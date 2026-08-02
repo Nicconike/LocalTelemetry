@@ -9,6 +9,6 @@
         "vitest": "^4.1.10",
         "svelte": "^5.35.5",
         "@vitest/coverage-v8": "^4.1.10",
-        "happy-dom": "^18.0.1"
+        "happy-dom": "^20.11.1"
     }
 }
