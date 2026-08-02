@@ -1,0 +1,114 @@
+name: Release
+
+on:
+    push:
+        branches: [master]
+
+permissions:
+    contents: write
+    issues: write
+    pull-requests: write
+    id-token: write # Required for SLSA Artifact Attestations
+    attestations: write # Required for SLSA Artifact Attestations
+
+jobs:
+    release:
+        runs-on: windows-latest
+        steps:
+            # 0. Generate GitHub App Token for Protected Branch Commit/Push Access
+            - name: Generate GitHub App Token
+              id: app_token
+              uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+              with:
+                  client-id: ${{ secrets.APP_CLIENT_ID }}
+                  private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+            - name: Checkout Code
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  token: ${{ steps.app_token.outputs.token }}
+                  fetch-depth: 0
+
+            # 1. Setup Bun & Build Svelte Frontend
+            - name: Setup Bun
+              uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+
+            - name: Build Svelte Frontend
+              run: |
+                  bun install
+                  bun run build
+              working-directory: src/LocalTelemetry.App/Settings/wwwroot
+
+            # 2. Calculate Semantic Version Tag based on Conventional Commits
+            - name: Generate Version Tag
+              id: tag_version
+              uses: mathieudutour/github-tag-action@a22cf08638b34d5badda920f9daf6e72c477b07b # v6.2
+              with:
+                  github_token: ${{ steps.app_token.outputs.token }}
+                  tag_prefix: v
+                  default_bump: minor
+                  prerelease: true
+                  prerelease_suffix: beta
+
+            # 3. Setup .NET 10 & Publish Executable
+            - name: Setup .NET 10 SDK
+              uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+              with:
+                  dotnet-version: 10.0.x
+
+            - name: Publish Single-File Executable
+              run: dotnet publish src/LocalTelemetry.App/LocalTelemetry.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:Version=${{ steps.tag_version.outputs.new_version }} -o ./publish
+
+            # 4. Install & Run Inno Setup Compiler
+            - name: Install Inno Setup & Compile Installer
+              shell: pwsh
+              run: |
+                  choco install innosetup --no-progress -y
+                  $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+                  if (-not (Test-Path $iscc)) { $iscc = "C:\Program Files\Inno Setup 6\ISCC.exe" }
+                  if (-not (Test-Path $iscc)) { $iscc = "C:\Program Files\Inno Setup 7\ISCC.exe" }
+                  $ver = "${{ steps.tag_version.outputs.new_version }}"
+                  $numVer = ($ver -split '-')[0]
+                  if ($numVer.Split('.').Count -eq 3) { $numVer = "$numVer.0" }
+                  & $iscc /DAppVersion=$ver /DAppVersionInfoVersion=$numVer setup.iss
+
+            # 5. Package Portable Archive & Generate SHA-256 Checksums
+            - name: Package Portable ZIP & SHA-256 Checksums
+              shell: pwsh
+              run: |
+                  Compress-Archive -Path ./publish/* -DestinationPath ./LocalTelemetry-win-x64.zip
+                  Get-FileHash -Path ./LocalTelemetrySetup.exe, ./LocalTelemetry-win-x64.zip -Algorithm SHA256 | Format-Table -AutoSize | Out-String | Set-Content ./checksums.txt
+
+            # 6. Generate Cryptographic SLSA Artifact Attestations (GitHub Attestations Platform)
+            - name: Generate Build Artifact Attestations
+              uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+              with:
+                  subject-path: |
+                      ${{ github.workspace }}/LocalTelemetrySetup.exe
+                      ${{ github.workspace }}/LocalTelemetry-win-x64.zip
+                  show-summary: true
+
+            # 6.5 Upload Release Executables as GitHub Actions Build Artifacts
+            - name: Upload Release Executables as Build Artifacts
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: release-executables
+                  path: |
+                      ./LocalTelemetrySetup.exe
+                      ./LocalTelemetry-win-x64.zip
+                      ./checksums.txt
+                  retention-days: 30
+
+            # 7. Publish Official GitHub Release
+            - name: Publish GitHub Release
+              uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+              with:
+                  token: ${{ steps.app_token.outputs.token }}
+                  tag_name: ${{ steps.tag_version.outputs.new_tag }}
+                  name: ${{ steps.tag_version.outputs.new_tag }}
+                  body: ${{ steps.tag_version.outputs.changelog }}
+                  prerelease: true
+                  files: |
+                      ./LocalTelemetrySetup.exe
+                      ./LocalTelemetry-win-x64.zip
+                      ./checksums.txt

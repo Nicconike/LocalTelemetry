@@ -1,0 +1,73 @@
+name: CI
+
+on:
+    push:
+        branches: [master]
+    pull_request:
+        branches: [master]
+
+jobs:
+    build-and-test:
+        runs-on: windows-latest
+        steps:
+            - name: Checkout Code
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  fetch-depth: 0
+
+            - name: Setup Node & Bun
+              uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+
+            - name: Install & Run Frontend Unit Tests (Vitest)
+              run: |
+                  bun install
+                  bun run test
+              working-directory: tests/LocalTelemetry.App.Tests/Settings/wwwroot
+
+            - name: Install & Build Svelte SPA Frontend
+              run: |
+                  bun install
+                  bun run build
+              working-directory: src/LocalTelemetry.App/Settings/wwwroot
+
+            - name: Verify Conventional Commit Messages (commitlint)
+              uses: wagoid/commitlint-github-action@b948419dd99f3fd78a6548d48f94e3df7f6bf3ed # v6.2.1
+              with:
+                  configFile: .commitlintrc.json
+
+            - name: Setup .NET 10 SDK
+              uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+              with:
+                  dotnet-version: 10.0.x
+
+            - name: Verify C# Code Formatting (Microsoft Official dotnet format)
+              run: dotnet format --verify-no-changes
+
+            - name: Build C# Solution
+              run: dotnet build --configuration Debug
+
+            - name: Run C# Unit Tests with Code Coverage
+              run: dotnet test --configuration Debug --no-build --verbosity normal --collect:"XPlat Code Coverage"
+
+            - name: Upload Code Coverage to Codecov
+              uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+              with:
+                  token: ${{ secrets.CODECOV_TOKEN }}
+                  slug: Nicconike/LocalTelemetry
+
+            - name: Upload Compiled Frontend Artifacts
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: frontend-dist
+                  path: src/LocalTelemetry.App/Settings/wwwroot/dist/
+                  retention-days: 7
+
+            - name: Upload Test Results & Coverage Artifacts
+              if: always()
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: test-results
+                  path: |
+                      **/TestResults/
+                      tests/LocalTelemetry.App.Tests/Settings/wwwroot/coverage/
+                  retention-days: 7

@@ -1,0 +1,14 @@
+{
+    "name": "localtelemetry-frontend-tests",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "test": "vitest run"
+    },
+    "devDependencies": {
+        "vitest": "^4.1.10",
+        "svelte": "^5.35.5",
+        "@vitest/coverage-v8": "^4.1.10",
+        "happy-dom": "^18.0.1"
+    }
+}

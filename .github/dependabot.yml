@@ -1,0 +1,92 @@
+# GitHub Dependabot Configuration
+# Reference: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot-version-update-file
+version: 2
+updates:
+    # 1. .NET / C# NuGet Dependencies
+    - package-ecosystem: "nuget"
+      directory: "/"
+      schedule:
+          interval: "monthly"
+          day: "monday"
+          time: "06:00"
+          timezone: "Asia/Kolkata" # GMT+5:30
+      open-pull-requests-limit: 5
+      rebase-strategy: "auto"
+      commit-message:
+          prefix: "chore(deps)"
+          prefix-development: "chore(deps-dev)"
+          include: "scope"
+      labels:
+          - "deps"
+          - "csharp"
+          - "automated-pr"
+      groups:
+          dotnet-deps:
+              patterns:
+                  - "*"
+
+    # 2. .NET SDK Version (global.json)
+    - package-ecosystem: "dotnet-sdk"
+      directory: "/"
+      schedule:
+          interval: "monthly"
+          day: "monday"
+          time: "06:00"
+          timezone: "Asia/Kolkata" # GMT+5:30
+      open-pull-requests-limit: 5
+      rebase-strategy: "auto"
+      commit-message:
+          prefix: "chore(deps)"
+          include: "scope"
+      labels:
+          - "deps"
+          - "csharp"
+          - "automated-pr"
+      groups:
+          sdk-deps:
+              patterns:
+                  - "*"
+
+    # 3. Svelte 5 / Vite Frontend Dependencies (Bun)
+    - package-ecosystem: "bun"
+      directory: "/src/LocalTelemetry.App/Settings/wwwroot"
+      schedule:
+          interval: "monthly"
+          day: "monday"
+          time: "06:00"
+          timezone: "Asia/Kolkata" # GMT+5:30
+      open-pull-requests-limit: 5
+      rebase-strategy: "auto"
+      commit-message:
+          prefix: "chore(deps)"
+          prefix-development: "chore(deps-dev)"
+          include: "scope"
+      labels:
+          - "deps"
+          - "frontend"
+          - "automated-pr"
+      groups:
+          frontend-deps:
+              patterns:
+                  - "*"
+
+    # 4. GitHub Actions Workflows (.github/workflows/*.yml)
+    - package-ecosystem: "github-actions"
+      directory: "/"
+      schedule:
+          interval: "monthly"
+          day: "monday"
+          time: "06:00"
+          timezone: "Asia/Kolkata" # GMT+5:30
+      open-pull-requests-limit: 5
+      rebase-strategy: "auto"
+      commit-message:
+          prefix: "chore(ci)"
+          include: "scope"
+      labels:
+          - "actions"
+          - "automated-pr"
+      groups:
+          actions-deps:
+              patterns:
+                  - "*"

@@ -1,0 +1,126 @@
+/**
+ * LocalTelemetry VitePress Theme Styling
+ * Native VitePress CSS Variable Overrides & Mermaid Diagram Styling
+ */
+
+:root {
+    /* Brand Theme Accent - Clean Electric Blue */
+    --vp-c-brand-1: #0284c7;
+    --vp-c-brand-2: #0369a1;
+    --vp-c-brand-3: #075985;
+    --vp-c-brand-soft: rgba(2, 132, 199, 0.14);
+
+    /* Native VitePress Layout Width Override (Wider Layout Default) */
+    --vp-layout-max-width: 1440px;
+
+    --vp-font-family-base: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Pure Obsidian Dark Mode for Documentation Pages (Zero Blue Tint) */
+.dark {
+    --vp-c-brand-1: #38bdf8;
+    --vp-c-brand-2: #0284c7;
+    --vp-c-brand-3: #0369a1;
+    --vp-c-brand-soft: rgba(56, 189, 248, 0.14);
+
+    /* True Obsidian / Neutral Dark Backgrounds */
+    --vp-c-bg: #09090b;
+    --vp-c-bg-alt: #121215;
+    --vp-c-bg-elv: #18181b;
+    --vp-c-bg-soft: #141417;
+
+    /* Sidebar & Header Neutral Dark */
+    --vp-c-sidebar-bg: #09090b;
+
+    --vp-c-border: rgba(255, 255, 255, 0.1);
+    --vp-c-divider: rgba(255, 255, 255, 0.08);
+
+    --vp-home-hero-name-color: transparent;
+    --vp-home-hero-name-background: linear-gradient(135deg, #38bdf8 0%, #60a5fa 50%, #a855f7 100%);
+}
+
+/* Landing Page Ambient Glow (Landing Page Only) */
+.dark .VPHome {
+    background:
+        radial-gradient(circle at 50% 0%, rgba(56, 189, 248, 0.16) 0%, transparent 60%),
+        radial-gradient(circle at 85% 30%, rgba(99, 102, 241, 0.1) 0%, transparent 50%);
+}
+
+/* Navbar Logo */
+.VPNavBarTitle .logo {
+    height: 24px !important;
+    width: 24px !important;
+    object-fit: contain;
+    margin-right: 8px;
+}
+
+/* Exact VitePress.dev Hero Underglow (Landing Page Only) */
+.VPHomeHero .image-bg {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    border-radius: 50%;
+    width: 192px;
+    height: 192px;
+    background: linear-gradient(135deg, #38bdf8 0%, #a855f7 100%);
+    filter: blur(56px);
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+}
+
+@media (min-width: 640px) {
+    .VPHomeHero .image-bg {
+        width: 256px;
+        height: 256px;
+        filter: blur(68px);
+    }
+}
+
+@media (min-width: 960px) {
+    .VPHomeHero .image-bg {
+        width: 320px;
+        height: 320px;
+        filter: blur(80px);
+    }
+}
+
+.VPHomeHero .image-src {
+    max-height: 240px;
+    width: auto;
+    border-radius: 20px;
+}
+
+/* Documentation Content Enhancements */
+.vp-doc img {
+    border-radius: 12px;
+    border: 1px solid var(--vp-c-border);
+    margin: 16px 0;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+/* Mermaid Diagrams Container & Text Clipping Fix */
+.mermaid {
+    display: flex;
+    justify-content: center;
+    margin: 28px 0;
+    padding: 12px;
+    overflow-x: auto;
+    border-radius: 8px;
+    background: var(--vp-c-bg-alt);
+    border: 1px solid var(--vp-c-border);
+}
+
+.mermaid svg {
+    font-family: var(--vp-font-family-base) !important;
+    max-width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+}
+
+/* Ensure text inside Mermaid foreignObjects & node labels does not wrap or clip */
+.mermaid .node label,
+.mermaid .node foreignObject,
+.mermaid .label {
+    overflow: visible !important;
+    white-space: nowrap !important;
+}

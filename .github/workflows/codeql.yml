@@ -1,0 +1,33 @@
+name: "CodeQL Security Scan"
+
+on:
+    push:
+        branches: ["master"]
+    pull_request:
+        branches: ["master"]
+
+jobs:
+    analyze:
+        runs-on: windows-latest
+        permissions:
+            security-events: write
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+            - name: Initialize CodeQL
+              uses: github/codeql-action/init@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
+              with:
+                  languages: "csharp"
+
+            - name: Setup .NET 10
+              uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+              with:
+                  dotnet-version: 10.0.x
+
+            - name: Build C# Solution
+              run: dotnet build --configuration Release
+
+            - name: Perform CodeQL Analysis
+              uses: github/codeql-action/analyze@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4

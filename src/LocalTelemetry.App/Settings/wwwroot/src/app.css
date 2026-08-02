@@ -1,0 +1,107 @@
+/* Design tokens */
+:root,
+[data-theme="dark"] {
+    --color-bg: #171614;
+    --color-surface: #1c1b19;
+    --color-surface-2: #201f1d;
+    --color-surface-offset: #252422;
+    --color-surface-dynamic: #2d2c2a;
+    --color-divider: #2e2d2b;
+    --color-border: #393836;
+    --color-text: #cdccca;
+    --color-text-muted: #797876;
+    --color-text-faint: #5a5957;
+    --color-primary: #4f98a3;
+    --color-primary-hover: #227f8b;
+    --color-primary-active: #1a626b;
+    --color-primary-hl: #1e3436;
+    --color-success: #6daa45;
+    --color-warning: #bb653b;
+    --color-error: #d163a7;
+    --color-orange: #fdab43;
+
+    --radius-sm: 0.25rem;
+    --radius-md: 0.375rem;
+    --radius-lg: 0.5rem;
+    --radius-xl: 0.75rem;
+    --radius-full: 9999px;
+
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.25rem;
+    --space-6: 1.5rem;
+    --space-8: 2rem;
+
+    --text-xs: 0.75rem;
+    --text-sm: 0.8125rem;
+    --text-base: 0.875rem;
+    --text-lg: 1rem;
+
+    --font-body: 'Geist', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+
+    --transition: 140ms cubic-bezier(0.16, 1, 0.3, 1);
+    --shadow-sm: 0 1px 3px oklch(0 0 0 / 0.3);
+    --shadow-md: 0 4px 12px oklch(0 0 0 / 0.4);
+}
+
+/* Reset */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html {
+    -webkit-font-smoothing: antialiased;
+}
+
+body {
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    color: var(--color-text);
+    background: var(--color-bg);
+    min-height: 100dvh;
+    line-height: 1.55;
+}
+
+input,
+button,
+select,
+textarea {
+    font: inherit;
+    color: inherit;
+}
+
+button {
+    cursor: pointer;
+    background: none;
+    border: none;
+}
+
+:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-faint);
+}

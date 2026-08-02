@@ -1,0 +1,25 @@
+{
+    "compilerOptions": {
+        "target": "ESNext",
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "strict": true,
+        "noUnusedLocals": false,
+        "noUnusedParameters": false,
+        "noEmit": true,
+        "allowImportingTsExtensions": true,
+        "isolatedModules": true,
+        "verbatimModuleSyntax": true,
+        "skipLibCheck": true,
+        "types": [
+            "svelte",
+            "vitest/globals"
+        ]
+    },
+    "include": [
+        "src/**/*.ts",
+        "src/**/*.d.ts",
+        "../../../../../src/LocalTelemetry.App/Settings/wwwroot/src/**/*.ts",
+        "../../../../../src/LocalTelemetry.App/Settings/wwwroot/src/**/*.d.ts"
+    ]
+}

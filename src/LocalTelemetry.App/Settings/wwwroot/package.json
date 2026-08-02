@@ -1,0 +1,27 @@
+{
+    "name": "localtelemetry",
+    "version": "1.0.0-beta.1",
+    "description": "Settings UI for LocalTelemetry",
+    "license": "GPL-3.0-or-later",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "vite",
+        "build": "vite build",
+        "preview": "vite preview",
+        "test": "vitest run",
+        "test:coverage": "vitest run --coverage",
+        "commitlint": "commitlint"
+    },
+    "devDependencies": {
+        "@commitlint/cli": "^21.2.1",
+        "@commitlint/config-conventional": "^21.2.0",
+        "@sveltejs/vite-plugin-svelte": "^7.1.2",
+        "@vitest/coverage-v8": "^4.1.10",
+        "happy-dom": "^20.11.1",
+        "svelte": "^5.56.4",
+        "typescript": "^7.0.2",
+        "vite": "^8.1.0",
+        "vitest": "^4.1.10"
+    }
+}

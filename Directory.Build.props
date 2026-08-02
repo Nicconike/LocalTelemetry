@@ -1,0 +1,14 @@
+<Project>
+    <PropertyGroup>
+        <!-- Microsoft Official Roslyn & Code Style Enforcement -->
+        <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+        <AnalysisLevel>latest-recommended</AnalysisLevel>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <!-- Suppress locale, logger, default init, P/Invoke and WPF window disposal warning noise -->
+        <NoWarn>$(NoWarn);CA1305;CA1310;CA1848;CA1014;CA1805;CA1806;CA2101;CA1873;CA1822;CA1001</NoWarn>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <!-- Allow dotnet restore on Linux/macOS CI runners for dependency graph submission -->
+        <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    </PropertyGroup>
+</Project>

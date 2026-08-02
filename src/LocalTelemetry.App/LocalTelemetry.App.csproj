@@ -1,0 +1,79 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <TargetFramework>net10.0-windows</TargetFramework>
+        <UseWPF>true</UseWPF>
+        <UseWindowsForms>true</UseWindowsForms>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Platforms>x64</Platforms>
+        <PlatformTarget>x64</PlatformTarget>
+        <ApplicationManifest>app.manifest</ApplicationManifest>
+        <AssemblyName>LocalTelemetry</AssemblyName>
+        <RootNamespace>LocalTelemetry.App</RootNamespace>
+        <ApplicationIcon>app.ico</ApplicationIcon>
+        <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+        <Description>Hardware Telemetry &amp; Monitoring Overlay for Windows Taskbar</Description>
+        <Product>LocalTelemetry</Product>
+        <Company>LocalTelemetry</Company>
+        <Copyright>Copyright © 2026 LocalTelemetry</Copyright>
+        <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="MinVer" Version="6.0.0" PrivateAssets="All" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>LocalTelemetry.App.Tests</_Parameter1>
+        </AssemblyAttribute>
+    </ItemGroup>
+
+    <PropertyGroup Condition="'$(Configuration)'=='Release'">
+        <PublishSingleFile>true</PublishSingleFile>
+        <SelfContained>true</SelfContained>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Page Update="Settings\SettingsShell.xaml" SubType="Designer" Generator="MSBuild:Compile" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.0-preview.*" />
+        <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2739.15" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+        <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.0" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
+
+        <ProjectReference Include="..\LocalTelemetry.Core\LocalTelemetry.Core.csproj" />
+        <ProjectReference Include="..\LocalTelemetry.Notifier\LocalTelemetry.Notifier.csproj"
+            ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
+    </ItemGroup>
+    <!-- Copy notifier to output directory and publish directory -->
+    <Target Name="CopyNotifier" AfterTargets="Build;Publish">
+        <ItemGroup>
+            <NotifierFiles
+                Include="..\LocalTelemetry.Notifier\bin\$(Configuration)\$(TargetFramework)\win-x64\LocalTelemetry.Notifier.exe" />
+            <NotifierFiles
+                Include="..\LocalTelemetry.Notifier\bin\$(Configuration)\$(TargetFramework)\win-x64\LocalTelemetry.Notifier.dll" />
+            <NotifierFiles
+                Include="..\LocalTelemetry.Notifier\bin\$(Configuration)\$(TargetFramework)\win-x64\LocalTelemetry.Notifier.runtimeconfig.json" />
+            <NotifierFiles
+                Include="..\LocalTelemetry.Notifier\bin\$(Configuration)\$(TargetFramework)\win-x64\LocalTelemetry.Notifier.deps.json" />
+        </ItemGroup>
+        <Copy SourceFiles="@(NotifierFiles)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+        <Copy Condition="'$(PublishDir)' != ''" SourceFiles="@(NotifierFiles)"
+            DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
+    </Target>
+    <Target Name="CopyWwwroot" AfterTargets="Build;Publish">
+        <ItemGroup>
+            <WwwFiles Include="Settings\wwwroot\dist\**\*" />
+        </ItemGroup>
+        <Copy SourceFiles="@(WwwFiles)"
+            DestinationFiles="@(WwwFiles->'$(OutDir)wwwroot\%(RecursiveDir)%(Filename)%(Extension)')"
+            SkipUnchangedFiles="true" />
+        <Copy Condition="'$(PublishDir)' != ''" SourceFiles="@(WwwFiles)"
+            DestinationFiles="@(WwwFiles->'$(PublishDir)wwwroot\%(RecursiveDir)%(Filename)%(Extension)')"
+            SkipUnchangedFiles="true" />
+    </Target>
+</Project>

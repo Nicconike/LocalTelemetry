@@ -1,0 +1,59 @@
+name: SonarQube Code Analysis
+
+on:
+    push:
+        branches: [master]
+    pull_request:
+        branches: [master]
+
+jobs:
+    sonar-analysis:
+        runs-on: windows-latest
+        steps:
+            - name: Checkout Repository
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  fetch-depth: 0
+
+            - name: Setup .NET 10 SDK
+              uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+              with:
+                  dotnet-version: "10.0.x"
+
+            - name: Setup Node & Bun
+              uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+
+            - name: Cache SonarCloud & .NET Packages
+              uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+              with:
+                  path: |
+                      ~/.sonar/cache
+                      ~/.nuget/packages
+                  key: ${{ runner.os }}-sonar-${{ hashFiles('**/*.csproj') }}
+                  restore-keys: ${{ runner.os }}-sonar-
+
+            - name: Install SonarScanner for .NET
+              run: dotnet tool install --global dotnet-sonarscanner
+
+            - name: Begin SonarCloud Analysis
+              env:
+                  SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+              run: |
+                  dotnet-sonarscanner begin /k:"Nicconike_LocalTelemetry" /o:"nicconike" /d:sonar.token="${{ secrets.SONAR_TOKEN }}" /d:sonar.host.url="https://sonarcloud.io" /d:sonar.cs.opencover.reportsPaths="**/TestResults/**/*.xml" /d:sonar.scanner.scanAll=false
+
+            - name: Install & Build Svelte SPA Frontend
+              run: |
+                  bun install
+                  bun run build
+              working-directory: src/LocalTelemetry.App/Settings/wwwroot
+
+            - name: Build C# Solution
+              run: dotnet build --configuration Debug
+
+            - name: Run C# Unit Tests & Collect Code Coverage
+              run: dotnet test --configuration Debug --no-build --verbosity normal --collect:"XPlat Code Coverage"
+
+            - name: End SonarCloud Analysis
+              env:
+                  SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+              run: dotnet-sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN }}"

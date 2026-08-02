@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <TargetFramework>net10.0-windows</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Platforms>x64</Platforms>
+        <PlatformTarget>x64</PlatformTarget>
+        <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+        <UseWindowsForms>true</UseWindowsForms>
+        <UseWPF>true</UseWPF>
+        <AssemblyName>LocalTelemetry.Notifier</AssemblyName>
+        <RootNamespace>LocalTelemetry.Notifier</RootNamespace>
+        <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Windows.SDK.NET" Version="10.0.18362.6-preview" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>LocalTelemetry.Notifier.Tests</_Parameter1>
+        </AssemblyAttribute>
+    </ItemGroup>
+</Project>

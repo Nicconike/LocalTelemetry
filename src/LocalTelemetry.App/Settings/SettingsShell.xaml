@@ -1,0 +1,96 @@
+<Window
+    x:Class="LocalTelemetry.App.Settings.SettingsShell"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+    Title="LocalTelemetry"
+    Width="740"
+    Height="600"
+    MinWidth="580"
+    MinHeight="460"
+    AllowsTransparency="False"
+    Background="#1C1B19"
+    ResizeMode="CanResize"
+    WindowStartupLocation="CenterScreen"
+    WindowStyle="None">
+
+    <WindowChrome.WindowChrome>
+        <WindowChrome
+            CaptionHeight="36"
+            CornerRadius="8"
+            GlassFrameThickness="0"
+            ResizeBorderThickness="8"
+            UseAeroCaptionButtons="False" />
+    </WindowChrome.WindowChrome>
+
+    <Window.Resources>
+        <SolidColorBrush x:Key="TitleBarBg" Color="#1C1B19" />
+        <SolidColorBrush x:Key="TitleFg" Color="#CDCCCA" />
+        <SolidColorBrush x:Key="CloseHoverBg" Color="#A12C7B" />
+        <SolidColorBrush x:Key="BtnHoverBg" Color="#2D2C2A" />
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="32" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!--  ══ Custom title bar ══════════════════════════════════════════  -->
+        <Grid
+            Grid.Row="0"
+            Background="{StaticResource TitleBarBg}"
+            MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <!--  Window title  -->
+            <TextBlock
+                Grid.Column="0"
+                Margin="8,0,0,0"
+                VerticalAlignment="Center"
+                FontFamily="Segoe UI Variable Text"
+                FontSize="13"
+                Foreground="{StaticResource TitleFg}"
+                Text="LocalTelemetry" />
+
+            <!--  Caption buttons  -->
+            <StackPanel Grid.Column="2" Orientation="Horizontal">
+
+                <!--  Close / hide  -->
+                <Button
+                    Width="46"
+                    Height="32"
+                    BorderThickness="0"
+                    Click="CloseButton_Click"
+                    ToolTip="Close"
+                    WindowChrome.IsHitTestVisibleInChrome="True">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="bg" Background="Transparent">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="bg" Property="Background" Value="{StaticResource CloseHoverBg}" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                    <!--  U+2715 MULTIPLICATION X (close glyph)  -->
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        FontSize="12"
+                        Foreground="{StaticResource TitleFg}"
+                        Text="&#x2715;" />
+                </Button>
+
+            </StackPanel>
+        </Grid>
+
+        <!--  WebView2 host  -->
+        <wv2:WebView2 x:Name="WebView" Grid.Row="1" />
+    </Grid>
+</Window>
