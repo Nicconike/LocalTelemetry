@@ -10,8 +10,22 @@ permissions:
     contents: read
 
 jobs:
+    commitlint:
+        name: CommitLint
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout Code
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  fetch-depth: 0
+
+            - name: Verify Conventional Commit Messages (commitlint)
+              uses: wagoid/commitlint-github-action@b948419dd99f3fd78a6548d48f94e3df7f6bf3ed # v6.2.1
+              with:
+                  configFile: .commitlintrc.json
+
     ci:
-        name: CI Build & Test
+        name: CI
         runs-on: windows-latest
         steps:
             - name: Checkout Code
@@ -25,7 +39,6 @@ jobs:
             - name: Install & Run Frontend Unit Tests (Vitest)
               run: |
                   bun install
-                  bun add -d @vitest/coverage-v8
                   bun x vitest run --coverage --reporter=default --reporter=junit --outputFile=test-report.junit.xml
               working-directory: tests/LocalTelemetry.App.Tests/Settings/wwwroot
 
@@ -35,16 +48,17 @@ jobs:
                   bun run build
               working-directory: src/LocalTelemetry.App/Settings/wwwroot
 
-            - name: Verify Conventional Commit Messages (commitlint)
-              uses: wagoid/commitlint-github-action@b948419dd99f3fd78a6548d48f94e3df7f6bf3ed # v6.2.1
+            - name: Cache .NET Packages
+              uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
               with:
-                  configFile: .commitlintrc.json
+                  path: ~/.nuget/packages
+                  key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+                  restore-keys: ${{ runner.os }}-nuget-
 
             - name: Setup .NET 10 SDK
               uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
               with:
                   dotnet-version: 10.0.x
-                  cache: true
 
             - name: Verify C# Code Formatting
               run: dotnet format --verify-no-changes

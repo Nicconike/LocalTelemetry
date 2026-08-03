@@ -7,8 +7,8 @@ function copyMasterAppIcon() {
     return {
         name: 'copy-master-app-icon',
         closeBundle() {
-            const src = path.resolve(__dirname, '../../app.ico');
-            const dest = path.resolve(__dirname, 'dist/app.ico');
+            const src = path.resolve(import.meta.dirname, '../../app.ico');
+            const dest = path.resolve(import.meta.dirname, 'dist/app.ico');
             if (fs.existsSync(src)) {
                 fs.copyFileSync(src, dest);
             }
