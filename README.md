@@ -9,6 +9,7 @@
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
 [![Svelte 5](https://img.shields.io/badge/Frontend-Svelte%205-FF3E00.svg)](https://svelte.dev/)
 ![GitHub Release](https://img.shields.io/github/v/release/nicconike/LocalTelemetry?include_prereleases&sort=semver)
+![GitHub Tag](https://img.shields.io/github/v/tag/nicconike/localtelemetry?include_prereleases&sort=semver&logo=github&label=Tag&link=https%3A%2F%2Fgithub.com%2FNicconike%2FLocalTelemetry%2Freleases)
 [![Quality gate status](https://sonarcloud.io/api/project_badges/measure?project=Nicconike_LocalTelemetry&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Nicconike_LocalTelemetry)
 [![codecov](https://codecov.io/gh/Nicconike/LocalTelemetry/graph/badge.svg?token=OQ25T5D97Q)](https://codecov.io/gh/Nicconike/LocalTelemetry)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/13911/badge)](https://www.bestpractices.dev/projects/13911)
