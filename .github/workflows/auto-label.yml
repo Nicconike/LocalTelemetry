@@ -4,12 +4,15 @@ on:
         types: [opened]
 
 permissions:
-    pull-requests: write
+    contents: none
 
 jobs:
     label-bot-pr:
         if: contains(github.actor, '[bot]')
+        name: Add automated-pr label
         runs-on: ubuntu-latest
+        permissions:
+            pull-requests: write
         steps:
             - name: Add automated-pr label
               env:

@@ -3,17 +3,24 @@ name: Release
 on:
     push:
         branches: [master]
+        paths:
+            - ".github/workflows/release.yml"
+            - "setup.iss"
+            - "src/LocalTelemetry.App/**"
+            - "src/LocalTelemetry.Core/**"
+            - "src/LocalTelemetry.Notifier/**"
 
 permissions:
-    contents: write
-    issues: write
-    pull-requests: write
-    id-token: write # Required for SLSA Artifact Attestations
-    attestations: write # Required for SLSA Artifact Attestations
+    contents: read
 
 jobs:
     release:
+        name: Build & Release
         runs-on: windows-latest
+        permissions:
+            contents: write
+            id-token: write
+            attestations: write
         steps:
             # 0. Generate GitHub App Token for Protected Branch Commit/Push Access
             - name: Generate GitHub App Token
@@ -46,9 +53,11 @@ jobs:
               with:
                   github_token: ${{ steps.app_token.outputs.token }}
                   tag_prefix: v
-                  default_bump: minor
-                  prerelease: true
-                  prerelease_suffix: beta
+                  dry_run: true
+                  release_branches: main
+                  pre_release_branches: master
+                  default_prerelease_bump: premajor
+                  append_to_pre_release_tag: beta
 
             # 3. Setup .NET 10 & Publish Executable
             - name: Setup .NET 10 SDK
@@ -64,11 +73,19 @@ jobs:
               shell: pwsh
               run: |
                   choco install innosetup --no-progress -y
-                  $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
-                  if (-not (Test-Path $iscc)) { $iscc = "C:\Program Files\Inno Setup 6\ISCC.exe" }
-                  if (-not (Test-Path $iscc)) { $iscc = "C:\Program Files\Inno Setup 7\ISCC.exe" }
+                  $iscc = "iscc"
+                  $possiblePaths = @(
+                        "C:\Program Files\Inno Setup 7\ISCC.exe",
+                        "C:\Program Files (x86)\Inno Setup 7\ISCC.exe"
+                    )
+                  foreach ($path in $possiblePaths) {
+                        if (Test-Path $path) {
+                            $iscc = $path
+                            break
+                        }
+                    }
                   $ver = "${{ steps.tag_version.outputs.new_version }}"
-                  $numVer = ($ver -split '-')[0]
+                  $numVer = ($ver -split '-')
                   if ($numVer.Split('.').Count -eq 3) { $numVer = "$numVer.0" }
                   & $iscc /DAppVersion=$ver /DAppVersionInfoVersion=$numVer setup.iss
 
@@ -79,7 +96,7 @@ jobs:
                   Compress-Archive -Path ./publish/* -DestinationPath ./LocalTelemetry-win-x64.zip
                   Get-FileHash -Path ./LocalTelemetrySetup.exe, ./LocalTelemetry-win-x64.zip -Algorithm SHA256 | Format-Table -AutoSize | Out-String | Set-Content ./checksums.txt
 
-            # 6. Generate Cryptographic SLSA Artifact Attestations (GitHub Attestations Platform)
+            # 6. Generate Cryptographic SLSA Artifact Attestations
             - name: Generate Build Artifact Attestations
               uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
               with:
@@ -87,17 +104,6 @@ jobs:
                       ${{ github.workspace }}/LocalTelemetrySetup.exe
                       ${{ github.workspace }}/LocalTelemetry-win-x64.zip
                   show-summary: true
-
-            # 6.5 Upload Release Executables as GitHub Actions Build Artifacts
-            - name: Upload Release Executables as Build Artifacts
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-              with:
-                  name: release-executables
-                  path: |
-                      ./LocalTelemetrySetup.exe
-                      ./LocalTelemetry-win-x64.zip
-                      ./checksums.txt
-                  retention-days: 30
 
             # 7. Publish Official GitHub Release
             - name: Publish GitHub Release
@@ -108,6 +114,7 @@ jobs:
                   name: ${{ steps.tag_version.outputs.new_tag }}
                   body: ${{ steps.tag_version.outputs.changelog }}
                   prerelease: true
+                  generate_release_notes: true
                   files: |
                       ./LocalTelemetrySetup.exe
                       ./LocalTelemetry-win-x64.zip

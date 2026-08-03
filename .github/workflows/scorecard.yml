@@ -1,14 +1,13 @@
-name: OpenSSF Scorecard Security Supply-Chain Analysis
+name: OpenSSF Scorecard Analysis
 
 on:
     # For Branch Protection checks, Scorecard needs master pushes & PRs
     branch_protection_rule:
-    schedule:
-        - cron: "0 0 * * 1" # Weekly Monday midnight scan
     push:
         branches: [master]
 
-permissions: read-all
+permissions:
+    contents: read
 
 jobs:
     scorecard:
@@ -40,7 +39,7 @@ jobs:
                   path: results.sarif
                   retention-days: 5
 
-            - name: Upload SARIF to GitHub Security Code Scanning
+            - name: Upload to GitHub Security Code Scanning
               uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
               with:
                   sarif_file: results.sarif

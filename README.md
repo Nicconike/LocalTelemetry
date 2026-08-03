@@ -4,16 +4,22 @@
 
 [![CI](https://github.com/Nicconike/LocalTelemetry/actions/workflows/ci.yml/badge.svg)](https://github.com/Nicconike/LocalTelemetry/actions/workflows/ci.yml)
 [![Release](https://github.com/Nicconike/LocalTelemetry/actions/workflows/release.yml/badge.svg)](https://github.com/Nicconike/LocalTelemetry/releases)
+[![Deploy Documentation](https://github.com/Nicconike/LocalTelemetry/actions/workflows/docs.yml/badge.svg)](https://github.com/Nicconike/LocalTelemetry/actions/workflows/docs.yml)
 [![Platform](https://img.shields.io/badge/platform-Windows%20x64-0078D6.svg)](https://github.com/Nicconike/LocalTelemetry)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
 [![Svelte 5](https://img.shields.io/badge/Frontend-Svelte%205-FF3E00.svg)](https://svelte.dev/)
+![GitHub Release](https://img.shields.io/github/v/release/nicconike/LocalTelemetry?include_prereleases&sort=semver)
+[![Quality gate status](https://sonarcloud.io/api/project_badges/measure?project=Nicconike_LocalTelemetry&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Nicconike_LocalTelemetry)
 [![codecov](https://codecov.io/gh/Nicconike/LocalTelemetry/graph/badge.svg?token=OQ25T5D97Q)](https://codecov.io/gh/Nicconike/LocalTelemetry)
-![GitHub License](https://img.shields.io/github/license/nicconike/localtelemetry)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/13911/badge)](https://www.bestpractices.dev/projects/13911)
+[![OpenSSF Baseline](https://www.bestpractices.dev/projects/13911/baseline)](https://www.bestpractices.dev/projects/13911)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/nicconike/LocalTelemetry/badge)](https://scorecard.dev/viewer/?uri=github.com/nicconike/LocalTelemetry)
+![GitHub License](https://img.shields.io/github/license/nicconike/localtelemetry)
 [![wakatime](https://wakatime.com/badge/user/018e538b-3f55-4e8e-95fa-6c3225418eed/project/4a017698-b6e1-4859-a4f2-b5379b9a36ef.svg)](https://wakatime.com/badge/user/018e538b-3f55-4e8e-95fa-6c3225418eed/project/4a017698-b6e1-4859-a4f2-b5379b9a36ef)
 
-> [!NOTE] About
-> **LocalTelemetry** is a lightweight, real-time Windows hardware monitoring utility that embeds your system metrics directly into your Windows taskbar.
+> ### About
+>
+> **LocalTelemetry** is a lightweight, real-time Windows hardware monitoring utility that embeds your system vitals directly into your native Windows taskbar without taking up screen real estate. Designed to be fast, customizable and 100% private.
 
 ---
 

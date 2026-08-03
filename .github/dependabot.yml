@@ -17,7 +17,7 @@ updates:
           prefix-development: "chore(deps-dev)"
           include: "scope"
       labels:
-          - "deps"
+          - "dependencies"
           - "csharp"
           - "automated-pr"
       groups:
@@ -39,7 +39,7 @@ updates:
           prefix: "chore(deps)"
           include: "scope"
       labels:
-          - "deps"
+          - "dependencies"
           - "csharp"
           - "automated-pr"
       groups:
@@ -62,7 +62,7 @@ updates:
           prefix-development: "chore(deps-dev)"
           include: "scope"
       labels:
-          - "deps"
+          - "dependencies"
           - "frontend"
           - "automated-pr"
       groups:
@@ -84,6 +84,7 @@ updates:
           prefix: "chore(ci)"
           include: "scope"
       labels:
+          - "dependencies"
           - "actions"
           - "automated-pr"
       groups:

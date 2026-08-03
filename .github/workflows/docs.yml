@@ -1,34 +1,34 @@
-name: Deploy Documentation
+name: Deploy Docs
 
 on:
     push:
         branches: [master]
+        paths:
+            - ".github/workflows/docs.yml"
+            - "docs/**"
     workflow_dispatch:
 
-permissions:
-    contents: read
-    pages: write
-    id-token: write
-
-concurrency:
-    group: pages
-    cancel-in-progress: true
-
 jobs:
-    deploy-docs:
+    # Build the VitePress doc site
+    build:
+        name: Build VitePress Site
         runs-on: ubuntu-latest
-        timeout-minutes: 10
+        permissions:
+            contents: read
         steps:
             - name: Checkout Code
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   fetch-depth: 0
 
+            - name: Setup Pages
+              uses: actions/configure-pages@983d63b72ee222bcada205562e499a07a4a9a43a # v5.0.0
+
             - name: Setup Node & Bun
               uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
 
-            - name: Install Documentation Dependencies
-              run: bun install
+            - name: Install Doc Dependencies
+              run: bun install --frozen-lockfile --ignore-scripts
               working-directory: docs
 
             - name: Build VitePress Documentation
@@ -42,6 +42,17 @@ jobs:
               with:
                   path: docs/.vitepress/dist
 
+    deploy:
+        name: Deploy to GitHub Pages
+        runs-on: ubuntu-latest
+        needs: build
+        permissions:
+            pages: write
+            id-token: write
+        environment:
+            name: github-pages
+            url: ${{ steps.deployment.outputs.page_url }}
+        steps:
             - name: Deploy to GitHub Pages
               id: deployment
               uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
