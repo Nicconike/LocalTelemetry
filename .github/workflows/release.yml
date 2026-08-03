@@ -18,7 +18,7 @@ jobs:
         name: Build & Release
         runs-on: windows-latest
         permissions:
-            contents: write
+            contents: read
             id-token: write
             attestations: write
         steps:
@@ -85,7 +85,7 @@ jobs:
                         }
                     }
                   $ver = "${{ steps.tag_version.outputs.new_version }}"
-                  $numVer = ($ver -split '-')
+                  $numVer = ($ver -split '-')[0]
                   if ($numVer.Split('.').Count -eq 3) { $numVer = "$numVer.0" }
                   & $iscc /DAppVersion=$ver /DAppVersionInfoVersion=$numVer setup.iss
 
