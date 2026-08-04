@@ -54,7 +54,8 @@ jobs:
                   tag_prefix: v
                   release_branches: main
                   pre_release_branches: master
-                  default_prerelease_bump: patch
+                  default_prerelease_bump: prerelease
+                  custom_release_rules: feat:prerelease,fix:prerelease,perf:prerelease
                   append_to_pre_release_tag: beta
 
             # 3. Setup .NET 10 & Publish Executable
@@ -63,9 +64,15 @@ jobs:
               with:
                   dotnet-version: 10.0.x
 
+            # Fetch the tag created in step 2 so MinVer derives the exact version
+            # from the tag instead of the untagged default (0.0.0-alpha.0.N).
+            - name: Fetch Release Tag
+              if: ${{ steps.tag_version.outputs.new_tag != '' }}
+              run: git fetch --tags --force
+
             - name: Publish Single-File Executable
               if: ${{ steps.tag_version.outputs.new_tag != '' }}
-              run: dotnet publish src/LocalTelemetry.App/LocalTelemetry.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:Version=${{ steps.tag_version.outputs.new_version }} -o ./publish
+              run: dotnet publish src/LocalTelemetry.App/LocalTelemetry.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:MinVerVersionOverride=${{ steps.tag_version.outputs.new_version }} -o ./publish
 
             # 4. Install & Run Inno Setup Compiler
             - name: Install Inno Setup & Compile Installer
@@ -107,7 +114,16 @@ jobs:
                       ${{ github.workspace }}/LocalTelemetry-win-x64.zip
                   show-summary: true
 
-            # 7. Publish Official GitHub Release
+            # 7. Generate Release Notes with git-cliff
+            - name: Install git-cliff
+              if: ${{ steps.tag_version.outputs.new_tag != '' }}
+              uses: taiki-e/install-action@cb33e69fad06166ca28a42b2575e4dadabf62ee8 # v2
+
+            - name: Generate Release Notes
+              if: ${{ steps.tag_version.outputs.new_tag != '' }}
+              run: git cliff --config cliff.toml --latest --strip header -o release-body.md
+
+            # 8. Publish Official GitHub Release
             - name: Publish GitHub Release
               if: ${{ steps.tag_version.outputs.new_tag != '' }}
               uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
@@ -115,10 +131,20 @@ jobs:
                   token: ${{ steps.app_token.outputs.token }}
                   tag_name: ${{ steps.tag_version.outputs.new_tag }}
                   name: ${{ steps.tag_version.outputs.new_tag }}
-                  body: ${{ steps.tag_version.outputs.changelog }}
+                  body_path: release-body.md
                   prerelease: true
-                  generate_release_notes: true
                   files: |
                       ./LocalTelemetrySetup.exe
                       ./LocalTelemetry-win-x64.zip
                       ./checksums.txt
+
+            # 9. Regenerate CHANGELOG.md from the full git history
+            - name: Update CHANGELOG.md
+              if: ${{ steps.tag_version.outputs.new_tag != '' }}
+              run: |
+                  git cliff --config cliff.toml -o CHANGELOG.md
+                  git config user.name "github-actions[bot]"
+                  git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+                  git add CHANGELOG.md
+                  git commit -m "docs: update changelog for ${{ steps.tag_version.outputs.new_tag }}"
+                  git push origin master
