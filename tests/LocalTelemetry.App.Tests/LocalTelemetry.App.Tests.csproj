@@ -26,7 +26,7 @@
         </PackageReference>
         <PackageReference Include="NSubstitute" Version="6.0.0" />
         <PackageReference Include="FluentAssertions" Version="8.10.0" />
-        <PackageReference Include="Xunit.StaFact" Version="3.0.13" />
+        <PackageReference Include="Xunit.StaFact" Version="1.1.11" />
         <PackageReference Include="JUnitXml.TestLogger" Version="8.0.0" />
     </ItemGroup>
 
