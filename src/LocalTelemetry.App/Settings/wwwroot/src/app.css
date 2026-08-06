@@ -105,3 +105,17 @@ button {
 ::-webkit-scrollbar-thumb:hover {
     background: var(--color-text-faint);
 }
+
+/* Content scrollbar: hidden until the user hovers or scrolls the area. */
+.content::-webkit-scrollbar-thumb {
+    background: transparent;
+}
+
+.content:hover::-webkit-scrollbar-thumb,
+.content:focus-within::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+}
+
+.content::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-faint);
+}

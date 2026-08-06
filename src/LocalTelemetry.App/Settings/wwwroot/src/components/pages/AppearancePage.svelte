@@ -55,18 +55,33 @@
     );
 
     const leftColumnGroups = [
-        { group: "CPU", ids: ["cpu_pct", "cpu_temp", "cpu_freq", "cpu_power"] },
         {
+            key: "cpu",
+            group: "CPU",
+            ids: ["cpu_pct", "cpu_temp", "cpu_freq", "cpu_power"],
+        },
+        {
+            key: "gpu",
             group: "GPU",
             ids: ["gpu_pct", "gpu_temp", "gpu_vram", "gpu_freq", "gpu_power"],
         },
     ];
 
     let rightColumnGroups = $derived([
-        { group: "RAM", ids: ["ram_pct", "ram_used"] },
-        { group: "Network", ids: ["net_down", "net_up", "net_total"] },
+        { key: "ram", group: "RAM", ids: ["ram_pct", "ram_used"] },
+        {
+            key: "network",
+            group: "Network",
+            ids: ["net_down", "net_up", "net_total"],
+        },
         ...($settings?.monitoring?.hasBattery
-            ? [{ group: "Battery", ids: ["battery_pct", "battery_rate"] }]
+            ? [
+                  {
+                      key: "battery",
+                      group: "Battery",
+                      ids: ["battery_pct", "battery_rate"],
+                  },
+              ]
             : []),
     ]);
 
@@ -102,8 +117,31 @@
         );
     }
 
-    function getGroupColor(ids) {
-        return getMetricColor(ids[0]);
+    function getGroupColor(key, ids) {
+        return (
+            $settings?.overlay?.groupColors?.[key] ??
+            (ids?.length ? getMetricColor(ids[0]) : fallbackHex)
+        );
+    }
+
+    const groupDefaultKey = {
+        cpu: "cpu_pct",
+        gpu: "gpu_pct",
+        ram: "ram_pct",
+        network: "net_down",
+        battery: "battery_pct",
+    };
+
+    function getDefaultGroupColor(key, ids) {
+        const id = key === "disk" ? ids?.[0] : groupDefaultKey[key];
+        return id ? getDefaultColor(id) : fallbackHex;
+    }
+
+    function hasGroupOverride(key) {
+        return (
+            $settings?.overlay?.userCustomizedGroupColors?.includes(key) ??
+            false
+        );
     }
 
     function setCustomized(id, value) {
@@ -119,6 +157,22 @@
                 $settings.overlay.userCustomizedMetricColors = [];
             if (!$settings.overlay.userCustomizedMetricColors.includes(id))
                 $settings.overlay.userCustomizedMetricColors.push(id);
+        }
+    }
+
+    function setGroupCustomized(grp, value) {
+        const def = getDefaultGroupColor(grp.key, grp.ids);
+        if (value === def) {
+            if ($settings.overlay.userCustomizedGroupColors)
+                $settings.overlay.userCustomizedGroupColors =
+                    $settings.overlay.userCustomizedGroupColors.filter(
+                        (x) => x !== grp.key,
+                    );
+        } else {
+            if (!$settings.overlay.userCustomizedGroupColors)
+                $settings.overlay.userCustomizedGroupColors = [];
+            if (!$settings.overlay.userCustomizedGroupColors.includes(grp.key))
+                $settings.overlay.userCustomizedGroupColors.push(grp.key);
         }
     }
 
@@ -150,10 +204,14 @@
         }
     }
 
-    function applyGroupColor(ids, color) {
+    function applyGroupColor(grp, color) {
+        if (!$settings.overlay.groupColors) $settings.overlay.groupColors = {};
+        if (getGroupColor(grp.key) !== color)
+            $settings.overlay.groupColors[grp.key] = color;
+        setGroupCustomized(grp, color);
         if (!$settings.overlay.metricColors)
             $settings.overlay.metricColors = {};
-        for (const id of ids) {
+        for (const id of grp.ids) {
             const current = getMetricColor(id);
             if (color === current) continue;
             $settings.overlay.metricColors[id] = color;
@@ -163,18 +221,18 @@
         saveSettings($settings);
     }
 
-    function onGroupColorChange(e, ids) {
-        applyGroupColor(ids, e.target.value);
+    function onGroupColorChange(e, grp) {
+        applyGroupColor(grp, e.target.value);
     }
 
-    function onGroupHexBlur(ids, value) {
-        const key = "group-" + ids[0];
+    function onGroupHexBlur(key, ids, value) {
+        const invalidKey = "group-" + key;
         if (/^#[0-9a-f]{6}$/i.test(value)) {
-            invalidHex = { ...invalidHex, [key]: false };
-            if (value === getGroupColor(ids)) return;
-            applyGroupColor(ids, value);
+            invalidHex = { ...invalidHex, [invalidKey]: false };
+            if (value === getGroupColor(key)) return;
+            applyGroupColor({ key, ids }, value);
         } else if (value.length > 0) {
-            invalidHex = { ...invalidHex, [key]: true };
+            invalidHex = { ...invalidHex, [invalidKey]: true };
         }
     }
 
@@ -192,7 +250,7 @@
         saveSettings($settings);
     }
 
-    function resetGroupColors(ids) {
+    function resetGroupColors(key, ids) {
         for (const id of ids) {
             const def = getDefaultColor(id);
             if (!$settings.overlay.metricColors)
@@ -204,6 +262,13 @@
                 $settings.overlay.userCustomizedMetricColors.filter(
                     (x) => !ids.includes(x),
                 );
+        if (!$settings.overlay.groupColors) $settings.overlay.groupColors = {};
+        $settings.overlay.groupColors[key] = getDefaultGroupColor(key, ids);
+        if ($settings.overlay.userCustomizedGroupColors)
+            $settings.overlay.userCustomizedGroupColors =
+                $settings.overlay.userCustomizedGroupColors.filter(
+                    (x) => x !== key,
+                );
         settings.set($settings);
         saveSettings($settings);
     }
@@ -214,6 +279,18 @@
             ...$settings.overlay.defaultMetricColors,
         };
         $settings.overlay.userCustomizedMetricColors = [];
+        const nextGroups = {};
+        for (const grp of [...leftColumnGroups, ...rightColumnGroups]) {
+            nextGroups[grp.key] = getDefaultGroupColor(grp.key, grp.ids);
+        }
+        if (diskMetrics.length > 0) {
+            nextGroups.disk = getDefaultGroupColor(
+                "disk",
+                diskMetrics.map((d) => d.id),
+            );
+        }
+        $settings.overlay.groupColors = nextGroups;
+        $settings.overlay.userCustomizedGroupColors = [];
         settings.set($settings);
         saveSettings($settings);
     }
@@ -372,11 +449,11 @@
                         {#each leftColumnGroups as grp}
                             <h3 class="section-subtitle">
                                 {grp.group}
-                                {#if grp.ids.some((id) => hasOverride(id))}
+                                {#if grp.ids.some( (id) => hasOverride(id), ) || hasGroupOverride(grp.key)}
                                     <button
                                         class="reset-btn group"
                                         onclick={() =>
-                                            resetGroupColors(grp.ids)}
+                                            resetGroupColors(grp.key, grp.ids)}
                                         >↺ Reset</button
                                     >
                                 {/if}
@@ -385,20 +462,23 @@
                                 <span class="color-label">All {grp.group}</span>
                                 <input
                                     type="color"
-                                    value={getGroupColor(grp.ids)}
-                                    onchange={(e) =>
-                                        onGroupColorChange(e, grp.ids)}
+                                    value={getGroupColor(grp.key, grp.ids)}
+                                    onchange={(e) => onGroupColorChange(e, grp)}
                                     class="color-picker"
                                 />
                                 <input
                                     type="text"
                                     class="hex-input"
                                     class:invalid={invalidHex[
-                                        "group-" + grp.ids[0]
+                                        "group-" + grp.key
                                     ]}
-                                    value={getGroupColor(grp.ids)}
+                                    value={getGroupColor(grp.key, grp.ids)}
                                     onblur={(e) =>
-                                        onGroupHexBlur(grp.ids, e.target.value)}
+                                        onGroupHexBlur(
+                                            grp.key,
+                                            grp.ids,
+                                            e.target.value,
+                                        )}
                                     placeholder="#RRGGBB"
                                 />
                                 <span class="reset-spacer"></span>
@@ -448,11 +528,11 @@
                         {#each rightColumnGroups as grp}
                             <h3 class="section-subtitle">
                                 {grp.group}
-                                {#if grp.ids.some((id) => hasOverride(id))}
+                                {#if grp.ids.some( (id) => hasOverride(id), ) || hasGroupOverride(grp.key)}
                                     <button
                                         class="reset-btn group"
                                         onclick={() =>
-                                            resetGroupColors(grp.ids)}
+                                            resetGroupColors(grp.key, grp.ids)}
                                         >↺ Reset</button
                                     >
                                 {/if}
@@ -461,20 +541,23 @@
                                 <span class="color-label">All {grp.group}</span>
                                 <input
                                     type="color"
-                                    value={getGroupColor(grp.ids)}
-                                    onchange={(e) =>
-                                        onGroupColorChange(e, grp.ids)}
+                                    value={getGroupColor(grp.key, grp.ids)}
+                                    onchange={(e) => onGroupColorChange(e, grp)}
                                     class="color-picker"
                                 />
                                 <input
                                     type="text"
                                     class="hex-input"
                                     class:invalid={invalidHex[
-                                        "group-" + grp.ids[0]
+                                        "group-" + grp.key
                                     ]}
-                                    value={getGroupColor(grp.ids)}
+                                    value={getGroupColor(grp.key, grp.ids)}
                                     onblur={(e) =>
-                                        onGroupHexBlur(grp.ids, e.target.value)}
+                                        onGroupHexBlur(
+                                            grp.key,
+                                            grp.ids,
+                                            e.target.value,
+                                        )}
                                     placeholder="#RRGGBB"
                                 />
                                 <span class="reset-spacer"></span>
@@ -522,11 +605,12 @@
                         {#if diskMetrics.length > 0}
                             <h3 class="section-subtitle">
                                 Disk
-                                {#if diskMetrics.some( ({ id }) => hasOverride(id), )}
+                                {#if diskMetrics.some( ({ id }) => hasOverride(id), ) || hasGroupOverride("disk")}
                                     <button
                                         class="reset-btn group"
                                         onclick={() =>
                                             resetGroupColors(
+                                                "disk",
                                                 diskMetrics.map((d) => d.id),
                                             )}>↺ Reset</button
                                     >
@@ -537,13 +621,14 @@
                                 <input
                                     type="color"
                                     value={getGroupColor(
+                                        "disk",
                                         diskMetrics.map((d) => d.id),
                                     )}
                                     onchange={(e) =>
-                                        onGroupColorChange(
-                                            e,
-                                            diskMetrics.map((d) => d.id),
-                                        )}
+                                        onGroupColorChange(e, {
+                                            key: "disk",
+                                            ids: diskMetrics.map((d) => d.id),
+                                        })}
                                     class="color-picker"
                                 />
                                 <input
@@ -551,10 +636,12 @@
                                     class="hex-input"
                                     class:invalid={invalidHex["group-disk"]}
                                     value={getGroupColor(
+                                        "disk",
                                         diskMetrics.map((d) => d.id),
                                     )}
                                     onblur={(e) =>
                                         onGroupHexBlur(
+                                            "disk",
                                             diskMetrics.map((d) => d.id),
                                             e.target.value,
                                         )}
@@ -603,7 +690,7 @@
                     </div>
                 </div>
 
-                {#if $settings?.overlay?.userCustomizedMetricColors?.length > 0}
+                {#if $settings?.overlay?.userCustomizedMetricColors?.length > 0 || $settings?.overlay?.userCustomizedGroupColors?.length > 0}
                     <button class="reset-btn" onclick={resetAllColors}>
                         Reset All to Defaults
                     </button>

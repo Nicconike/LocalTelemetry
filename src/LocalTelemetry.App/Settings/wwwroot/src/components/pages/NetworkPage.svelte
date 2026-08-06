@@ -4,12 +4,8 @@
     import Select from "../ui/Select.svelte";
     import SectionCard from "../ui/SectionCard.svelte";
 
-    function change() {
-        checkDirty();
-    }
-
     let nicOptions = $derived([
-        { value: "auto", label: "Auto (best match)" },
+        { value: "auto", label: "Auto (Best Match)" },
         ...($nics ?? []).map((n) => ({ value: n, label: n })),
     ]);
 </script>
@@ -26,7 +22,6 @@
                 label="Adapter"
                 bind:value={$settings.monitoring.preferredNic}
                 options={nicOptions}
-                onchange={change}
             />
         </SectionCard>
 
@@ -37,7 +32,6 @@
             <Toggle
                 bind:checked={$settings.netUsage.enabled}
                 label="Enable daily traffic logging"
-                onchange={change}
             />
         </SectionCard>
     </div>

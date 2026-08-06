@@ -56,7 +56,6 @@
         const next = deepClone($settings);
         next.overlay.row1 = items.filter((x) => x);
         settings.set(next);
-        checkDirty();
     }
 
     function moveUp(idx) {
@@ -149,12 +148,13 @@
         $settings ? ($settings.overlay.row1 || []).filter((x) => x) : [],
     );
     let available = $derived(allMetrics.filter((m) => !items.includes(m.id)));
-    let selectedMetric = $state("");
 
-    function handleAdd() {
-        if (!selectedMetric) return;
-        add(selectedMetric);
-        selectedMetric = "";
+    function handleAdd(e) {
+        const el = e.currentTarget;
+        const metricId = el.value;
+        if (!metricId) return;
+        add(metricId);
+        el.value = "";
     }
 </script>
 
@@ -211,11 +211,7 @@
             {#if available.length > 0}
                 <div class="add-row">
                     <span class="add-label">+ Add metric:</span>
-                    <select
-                        class="add-select"
-                        bind:value={selectedMetric}
-                        onchange={handleAdd}
-                    >
+                    <select class="add-select" onchange={handleAdd}>
                         <option value="">-- Select --</option>
                         {#each available as m (m.id)}
                             <option value={m.id}>{m.label}</option>

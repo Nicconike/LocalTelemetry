@@ -18,11 +18,13 @@ This page provides an architectural breakdown of the C# backend powering **Local
 - Central engine for polling system hardware sensors.
 - Maintains timer loops executing periodic sensor checks based on user polling rate settings.
 - Aggregates metrics from specialized hardware readers:
-  - `AmdGpuMonitor.cs` (AMD ADL library interop)
-  - `NvGpuMonitor.cs` (NVIDIA NVAPI library interop)
-  - `IntelGpuMonitor.cs` (Intel Graphics API interop)
+  - `AmdGpuMonitor.cs` (AMD ADL interop, `atiadlxx.dll`)
+  - `NvGpuMonitor.cs` (NVIDIA NVML interop, `nvml.dll`)
+  - `IntelGpuMonitor.cs` (Intel Graphics Control Library interop, `ControlLib.dll`)
+  - `WddmGpuMonitor.cs` (system-wide GPU utilisation via WDDM GPU Engine performance counters)
   - `DiskQuery.cs` (Performance Counter / IOCTL queries)
-  - `WindowsNetworkUsageProvider.cs` & `EseNetworkUsageReader.cs` (Network interfaces & ESE databases)
+  - `WindowsNetworkUsageProvider.cs` & `EseNetworkUsageReader.cs` (Network interfaces & SRUM ESE databases)
+  - `DatImporter.cs` (imports daily usage records from `.dat` files)
 
 #### 3. `SystemInfo.cs` (`Hardware/`)
 - System info collector gathering CPU name, physical core counts, RAM capacity, GPU models, Windows OS build versions and motherboard identifiers.
@@ -44,7 +46,7 @@ This page provides an architectural breakdown of the C# backend powering **Local
 #### 2. `AlertService.cs` (`Services/`)
 - Evaluates live telemetry values against threshold rules set in `AppSettings.Alerts`.
 - Triggers visual text flashing in `TaskbarOverlay`.
-- Dispatches commands to `NotificationClient.cs` to communicate with `LocalTelemetry.Notifier.exe`.
+- Dispatches notifications to `LocalTelemetry.Notifier.exe` via `NotificationClient.cs`, which writes JSON messages over a **named pipe** (`LocalTelemetryNotifier`). The notifier process is launched once with the app's PID as its only argument, used purely to track the app's lifetime.
 
 #### 3. `SettingsShell.xaml.cs` (`Settings/`)
 - WPF host window managing Microsoft WebView2 control (`Microsoft.Web.WebView2.Wpf`).

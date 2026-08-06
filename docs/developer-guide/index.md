@@ -18,8 +18,9 @@ flowchart TD
 
     subgraph Drivers["Kernel & Hardware Layer"]
         PawnIo["PawnIo Driver / MSRs"]
-        NVAPI["NVIDIA NVAPI / NVML"]
+        NVML["NVIDIA NVML"]
         ADL["AMD ADL"]
+        IGCL["Intel IGCL (ControlLib)"]
     end
 
     subgraph UI["Settings UI"]
@@ -41,14 +42,14 @@ flowchart TD
 ## Key Subsystems
 
 ### 1. `LocalTelemetry.Core` (`.NET 10 Class Library`)
-- **Responsibility**: Hardware sensor monitoring, PawnIo kernel driver communication, vendor API bindings (NVAPI, ADL, Intel Power Gadget), ESE log parsing and JSON configuration management.
+- **Responsibility**: Hardware sensor monitoring, vendor API bindings (NVML, ADL, Intel ControlLib, WDDM GPU counters), SRUM ESE parsing, `.dat` traffic import and JSON configuration management.
 - **Dependencies**: No UI framework dependencies (pure C# logic).
 
 ### 2. `LocalTelemetry.App` (`.NET 10 WPF Application`)
 - **Responsibility**: Manages the main application lifecycle, Win32 P/Invoke taskbar window docking (`TaskbarOverlay`), System Tray context menu (`TrayIconManager`) and hosting WebView2 for the Svelte 5 settings panel (`SettingsShell`).
 
 ### 3. `LocalTelemetry.Notifier` (`.NET 10 WinForms Helper`)
-- **Responsibility**: Standalone, lightweight popup notification tool. Receives toast flags via command line parameters to display non-blocking alerts over games or fullscreen applications.
+- **Responsibility**: Standalone, lightweight popup notification tool. Receives alert payloads over a **named pipe** (`LocalTelemetryNotifier`) and exits automatically when the main app (its parent process) closes.
 
 ### 4. Svelte 5 Settings UI (`src/LocalTelemetry.App/Settings/wwwroot`)
 - **Responsibility**: Modern dark-mode configuration UI built with Svelte 5 runes (`$state`, `$derived`, `$effect`), Vite, Bun and TypeScript. Communicates with WPF via bidirectional `window.chrome.webview` JSON messaging.

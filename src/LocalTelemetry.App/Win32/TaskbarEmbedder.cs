@@ -18,6 +18,9 @@ public sealed class TaskbarEmbedder(AppSettings cfg, ILogger<TaskbarEmbedder> lo
     private readonly AppSettings _cfg = cfg;
     private readonly ILogger _log = log;
 
+    /// <summary>Minimum gap (physical px) kept between the overlay's right edge and the tray area.</summary>
+    private const int TrayInset = 4;
+
     private IntPtr _parentHwnd = IntPtr.Zero;
     private IntPtr _taskBandHwnd = IntPtr.Zero;
     private NativeMethods.RECT _taskBandOri;
@@ -46,6 +49,10 @@ public sealed class TaskbarEmbedder(AppSettings cfg, ILogger<TaskbarEmbedder> lo
 
     private int _trayLeftEdge = -1;
 
+    // Reposition() runs on a 200ms timer; PositionInBand() computes the same position every
+    // tick, so only emit a log line when the position message actually changes.
+    private string? _lastPositionInBandLog;
+
     /// <summary>
     /// Attempts to embed the overlay window into the taskbar. Tries the child-window
     /// approach first; falls back to a layered floating window on failure.
@@ -57,6 +64,7 @@ public sealed class TaskbarEmbedder(AppSettings cfg, ILogger<TaskbarEmbedder> lo
     {
         _trayLeftEdge = GetTrayLeftEdge();
         RefreshTaskbarInfo();
+        LogTrayStructure();
         IsEmbedded = false;
         IsFallback = false;
 
@@ -199,26 +207,84 @@ public sealed class TaskbarEmbedder(AppSettings cfg, ILogger<TaskbarEmbedder> lo
             if (tray == IntPtr.Zero) return -1;
 
             // TrayNotifyWnd exists on Win10 and most Win11 builds (order: icons | clock)
-            IntPtr traywnd = NativeMethods.FindWindowEx(tray, IntPtr.Zero, "TrayNotifyWnd", null);
-            if (traywnd != IntPtr.Zero)
+            IntPtr trayNotify = NativeMethods.FindWindowEx(tray, IntPtr.Zero, "TrayNotifyWnd", null);
+            if (trayNotify != IntPtr.Zero && NativeMethods.GetWindowRect(trayNotify, out var notifyRect))
             {
-                NativeMethods.GetWindowRect(traywnd, out var r);
-                return r.Left;
+                LogTrayEdgeChange(notifyRect.Left, $"TrayNotifyWnd left={notifyRect.Left}");
+                return notifyRect.Left;
+            }
+
+            // Win11: the clock is rendered as a separate top-level widget; its left edge
+            // marks the start of the tray content area on taskbars without TrayNotifyWnd.
+            IntPtr clock = NativeMethods.FindWindowEx(tray, IntPtr.Zero, "TrayClockWClass", null);
+            if (clock == IntPtr.Zero)
+                clock = NativeMethods.FindWindowEx(tray, IntPtr.Zero, "ClockCompWidget", null);
+            if (clock != IntPtr.Zero && NativeMethods.GetWindowRect(clock, out var clockRect))
+            {
+                LogTrayEdgeChange(clockRect.Left, $"clock left={clockRect.Left}");
+                return clockRect.Left;
             }
 
             // Win11: DesktopWindowContentBridge covers the full tray content area.
             // Estimate the tray left edge by subtracting a DPI-aware tray width.
-            traywnd = NativeMethods.FindWindowEx(tray, IntPtr.Zero,
+            IntPtr bridge = NativeMethods.FindWindowEx(tray, IntPtr.Zero,
                 "Windows.UI.Composition.DesktopWindowContentBridge", null);
-            if (traywnd != IntPtr.Zero && NativeMethods.GetWindowRect(traywnd, out var bridgeRect))
+            if (bridge != IntPtr.Zero && NativeMethods.GetWindowRect(bridge, out var bridgeRect))
             {
                 int trayWidth = EstimateTrayWidth();
-                return bridgeRect.Right - trayWidth;
+                int edge = bridgeRect.Right - trayWidth;
+                LogTrayEdgeChange(edge, $"bridge estimate (right={bridgeRect.Right}, width={trayWidth}) => {edge}");
+                return edge;
             }
 
+            LogTrayEdgeChange(-1, "no tray marker found, returning -1");
             return -1;
         }
         catch (Exception) { return -1; }
+    }
+
+    // Reposition() runs on a 200ms timer; GetTrayLeftEdge() resolves the same value every
+    // tick, so only emit a log line when the resolved edge actually changes.
+    private static int _lastLoggedTrayEdge = int.MinValue;
+
+    private static void LogTrayEdgeChange(int edge, string message)
+    {
+        if (edge == _lastLoggedTrayEdge) return;
+        _lastLoggedTrayEdge = edge;
+        Log.Info($"Tray edge: {message}");
+    }
+
+    /// <summary>
+    /// Dumps the direct child windows of the Explorer taskbar (class name, visibility,
+    /// rect) to the system log. Used to diagnose overlay placement issues.
+    /// </summary>
+    private static void LogTrayStructure()
+    {
+        try
+        {
+            IntPtr tray = FindExplorerTrayWnd();
+            if (tray == IntPtr.Zero)
+            {
+                Log.Info("Tray structure: Shell_TrayWnd not found");
+                return;
+            }
+
+            Log.Info($"Tray structure: Shell_TrayWnd=0x{(long)tray:X}");
+            var className = new char[256];
+            IntPtr child = IntPtr.Zero;
+            while ((child = NativeMethods.FindWindowEx(tray, child, null, null)) != IntPtr.Zero)
+            {
+                Array.Clear(className);
+                NativeMethods.GetClassName(child, className, className.Length);
+                string cls = new string(className).TrimEnd('\0');
+                NativeMethods.GetWindowRect(child, out var r);
+                Log.Info($"  child: class='{cls}', visible={NativeMethods.IsWindowVisible(child)}, rect={r.Left},{r.Top} {r.Width}x{r.Height}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "LogTrayStructure failed");
+        }
     }
 
     private static bool IsWindows11Taskbar()
@@ -394,6 +460,9 @@ public sealed class TaskbarEmbedder(AppSettings cfg, ILogger<TaskbarEmbedder> lo
                     ? _trayLeftEdge
                     : parentRect.Width;
                 x = rightBound - sz.Width - _cfg.Overlay.PlacementOffset;
+                // Never let the overlay slide under the tray: keep a minimum inset.
+                if (_trayLeftEdge > 0)
+                    x = Math.Min(x, _trayLeftEdge - sz.Width - TrayInset);
             }
             else
             {
@@ -401,7 +470,22 @@ public sealed class TaskbarEmbedder(AppSettings cfg, ILogger<TaskbarEmbedder> lo
             }
         }
 
+        x = Math.Max(x, 0);
+        // Defensive: never extend past the parent's right edge (avoids edge clipping).
+        if (x + sz.Width > parentRect.Width)
+            x = Math.Max(parentRect.Width - sz.Width, 0);
+
         int y = Math.Max(0, (parentRect.Height - sz.Height) / 2);
+
+        string positionLog = $"PositionInBand: isWin11={_isWin11}, centered={_isWin11 && IsTaskbarCentered()}, " +
+            $"placement='{_cfg.Overlay.Placement}', offset={_cfg.Overlay.PlacementOffset}, " +
+            $"parent={parentRect.Width}x{parentRect.Height}, trayLeftEdge={_trayLeftEdge}, " +
+            $"overlay={sz.Width}x{sz.Height} -> x={x}, y={y}";
+        if (positionLog != _lastPositionInBandLog)
+        {
+            _lastPositionInBandLog = positionLog;
+            Log.Info(positionLog);
+        }
 
         NativeMethods.SetWindowPos(
             overlayHwnd, NativeMethods.HWND_TOP,

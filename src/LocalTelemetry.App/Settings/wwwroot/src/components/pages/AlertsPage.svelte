@@ -3,10 +3,6 @@
     import Toggle from "../ui/Toggle.svelte";
     import Slider from "../ui/Slider.svelte";
     import SectionCard from "../ui/SectionCard.svelte";
-
-    function change() {
-        checkDirty();
-    }
 </script>
 
 {#if $settings}
@@ -17,7 +13,6 @@
             <Toggle
                 bind:checked={$settings.alerts.enabled}
                 label="Enable Threshold Alerts"
-                onchange={change}
             />
         </SectionCard>
 
@@ -25,38 +20,27 @@
             <SectionCard title="Thresholds">
                 <h3 class="section-subtitle">CPU</h3>
                 <div class="alert-row">
-                    <Toggle
-                        bind:checked={$settings.alerts.alertCpuUsage}
-                        onchange={change}
-                    />
+                    <Toggle bind:checked={$settings.alerts.alertCpuUsage} />
                     <Slider
                         label="CPU Usage"
                         bind:value={$settings.alerts.cpuUsageMaxPct}
                         min={50}
                         max={100}
                         unit="%"
-                        onchange={change}
                     />
                 </div>
                 <div class="alert-row">
-                    <Toggle
-                        bind:checked={$settings.alerts.alertCpuTemp}
-                        onchange={change}
-                    />
+                    <Toggle bind:checked={$settings.alerts.alertCpuTemp} />
                     <Slider
                         label="CPU Temp"
                         bind:value={$settings.alerts.cpuTempMaxC}
                         min={60}
                         max={100}
                         unit="°C"
-                        onchange={change}
                     />
                 </div>
                 <div class="alert-row">
-                    <Toggle
-                        bind:checked={$settings.alerts.alertCpuFreq}
-                        onchange={change}
-                    />
+                    <Toggle bind:checked={$settings.alerts.alertCpuFreq} />
                     <Slider
                         label="CPU Frequency (alert when below)"
                         bind:value={$settings.alerts.cpuFreqMinMhz}
@@ -64,14 +48,10 @@
                         max={2000}
                         step={50}
                         unit="MHz"
-                        onchange={change}
                     />
                 </div>
                 <div class="alert-row">
-                    <Toggle
-                        bind:checked={$settings.alerts.alertCpuPower}
-                        onchange={change}
-                    />
+                    <Toggle bind:checked={$settings.alerts.alertCpuPower} />
                     <Slider
                         label="CPU Package Power"
                         bind:value={$settings.alerts.cpuPowerMaxW}
@@ -79,46 +59,34 @@
                         max={250}
                         step={5}
                         unit="W"
-                        onchange={change}
                     />
                 </div>
 
                 <h3 class="section-subtitle">RAM</h3>
                 <div class="alert-row">
-                    <Toggle
-                        bind:checked={$settings.alerts.alertRamUsage}
-                        onchange={change}
-                    />
+                    <Toggle bind:checked={$settings.alerts.alertRamUsage} />
                     <Slider
                         label="RAM Usage"
                         bind:value={$settings.alerts.ramUsageMaxPct}
                         min={50}
                         max={100}
                         unit="%"
-                        onchange={change}
                     />
                 </div>
 
                 <h3 class="section-subtitle">GPU</h3>
                 <div class="alert-row">
-                    <Toggle
-                        bind:checked={$settings.alerts.alertGpuUsage}
-                        onchange={change}
-                    />
+                    <Toggle bind:checked={$settings.alerts.alertGpuUsage} />
                     <Slider
                         label="GPU Usage"
                         bind:value={$settings.alerts.gpuUsageMaxPct}
                         min={50}
                         max={100}
                         unit="%"
-                        onchange={change}
                     />
                 </div>
                 <div class="alert-row">
-                    <Toggle
-                        bind:checked={$settings.alerts.alertGpuVram}
-                        onchange={change}
-                    />
+                    <Toggle bind:checked={$settings.alerts.alertGpuVram} />
                     <Slider
                         label="GPU VRAM Usage"
                         bind:value={$settings.alerts.gpuVramMaxMb}
@@ -126,28 +94,20 @@
                         max={32768}
                         step={512}
                         unit="MB"
-                        onchange={change}
                     />
                 </div>
                 <div class="alert-row">
-                    <Toggle
-                        bind:checked={$settings.alerts.alertGpuTemp}
-                        onchange={change}
-                    />
+                    <Toggle bind:checked={$settings.alerts.alertGpuTemp} />
                     <Slider
                         label="GPU Temp"
                         bind:value={$settings.alerts.gpuTempMaxC}
                         min={60}
                         max={100}
                         unit="°C"
-                        onchange={change}
                     />
                 </div>
                 <div class="alert-row">
-                    <Toggle
-                        bind:checked={$settings.alerts.alertGpuFreq}
-                        onchange={change}
-                    />
+                    <Toggle bind:checked={$settings.alerts.alertGpuFreq} />
                     <Slider
                         label="GPU Frequency (alert when below)"
                         bind:value={$settings.alerts.gpuFreqMinMhz}
@@ -155,14 +115,10 @@
                         max={2000}
                         step={50}
                         unit="MHz"
-                        onchange={change}
                     />
                 </div>
                 <div class="alert-row">
-                    <Toggle
-                        bind:checked={$settings.alerts.alertGpuPower}
-                        onchange={change}
-                    />
+                    <Toggle bind:checked={$settings.alerts.alertGpuPower} />
                     <Slider
                         label="GPU Power"
                         bind:value={$settings.alerts.gpuPowerMaxW}
@@ -170,7 +126,6 @@
                         max={400}
                         step={5}
                         unit="W"
-                        onchange={change}
                     />
                 </div>
 
@@ -179,7 +134,6 @@
                     <div class="alert-row">
                         <Toggle
                             bind:checked={$settings.alerts.alertBatteryLow}
-                            onchange={change}
                         />
                         <Slider
                             label="Battery Low"
@@ -187,7 +141,6 @@
                             min={5}
                             max={50}
                             unit="%"
-                            onchange={change}
                         />
                     </div>
                 {/if}
@@ -200,12 +153,10 @@
                 <Toggle
                     bind:checked={$settings.alerts.showToastNotif}
                     label="Show tray notification"
-                    onchange={change}
                 />
                 <Toggle
                     bind:checked={$settings.alerts.flashOverlay}
                     label="Flash overlay briefly"
-                    onchange={change}
                 />
                 <Slider
                     label="Cooldown between alerts"
@@ -214,12 +165,10 @@
                     max={120}
                     step={5}
                     unit="s"
-                    onchange={change}
                 />
                 <Toggle
                     bind:checked={$settings.alerts.fireOncePerSession}
                     label="Only fire once per session (ignores cooldown)"
-                    onchange={change}
                 />
             </SectionCard>
         {/if}

@@ -20,7 +20,7 @@ LocalTelemetry/
 │   ├── LocalTelemetry.Core/     # Hardware polling, PawnIo, SystemInfo, Config models
 │   │   ├── Config/              # AppSettings.cs & serialization options
 │   │   ├── Diagnostics/         # Log.cs logging utility
-│   │   ├── Hardware/            # Hardware sensors (CPU, NVAPI, ADL, Disk, Network)
+│   │   ├── Hardware/            # Hardware sensors (CPU, NVML, ADL, IGCL, WDDM, Disk, Network)
 │   │   └── Models/              # Data transfer objects & metric structures
 │   ├── LocalTelemetry.App/      # WPF Windows desktop app & overlay
 │   │   ├── Overlay/             # TaskbarOverlay.cs (Win32 P/Invoke taskbar window)

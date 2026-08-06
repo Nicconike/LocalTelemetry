@@ -17,10 +17,6 @@
         { value: "settings", label: "Open Settings" },
     ];
 
-    function change() {
-        checkDirty();
-    }
-
     function apply() {
         saveSettings($settings);
     }
@@ -40,7 +36,6 @@
                 label="Double-click action"
                 bind:value={$settings.overlay.doubleClickAction}
                 options={dblClickOptions}
-                onchange={change}
             />
         </SectionCard>
 
@@ -49,7 +44,6 @@
                 label="Position in taskbar"
                 bind:value={$settings.overlay.position}
                 options={posOptions}
-                onchange={change}
             />
             <Slider
                 label="Offset from Edge"

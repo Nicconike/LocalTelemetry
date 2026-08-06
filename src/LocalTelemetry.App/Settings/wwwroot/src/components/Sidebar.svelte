@@ -1,5 +1,8 @@
 <script>
+    import { createEventDispatcher } from "svelte";
     import { activePage } from "../lib/store.ts";
+
+    const dispatch = createEventDispatcher();
 
     const pages = [
         {
@@ -8,14 +11,14 @@
             icon: "M12 1a2 2 0 0 0-2 2v.3a6.9 6.9 0 0 0-2.4 1l-.2-.2a2 2 0 0 0-2.8.8l-.7 1.1a2 2 0 0 0 .8 2.7l.2.2a7 7 0 0 0 0 2l-.2.2a2 2 0 0 0-.8 2.7l.7 1.2a2 2 0 0 0 2.8.8l.2-.2a6.9 6.9 0 0 0 2.4 1v.3a2 2 0 0 0 4 0v-.3a6.9 6.9 0 0 0 2.4-1l.2.2a2 2 0 0 0 2.8-.8l.7-1.2a2 2 0 0 0-.8-2.7l-.2-.2a7 7 0 0 0 0-2l.2-.2a2 2 0 0 0 .8-2.7l-.7-1.1a2 2 0 0 0-2.8-.8l-.2.2a6.9 6.9 0 0 0-2.4-1V3a2 2 0 0 0-2-2zm0 7a4 4 0 1 1 0 8 4 4 0 0 1 0-8z",
         },
         {
-            id: "monitoring",
-            label: "Monitoring",
-            icon: "M18 20V10M12 20V4M6 20v-6",
-        },
-        {
             id: "overlay",
             label: "Overlay",
             icon: "M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5",
+        },
+        {
+            id: "monitoring",
+            label: "Monitoring",
+            icon: "M18 20V10M12 20V4M6 20v-6",
         },
         {
             id: "layout",
@@ -43,7 +46,7 @@
     ];
 
     function navigate(pageId) {
-        activePage.set(pageId);
+        dispatch("navigate", pageId);
     }
 </script>
 

@@ -128,21 +128,6 @@ public sealed partial class App : WpfApplication
         };
         _tray = _services.GetRequiredService<TrayIconManager>();
         _tray.SetOverlayVisible(_cfg.Overlay.Visible);
-        _tray.ToggleOverlayRequested += () =>
-        {
-            _cfg.Overlay.Visible = !_cfg.Overlay.Visible;
-            _cfg.Save();
-            _tray.SetOverlayVisible(_cfg.Overlay.Visible);
-            if (_cfg.Overlay.Visible)
-            {
-                if (!_overlay.Visible) _overlay.Show();
-                _overlay.RefreshOverlay();
-            }
-            else
-            {
-                _overlay.Hide();
-            }
-        };
         _alerts = _services.GetRequiredService<AlertService>();
         _monitor = _services.GetRequiredService<HardwareMonitor>();
         _notifClient = _services.GetRequiredService<NotificationClient>();
@@ -245,7 +230,7 @@ public sealed partial class App : WpfApplication
         e.Handled = true;
     }
 
-    private static void ApplyVendorColors(AppSettings cfg)
+    internal static void ApplyVendorColors(AppSettings cfg)
     {
         var vendorDefaults = BrandColorDefaults.BuildDefaultMetricColors();
         cfg.Overlay.DefaultMetricColors = vendorDefaults;
@@ -256,6 +241,14 @@ public sealed partial class App : WpfApplication
                 continue;
 
             cfg.Overlay.MetricColors[kvp.Key] = kvp.Value;
+        }
+
+        foreach (var kvp in BrandColorDefaults.BuildDefaultGroupColors(vendorDefaults))
+        {
+            if (cfg.Overlay.UserCustomizedGroupColors.Contains(kvp.Key))
+                continue;
+
+            cfg.Overlay.GroupColors[kvp.Key] = kvp.Value;
         }
     }
 

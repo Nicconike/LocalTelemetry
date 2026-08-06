@@ -7,7 +7,7 @@ This page details the minimum system requirements and step-by-step installation 
 
 | Requirement          | Minimum Specification                                | Recommended Specification                        |
 | :------------------- | :--------------------------------------------------- | :----------------------------------------------- |
-| **Operating System** | **Windows 10** (64-bit, v1903+)                      | **Windows 11** (64-bit, v22H2+)                  |
+| **Operating System** | **Windows 10** (64-bit, v2004+ / build 19041)        | **Windows 11** (64-bit, v22H2+)                  |
 | **Architecture**     | **x86-64 / AMD64** (Intel or AMD)                    | **x86-64 / AMD64**                               |
 | **Permissions**      | **Administrator (UAC)** *(for PawnIo driver access)* | **Administrator (UAC)**                          |
 | **RAM**              | **2 GB**                                             | **4 GB or higher**                               |
@@ -31,7 +31,7 @@ This page details the minimum system requirements and step-by-step installation 
 ### Method 2: Portable ZIP
 
 1. Download `LocalTelemetry-win-x64.zip` from [GitHub Releases](https://github.com/Nicconike/LocalTelemetry/releases).
-2. Extract the archive contents to any folder of your choice (e.g. `C:\Tools\LocalTelemetry`).
+2. Extract the archive contents to any folder of your choice (e.g. `E:\Software\LocalTelemetry`).
 3. Run `LocalTelemetry.exe`.
 
 > [!NOTE]

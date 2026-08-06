@@ -1,0 +1,173 @@
+name: "Project Automation"
+
+on:
+  issues:
+    types: [opened]
+  pull_request:
+    types: [opened]
+
+permissions:
+  contents: read
+
+jobs:
+  auto-project-setup:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Auto-Assign Sprint, Labels, Scope & Add to Project
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        with:
+          github-token: ${{ secrets.PROJECTS }}
+          script: |
+            const isIssue = !!context.payload.issue;
+            const item = isIssue ? context.payload.issue : context.payload.pull_request;
+            const title = item.title.toLowerCase();
+            const author = item.user.login;
+            const number = item.number;
+            const contentId = item.node_id;
+
+            // 1. Add Labels mapped directly to your existing repository labels
+            let labelsToAdd = new Set();
+
+            if (author.includes('bot') || author === 'dependabot[bot]' || title.includes('(deps)')) {
+              labelsToAdd.add('automated-pr');
+              labelsToAdd.add('dependencies');
+              labelsToAdd.add('ci');
+            } else {
+              if (title.startsWith('fix') || title.startsWith('revert')) {
+                labelsToAdd.add('bug');
+              } else if (title.startsWith('feat') || title.startsWith('refactor') || title.startsWith('perf')) {
+                labelsToAdd.add('enhancement');
+              } else if (title.startsWith('docs')) {
+                labelsToAdd.add('documentation');
+              } else if (title.startsWith('ci') || title.startsWith('build')) {
+                labelsToAdd.add('ci');
+              }
+
+              if (title.includes('(core)') || title.includes('(config)') || title.includes('(monitor)')) {
+                labelsToAdd.add('csharp');
+              } else if (title.includes('(app)') || title.includes('(overlay)')) {
+                labelsToAdd.add('frontend');
+              } else if (title.includes('(ci)') || title.includes('(actions)')) {
+                labelsToAdd.add('actions');
+                labelsToAdd.add('ci');
+              }
+            }
+
+            const finalLabels = Array.from(labelsToAdd);
+            if (finalLabels.length > 0) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: number,
+                labels: finalLabels
+              });
+              console.log(`Labeled #${number} with: ${finalLabels.join(', ')}`);
+            }
+
+            // 2. Add to User Project #7 & Find Active Sprint via GraphQL API
+            const owner = context.repo.owner;
+            const projectNumber = 7;
+
+            const projectQuery = `
+              query($owner: String!, $number: Int!) {
+                user(login: $owner) {
+                  projectV2(number: $number) {
+                    id
+                    fields(first: 100) {
+                      nodes {
+                        ... on ProjectV2IterationField {
+                          id
+                          name
+                          configuration {
+                            iterations {
+                              id
+                              startDate
+                              duration
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            `;
+
+            try {
+              const projectData = await github.graphql(projectQuery, { owner, number: projectNumber });
+              const project = projectData.user ? projectData.user.projectV2 : null;
+
+              if (!project) {
+                core.setFailed(`Project #${projectNumber} not found under user '${owner}'. Ensure PROJECTS_PAT secret is configured.`);
+                return;
+              }
+
+              const projectId = project.id;
+              const iterationField = project.fields.nodes.find(f => f.configuration && f.configuration.iterations);
+
+              if (!iterationField) {
+                core.setFailed("No Iteration/Sprint field found on Project #7.");
+                return;
+              }
+
+              // Timezone-safe YYYY-MM-DD comparison
+              const todayStr = new Date().toISOString().split('T')[0];
+              const iterations = iterationField.configuration.iterations;
+
+              // Find active iteration or next upcoming iteration
+              let activeIteration = iterations.find(iter => {
+                const startStr = iter.startDate;
+                const endDate = new Date(new Date(iter.startDate).getTime() + iter.duration * 86400000);
+                const endStr = endDate.toISOString().split('T')[0];
+                return todayStr >= startStr && todayStr < endStr;
+              });
+
+              if (!activeIteration) {
+                // Fallback to next upcoming iteration if available
+                activeIteration = iterations.find(iter => iter.startDate > todayStr);
+              }
+
+              if (!activeIteration) {
+                console.log(`No active or upcoming iteration found for date ${todayStr}. Skipping sprint field update.`);
+                return;
+              }
+
+              // Add Item to Project #7
+              const addItemMutation = `
+                mutation($projectId: ID!, $contentId: ID!) {
+                  addProjectV2ItemByCodeId(input: {projectId: $projectId, contentId: $contentId}) {
+                    item { id }
+                  }
+                }
+              `;
+              const addItemRes = await github.graphql(addItemMutation, { projectId, contentId });
+              const itemId = addItemRes.addProjectV2ItemByCodeId.item.id;
+
+              // Update Sprint/Iteration Field
+              const updateFieldMutation = `
+                mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $iterationId: String!) {
+                  updateProjectV2ItemFieldValue(input: {
+                    projectId: $projectId,
+                    itemId: $itemId,
+                    fieldId: $fieldId,
+                    value: { iterationId: $iterationId }
+                  }) {
+                    projectV2Item { id }
+                  }
+                }
+              `;
+              await github.graphql(updateFieldMutation, {
+                projectId,
+                itemId,
+                fieldId: iterationField.id,
+                iterationId: activeIteration.id
+              });
+
+              console.log(`Successfully assigned #${number} to Project #7 Sprint (${activeIteration.id})`);
+            } catch (err) {
+              core.setFailed(`Project automation failed: ${err.message}`);
+            }

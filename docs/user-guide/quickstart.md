@@ -15,10 +15,9 @@ After installation, double-click the **LocalTelemetry** desktop shortcut or run 
 
 Right-click the **LocalTelemetry System Tray icon** to open the context menu:
 
-- ⚙️ **Settings**: Opens the Svelte 5 WebView2 settings panel.
-- 👁️ **Toggle Overlay**: Instantly show or hide the taskbar overlay.
-- 🔄 **Restart Overlay**: Re-initializes Win32 taskbar hooks if Explorer was restarted.
-- ❌ **Exit**: Completely closes LocalTelemetry.
+- **Show Overlay / Hide Overlay**: Instantly show or hide the taskbar overlay.
+- **Open Settings**: Opens the Svelte 5 WebView2 settings panel.
+- **Quit**: Completely closes LocalTelemetry.
 
 
 ## 3. Opening the Settings Panel
@@ -28,8 +27,8 @@ Double-click the **Tray Icon** or select **Settings** from the right-click menu.
 The Settings window allows you to:
 1. **Choose Active Metrics**: Toggle CPU, GPU, RAM, Disk and Network displays.
 2. **Reorder Layout**: Drag and drop lines/items to order metrics to your liking.
-3. **Customize Colors**: Choose accent colors and threshold alert highlight colors.
-4. **Set Threshold Alerts**: Configure alert temperatures (e.g. 85°C CPU warning).
+3. **Customize Appearance**: Choose one of the built-in themes and per-metric or per-group colors.
+4. **Set Threshold Alerts**: Configure alert temperatures (e.g. 90°C CPU warning).
 5. **Autostart**: Toggle "Start with Windows".
 
 

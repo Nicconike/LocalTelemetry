@@ -90,6 +90,47 @@ public class SettingsDtoTests
     }
 
     [Fact]
+    public void SettingsDtoMapping_ToDto_MapsUserCustomizedGroupColors()
+    {
+        var src = new AppSettings();
+        src.Overlay.GroupColors["cpu"] = "#FF0000";
+        src.Overlay.GroupColors["gpu"] = "#00FF00";
+        src.Overlay.UserCustomizedGroupColors.Add("cpu");
+        src.Overlay.UserCustomizedGroupColors.Add("gpu");
+
+        var dto = SettingsDtoMapping.ToDto(src);
+
+        dto.Overlay.GroupColors.Should().Contain("cpu", "#FF0000");
+        dto.Overlay.GroupColors.Should().Contain("gpu", "#00FF00");
+        dto.Overlay.UserCustomizedGroupColors.Should().Contain("cpu");
+        dto.Overlay.UserCustomizedGroupColors.Should().Contain("gpu");
+    }
+
+    [Fact]
+    public void SettingsDtoMapping_ApplyTo_RestoresUserCustomizedGroupColors()
+    {
+        var target = new AppSettings();
+        var dto = new SettingsDto
+        {
+            Overlay = new OverlayDto
+            {
+                GroupColors = new Dictionary<string, string>
+                {
+                    ["cpu"] = "#FF0000",
+                    ["gpu"] = "#00FF00",
+                },
+                UserCustomizedGroupColors = new HashSet<string> { "cpu" },
+            },
+        };
+
+        SettingsDtoMapping.ApplyTo(target, dto);
+
+        target.Overlay.GroupColors.Should().Contain("cpu", "#FF0000");
+        target.Overlay.GroupColors.Should().Contain("gpu", "#00FF00");
+        target.Overlay.UserCustomizedGroupColors.Should().Equal("cpu");
+    }
+
+    [Fact]
     public void SettingsDtoMapping_ApplyTo_UpdatesAppSettings()
     {
         var target = new AppSettings();
