@@ -1,10 +1,13 @@
-name: "Project Automation: Fully Automated Sprint & Fields"
+name: "Project Automation"
 
 on:
   issues:
     types: [opened]
   pull_request:
     types: [opened]
+
+permissions:
+  contents: read
 
 jobs:
   auto-project-setup:
@@ -14,7 +17,8 @@ jobs:
       pull-requests: write
 
     steps:
-      - name: Auto-Assign Sprint, Labels, Scope & Add to Project #7
+      - name: Auto-Assign Sprint, Labels, Scope & Add to Project
+        if: ${{ secrets.PROJECTS != '' }}
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         with:
           github-token: ${{ secrets.PROJECTS }}

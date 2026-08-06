@@ -13,8 +13,7 @@ header = """
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and [Conventional Commits](https://www.conventionalcommits.org/).
 """
 # A Tera template to be rendered for each release in the changelog.
 body = """
@@ -23,14 +22,17 @@ body = """
 {% else -%}
     ## [Unreleased]
 {% endif -%}
-{% for group, commits in commits | group_by(attribute="group") %}
-    ### {{ group | upper_first }}
-    {% for commit in commits %}
-        - {{ commit.message | split(pat="\n") | first | trim }}\
-        {% if commit.scope %} ({{ commit.scope }}){% endif -%}\
-        {% if commit.breaking %} [breaking]{% endif -%}\
-        ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}/commit/{{ commit.id }}))
-    {% endfor %}
+{% set group_order = ["Breaking Changes", "Features", "Bug Fixes", "Continuous Integration", "Performance Improvements", "Reverts", "Documentation", "Code Refactoring", "Styles", "Tests", "Build Systems", "Other Changes"] %}
+{% for group_name in group_order %}
+    {% set group_commits = commits | filter(attribute="group", value=group_name) %}
+    {% if group_commits | length > 0 %}
+        ### {{ group_name }}
+        {% for commit in group_commits %}
+            - {{ commit.message | split(pat="\n") | first | trim }}\
+            {% if commit.scope %} ({{ commit.scope }}){% endif -%}\
+            ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}/commit/{{ commit.id }}))
+        {% endfor %}
+    {% endif %}
 {% endfor %}
 
 """
@@ -69,11 +71,13 @@ commit_preprocessors = []
 topo_order = false
 # Order of commits in each group/release within the changelog.
 # Allowed values: newest, oldest
-sort_commits = "oldest"
+sort_commits = "newest"
 # Commit parsers assign every commit to a group. Each conventional commit type
 # gets its own section; anything that does not match lands in "Other Changes".
 commit_parsers = [
     { skip = true, message = "^Merge " },
+    { message = "^.*!:", group = "Breaking Changes" },
+    { footer = "BREAKING CHANGE", group = "Breaking Changes" },
     { message = "^feat", group = "Features" },
     { message = "^fix", group = "Bug Fixes" },
     { message = "^perf", group = "Performance Improvements" },
@@ -84,6 +88,6 @@ commit_parsers = [
     { message = "^test", group = "Tests" },
     { message = "^build", group = "Build Systems" },
     { message = "^ci", group = "Continuous Integration" },
-    { message = "^chore", group = "Chores" },
+    { message = "^chore", skip = true },
     { message = ".*", group = "Other Changes" },
 ]

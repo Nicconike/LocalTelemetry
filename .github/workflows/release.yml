@@ -133,6 +133,8 @@ jobs:
             - name: Install git-cliff
               if: ${{ steps.tag_version.outputs.new_tag != '' }}
               uses: taiki-e/install-action@cb33e69fad06166ca28a42b2575e4dadabf62ee8 # v2
+              with:
+                  tool: git-cliff
 
             - name: Generate Release Notes
               if: ${{ steps.tag_version.outputs.new_tag != '' }}
