@@ -12,7 +12,6 @@ permissions:
 jobs:
     sonar-analysis:
         name: SonarQube Analysis
-        if: ${{ secrets.SONAR_TOKEN != '' }}
         runs-on: windows-latest
         permissions:
             contents: read

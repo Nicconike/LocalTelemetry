@@ -4,6 +4,7 @@ on:
     push:
         branches: [master]
         paths:
+            - ".github/workflows/release.yml"
             - "setup.iss"
             - "src/LocalTelemetry.App/**"
             - "src/LocalTelemetry.Core/**"
