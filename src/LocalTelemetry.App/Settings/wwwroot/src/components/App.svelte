@@ -37,6 +37,9 @@
     import AboutPage from "./pages/AboutPage.svelte";
 
     let saving = $state(false);
+    let showNavModal = $state(false);
+    let pendingPage = null;
+    let navigateAfterSave = null;
 
     let isDirty = $derived.by(() => {
         if (!$settings || !$pristineSettings) return false;
@@ -68,6 +71,10 @@
                 }
                 saveStatus.set("saved");
                 saving = false;
+                if (navigateAfterSave) {
+                    activePage.set(navigateAfterSave);
+                    navigateAfterSave = null;
+                }
                 setTimeout(() => saveStatus.set("idle"), 2500);
             });
 
@@ -150,10 +157,43 @@
             settings.set(restored);
         } catch {}
     }
+
+    function handleNavigateRequest(event) {
+        const target = event.detail;
+        if (!target || target === $activePage) return;
+        if (isDirty) {
+            pendingPage = target;
+            showNavModal = true;
+        } else {
+            activePage.set(target);
+        }
+    }
+
+    function onSaveAndMove() {
+        if (!pendingPage || saving) return;
+        navigateAfterSave = pendingPage;
+        pendingPage = null;
+        showNavModal = false;
+        handleSave();
+    }
+
+    function onDiscardAndMove() {
+        handleDiscard();
+        if (pendingPage) {
+            activePage.set(pendingPage);
+            pendingPage = null;
+        }
+        showNavModal = false;
+    }
+
+    function onCancelNav() {
+        pendingPage = null;
+        showNavModal = false;
+    }
 </script>
 
 <div class="shell">
-    <Sidebar />
+    <Sidebar on:navigate={handleNavigateRequest} />
     <div class="content-wrap">
         <main class="content" id="main-content">
             {#if $activePage === "general"}
@@ -211,6 +251,53 @@
             {/if}
         </footer>
     </div>
+
+    {#if showNavModal}
+        <div
+            class="nav-modal-overlay"
+            role="button"
+            aria-label="Cancel navigation"
+            tabindex="-1"
+            onclick={onCancelNav}
+            onkeydown={(e) => {
+                if (e.key === "Escape") onCancelNav();
+            }}
+        >
+            <div
+                class="nav-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="nav-modal-title"
+                tabindex="-1"
+                onclick={(e) => e.stopPropagation()}
+                onkeydown={(e) => {
+                    if (e.key === "Escape") onCancelNav();
+                    e.stopPropagation();
+                }}
+            >
+                <h3 id="nav-modal-title">Unsaved Changes</h3>
+                <p>
+                    You have unsaved changes on this page. What would you like
+                    to do?
+                </p>
+                <div class="nav-modal-actions">
+                    <button class="btn-cancel" onclick={onCancelNav}>
+                        Cancel
+                    </button>
+                    <button class="btn-discard" onclick={onDiscardAndMove}>
+                        Discard
+                    </button>
+                    <button
+                        class="btn-save"
+                        onclick={onSaveAndMove}
+                        disabled={saving}
+                    >
+                        {saving ? "Saving…" : "Save"}
+                    </button>
+                </div>
+            </div>
+        </div>
+    {/if}
 </div>
 
 <style>
@@ -320,5 +407,72 @@
     }
     .btn-save:hover {
         opacity: 0.9;
+    }
+
+    .nav-modal-overlay {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: oklch(0 0 0 / 0.5);
+        z-index: 100;
+    }
+    .nav-modal {
+        width: min(380px, calc(100% - 48px));
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-lg);
+        padding: var(--space-5);
+        box-shadow: var(--shadow-md);
+    }
+    .nav-modal h3 {
+        font-size: var(--text-base);
+        font-weight: 600;
+        color: var(--color-text);
+        margin-bottom: var(--space-2);
+    }
+    .nav-modal p {
+        font-size: var(--text-sm);
+        color: var(--color-text-muted);
+        line-height: 1.5;
+        margin-bottom: var(--space-5);
+    }
+    .nav-modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: var(--space-2);
+    }
+    .nav-modal .btn-save,
+    .nav-modal .btn-discard,
+    .nav-modal .btn-cancel {
+        padding: var(--space-2) var(--space-4);
+        border-radius: var(--radius-md);
+        font-size: var(--text-sm);
+        font-weight: 500;
+    }
+    .nav-modal .btn-save {
+        background: var(--color-accent, #3b82f6);
+        color: #ffffff;
+        border: none;
+    }
+    .nav-modal .btn-save:disabled {
+        opacity: 0.6;
+    }
+    .nav-modal .btn-discard {
+        background: transparent;
+        color: var(--color-text);
+        border: 1px solid var(--color-divider);
+    }
+    .nav-modal .btn-discard:hover {
+        background: var(--color-surface-offset);
+    }
+    .nav-modal .btn-cancel {
+        background: transparent;
+        color: var(--color-text-muted);
+        border: 1px solid transparent;
+    }
+    .nav-modal .btn-cancel:hover {
+        color: var(--color-text);
     }
 </style>

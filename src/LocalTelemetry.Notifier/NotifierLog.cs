@@ -9,7 +9,7 @@ namespace LocalTelemetry.Notifier;
 /// </summary>
 internal static class NotifierLog
 {
-    private static string ModuleName(string? callerPath)
+    internal static string ModuleName(string? callerPath)
     {
         if (callerPath is null) return "?";
         int idx = callerPath.LastIndexOf("Notifier", StringComparison.Ordinal);

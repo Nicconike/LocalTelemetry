@@ -73,6 +73,13 @@ internal sealed class ToastForm : Form
     }
 
     // Animation
+    internal static int ComputeAnimOffset(int elapsedMs, int maxOffset, int durationMs)
+    {
+        double t = Math.Min(elapsedMs / (double)durationMs, 1.0);
+        t = 1.0 - Math.Pow(1.0 - t, 3); // ease-out cubic
+        return (int)(maxOffset * (1.0 - t));
+    }
+
     private void OnLoad(object? sender, EventArgs e)
     {
         // Animate slide-in from below the screen edge
@@ -85,11 +92,9 @@ internal sealed class ToastForm : Form
         animTimer.Tick += (_, _) =>
         {
             int elapsed = Environment.TickCount - startTicks;
-            double t = Math.Min(elapsed / (double)AnimationDurationMs, 1.0);
-            t = 1.0 - Math.Pow(1.0 - t, 3); // ease-out cubic
-            _animOffset = (int)((FormHeight + FormPadding) * (1.0 - t));
+            _animOffset = ComputeAnimOffset(elapsed, FormHeight + FormPadding, AnimationDurationMs);
             Location = new Point(screen.Right - FormWidth - FormPadding, screen.Bottom - FormHeight - FormPadding + _animOffset);
-            if (t >= 1.0)
+            if (elapsed >= AnimationDurationMs)
             {
                 animTimer.Stop();
                 animTimer.Dispose();

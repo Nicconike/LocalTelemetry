@@ -19,7 +19,7 @@
             CaptionHeight="36"
             CornerRadius="8"
             GlassFrameThickness="0"
-            ResizeBorderThickness="8"
+            ResizeBorderThickness="10"
             UseAeroCaptionButtons="False" />
     </WindowChrome.WindowChrome>
 
@@ -30,7 +30,7 @@
         <SolidColorBrush x:Key="BtnHoverBg" Color="#2D2C2A" />
     </Window.Resources>
 
-    <Grid>
+    <Grid Background="#171614">
         <Grid.RowDefinitions>
             <RowDefinition Height="32" />
             <RowDefinition Height="*" />
@@ -91,6 +91,9 @@
         </Grid>
 
         <!--  WebView2 host  -->
-        <wv2:WebView2 x:Name="WebView" Grid.Row="1" />
+        <wv2:WebView2
+            x:Name="WebView"
+            Grid.Row="1"
+            Margin="10,0,10,10" />
     </Grid>
 </Window>

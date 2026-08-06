@@ -11,7 +11,10 @@ namespace LocalTelemetry.Notifier;
 internal static class Program
 {
     private const string PipeName = "LocalTelemetryNotifier";
-    private const int ReconnectDelayMs = 1000;
+
+    internal static int ReconnectDelayMs = 1000;
+    internal static Func<INotifierPipeServer>? PipeServerFactory;
+    internal static Func<string, string, ToastForm> ToastFactory = static (title, body) => new ToastForm(title, body);
 
     [STAThread]
     private static void Main(string[] args)
@@ -28,24 +31,26 @@ internal static class Program
         // Monitor parent process
         if (parentPid > 0)
         {
-            _ = Task.Run(() =>
-            {
-                try
+            _ = Task.Run(() => MonitorParentProcessAsync(
+                () =>
                 {
-                    using var parent = Process.GetProcessById(parentPid);
-                    parent.WaitForExit();
-                }
-                catch (ArgumentException) { NotifierLog.Warn("Parent process not found (already exited)"); }
-                NotifierLog.Info("Parent exited, shutting down");
-                shutdownCts.Cancel();
-            });
+                    try
+                    {
+                        using var parent = Process.GetProcessById(parentPid);
+                        parent.WaitForExit();
+                    }
+                    catch (ArgumentException) { NotifierLog.Warn("Parent process not found (already exited)"); }
+                    return Task.CompletedTask;
+                },
+                shutdownCts));
         }
 
         // Hidden form to provide Windows message pump (required for WinForms/WPF)
         using var hiddenForm = new HiddenForm();
         hiddenForm.Load += (_, _) =>
         {
-            _ = Task.Run(() => RunPipeServerAsync(shutdownCts, hiddenForm));
+            _ = Task.Run(() => RunPipeServerAsync(shutdownCts, (title, body) =>
+                hiddenForm.BeginInvoke(() => ShowToast(title, body))));
         };
         hiddenForm.FormClosing += (_, _) => NotifierLog.Info("Message pump exiting");
 
@@ -60,24 +65,32 @@ internal static class Program
         NotifierLog.Info("Exited");
     }
 
-    private static async Task RunPipeServerAsync(CancellationTokenSource cts, Form uiForm)
+    internal static async Task MonitorParentProcessAsync(Func<Task> waitForParentExit, CancellationTokenSource cts)
+    {
+        try
+        {
+            await waitForParentExit();
+        }
+        catch (ArgumentException) { NotifierLog.Warn("Parent process not found (already exited)"); }
+        NotifierLog.Info("Parent exited, shutting down");
+        cts.Cancel();
+    }
+
+    internal static async Task RunPipeServerAsync(CancellationTokenSource cts, Action<string, string> toastDispatcher)
     {
         CancellationToken ct = cts.Token;
         while (!ct.IsCancellationRequested)
         {
             try
             {
-                using var server = new NamedPipeServerStream(
-                    PipeName, PipeDirection.In, 1,
-                    PipeTransmissionMode.Message, PipeOptions.Asynchronous);
+                using var server = CreatePipeServer();
 
                 NotifierLog.Info("Waiting for connection...");
                 await server.WaitForConnectionAsync(ct);
                 NotifierLog.Info("Client connected");
 
-                using var reader = new StreamReader(server, Encoding.UTF8);
-                await ProcessMessageStreamAsync(reader, cts, (title, body) =>
-                    uiForm.BeginInvoke(() => ShowToast(title, body)));
+                using var reader = new StreamReader(server.Stream, Encoding.UTF8);
+                await ProcessMessageStreamAsync(reader, cts, toastDispatcher);
 
                 NotifierLog.Info("Client disconnected");
             }
@@ -92,6 +105,35 @@ internal static class Program
                 }
             }
         }
+    }
+
+    private static INotifierPipeServer CreatePipeServer()
+    {
+        if (PipeServerFactory is not null)
+            return PipeServerFactory();
+
+        return new NamedPipeServerStreamWrapper(new NamedPipeServerStream(
+            PipeName, PipeDirection.In, 1, PipeTransmissionMode.Message, PipeOptions.Asynchronous));
+    }
+
+    internal interface INotifierPipeServer : IDisposable
+    {
+        Task WaitForConnectionAsync(CancellationToken ct);
+
+        Stream Stream { get; }
+    }
+
+    private sealed class NamedPipeServerStreamWrapper : INotifierPipeServer
+    {
+        private readonly NamedPipeServerStream _inner;
+
+        public NamedPipeServerStreamWrapper(NamedPipeServerStream inner) => _inner = inner;
+
+        public Stream Stream => _inner;
+
+        public Task WaitForConnectionAsync(CancellationToken ct) => _inner.WaitForConnectionAsync(ct);
+
+        public void Dispose() => _inner.Dispose();
     }
 
     internal static async Task ProcessMessageStreamAsync(TextReader reader, CancellationTokenSource cts, Action<string, string> toastHandler)
@@ -141,7 +183,7 @@ internal static class Program
     {
         try
         {
-            var toast = new ToastForm(title, body);
+            var toast = ToastFactory(title, body);
             toast.Show();
         }
         catch (Exception ex)

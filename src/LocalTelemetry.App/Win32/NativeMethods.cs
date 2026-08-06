@@ -47,6 +47,7 @@ internal static class NativeMethods
     public const int WM_TABLET_QUERYSYSTEMGESTURESTATUS = 0x02E4;
     public const int WM_NCHITTEST = 0x0084;
     public const int HTCLIENT = 1;
+    public const int HTTRANSPARENT = -1;
 
     // AppBar & Taskbar Position
     public const uint ABM_GETTASKBARPOS = 0x05;
@@ -55,7 +56,6 @@ internal static class NativeMethods
     public const int SM_CXSMICON = 49;
 
     // Structs
-
     /// <summary>Contains painting information for a window client area.</summary>
     [StructLayout(LayoutKind.Sequential)]
     public struct PAINTSTRUCT
@@ -134,6 +134,10 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     public static extern bool GetClientRect(IntPtr hWnd, out RECT r);
 
+    /// <summary>Retrieves a handle to the parent of a window.</summary>
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetParent(IntPtr hWnd);
+
     /// <summary>Retrieves a window style long value.</summary>
     [DllImport("user32.dll")]
     public static extern int GetWindowLong(IntPtr hWnd, int idx);
@@ -145,6 +149,15 @@ internal static class NativeMethods
     /// <summary>Determines whether a window handle is valid.</summary>
     [DllImport("user32.dll")]
     public static extern bool IsWindow(IntPtr hWnd);
+
+    /// <summary>Determines whether the specified window is visible.</summary>
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool IsWindowVisible(IntPtr hWnd);
+
+    /// <summary>Retrieves the class name of the specified window.</summary>
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern int GetClassName(IntPtr hWnd, char[] lpClassName, int nMaxCount);
 
     /// <summary>Changes window position, size and Z-order.</summary>
     [DllImport("user32.dll")]
@@ -222,4 +235,24 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool MoveWindow(IntPtr hWnd, int x, int y, int nWidth, int nHeight, [MarshalAs(UnmanagedType.Bool)] bool bRepaint);
+
+    /// <summary>Window procedure used by <see cref="SetWindowSubclass"/>.</summary>
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+    public delegate IntPtr SUBCLASSPROC(
+        IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam,
+        UIntPtr uIdSubclass, UIntPtr dwRefData);
+
+    /// <summary>Installs a window subclass callback.</summary>
+    [DllImport("comctl32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SetWindowSubclass(IntPtr hWnd, SUBCLASSPROC pfnSubclass, UIntPtr uIdSubclass, UIntPtr dwRefData);
+
+    /// <summary>Calls the default window procedure for a subclasses window.</summary>
+    [DllImport("comctl32.dll")]
+    public static extern IntPtr DefSubclassProc(IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam);
+
+    /// <summary>Removes a window subclass callback.</summary>
+    [DllImport("comctl32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool RemoveWindowSubclass(IntPtr hWnd, SUBCLASSPROC pfnSubclass, UIntPtr uIdSubclass);
 }

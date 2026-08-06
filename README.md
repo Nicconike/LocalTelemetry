@@ -2,25 +2,52 @@
     <img src="docs/public/images/banner.jpg" alt="LocalTelemetry Banner" width="100%" />
 </p>
 
-[![CI](https://github.com/Nicconike/LocalTelemetry/actions/workflows/ci.yml/badge.svg)](https://github.com/Nicconike/LocalTelemetry/actions/workflows/ci.yml)
-[![Release](https://github.com/Nicconike/LocalTelemetry/actions/workflows/release.yml/badge.svg)](https://github.com/Nicconike/LocalTelemetry/releases)
-[![Deploy Documentation](https://github.com/Nicconike/LocalTelemetry/actions/workflows/docs.yml/badge.svg)](https://github.com/Nicconike/LocalTelemetry/actions/workflows/docs.yml)
-[![Platform](https://img.shields.io/badge/platform-Windows%20x64-0078D6.svg)](https://github.com/Nicconike/LocalTelemetry)
-[![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
-[![Svelte 5](https://img.shields.io/badge/Frontend-Svelte%205-FF3E00.svg)](https://svelte.dev/)
-![GitHub Release](https://img.shields.io/github/v/release/nicconike/LocalTelemetry?include_prereleases&sort=semver)
-![GitHub Tag](https://img.shields.io/github/v/tag/nicconike/localtelemetry?include_prereleases&sort=semver&logo=github&label=Tag&link=https%3A%2F%2Fgithub.com%2FNicconike%2FLocalTelemetry%2Freleases)
-[![Quality gate status](https://sonarcloud.io/api/project_badges/measure?project=Nicconike_LocalTelemetry&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Nicconike_LocalTelemetry)
-[![codecov](https://codecov.io/gh/Nicconike/LocalTelemetry/graph/badge.svg?token=OQ25T5D97Q)](https://codecov.io/gh/Nicconike/LocalTelemetry)
-[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/13911/badge)](https://www.bestpractices.dev/projects/13911)
-[![OpenSSF Baseline](https://www.bestpractices.dev/projects/13911/baseline)](https://www.bestpractices.dev/projects/13911)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/nicconike/LocalTelemetry/badge)](https://scorecard.dev/viewer/?uri=github.com/nicconike/LocalTelemetry)
-![GitHub License](https://img.shields.io/github/license/nicconike/localtelemetry)
-[![wakatime](https://wakatime.com/badge/user/018e538b-3f55-4e8e-95fa-6c3225418eed/project/4a017698-b6e1-4859-a4f2-b5379b9a36ef.svg)](https://wakatime.com/badge/user/018e538b-3f55-4e8e-95fa-6c3225418eed/project/4a017698-b6e1-4859-a4f2-b5379b9a36ef)
+<p align="center">
+    <a href="https://github.com/Nicconike/LocalTelemetry/actions/workflows/ci.yml">
+        <img src="https://github.com/Nicconike/LocalTelemetry/actions/workflows/ci.yml/badge.svg" alt="CI" />
+    </a>
+    <a href="https://github.com/Nicconike/LocalTelemetry/actions/workflows/release.yml">
+        <img src="https://github.com/Nicconike/LocalTelemetry/actions/workflows/release.yml/badge.svg" alt="Release" />
+    </a>
+    <a href="https://github.com/Nicconike/LocalTelemetry/actions/workflows/docs.yml">
+        <img src="https://github.com/Nicconike/LocalTelemetry/actions/workflows/docs.yml/badge.svg" alt="Deploy Docs" />
+    </a>
+    <a href="https://github.com/Nicconike/LocalTelemetry">
+        <img src="https://img.shields.io/badge/platform-Windows%20x64-0078D6?logo=data:image/svg%2Bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI%2BPHBhdGggZmlsbD0iI2ZmZiIgZD0iTTAgMy40NDkgOS43NSAyLjF2OS40NTFIMG0xMC45NDktOS42MDJMMjQgMHYxMS40SDEwLjk0OW0wIDkuNjAyTDI0IDIxLjc1VjI0SDEwLjk0OU0wIDEyLjZoOS43NXY5LjQ1MUwwIDIwLjY5OSIvPjwvc3ZnPg==" alt="Platform" />
+    </a>
+    <a href="https://dotnet.microsoft.com/">
+        <img src="https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet&logoColor=white" alt=".NET 10" />
+    </a>
+    <a href="https://svelte.dev/">
+        <img src="https://img.shields.io/badge/Frontend-Svelte%205-FF3E00?logo=svelte&logoColor=white" alt="Svelte 5" />
+    </a>
+    <img src="https://img.shields.io/github/v/release/nicconike/LocalTelemetry?include_prereleases&sort=semver&logo=github&label=Release" alt="GitHub Release" />
+</p>
 
-> ### About
->
-> **LocalTelemetry** is a lightweight, real-time Windows hardware monitoring utility that embeds your system vitals directly into your native Windows taskbar without taking up screen real estate. Designed to be fast, customizable and 100% private.
+<p align="center">
+    <a href="https://sonarcloud.io/summary/new_code?id=LocalTelemetry">
+        <img src="https://sonarcloud.io/api/project_badges/measure?project=LocalTelemetry&metric=alert_status" alt="Quality gate status" />
+    </a>
+    <a href="https://codecov.io/gh/Nicconike/LocalTelemetry">
+        <img src="https://codecov.io/gh/Nicconike/LocalTelemetry/graph/badge.svg?token=OQ25T5D97Q" alt="codecov" />
+    </a>
+    <a href="https://www.bestpractices.dev/projects/13911">
+        <img src="https://www.bestpractices.dev/projects/13911/badge" alt="OpenSSF Best Practices" />
+    </a>
+    <a href="https://www.bestpractices.dev/projects/13911">
+        <img src="https://www.bestpractices.dev/projects/13911/baseline" alt="OpenSSF Baseline" />
+    </a>
+    <a href="https://scorecard.dev/viewer/?uri=github.com/Nicconike/LocalTelemetry">
+        <img src="https://api.scorecard.dev/projects/github.com/Nicconike/LocalTelemetry/badge" alt="OpenSSF Scorecard" />
+    </a>
+</p>
+
+<p align="center">
+    <img src="https://img.shields.io/github/license/nicconike/localtelemetry" alt="GitHub License" />
+    <a href="https://wakatime.com/badge/user/018e538b-3f55-4e8e-95fa-6c3225418eed/project/4a017698-b6e1-4859-a4f2-b5379b9a36ef">
+        <img src="https://wakatime.com/badge/user/018e538b-3f55-4e8e-95fa-6c3225418eed/project/4a017698-b6e1-4859-a4f2-b5379b9a36ef.svg" alt="wakatime" />
+    </a>
+</p>
 
 ---
 
@@ -33,6 +60,7 @@
 - 🔔 **Custom Threshold Alerts**: Flashing visual warnings and desktop toast notifications when temperatures or usage exceed your thresholds.
 - 🎨 **Fully Customizable**: Personalize colors, fonts, metric ordering, placement and update intervals through a clean dark-mode settings panel.
 - 🔒 **100% Private & Local**: Zero network tracking, no telemetry phoning home and no external API calls. Your hardware data stays entirely on your machine.
+- 🛡️ **No Antivirus False Positives**: Windows Defender and other antivirus engines never flag LocalTelemetry.
 
 ---
 
@@ -40,7 +68,7 @@
 
 | Requirement          | Minimum Specification                                   | Recommended Specification                        |
 | :------------------- | :------------------------------------------------------ | :----------------------------------------------- |
-| **Operating System** | **Windows 10** (64-bit, v1903+)                         | **Windows 11** (64-bit, v22H2+)                  |
+| **Operating System** | **Windows 10** (64-bit, v2004+ / build 19041)           | **Windows 11** (64-bit, v22H2+)                  |
 | **Architecture**     | **x86-64 / AMD64** (Intel / AMD)                        | **x86-64 / AMD64**                               |
 | **Permissions**      | **Administrator (UAC)** *(For hardware sensor drivers)* | **Administrator (UAC)**                          |
 | **RAM**              | **2 GB**                                                | **4 GB or higher**                               |
@@ -57,7 +85,7 @@
 
 1. Download the latest `LocalTelemetrySetup.exe` from [**GitHub Releases**](https://github.com/Nicconike/LocalTelemetry/releases).
 2. Run the installer and follow the quick setup wizard.
-3. LocalTelemetry will launch automatically in your Windows system tray.
+3. LocalTelemetry will launch automatically after installation.
 
 ### Option 2: Portable ZIP
 
@@ -67,10 +95,49 @@
 
 ---
 
-## How to Use
+## Quick Start
 
-1. **System Tray Control**: Right-click the **LocalTelemetry icon** in your Windows System Tray to toggle the taskbar overlay, access settings or exit.
-2. **Configure Settings**: Double-click the tray icon (or select **Settings**) to adjust layout colors, toggle specific metrics, enable threshold alerts or set up Windows auto-start.
+### 1. Taskbar Overlay
+
+After launch, LocalTelemetry docks a live telemetry widget directly into your Windows taskbar:
+
+<img src="docs/public/images/overlay.png" alt="LocalTelemetry taskbar overlay showing live hardware metrics" style="border-radius: 8px;" />
+
+### 2. System Tray Controls
+
+Right-click the **LocalTelemetry icon** in the system tray (near the clock) to control the app:
+
+<img src="docs/public/images/tray-menu.png" alt="System tray context menu" style="border-radius: 8px;" />
+
+- **Show / Hide Taskbar Overlay**: Toggle the overlay instantly.
+- **Open Settings**: Launch the settings panel.
+- **Quit**: Exit LocalTelemetry.
+
+### 3. Settings & Customization
+
+Double-click the tray icon to open the dark-mode settings panel:
+
+**General** - autostart with Windows, launch minimized, polling interval and temperature units:
+
+<img src="docs/public/images/general-settings.png" alt="General settings page" style="border-radius: 8px;" />
+
+**Taskbar Layout** - reorder metrics by drag-and-drop to control exactly what appears in the overlay:
+
+<img src="docs/public/images/layout-settings.png" alt="Taskbar layout settings page" style="border-radius: 8px;" />
+
+**Monitoring** - toggle individual hardware components and enable metrics logging:
+
+<img src="docs/public/images/monitoring-settings.png" alt="Monitoring settings page" style="border-radius: 8px;" />
+
+**Traffic & Network History** - daily bandwidth calendar with per-interface breakdown:
+
+<img src="docs/public/images/traffic-settings.png" alt="Traffic history calendar settings page" style="border-radius: 8px;" />
+
+### 4. Threshold Alerts
+
+Set per-metric warning limits - e.g. CPU at 90°C or GPU at 88°C. When a threshold is crossed, the metric flashes on the overlay and a desktop toast notification pops up without stealing focus:
+
+<img src="docs/public/images/toast-alert.png" alt="Threshold alert toast notification" style="border-radius: 8px;" />
 
 ---
 

@@ -42,14 +42,15 @@ src/components/
 ├── App.svelte                    # Root component & WebView2 message listener
 ├── Sidebar.svelte                # Sidebar tab navigation menu
 ├── pages/
-│   ├── GeneralPage.svelte        # Autostart & run mode
-│   ├── OverlayPage.svelte        # Taskbar overlay offsets & alignment
-│   ├── MonitoringPage.svelte     # Polling rates & sensor toggles
-│   ├── LayoutPage.svelte         # Metric drag-and-drop reordering
-│   ├── AppearancePage.svelte     # Metric colors & fonts
+│   ├── GeneralPage.svelte        # Startup behavior, polling interval & units
+│   ├── OverlayPage.svelte        # Taskbar overlay visibility, position, opacity & scale
+│   ├── MonitoringPage.svelte     # Hardware component toggles & metrics logging
+│   ├── NetworkPage.svelte        # Network adapter selection & daily traffic logging
+│   ├── LayoutPage.svelte         # Metric add/remove/reorder for the overlay
+│   ├── AppearancePage.svelte     # Built-in themes & per-metric colors
 │   ├── AlertsPage.svelte         # Threshold limits & toast settings
 │   ├── SystemPage.svelte         # Hardware summary & system specs
-│   ├── TrafficHistoryPage.svelte # Network logging charts & CSV exports
-│   └── AboutPage.svelte          # Version info, updates & open-source credits
+│   ├── TrafficHistoryPage.svelte # Traffic calendar, interface filter & .dat import
+│   └── AboutPage.svelte          # Version info, credits & open-source links
 └── ui/                           # Reusable UI controls (ColorPicker, ToggleSwitch, Slider)
 ```

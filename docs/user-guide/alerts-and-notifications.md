@@ -1,34 +1,41 @@
 # Threshold Alerts & Toast Notifications
 
-LocalTelemetry includes a customizable alerting system to warn you whenever hardware temperatures or usage exceed safe operational boundaries.
+LocalTelemetry includes a customizable alerting system that warns whenever hardware temperatures, usage, frequency or power exceed (or drop below) configured thresholds.
 
 ## Alert Types
 
-LocalTelemetry supports two distinct types of alerts:
+LocalTelemetry supports two types of alerts:
 
-1. **Visual Flashing Alert**: The corresponding metric on the taskbar overlay flashes in a bright warning color (e.g. bright red or amber) to draw immediate attention without interrupting your workflow.
-2. **Desktop Toast Notification**: A non-intrusive Windows toast popup window launched via `LocalTelemetry.Notifier.exe`.
+1. **Visual Flashing Alert**: The affected metric on the taskbar overlay flashes in a bright warning color to draw attention without interrupting your workflow.
+2. **Desktop Toast Notification**: A non-intrusive Windows toast popup displayed by the `LocalTelemetry.Notifier.exe` helper process.
 
 ![Standalone Toast Alert Notification](/images/toast-alert.png)
 *Figure: Standalone desktop toast warning popup.*
 
-
 ## Configuring Alert Thresholds
 
-In **Settings -> Alerts**, you can enable and set individual limits:
+In **Settings -> Alerts**, you can enable and set individual limits. Defaults:
 
-- **CPU Temp Threshold**: Default `85°C`. Triggered when CPU temperature exceeds this limit.
-- **GPU Temp Threshold**: Default `83°C`. Triggered when GPU core temperature exceeds this limit.
-- **CPU Usage Threshold**: Default `95%`. Triggered on sustained high CPU load.
-- **RAM Usage Threshold**: Default `90%`. Triggered when system memory is near exhaustion.
+| Alert                        | Setting               | Default           |
+| :--------------------------- | :-------------------- | :---------------- |
+| **CPU Temperature**          | `CPU Temp Threshold`  | `90°C`            |
+| **GPU Temperature**          | `GPU Temp Threshold`  | `88°C`            |
+| **CPU Usage**                | `CPU Usage Threshold` | `95%`             |
+| **RAM Usage**                | `RAM Usage Threshold` | `92%`             |
+| **GPU VRAM Usage**           | `GPU VRAM Threshold`  | `6000 MB`         |
+| **CPU Frequency (throttle)** | `CPU Freq Minimum`    | `800 MHz` (below) |
+| **CPU Power**                | `CPU Power Maximum`   | `65 W`            |
+| **GPU Frequency (throttle)** | `GPU Freq Minimum`    | `300 MHz` (below) |
+| **GPU Power**                | `GPU Power Maximum`   | `150 W`           |
 
+Each alert is toggled independently. Frequency alerts fire when the CPU/GPU clock drops below the minimum (thermal throttling), while power alerts fire when package/board power exceeds the maximum.
 
 ## Alert Cooldown & Throttle Controls
 
-To prevent spamming notifications while gaming or rendering:
-- **Cooldown Interval**: Set minimum seconds between repeat notifications (Default: `30 seconds`).
-- **Duration**: Duration of visual text flashing in the taskbar overlay.
+To prevent notification spam during gaming or rendering:
 
+- **Cooldown Interval**: Minimum seconds between repeat notifications (Default: `60 seconds`).
+- **Fire Once Per Session**: When enabled, each alert fires only once per app session and the cooldown is ignored.
 
 ## The Standalone Notifier (`LocalTelemetry.Notifier`)
 
@@ -38,3 +45,6 @@ Desktop notifications are handled by a dedicated lightweight helper process (`Lo
 By isolating notifications in a secondary process:
 - Toast popups never steal focus from full-screen games or applications.
 - Heavy notification window animations do not affect the main overlay polling thread.
+
+### How it communicates
+The main app launches the notifier with the parent process ID as its first command-line argument (used purely to track the app's lifetime and exit when it closes). Alert payloads (title, body, action) are delivered over a **named pipe** (`LocalTelemetryNotifier`), so no toast data is passed through command-line arguments.

@@ -177,6 +177,28 @@ public static class BrandColorDefaults
     [SupportedOSPlatform("windows")]
     public static string DetectDiskColor() => SystemInfo.GetDiskColor();
 
+    /// <summary>Resolves a brand color for a disk from its vendor/model strings (empty if unknown).</summary>
+    public static string ResolveDiskColor(string vendor, string model)
+    {
+        if (!string.IsNullOrEmpty(vendor))
+        {
+            foreach (var kvp in DiskColors)
+            {
+                if (vendor.Contains(kvp.Key, StringComparison.OrdinalIgnoreCase))
+                    return kvp.Value;
+            }
+        }
+        if (!string.IsNullOrEmpty(model))
+        {
+            foreach (var kvp in DiskColors)
+            {
+                if (model.Contains(kvp.Key, StringComparison.OrdinalIgnoreCase))
+                    return kvp.Value;
+            }
+        }
+        return string.Empty;
+    }
+
     /// <summary>Detects the active NIC brand color.</summary>
     [SupportedOSPlatform("windows")]
     public static string DetectNicColor() => SystemInfo.GetNicColor();
@@ -266,11 +288,50 @@ public static class BrandColorDefaults
             [Metrics.BatteryPct] = batColor.Length > 0 ? batColor : "#80E080",
             [Metrics.BatteryRate] = batColor.Length > 0 ? batColor : "#80E080",
         };
-        foreach (var m in Metrics.AllMetrics)
+        var disks = SystemInfo.GetAllDisks();
+        bool multiDisk = disks.Count > 1;
+        for (int i = 0; i < disks.Count; i++)
         {
-            if (m.Group == "disk")
-                result[m.Id] = diskColor.Length > 0 ? diskColor : "#AAAAAA";
+            var disk = disks[i];
+            string perDiskColor = ResolveDiskColor(disk.Vendor, disk.Model);
+            string label = multiDisk ? $"DISK {i + 1}" : "DISK";
+            string mfr = string.IsNullOrEmpty(disk.Vendor) ? disk.Model : disk.Vendor;
+            if (perDiskColor.Length > 0)
+                Log.Info($"BrandDetection: {label} manufacturer=\"{mfr}\" → color={perDiskColor}");
+            else
+                Log.Info($"BrandDetection: {label} manufacturer=\"{mfr}\" (not in DiskColors) → using fallback #AAAAAA");
+            string fallback = perDiskColor.Length > 0 ? perDiskColor : "#AAAAAA";
+            result[$"disk_disk{i}_read"] = fallback;
+            result[$"disk_disk{i}_write"] = fallback;
         }
         return result;
+    }
+
+    /// <summary>
+    /// Builds the default group color map (keys: <c>cpu</c>, <c>gpu</c>, <c>ram</c>,
+    /// <c>network</c>, <c>battery</c>, <c>disk</c>) from the same detection results used by
+    /// <see cref="BuildDefaultMetricColors"/>.
+    /// </summary>
+    [SupportedOSPlatform("windows")]
+    public static Dictionary<string, string> BuildDefaultGroupColors()
+        => BuildDefaultGroupColors(BuildDefaultMetricColors());
+
+    /// <summary>
+    /// Builds the default group color map from an existing metric default color dictionary
+    /// (no hardware detection; reuse the results of <see cref="BuildDefaultMetricColors"/>).
+    /// </summary>
+    [SupportedOSPlatform("windows")]
+    public static Dictionary<string, string> BuildDefaultGroupColors(Dictionary<string, string> metricDefaults)
+    {
+        var diskColor = metricDefaults.FirstOrDefault(kvp => kvp.Key.StartsWith("disk_", StringComparison.Ordinal)).Value;
+        return new Dictionary<string, string>
+        {
+            ["cpu"] = metricDefaults[Metrics.CpuPct],
+            ["gpu"] = metricDefaults[Metrics.GpuPct],
+            ["ram"] = metricDefaults[Metrics.RamPct],
+            ["network"] = metricDefaults[Metrics.NetDown],
+            ["battery"] = metricDefaults[Metrics.BatteryPct],
+            ["disk"] = diskColor.Length > 0 ? diskColor : "#AAAAAA",
+        };
     }
 }

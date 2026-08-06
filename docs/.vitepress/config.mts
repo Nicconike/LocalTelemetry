@@ -5,8 +5,11 @@ import { version } from '../package.json';
 // Retrieve Measurement ID from environment variable
 const gaId = process.env.GA_MEASUREMENT_ID;
 
+// Subpath base for GitHub Pages project sites (e.g. /LocalTelemetry/)
+const base = process.env.VITE_BASE || '/';
+
 const headConfigs: HeadConfig[] = [
-    ['link', { rel: 'icon', type: 'image/x-icon', href: '/app.ico' }],
+    ['link', { rel: 'icon', type: 'image/x-icon', href: `${base}app.ico` }],
     ['meta', { name: 'theme-color', content: '#0284c7' }],
     ['meta', { name: 'og:type', content: 'website' }],
     ['meta', { name: 'og:title', content: 'LocalTelemetry Documentation' }],
@@ -34,6 +37,7 @@ export default withMermaid(
         title: 'LocalTelemetry',
         description: 'Lightweight, real-time Windows taskbar hardware monitoring utility',
         lang: 'en-US',
+        base,
         cleanUrls: true,
         lastUpdated: true,
         head: headConfigs,

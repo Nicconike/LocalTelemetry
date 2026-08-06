@@ -171,6 +171,32 @@ public static class Metrics
         };
     }
 
+    /// <summary>
+    /// Returns the widest string <see cref="Format"/> can ever emit for a metric ID,
+    /// so callers can reserve exact layout space (no ad-hoc padding needed).
+    /// Mirrors every <see cref="Format"/> branch, including the <c>useBits</c>/<c>useFahrenheit</c>
+    /// variants.
+    /// </summary>
+    /// <param name="id">Metric identifier constant or <c>disk_*</c> ID.</param>
+    /// <param name="useBits">If true, reserve for network speeds in bits; otherwise bytes.</param>
+    /// <param name="useFahrenheit">If true, reserve for Fahrenheit temperatures; otherwise Celsius.</param>
+    /// <returns>The maximum-width formatted string for the metric.</returns>
+    public static string WidestValueString(string id, bool useBits, bool useFahrenheit) => id switch
+    {
+        CpuPct or RamPct or GpuPct or BatteryPct => "100%",
+        CpuTemp or GpuTemp => useFahrenheit ? "212°F" : "100°C",
+        CpuFreq => "9.99GHz",
+        CpuPower or GpuPower => "999W",
+        RamUsed => "999.9GB",
+        GpuVram => "65535MB",
+        GpuFreq => "9999MHz",
+        NetDown or NetUp => useBits ? "9999.9Gb/s" : "999.9GB/s",
+        NetTotal => "999.99TB",
+        BatteryRate => "+999.9W",
+        _ when id.StartsWith("disk_", StringComparison.Ordinal) => "999.9GB/s",
+        _ => "9999",
+    };
+
     /// <summary>Formats a temperature value for display.</summary>
     /// <param name="c">Temperature in Celsius.</param>
     /// <param name="f">If true, convert to Fahrenheit.</param>

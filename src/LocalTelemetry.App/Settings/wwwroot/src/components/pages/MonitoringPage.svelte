@@ -20,10 +20,6 @@
             : categories.filter((c) => c.key !== "Battery"),
     );
 
-    function change() {
-        checkDirty();
-    }
-
     function toggleFileLogging() {
         if ($settings.enableFileLogging) {
             if ($settings.monitoring.logCpuMode === 0)
@@ -39,14 +35,12 @@
             if ($settings.monitoring.logBatteryMode === 0)
                 $settings.monitoring.logBatteryMode = 1;
         }
-        change();
     }
 
     function onModeChange(category, mode) {
         if (mode > 0 && !$settings.monitoring[`track${category}`]) {
             $settings.monitoring[`track${category}`] = true;
         }
-        change();
     }
 </script>
 
@@ -63,7 +57,6 @@
                     <Toggle
                         bind:checked={$settings.monitoring[`track${cat.key}`]}
                         label={cat.label}
-                        onchange={change}
                     />
                 {/each}
             </div>

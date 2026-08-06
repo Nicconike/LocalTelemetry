@@ -15,9 +15,10 @@ graph TD
     end
 
     subgraph GPU["GPU Telemetry"]
-        NV["NvGpuMonitor.cs<br/>(NVAPI / NVML - NVIDIA)"]
+        NV["NvGpuMonitor.cs<br/>(NVML - NVIDIA)"]
         AMD["AmdGpuMonitor.cs<br/>(ADL - AMD Radeon)"]
-        Intel["IntelGpuMonitor.cs<br/>(IGCL / WMI - Intel)"]
+        Intel["IntelGpuMonitor.cs<br/>(IGCL - Intel)"]
+        WDDM["WddmGpuMonitor.cs<br/>(WDDM GPU Engine Counters)"]
     end
 
     subgraph StorageNet["Disk & Network"]
@@ -41,7 +42,7 @@ graph TD
 | **CPU Temperature**        | `PawnIO IntelMSR` (Intel MSR)                | `PawnIO RyzenSMU` (AMD SMU)                     |
 | **CPU Frequency**          | `PawnIO APERF/MPERF` MSR delta               | `Intel Power Gadget` / `CallNtPowerInformation` |
 | **RAM Usage**              | `GlobalMemoryStatusEx` (Win32 API)           | N/A                                             |
-| **GPU Utilization & Temp** | `NVML` / `NVAPI` (NVIDIA)                    | `ADL` (AMD) / `IGCL` / WMI (Intel)              |
+| **GPU Utilization & Temp** | `NVML` (NVIDIA) / WDDM GPU Engine counters | `ADL` (AMD) / `IGCL` (Intel)                    |
 | **Disk Throughput**        | PDH (`PhysicalDisk\Disk * Bytes/sec\_Total`) | Win32 IOCTL Queries                             |
 | **Network Speeds**         | `NetworkInterface.GetIPv4Statistics()` delta | `WindowsNetworkUsageProvider` / ESE SRUDB       |
 
@@ -57,12 +58,16 @@ To read CPU package temperatures, MSR (Model-Specific Register) values and Ryzen
 
 ### 2. NVIDIA GPU Monitoring (`NvGpuMonitor.cs` & NVML)
 
-GPU monitoring for NVIDIA GeForce graphics cards uses native P/Invoke calls into `nvapi64.dll` and NVML:
+GPU monitoring for NVIDIA GeForce graphics cards uses native P/Invoke calls into `nvml.dll` (NVIDIA Management Library, which ships with every display driver):
 
-- **Functions**:
-  - `NvAPI_GPU_GetThermalSettings`: Retrieves GPU core and hotspot temperatures.
-  - `NvAPI_GPU_GetDynamicPstatesInfoEx`: Returns GPU engine clock frequency and memory load percentage.
-  - `NvAPI_GPU_GetMemoryInfo`: Retrieves dedicated VRAM utilization.
+- **Initialization**: `nvmlInit` → `nvmlDeviceGetHandleByIndex(0)`; also reads the GPU name and driver version (`nvmlSystemGetDriverVersion`).
+- **Sensor Queries**:
+  - `nvmlDeviceGetTemperature`: GPU temperature.
+  - `nvmlDeviceGetUtilizationRates`: GPU engine and memory utilization.
+  - `nvmlDeviceGetMemoryInfo`: Dedicated VRAM usage.
+  - `nvmlDeviceGetClockInfo`: GPU core clock frequency.
+  - `nvmlDeviceGetPowerUsage` / `nvmlDeviceGetPowerManagementLimit`: Power draw and TDP.
+- **System-wide GPU utilisation** is measured independently via **WDDM GPU Engine performance counters** (`WddmGpuMonitor.cs`), so it works regardless of vendor.
 
 
 ### 3. AMD GPU Monitoring (`AmdGpuMonitor.cs` & ADL)

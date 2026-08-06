@@ -79,7 +79,6 @@ jobs:
               if: ${{ steps.tag_version.outputs.new_tag != '' }}
               shell: pwsh
               run: |
-                  choco install innosetup --no-progress -y
                   $iscc = "iscc"
                   $possiblePaths = @(
                         "C:\Program Files\Inno Setup 7\ISCC.exe",
@@ -90,6 +89,22 @@ jobs:
                             $iscc = $path
                             break
                         }
+                    }
+                  if ($iscc -eq "iscc" -and -not (Get-Command iscc -ErrorAction SilentlyContinue)) {
+                        winget install --id JRSoftware.InnoSetup.7 --exact --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+                        foreach ($path in $possiblePaths) {
+                            if (Test-Path $path) {
+                                $iscc = $path
+                                break
+                            }
+                        }
+                        if ($iscc -eq "iscc") {
+                            $found = Get-ChildItem -Path "C:\Program Files*" -Filter "ISCC.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+                            if ($found) { $iscc = $found.FullName }
+                        }
+                    }
+                  if (-not (Test-Path $iscc) -and -not (Get-Command $iscc -ErrorAction SilentlyContinue)) {
+                        throw "ISCC.exe not found after winget install"
                     }
                   $ver = "${{ steps.tag_version.outputs.new_version }}"
                   $numVer = ($ver -split '-')[0]
@@ -138,13 +153,17 @@ jobs:
                       ./LocalTelemetry-win-x64.zip
                       ./checksums.txt
 
-            # 9. Regenerate CHANGELOG.md from the full git history
-            - name: Update CHANGELOG.md
+            # 9. Generate CHANGELOG from the full git history
+            - name: Update CHANGELOG
               if: ${{ steps.tag_version.outputs.new_tag != '' }}
+              shell: pwsh
               run: |
                   git cliff --config cliff.toml -o CHANGELOG.md
-                  git config user.name "github-actions[bot]"
-                  git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-                  git add CHANGELOG.md
-                  git commit -m "docs: update changelog for ${{ steps.tag_version.outputs.new_tag }}"
-                  git push origin master
+                  git diff --quiet -- CHANGELOG.md
+                  if ($LASTEXITCODE -ne 0) {
+                      git config user.name "protected-auto-commits[bot]"
+                      git config user.email "173199705+protected-auto-commits[bot]@users.noreply.github.com"
+                      git add CHANGELOG.md
+                      git commit -m "docs: update changelog for ${{ steps.tag_version.outputs.new_tag }}"
+                      git push origin master
+                  }

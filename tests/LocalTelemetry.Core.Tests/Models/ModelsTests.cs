@@ -168,6 +168,79 @@ public class ModelsTests
     }
 
     [Fact]
+    public void Metrics_WidestValueString_MatchesEveryFormatBranch()
+    {
+        Metrics.WidestValueString(Metrics.CpuPct, false, false).Should().Be("100%");
+        Metrics.WidestValueString(Metrics.RamPct, false, false).Should().Be("100%");
+        Metrics.WidestValueString(Metrics.GpuPct, false, false).Should().Be("100%");
+        Metrics.WidestValueString(Metrics.BatteryPct, false, false).Should().Be("100%");
+
+        Metrics.WidestValueString(Metrics.CpuTemp, false, false).Should().Be("100°C");
+        Metrics.WidestValueString(Metrics.CpuTemp, false, true).Should().Be("212°F");
+        Metrics.WidestValueString(Metrics.GpuTemp, false, true).Should().Be("212°F");
+
+        Metrics.WidestValueString(Metrics.CpuFreq, false, false).Should().Be("9.99GHz");
+        Metrics.WidestValueString(Metrics.CpuPower, false, false).Should().Be("999W");
+        Metrics.WidestValueString(Metrics.GpuPower, false, false).Should().Be("999W");
+
+        Metrics.WidestValueString(Metrics.RamUsed, false, false).Should().Be("999.9GB");
+        Metrics.WidestValueString(Metrics.GpuVram, false, false).Should().Be("65535MB");
+        Metrics.WidestValueString(Metrics.GpuFreq, false, false).Should().Be("9999MHz");
+
+        Metrics.WidestValueString(Metrics.NetDown, false, false).Should().Be("999.9GB/s");
+        Metrics.WidestValueString(Metrics.NetUp, false, false).Should().Be("999.9GB/s");
+        Metrics.WidestValueString(Metrics.NetDown, true, false).Should().Be("9999.9Gb/s");
+        Metrics.WidestValueString(Metrics.NetUp, true, false).Should().Be("9999.9Gb/s");
+
+        Metrics.WidestValueString(Metrics.NetTotal, false, false).Should().Be("999.99TB");
+        Metrics.WidestValueString(Metrics.BatteryRate, false, false).Should().Be("+999.9W");
+
+        Metrics.WidestValueString("disk_0_read", false, false).Should().Be("999.9GB/s");
+        Metrics.WidestValueString("disk_0_write", false, false).Should().Be("999.9GB/s");
+        Metrics.WidestValueString("unknown_metric", false, false).Should().Be("9999");
+    }
+
+    [Fact]
+    public void Metrics_WidestValueString_IsNeverShorterThanFormattedValue()
+    {
+        var snap = new TelemetrySnapshot
+        {
+            CpuUsagePct = 100f,
+            CpuTempPackageC = 100f,
+            CpuFreqGhz = 6.0f,
+            CpuPackagePowerW = 999f,
+            RamUsagePct = 100f,
+            RamUsedGb = 999.9f,
+            GpuUsagePct = 100f,
+            GpuTempC = 100f,
+            GpuVramUsedMb = 65535f,
+            GpuFreqMHz = 9999f,
+            GpuPowerW = 999f,
+            NetDownBps = 999_900_000_000,
+            NetUpBps = 999_900_000_000,
+            NetTotalBytes = 999_990_000_000_000,
+            Disks = [new DiskSnapshot { Id = "0", Label = "DISK0", ReadMBps = 9999f, WriteMBps = 9999f }],
+            BatteryPct = 100f,
+            BatteryChargeRateW = -999.9f,
+        };
+
+        foreach (var id in new[] {
+            Metrics.CpuPct, Metrics.CpuTemp, Metrics.CpuFreq, Metrics.CpuPower,
+            Metrics.RamPct, Metrics.RamUsed, Metrics.GpuPct, Metrics.GpuTemp,
+            Metrics.GpuVram, Metrics.GpuFreq, Metrics.GpuPower, Metrics.NetDown,
+            Metrics.NetUp, Metrics.NetTotal, Metrics.BatteryPct, Metrics.BatteryRate,
+            "disk_0_read", "disk_0_write" })
+        {
+            foreach (var bits in new[] { false, true })
+            {
+                var rendered = Metrics.Format(id, snap, bits, false);
+                var reserve = Metrics.WidestValueString(id, bits, false);
+                reserve.Length.Should().BeGreaterThanOrEqualTo(rendered.Length, $"{id} reserve \"{reserve}\" must fit \"{rendered}\"");
+            }
+        }
+    }
+
+    [Fact]
     public void TelemetrySnapshot_PropertiesAndDefaults()
     {
         var snap = TelemetrySnapshot.Empty;

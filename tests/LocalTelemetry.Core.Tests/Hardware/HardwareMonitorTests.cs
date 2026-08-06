@@ -56,6 +56,7 @@ public class HardwareMonitorTests
     {
         var cfg = new AppSettings();
         cfg.Monitoring.PollIntervalMs = 10;
+        cfg.Monitoring.EnableNet = false;
 
         var sysInfoMock = Substitute.For<ISystemInfo>();
         sysInfoMock.GetCpuName().Returns("Mocked CPU");

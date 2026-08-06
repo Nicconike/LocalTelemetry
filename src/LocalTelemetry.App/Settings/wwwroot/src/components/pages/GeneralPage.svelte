@@ -10,10 +10,6 @@
         { value: 2000, label: "2 s" },
         { value: 5000, label: "5 s" },
     ];
-
-    function change() {
-        checkDirty();
-    }
 </script>
 
 {#if $settings}
@@ -27,17 +23,14 @@
             <Toggle
                 bind:checked={$settings.runAtStartup}
                 label="Start with Windows"
-                onchange={change}
             />
             <Toggle
                 bind:checked={$settings.startMinimized}
                 label="Start minimized"
-                onchange={change}
             />
             <Toggle
                 bind:checked={$settings.minimizeToTray}
                 label="Minimize to Tray on close"
-                onchange={change}
             />
         </SectionCard>
 
@@ -49,7 +42,6 @@
                 label="Polling interval"
                 bind:value={$settings.monitoring.intervalMs}
                 options={intervalOptions}
-                onchange={change}
             />
         </SectionCard>
 
@@ -57,7 +49,6 @@
             <Toggle
                 bind:checked={$settings.monitoring.useFahrenheit}
                 label="Show temperatures in °F"
-                onchange={change}
             />
         </SectionCard>
     </div>

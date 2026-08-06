@@ -15,7 +15,7 @@
         },
         {
             label: "Documentation",
-            url: "https://github.com/Nicconike/LocalTelemetry#readme",
+            url: "https://nicconike.github.io/LocalTelemetry/",
             svg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
         },
         {
@@ -34,12 +34,14 @@
         { name: "MinVer", type: "Apache-2.0" },
     ];
 
-    // Strip trailing revision/build zeros from assembly version if they are redundant (e.g. 0.1.0.0 -> 0.1.0)
+    // Normalize redundant trailing revision/build zeros from assembly versions
+    // (e.g. 0.1.0.0 -> 0.1.0) but never mangle a SemVer string such as 1.0.0-beta.0.
     const cleanVersion = $derived.by(() => {
         const raw = $systemInfo.version;
         if (!raw) return "-";
         const parts = raw.split(".");
-        if (parts.length === 4 && parts[3] === "0") {
+        const isNumeric = parts.every((p) => /^\d+$/.test(p));
+        if (isNumeric && parts.length === 4 && parts[3] === "0") {
             if (parts[2] === "0") {
                 return `${parts[0]}.${parts[1]}`;
             }
@@ -56,8 +58,8 @@
         <div class="brand-info">
             <h1 class="brand-title">LocalTelemetry</h1>
             <p class="brand-tagline">
-                A lightweight, hardware-accelerated telemetry utility for
-                real-time taskbar monitoring.
+                Real-time hardware monitoring, embedded right in your Windows
+                taskbar.
             </p>
         </div>
     </div>

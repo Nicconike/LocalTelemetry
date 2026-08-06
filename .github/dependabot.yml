@@ -15,7 +15,6 @@ updates:
       commit-message:
           prefix: "chore(deps)"
           prefix-development: "chore(deps-dev)"
-          include: "scope"
       labels:
           - "dependencies"
           - "csharp"
@@ -37,7 +36,6 @@ updates:
       rebase-strategy: "auto"
       commit-message:
           prefix: "chore(deps)"
-          include: "scope"
       labels:
           - "dependencies"
           - "csharp"
@@ -60,7 +58,6 @@ updates:
       commit-message:
           prefix: "chore(deps)"
           prefix-development: "chore(deps-dev)"
-          include: "scope"
       labels:
           - "dependencies"
           - "frontend"
@@ -82,7 +79,6 @@ updates:
       rebase-strategy: "auto"
       commit-message:
           prefix: "chore(ci)"
-          include: "scope"
       labels:
           - "dependencies"
           - "actions"

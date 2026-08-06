@@ -129,6 +129,13 @@ public sealed class OverlayDto
     /// <summary>Per-metric value colors keyed by metric ID.</summary>
     public Dictionary<string, string> MetricColors { get; set; } = new();
 
+    /// <summary>
+    /// Per-group colors for the Appearance page group pickers ("All CPU", ...), keyed by
+    /// <c>cpu</c>/<c>gpu</c>/<c>ram</c>/<c>network</c>/<c>battery</c>/<c>disk</c>.
+    /// Independent of <see cref="MetricColors"/>.
+    /// </summary>
+    public Dictionary<string, string> GroupColors { get; set; } = new();
+
     /// <summary>Default vendor-brand colors for each metric, used as a fallback.</summary>
     public Dictionary<string, string> DefaultMetricColors { get; set; } = new();
 
@@ -140,6 +147,9 @@ public sealed class OverlayDto
 
     /// <summary>Set of metric IDs whose colors have been customised by the user.</summary>
     public HashSet<string> UserCustomizedMetricColors { get; set; } = new();
+
+    /// <summary>Set of group keys whose colors have been customised by the user.</summary>
+    public HashSet<string> UserCustomizedGroupColors { get; set; } = new();
 }
 
 // AlertsDto
@@ -290,9 +300,11 @@ public static class SettingsDtoMapping
                 BgColor = src.Overlay.BgColor,
                 TextColor = src.Overlay.ValueColor,
                 MetricColors = new Dictionary<string, string>(src.Overlay.MetricColors),
+                GroupColors = new Dictionary<string, string>(src.Overlay.GroupColors),
                 DefaultMetricColors = new Dictionary<string, string>(src.Overlay.DefaultMetricColors),
                 FollowWindowsTheme = src.Overlay.FollowWindowsTheme,
                 UserCustomizedMetricColors = [.. src.Overlay.UserCustomizedMetricColors],
+                UserCustomizedGroupColors = [.. src.Overlay.UserCustomizedGroupColors],
                 Row1 = [.. src.Overlay.Row1],
             },
             Alerts = new AlertsDto
@@ -375,9 +387,13 @@ public static class SettingsDtoMapping
         settings.Overlay.ValueColor = dto.Overlay.TextColor;
         if (dto.Overlay.MetricColors is { Count: > 0 })
             settings.Overlay.MetricColors = new Dictionary<string, string>(dto.Overlay.MetricColors);
+        if (dto.Overlay.GroupColors is { Count: > 0 })
+            settings.Overlay.GroupColors = new Dictionary<string, string>(dto.Overlay.GroupColors);
         settings.Overlay.FollowWindowsTheme = dto.Overlay.FollowWindowsTheme;
         settings.Overlay.UserCustomizedMetricColors = dto.Overlay.UserCustomizedMetricColors is { Count: > 0 }
             ? [.. dto.Overlay.UserCustomizedMetricColors] : [];
+        settings.Overlay.UserCustomizedGroupColors = dto.Overlay.UserCustomizedGroupColors is { Count: > 0 }
+            ? [.. dto.Overlay.UserCustomizedGroupColors] : [];
         settings.Overlay.DefaultMetricColors = dto.Overlay.DefaultMetricColors is { Count: > 0 }
             ? new Dictionary<string, string>(dto.Overlay.DefaultMetricColors)
             : [];

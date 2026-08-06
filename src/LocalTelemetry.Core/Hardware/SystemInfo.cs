@@ -1592,18 +1592,8 @@ public static class SystemInfo
     /// <returns>Hex color string or empty if unknown.</returns>
     public static string GetDiskColor()
     {
-        string mfr = GetDiskManufacturer();
-        foreach (var kvp in BrandColorDefaults.DiskColors)
-            if (mfr.Contains(kvp.Key, StringComparison.OrdinalIgnoreCase))
-                return kvp.Value;
-        // Fallback: check the model name - WMI rarely populates Vendor, but the model
-        // string always embeds the manufacturer.
         var drive = DiskQuery.QueryPhysicalDrive0();
-        string model = drive?.Model ?? "";
-        foreach (var kvp in BrandColorDefaults.DiskColors)
-            if (model.Contains(kvp.Key, StringComparison.OrdinalIgnoreCase))
-                return kvp.Value;
-        return "";
+        return BrandColorDefaults.ResolveDiskColor(drive?.Vendor ?? "", drive?.Model ?? "");
     }
 
     /// <summary>Gets the brand color hex for the RAM manufacturer.</summary>

@@ -563,7 +563,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
                 topLabel = rawPart!.PadRight(maxLen);
                 labelPartPx = TextRenderer.MeasureText(g, topLabel, font, Size.Empty, flags).Width;
                 topVal = Metrics.Format(topId, _snap, mc.UseNetBits, mc.UseFahrenheit);
-                topValW = TextRenderer.MeasureText(g, " " + GetMaxValueString(topId), font, Size.Empty, flags).Width;
+                topValW = TextRenderer.MeasureText(g, " " + Metrics.WidestValueString(topId, mc.UseNetBits, mc.UseFahrenheit), font, Size.Empty, flags).Width;
             }
             if (botOn)
             {
@@ -571,7 +571,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
                 int lblPx = TextRenderer.MeasureText(g, botLabel, font, Size.Empty, flags).Width;
                 labelPartPx = topOn ? Math.Max(labelPartPx, lblPx) : lblPx;
                 botVal = Metrics.Format(botId, _snap, mc.UseNetBits, mc.UseFahrenheit);
-                botValW = TextRenderer.MeasureText(g, " " + GetMaxValueString(botId), font, Size.Empty, flags).Width;
+                botValW = TextRenderer.MeasureText(g, " " + Metrics.WidestValueString(botId, mc.UseNetBits, mc.UseFahrenheit), font, Size.Empty, flags).Width;
             }
 
             int fullW = labelPartPx + colonW + Math.Max(
@@ -607,33 +607,6 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
             return $"{diskId.ToUpperInvariant()}{suffix}";
         }
         return _snap.PrimaryDiskType;
-    }
-
-    private static string GetMaxValueString(string id)
-    {
-        if (id.StartsWith("disk_"))
-        {
-            if (id.EndsWith("_read") || id.EndsWith("_write"))
-                return "9.99GB/s";
-            if (id.EndsWith("_temp"))
-                return "100°C";
-            return "100%";
-        }
-        return id switch
-        {
-            Metrics.CpuPct or Metrics.RamPct or Metrics.GpuPct
-                or Metrics.BatteryPct => "100%",
-            Metrics.CpuTemp or Metrics.GpuTemp => "100°C",
-            Metrics.CpuFreq => "6.00GHz",
-            Metrics.CpuPower or Metrics.GpuPower => "999W",
-            Metrics.RamUsed => "100.0GB",
-            Metrics.GpuVram => "32768MB",
-            Metrics.GpuFreq => "3999MHz",
-            Metrics.NetDown or Metrics.NetUp => "100.0GB/s",
-            Metrics.NetTotal => "1000.00MB",
-            Metrics.BatteryRate => "+99.9W",
-            _ => "9999",
-        };
     }
 
     private static bool IsMetricEnabled(string id, MonitoringConfig mc) => id switch
@@ -781,6 +754,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
         int h = hasRow2
             ? rowH * 2 + RowGap + vPad * 2
             : rowH + vPad * 2;
+
         return new Size(Math.Max(w, 10), Math.Max(h, 12));
     }
 

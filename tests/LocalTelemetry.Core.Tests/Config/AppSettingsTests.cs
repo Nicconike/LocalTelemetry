@@ -89,30 +89,6 @@ public class AppSettingsTests : IDisposable
     }
 
     [Fact]
-    public void Load_MigratesLegacyGpuClockToGpuFreq()
-    {
-        var json = """
-        {
-          "overlay": {
-            "row1": ["cpu_pct", "gpu_clock"],
-            "metricColors": {
-              "gpu_clock": "#FF0000"
-            }
-          }
-        }
-        """;
-        File.WriteAllText(AppSettings.ConfigPath, json);
-
-        var settings = AppSettings.Load();
-
-        settings.Overlay.Row1.Should().Contain("gpu_freq");
-        settings.Overlay.Row1.Should().NotContain("gpu_clock");
-        settings.Overlay.MetricColors.Should().ContainKey("gpu_freq");
-        settings.Overlay.MetricColors["gpu_freq"].Should().Be("#FF0000");
-        settings.Overlay.MetricColors.Should().NotContainKey("gpu_clock");
-    }
-
-    [Fact]
     public void Load_MigratesMissingMetricColors()
     {
         var json = """

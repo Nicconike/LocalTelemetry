@@ -88,50 +88,6 @@ public sealed partial class SettingsShell : Window
         };
     }
 
-    protected override void OnSourceInitialized(EventArgs e)
-    {
-        base.OnSourceInitialized(e);
-        HwndSource? source = PresentationSource.FromVisual(this) as HwndSource;
-        source?.AddHook(WndProc);
-    }
-
-    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
-    {
-        const int WM_NCHITTEST = 0x0084;
-        const int HTLEFT = 10;
-        const int HTRIGHT = 11;
-        const int HTTOP = 12;
-        const int HTTOPLEFT = 13;
-        const int HTTOPRIGHT = 14;
-        const int HTBOTTOM = 15;
-        const int HTBOTTOMLEFT = 16;
-        const int HTBOTTOMRIGHT = 17;
-
-        if (msg == WM_NCHITTEST && WindowState == WindowState.Normal)
-        {
-            int x = (short)(lParam.ToInt32() & 0xFFFF);
-            int y = (short)(lParam.ToInt32() >> 16);
-
-            System.Windows.Point windowPos = PointFromScreen(new System.Windows.Point(x, y));
-            const double border = 8.0;
-
-            bool onLeft = windowPos.X <= border;
-            bool onRight = windowPos.X >= ActualWidth - border;
-            bool onTop = windowPos.Y <= border;
-            bool onBottom = windowPos.Y >= ActualHeight - border;
-
-            if (onTop && onLeft) { handled = true; return (IntPtr)HTTOPLEFT; }
-            if (onTop && onRight) { handled = true; return (IntPtr)HTTOPRIGHT; }
-            if (onBottom && onLeft) { handled = true; return (IntPtr)HTBOTTOMLEFT; }
-            if (onBottom && onRight) { handled = true; return (IntPtr)HTBOTTOMRIGHT; }
-            if (onLeft) { handled = true; return (IntPtr)HTLEFT; }
-            if (onRight) { handled = true; return (IntPtr)HTRIGHT; }
-            if (onTop) { handled = true; return (IntPtr)HTTOP; }
-            if (onBottom) { handled = true; return (IntPtr)HTBOTTOM; }
-        }
-        return IntPtr.Zero;
-    }
-
     // Use Loaded event so the WPF visual tree is ready.
     // Guard with _webViewReady so re-showing the window doesn't re-init.
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -449,7 +405,11 @@ public sealed partial class SettingsShell : Window
         string buildDate = string.Empty;
         try
         {
+            // Single-file publish embeds the app dll into the exe, so fall back to the
+            // running executable when the dll isn't present on disk.
             string assemblyPath = Path.Combine(AppContext.BaseDirectory, $"{asm.GetName().Name}.dll");
+            if (!File.Exists(assemblyPath))
+                assemblyPath = Environment.ProcessPath ?? assemblyPath;
             if (File.Exists(assemblyPath))
                 buildDate = File.GetLastWriteTime(assemblyPath).ToString("yyyy-MM-dd HH:mm");
         }

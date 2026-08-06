@@ -39,7 +39,7 @@ jobs:
             - name: Install & Run Frontend Unit Tests (Vitest)
               run: |
                   bun install
-                  bun x vitest run --coverage --reporter=default --reporter=junit --outputFile=test-report.junit.xml
+                  bun x vitest run --reporter=default --reporter=junit --outputFile=test-report.junit.xml
               working-directory: tests/LocalTelemetry.App.Tests/Settings/wwwroot
 
             - name: Install & Build Svelte SPA Frontend
@@ -66,14 +66,41 @@ jobs:
             - name: Build C# Solution
               run: dotnet build --configuration Debug
 
-            - name: Run C# Unit Tests with Code Coverage
-              run: dotnet test --configuration Debug --no-build --verbosity normal --collect:"XPlat Code Coverage"
+            - name: Run Core Unit Tests with Coverage & Test Results
+              run: dotnet test tests/LocalTelemetry.Core.Tests/LocalTelemetry.Core.Tests.csproj --configuration Debug --no-build --verbosity minimal --collect:"XPlat Code Coverage" --logger "junit;LogFileName=junit.xml" --results-directory TestResults/core -p:Platform=x64
 
-            - name: Upload to Codecov
+            - name: Run Notifier Unit Tests with Coverage & Test Results
+              run: dotnet test tests/LocalTelemetry.Notifier.Tests/LocalTelemetry.Notifier.Tests.csproj --configuration Debug --no-build --verbosity minimal --collect:"XPlat Code Coverage" --logger "junit;LogFileName=junit.xml" --results-directory TestResults/notifier -p:Platform=x64
+
+            - name: Run App Unit Tests with Coverage & Test Results
+              run: dotnet test tests/LocalTelemetry.App.Tests/LocalTelemetry.App.Tests.csproj --configuration Debug --no-build --verbosity minimal --collect:"XPlat Code Coverage" --logger "junit;LogFileName=junit.xml" --results-directory TestResults/app -p:Platform=x64
+
+            - name: Upload Core Coverage to Codecov
               uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
               with:
                   token: ${{ secrets.CODECOV_TOKEN }}
                   slug: Nicconike/LocalTelemetry
+                  files: TestResults/core/**/coverage.cobertura.xml
+                  flags: core
+                  disable_search: true
+
+            - name: Upload Notifier Coverage to Codecov
+              uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+              with:
+                  token: ${{ secrets.CODECOV_TOKEN }}
+                  slug: Nicconike/LocalTelemetry
+                  files: TestResults/notifier/**/coverage.cobertura.xml
+                  flags: notifier
+                  disable_search: true
+
+            - name: Upload App Coverage to Codecov
+              uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+              with:
+                  token: ${{ secrets.CODECOV_TOKEN }}
+                  slug: Nicconike/LocalTelemetry
+                  files: TestResults/app/**/coverage.cobertura.xml
+                  flags: app
+                  disable_search: true
 
             - name: Upload test results to Codecov
               if: ${{ !cancelled() }}
@@ -81,7 +108,12 @@ jobs:
               with:
                   token: ${{ secrets.CODECOV_TOKEN }}
                   slug: Nicconike/LocalTelemetry
-                  report-type: test_results
+                  report_type: test_results
+                  files: |
+                      TestResults/core/junit.xml
+                      TestResults/notifier/junit.xml
+                      TestResults/app/junit.xml
+                      tests/LocalTelemetry.App.Tests/Settings/wwwroot/test-report.junit.xml
 
             - name: Upload Test Results & Coverage Artifacts
               if: always()
@@ -90,6 +122,5 @@ jobs:
                   name: test-results
                   path: |
                       **/TestResults/
-                      tests/LocalTelemetry.App.Tests/Settings/wwwroot/coverage/
-                      test-report.junit.xml
+                      tests/LocalTelemetry.App.Tests/Settings/wwwroot/test-report.junit.xml
                   retention-days: 7

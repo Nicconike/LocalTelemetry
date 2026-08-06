@@ -53,6 +53,9 @@ Generated\ Files/
 [Bb]uild[Ll]og.*
 *.trx
 
+# Test result reports (JUnit)
+*.junit.xml
+
 # NUnit
 *.VisualState.xml
 TestResult.xml

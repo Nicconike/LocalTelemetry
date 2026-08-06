@@ -46,13 +46,13 @@ public sealed class TrayIconManager : IDisposable
         _tray.DoubleClick += (_, _) => OpenSettingsRequested?.Invoke();
     }
 
-    /// <summary>Updates the checked state and text of the 'Show/Hide Taskbar Overlay' menu item.</summary>
+    /// <summary>Updates the checked state and text of the 'Show/Hide Overlay' menu item.</summary>
     public void SetOverlayVisible(bool visible)
     {
         if (_overlayToggleItem is not null)
         {
             _overlayToggleItem.Checked = visible;
-            _overlayToggleItem.Text = visible ? "Hide Taskbar Overlay" : "Show Taskbar Overlay";
+            _overlayToggleItem.Text = visible ? "Hide Overlay" : "Show Overlay";
             Log.Info($"Tray: SetOverlayVisible({visible}) -> text='{_overlayToggleItem.Text}', checked={visible}");
         }
     }
@@ -88,7 +88,7 @@ public sealed class TrayIconManager : IDisposable
             Font = new Font("Segoe UI", 9f, FontStyle.Bold)
         };
 
-        _overlayToggleItem = new ToolStripMenuItem("Hide Taskbar Overlay", null, (_, _) =>
+        _overlayToggleItem = new ToolStripMenuItem("Hide Overlay", null, (_, _) =>
         {
             Log.Info("Tray: toggle overlay item clicked");
             ToggleOverlayRequested?.Invoke();

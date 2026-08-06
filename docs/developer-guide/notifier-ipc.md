@@ -24,7 +24,7 @@ sequenceDiagram
     Notifier->>Notifier: RunPipeServerAsync("LocalTelemetryNotifier")
     Notifier->>Notifier: Background thread monitors parent Process.GetProcessById(parentPid)
 
-    Note over App, Notifier: Threshold Exceeded (e.g. CPU > 85°C)
+    Note over App, Notifier: Threshold Exceeded (e.g. CPU > 90°C)
     App->>Notifier: Connect to NamedPipe "LocalTelemetryNotifier"
     App->>Notifier: Send JSON NotificationMessage (Action="ShowToast")
     Notifier->>Notifier: Deserialize NotificationMessage JSON
@@ -41,7 +41,7 @@ sequenceDiagram
 {
   "Action": "ShowToast",
   "Title": "CPU Temperature Warning",
-  "Body": "CPU reached 88°C (Limit: 85°C)"
+  "Body": "CPU reached 91°C (Limit: 90°C)"
 }
 ```
 

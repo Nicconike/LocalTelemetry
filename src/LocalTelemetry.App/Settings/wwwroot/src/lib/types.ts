@@ -45,10 +45,12 @@ export interface OverlayDto {
     fontBold: boolean;
     labelColor: string;
     metricColors: Record<string, string>;
+    groupColors: Record<string, string>;
     defaultMetricColors: Record<string, string>;
     followWindowsTheme: boolean;
     row1: string[];
     userCustomizedMetricColors: string[];
+    userCustomizedGroupColors: string[];
 }
 
 export interface AlertsDto {
@@ -58,6 +60,7 @@ export interface AlertsDto {
     alertCpuUsage: boolean;
     alertRamUsage: boolean;
     alertGpuUsage: boolean;
+    alertGpuVram: boolean;
     alertBatteryLow: boolean;
     alertCpuFreq: boolean;
     alertCpuPower: boolean;
@@ -66,6 +69,7 @@ export interface AlertsDto {
     cpuUsageMaxPct: number;
     ramUsageMaxPct: number;
     gpuUsageMaxPct: number;
+    gpuVramMaxMb: number;
     cpuTempMaxC: number;
     gpuTempMaxC: number;
     batteryLowPct: number;

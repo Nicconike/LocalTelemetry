@@ -93,26 +93,21 @@ public sealed class AppSettings
             Log.Info($"Migrated config: filled {mc.Count} MetricColors entries");
         }
 
-        // Migrate old gpu_clock metric ID to gpu_freq
-        bool gpuClockMigrated = false;
-        for (int i = 0; i < cfg.Overlay.Row1.Count; i++)
+        // Ensure GroupColors has all known group entries (from configs saved before group colors existed)
+        var gc = cfg.Overlay.GroupColors;
+        bool groupDirty = false;
+        foreach (var kvp in BrandColorDefaults.BuildDefaultGroupColors(allDefaults))
         {
-            if (cfg.Overlay.Row1[i] == "gpu_clock")
+            if (!gc.ContainsKey(kvp.Key))
             {
-                cfg.Overlay.Row1[i] = "gpu_freq";
-                gpuClockMigrated = true;
+                gc[kvp.Key] = kvp.Value;
+                groupDirty = true;
             }
         }
-        if (mc.TryGetValue("gpu_clock", out var oldColor))
-        {
-            mc["gpu_freq"] = oldColor;
-            mc.Remove("gpu_clock");
-            gpuClockMigrated = true;
-        }
-        if (gpuClockMigrated)
+        if (groupDirty)
         {
             cfg.Save();
-            Log.Info("Migrated config: gpu_clock → gpu_freq");
+            Log.Info($"Migrated config: filled {gc.Count} GroupColors entries");
         }
     }
 
@@ -251,6 +246,15 @@ public sealed class OverlayConfig
         [Metrics.BatteryRate] = "#80E080",
     };
 
+    /// <summary>
+    /// Per-group colors shown by the Appearance page group pickers ("All CPU", "All GPU", ...).
+    /// Keys: <c>cpu</c>, <c>gpu</c>, <c>ram</c>, <c>network</c>, <c>battery</c>, <c>disk</c>.
+    /// Defaults to the detected vendor-brand colors (see <c>ApplyVendorColors</c>).
+    /// Independent of <see cref="MetricColors"/>: changing a group color stamps all metrics in the
+    /// group, but changing a single metric color does not affect the group color.
+    /// </summary>
+    public Dictionary<string, string> GroupColors { get; set; } = new();
+
     /// <summary>Hardware-detected default colors (never saved, rebuilt on each launch).</summary>
     [JsonIgnore]
     public Dictionary<string, string> DefaultMetricColors { get; set; } = new();
@@ -260,6 +264,9 @@ public sealed class OverlayConfig
 
     /// <summary>Metric IDs whose colors were customized by the user (skip in ApplyVendorColors).</summary>
     public HashSet<string> UserCustomizedMetricColors { get; set; } = new();
+
+    /// <summary>Group keys whose colors were customized by the user (skip in ApplyVendorColors).</summary>
+    public HashSet<string> UserCustomizedGroupColors { get; set; } = new();
 
     /// <summary>Combined metric ID list (even indices = top row, odd indices = bottom row).</summary>
     public List<string> Row1 { get; set; } = [Metrics.CpuPct, Metrics.CpuTemp, Metrics.GpuPct, Metrics.GpuTemp, Metrics.GpuVram, Metrics.NetTotal, Metrics.RamPct, Metrics.RamUsed, Metrics.NetDown, Metrics.NetUp];

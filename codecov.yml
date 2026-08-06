@@ -1,0 +1,45 @@
+coverage:
+    status:
+        project:
+            default:
+                target: auto
+                threshold: 1%
+                if_ci_failed: error
+        patch:
+            default:
+                target: auto
+                threshold: 1%
+                if_ci_failed: error
+
+comment:
+    layout: "header, diff, flags, components"
+    behavior: default
+    require_changes: false
+    require_base: true
+    require_head: true
+
+flags:
+    app:
+        paths:
+            - src/LocalTelemetry.App/**
+    core:
+        paths:
+            - src/LocalTelemetry.Core/**
+    notifier:
+        paths:
+            - src/LocalTelemetry.Notifier/**
+
+component_management:
+    individual_components:
+        - component_id: app
+          name: App
+          paths:
+              - src/LocalTelemetry.App/**
+        - component_id: core
+          name: Core
+          paths:
+              - src/LocalTelemetry.Core/**
+        - component_id: notifier
+          name: Notifier
+          paths:
+              - src/LocalTelemetry.Notifier/**
