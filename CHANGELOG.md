@@ -4,7 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and [Conventional Commits](https://www.conventionalcommits.org/).
 
-## [Unreleased]
+## [1.0.0-beta.2] - 07-08-2026
+
+### Features
+
+- Enhance installation and startup experience for LocalTelemetry ([b902bbb](https://github.com/Nicconike/LocalTelemetry/commit/b902bbbd475d8ee8a31fb320ff1a8db8eb0a31e8))
 
 ### Documentation
 
@@ -47,7 +51,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - bump happy-dom from 18.0.1 to 20.11.1 in /tests/LocalTelemetry.App.Tests/Settings/wwwroot in the npm_and_yarn group across 1 directory (#2) (deps-dev) ([7fb2104](https://github.com/Nicconike/LocalTelemetry/commit/7fb2104cf3f662d8de4539ca1bc54dacedadabd4))
 
-[unreleased]: https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0-beta.1...HEAD
+[1.0.0-beta.2]: https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0-beta.1...v1.0.0-beta.2
 [1.0.0-beta.1]: https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0-beta.0...v1.0.0-beta.1
 [1.0.0-beta.0]: https://github.com/Nicconike/LocalTelemetry/tree/v1.0.0-beta.0
 
