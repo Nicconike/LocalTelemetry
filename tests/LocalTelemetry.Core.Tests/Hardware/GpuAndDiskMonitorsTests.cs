@@ -15,7 +15,7 @@ public class GpuAndDiskMonitorsTests
         var primary = DiskQuery.QueryPhysicalDrive0();
         if (primary is not null)
         {
-            primary.DiskIndex.Should().BeGreaterOrEqualTo(0);
+            primary.DiskIndex.Should().BeGreaterThanOrEqualTo(0);
             primary.BusType.Should().NotBeNull();
         }
 

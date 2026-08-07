@@ -103,9 +103,9 @@ public sealed partial class SettingsShell : Window
         {
             string exeDir = AppContext.BaseDirectory;
             string markerFile = Path.Combine(exeDir, "app.mode");
-            bool normalMode = File.Exists(markerFile);
+            bool standardMode = File.Exists(markerFile);
 
-            string dataDir = normalMode
+            string dataDir = standardMode
                 ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LocalTelemetry", "webview2_data")
                 : Path.Combine(exeDir, "webview2_data");
 
@@ -416,8 +416,8 @@ public sealed partial class SettingsShell : Window
         catch (Exception ex) { Log.Error(ex, "Get build date failed"); }
 
         string exeDir = AppContext.BaseDirectory;
-        bool normalMode = File.Exists(Path.Combine(exeDir, "app.mode"));
-        string deploymentMode = normalMode ? "Normal" : "Portable";
+        bool standardMode = File.Exists(Path.Combine(exeDir, "app.mode"));
+        string deploymentMode = standardMode ? "Standard" : "Portable";
         string targetRuntime = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription;
 
         var gpus = SystemInfo.GetGpus();
@@ -559,7 +559,7 @@ public sealed partial class SettingsShell : Window
             if (before != after)
             {
                 Log.Info($"ApplySettings: saved ({after.Length} chars)");
-                WindowHelpers.SetStartup(_cfg.RunAtStartup, _cfg.StartMinimized);
+                WindowHelpers.SetStartup(_cfg.RunAtStartup);
                 _cfg.Save();
             }
 

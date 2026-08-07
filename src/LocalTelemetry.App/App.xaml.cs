@@ -106,7 +106,8 @@ public sealed partial class App : WpfApplication
         string exeDir = AppContext.BaseDirectory;
         AppSettings.InitPaths(exeDir);
         _cfg = AppSettings.Load();
-        // Sync startup setting with actual Windows Registry state (installer choice & HKCU/HKLM keys)
+        // Sync startup setting with actual Windows startup state (installer choice & task/registry)
+        bool fileRunAtStartup = _cfg.RunAtStartup;
         _cfg.RunAtStartup = WindowHelpers.IsStartupEnabled();
         Log.Init(AppSettings.SystemLogPath, AppSettings.MetricsLogPath, _cfg.EnableFileLogging);
         Log.Info($"config loaded from {AppSettings.ConfigPath}");
@@ -161,13 +162,11 @@ public sealed partial class App : WpfApplication
         TrafficHistoryStore.Initialize(historyFile);
         Log.Info("TrafficHistoryStore: initialized");
 
-        // Sync RunAtStartup setting with actual Windows Task Scheduler / Registry startup state
-        bool isStartupActive = WindowHelpers.IsStartupEnabled();
-        if (_cfg.RunAtStartup != isStartupActive)
+        // Persist startup state if the config file disagreed with actual Windows state
+        if (fileRunAtStartup != _cfg.RunAtStartup)
         {
-            _cfg.RunAtStartup = isStartupActive;
             _cfg.Save();
-            Log.Info($"Synced RunAtStartup with Windows system state: {isStartupActive}");
+            Log.Info($"Synced RunAtStartup with Windows system state: {_cfg.RunAtStartup}");
         }
 
         WireEvents();
@@ -189,7 +188,8 @@ public sealed partial class App : WpfApplication
         if (!minimized)
             OpenSettings();
 
-        WindowHelpers.SetStartup(_cfg.RunAtStartup, _cfg.StartMinimized);
+        if (_cfg.RunAtStartup)
+            WindowHelpers.SetStartup(true);
         Log.Info($"startup complete (elevated=true, overlayVisible={_cfg.Overlay.Visible}, startMinimized={minimized})");
     }
 

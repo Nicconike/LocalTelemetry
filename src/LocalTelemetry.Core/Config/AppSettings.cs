@@ -21,13 +21,13 @@ public sealed class AppSettings
     public static void InitPaths(string exeDir)
     {
         string markerFile = Path.Combine(exeDir, "app.mode");
-        bool normalMode = File.Exists(markerFile);
+        bool standardMode = File.Exists(markerFile);
 
-        string dataDir = normalMode
+        string dataDir = standardMode
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LocalTelemetry")
             : exeDir;
 
-        if (normalMode && !Directory.Exists(dataDir))
+        if (standardMode && !Directory.Exists(dataDir))
         {
             try { Directory.CreateDirectory(dataDir); }
             catch { /* fallback to exeDir if directory creation fails */ dataDir = exeDir; }

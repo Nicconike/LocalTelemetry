@@ -48,7 +48,7 @@ public sealed class PawnIoDevice : IPawnIoTransport
         if (handle.IsInvalid)
         {
             int err = Marshal.GetLastWin32Error();
-            Log.Error($"PawnIo driver not present (Win32 error {err})");
+            Log.Info($"PawnIo driver not present (Win32 error {err})");
             handle.Dispose();
             return null;
         }

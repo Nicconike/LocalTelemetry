@@ -39,5 +39,5 @@ LocalTelemetry is a local-only desktop application. Key security properties:
 
 - **No network telemetry**: All hardware data stays on your machine. No data is transmitted externally.
 - **No analytics or tracking**: The application does not phone home.
-- **Admin privileges**: Required only for PawnIo driver installation (CPU MSR access). The app runs as `asInvoker` by default and elevates programmatically only when needed.
+- **Admin privileges**: Required only for PawnIo driver installation (CPU MSR access). The app runs as `asInvoker` by default and elevates itself once on launch; the PawnIo driver install and service start then run silently in the background without further UAC prompts.
 - **WebView2 bridge**: URL navigation from the settings UI is restricted to `https://` and `http://` schemes only.

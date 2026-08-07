@@ -19,13 +19,17 @@ jobs:
               with:
                   fetch-depth: 0
 
-            - name: Verify Conventional Commit Messages (commitlint)
+            - name: Install commitlint config & plugin
+              run: npm install --no-save --no-package-lock --ignore-scripts commitlint-plugin-function-rules@4 @commitlint/config-conventional@19
+
+            - name: Verify Conventional Commit Messages
               uses: wagoid/commitlint-github-action@b948419dd99f3fd78a6548d48f94e3df7f6bf3ed # v6.2.1
               with:
-                  configFile: .commitlintrc.json
+                  configFile: commitlint.config.mjs
 
     ci:
         name: CI
+        needs: commitlint
         runs-on: windows-latest
         steps:
             - name: Checkout Code

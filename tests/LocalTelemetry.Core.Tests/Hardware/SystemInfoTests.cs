@@ -88,10 +88,10 @@ public class SystemInfoTests
     }
 
     [Fact]
-    public void SystemInfo_GetOsVersion_ReturnsNonEmptyString()
+    public void SystemInfo_GetOsVersion_MatchesExpectedFormat()
     {
         string os = SystemInfo.GetOsDisplayVersion();
-        os.Should().NotBeNull();
+        os.Should().MatchRegex(@"^Windows (10|11|Server).*\(build \d+\)$");
     }
 
     [Fact]

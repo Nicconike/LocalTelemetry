@@ -52,6 +52,7 @@ graph TD
 To read CPU package temperatures, MSR (Model-Specific Register) values and Ryzen SMU metrics, LocalTelemetry utilizes the **PawnIo** kernel driver abstraction layer.
 
 - **Driver Subsystem**: Located inside `LocalTelemetry.Core/Hardware/PawnIo/`.
+- **First-launch auto-install**: On startup, `HardwareMonitor.InitPawnIo` probes for the device handle. If the driver is not present, `PawnIoDevice.TryInstall` downloads `PawnIO_setup.exe` from GitHub and runs it silently (`-install -silent`), then starts the `PawnIO` service via `sc start PawnIO`. Because the app is already elevated at launch, these child processes inherit elevation **without** additional UAC prompts. The probe retries every 500 ms (up to 10 attempts) until the device opens; this is what causes the brief delay before the tray icon appears on a fresh install.
 - **Intel Sensor Queries**: MSR registers `IA32_THERM_STATUS` (`0x19C`) and `APERF`/`MPERF` deltas for core frequencies.
 - **AMD Sensor Queries**: Interacts with Ryzen SMU (System Management Unit) interface to read package temperatures and SMU telemetry.
 

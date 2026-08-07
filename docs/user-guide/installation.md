@@ -40,10 +40,21 @@ This page details the minimum system requirements and step-by-step installation 
 
 ## First-Time Launch & UAC Notice
 
-When LocalTelemetry runs for the first time, Windows User Account Control (UAC) may request administrative privileges.
+### What to expect on the very first launch
+
+On the first launch after a fresh install, LocalTelemetry:
+
+1. **Asks for Administrator rights once** — a single Windows UAC prompt appears while LocalTelemetry elevates itself.
+2. **Installs the PawnIo hardware driver silently in the background** — while running elevated, LocalTelemetry downloads and installs the PawnIo kernel driver without any further UAC prompts (child processes launched from an already-elevated process inherit its elevation).
+3. **May take a few seconds to appear** — the system tray icon and taskbar overlay dock once the driver is installed and the monitoring services are ready.
+
+On every subsequent launch the driver is already present, so the app starts instantly without a UAC prompt.
 
 ### Why does LocalTelemetry need Administrator rights?
 To read hardware sensors (such as CPU package temperatures, ring voltage and GPU power draw), LocalTelemetry interacts with low-level kernel drivers (such as `PawnIo` / `WinRing0`). Standard user privileges cannot read these hardware registers directly.
+
+> [!NOTE]
+> If the background driver installation fails (for example, when offline), LocalTelemetry still runs, but CPU temperature/MSR sensors will be unavailable. Details are written to the system log at `%LOCALAPPDATA%\LocalTelemetry\lt_system.log`.
 
 
 ## Updating LocalTelemetry

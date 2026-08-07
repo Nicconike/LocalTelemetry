@@ -6,7 +6,10 @@ Answers to frequently asked questions and troubleshooting guides for common issu
 ## FAQ
 
 ### Q: Why does LocalTelemetry require Administrator privileges?
-LocalTelemetry reads hardware sensors directly from CPU registers (MSRs) and GPU interfaces. Operating systems restrict direct hardware register access to administrative users to maintain kernel security.
+LocalTelemetry reads hardware sensors directly from CPU registers (MSRs) and GPU interfaces. Operating systems restrict direct hardware register access to administrative users to maintain kernel security. On the first launch after a fresh install you will see a single UAC prompt - LocalTelemetry then installs the PawnIo kernel driver silently in the background, so the tray icon and overlay may take a few seconds to appear. Later launches start instantly without a prompt.
+
+### Q: Why did the first launch take a few seconds to show the tray icon?
+On a fresh install, the first run downloads and installs the PawnIo kernel driver in the background (after the single UAC prompt). The tray icon and overlay appear once the driver and monitoring services are ready - usually after a few seconds. Subsequent launches start instantly.
 
 ### Q: Does LocalTelemetry impact gaming performance?
 No. LocalTelemetry is optimized for low-overhead background operation. Polling takes place on background worker threads using non-blocking Win32 calls. When minimized to the system tray with settings closed, background CPU and memory usage remain minimal. Opening the Svelte 5 settings panel spins up Microsoft WebView2 child processes (`msedgewebview2.exe`) to render the configuration UI.

@@ -58,22 +58,22 @@ This project follows [Conventional Commits](https://www.conventionalcommits.org/
 <type>(<scope>): <summary>
 ```
 
-**Types**: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `ci`, `perf`, `style`
+**Types**: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `ci`, `perf`, `style`, `build`
 
-**Scopes**: `core`, `app`, `overlay`, `settings`, `tray`, `monitor`, `config`, `deps`, `ci`
+**Scopes**: `core`, `app`, `overlay`, `monitor`, `config`, `ci` (`app` covers the `settings`/`tray` UI; dependency bumps use `chore(deps)` / `build(deps)`)
 
 Examples:
 ```
 feat(overlay): add GPU temperature display
 fix(core): handle missing PawnIo driver gracefully
-chore(deps): bump NuGet packages
+build(deps): bump NuGet packages
 ```
 
 ## Pull Requests
 
 - One logical change per PR
 - Squash and merge
-- PRs from bots/automation are auto-labeled with `automated-pr`
+- PRs/issues are auto-labeled and assigned to Project #7 by the [Project Automation workflow](workflows/project.yml): Kind/Scope/Sprint fields come from the PR title and changed files. Dependabot PRs are auto-labeled: package bumps get `dependabot` + `dependencies` (Kind Build), GitHub Actions bumps get `dependabot` + `actions` + `scope:ci` (Kind CI).
 
 ## Verification
 

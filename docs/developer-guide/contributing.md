@@ -64,17 +64,23 @@ This repository enforces the [Conventional Commits](https://www.conventionalcomm
 - `refactor`: Refactoring code without changing behavior
 - `perf`: Performance optimizations
 - `test`: Adding or updating tests
-- `chore`: Maintenance, updating dependencies or build scripts
+- `ci`: CI/CD pipeline changes
+- `build`: Build system or dependency changes
+- `chore`: Maintenance
 
 ### Scopes
-`core`, `app`, `overlay`, `settings`, `tray`, `monitor`, `config`, `deps`, `ci`
+`core`, `app`, `overlay`, `monitor`, `config`, `ci`
+
+`app` covers the `settings`/`tray` UI; dependency bumps use `chore(deps)` / `build(deps)`.
 
 ### Examples
 ```powershell
 feat(overlay): add GPU VRAM usage indicator
 fix(core): handle missing PawnIo driver initialization failure gracefully
-docs(vitepress): add website analytics tracking guide
+build(deps): bump NuGet packages
 ```
+
+> The [Project Automation workflow](../../.github/workflows/project.yml) auto-labels issues/PRs and assigns Kind, Scope & Sprint fields on Project #7 from the PR title and changed files. Dependabot PRs are auto-labeled: package bumps get `dependabot` + `dependencies` (Kind Build), GitHub Actions bumps get `dependabot` + `actions` + `scope:ci` (Kind CI).
 
 
 ## 🔀 Pull Request Process

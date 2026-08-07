@@ -8,7 +8,10 @@ Get up and running with **LocalTelemetry** in less than 2 minutes.
 After installation, double-click the **LocalTelemetry** desktop shortcut or run `LocalTelemetry.exe`.
 
 - You will see the **LocalTelemetry icon** appear in your Windows System Tray (near the clock).
-- The taskbar overlay will immediately dock itself into your taskbar, showing live hardware telemetry metrics.
+- The taskbar overlay will dock itself into your taskbar, showing live hardware telemetry metrics.
+
+> [!NOTE]
+> On the very first launch after a fresh install, LocalTelemetry asks for Administrator rights once (single UAC prompt) and then installs the PawnIo hardware driver silently in the background. This can take a few seconds - the tray icon and overlay appear once the driver and monitoring services are ready. Later launches start instantly.
 
 
 ## 2. System Tray Controls

@@ -13,12 +13,12 @@ updates:
       open-pull-requests-limit: 5
       rebase-strategy: "auto"
       commit-message:
-          prefix: "chore(deps)"
-          prefix-development: "chore(deps-dev)"
+          prefix: "build(deps)"
+          prefix-development: "build(deps-dev)"
       labels:
           - "dependencies"
+          - "dependabot"
           - "csharp"
-          - "automated-pr"
       groups:
           dotnet-deps:
               patterns:
@@ -35,11 +35,11 @@ updates:
       open-pull-requests-limit: 5
       rebase-strategy: "auto"
       commit-message:
-          prefix: "chore(deps)"
+          prefix: "build(deps)"
       labels:
           - "dependencies"
-          - "csharp"
-          - "automated-pr"
+          - "dependabot"
+          - "scope:ci"
       groups:
           sdk-deps:
               patterns:
@@ -56,12 +56,12 @@ updates:
       open-pull-requests-limit: 5
       rebase-strategy: "auto"
       commit-message:
-          prefix: "chore(deps)"
-          prefix-development: "chore(deps-dev)"
+          prefix: "build(deps)"
+          prefix-development: "build(deps-dev)"
       labels:
           - "dependencies"
+          - "dependabot"
           - "frontend"
-          - "automated-pr"
       groups:
           frontend-deps:
               patterns:
@@ -78,11 +78,11 @@ updates:
       open-pull-requests-limit: 5
       rebase-strategy: "auto"
       commit-message:
-          prefix: "chore(ci)"
+          prefix: "ci(deps)"
       labels:
-          - "dependencies"
+          - "dependabot"
           - "actions"
-          - "automated-pr"
+          - "scope:ci"
       groups:
           actions-deps:
               patterns:

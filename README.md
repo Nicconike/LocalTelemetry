@@ -87,11 +87,28 @@
 2. Run the installer and follow the quick setup wizard.
 3. LocalTelemetry will launch automatically after installation.
 
+> **First launch note:** the very first run asks for Administrator rights once (single UAC prompt), then installs the PawnIo hardware driver silently in the background - the tray icon and overlay can take a few seconds to appear. Subsequent launches start instantly.
+
 ### Option 2: Portable ZIP
 
 1. Download `LocalTelemetry-win-x64.zip` from [**GitHub Releases**](https://github.com/Nicconike/LocalTelemetry/releases).
 2. Extract the folder to any location on your PC.
 3. Run `LocalTelemetry.exe`.
+
+### Verifying Your Download
+
+Every release ships with a `checksums.txt` and [SLSA](https://slsa.dev/) build attestations. You can verify your download before running it:
+
+```pwsh
+# 1. Compare the SHA-256 hashes against checksums.txt
+Get-FileHash .\LocalTelemetrySetup.exe, .\LocalTelemetry-win-x64.zip -Algorithm SHA256
+
+# 2. Verify the SLSA attestation (proves the file was built by the release workflow)
+gh attestation verify .\LocalTelemetrySetup.exe --repo Nicconike/LocalTelemetry
+gh attestation verify .\LocalTelemetry-win-x64.zip --repo Nicconike/LocalTelemetry
+```
+
+The attestation confirms the binary was produced by the official [**Release workflow**](https://github.com/Nicconike/LocalTelemetry/actions/workflows/release.yml) and has not been tampered with.
 
 ---
 

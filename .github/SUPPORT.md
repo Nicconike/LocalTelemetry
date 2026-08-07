@@ -26,7 +26,7 @@ Welcome to the **LocalTelemetry** support hub! This document provides complete g
 
 ### Hardware Sensors & Driver Elevation
 * **Q: Why does LocalTelemetry prompt for Administrator (UAC) privileges?**
-  * **A:** Admin privileges are required exclusively to load the kernel-level **PawnIo** hardware driver for direct Model-Specific Register (MSR) access on CPUs. The application executable runs as `asInvoker` by default and elevates programmatically via UAC only when required for low-level ring-0 sensor access.
+  * **A:** Admin privileges are required exclusively to load the kernel-level **PawnIo** hardware driver for direct Model-Specific Register (MSR) access on CPUs. On the first launch after a fresh install you will see a single UAC prompt. LocalTelemetry then downloads and installs the PawnIo driver silently in the background - no further UAC prompts appear, so the tray icon and overlay may take a few seconds to appear. Later launches start instantly without prompting if start with windows is enabled.
 * **Q: Why is my GPU usage or temperature showing 0% or N/A?**
   * **A:** LocalTelemetry includes both generic Windows WDDM counters and vendor-specific hardware monitors (NVIDIA NVML, AMD ADL, Intel IGCL). If vendor libraries are unavailable or uninitialized:
     1. Navigate to **Settings > Monitoring**.

@@ -18,7 +18,7 @@ All workflow definition files are located in `.github/workflows/`:
 ├── codeql.yml      # CodeQL static security analysis
 ├── scorecard.yml   # OpenSSF Scorecard supply-chain security audit
 ├── sonar.yml       # SonarQube / SonarCloud static analysis
-└── auto-label.yml  # PR auto-labeling for automated bots
+└── project.yml     # Project Automation (labels + Project #7 board fields)
 ```
 
 ---
@@ -33,7 +33,7 @@ The workflow is split into two jobs:
 
 ### CommitLint Job
 1. **Checkout Code**: Uses `actions/checkout` with full git history (`fetch-depth: 0`).
-2. **Verify Conventional Commit Messages**: Runs `commitlint` (`wagoid/commitlint-github-action`) against `.commitlintrc.json`.
+2. **Verify Conventional Commit Messages**: Runs `commitlint` (`wagoid/commitlint-github-action`) against `commitlint.config.mjs`.
 
 ### CI Job (Windows)
 1. **Checkout Code**: Uses `actions/checkout` with full git history (`fetch-depth: 0`).
@@ -51,7 +51,26 @@ The workflow is split into two jobs:
 
 ---
 
-## 2. Release Workflow (`release.yml`)
+## 2. Project Automation (`project.yml`)
+
+Triggers on:
+- `issues` opened.
+- `pull_request` opened.
+- Manual `workflow_dispatch` (backfills all open issues & PRs).
+
+Authenticates with the `PROJECTS` secret (falling back to `PROJECTS_PAT`, then `GITHUB_TOKEN`) using a pinned `actions/github-script` SHA.
+
+For every issue/PR it:
+1. **Labels**: Assigns labels from the Conventional Commit type in the title (`feat` → `enhancement`, `fix` → `bug`, `perf` → `perf`, `docs` → `documentation`, etc.). `revert` is intentionally unlabeled so the changelog groups it under *Reverts*.
+2. **Scope**: Detects the board Scope (Core, App, Overlay, Monitor, Config, CI) from the changed files (`pulls.listFiles`) and title scope markers, tags every matching `scope:*` label, and sets the single-select Scope field using precedence Core > App > Overlay > Monitor > Config > CI.
+3. **Dependabot**: `dependabot[bot]` PRs are auto-labeled by dependabot and re-verified here. Package bumps (NuGet, Bun, dotnet-sdk) get `dependabot` + `dependencies` and Kind `Build`; GitHub Actions bumps get `dependabot` + `actions` + `scope:ci` and Kind `CI`. Scope is always derived from the files they touch (`.github/**`/`global.json` → CI, `*.csproj` → their project, `wwwroot/**` → App).
+4. **Board**: Adds the item to Project #7 and sets the **Kind** field from the title, the **Scope** field, and the **Sprint** field (active → next future iteration → creates a new 14-day iteration if none exist).
+
+The changelog (`git-cliff`, `cliff.toml`) groups commits by these same labels so PR labels, Project #7 fields, and CHANGELOG sections stay consistent.
+
+---
+
+## 3. Release Workflow (`release.yml`)
 
 Triggers on pushes to `master` that touch release-relevant paths (`setup.iss`, `src/LocalTelemetry.App/**`, `src/LocalTelemetry.Core/**`, `src/LocalTelemetry.Notifier/**`).
 
@@ -73,7 +92,7 @@ Job-level permissions:
 
 ---
 
-## 3. Documentation Deployment (`docs.yml`)
+## 4. Documentation Deployment (`docs.yml`)
 
 Triggers on:
 - Pushes to `master` branch or manual `workflow_dispatch`.
@@ -86,7 +105,7 @@ Triggers on:
 
 ---
 
-## 4. Security & Quality Analysis Workflows
+## 5. Security & Quality Analysis Workflows
 
 ### CodeQL Security Scan (`codeql.yml`)
 - Runs automated static code analysis scanning C# code for security vulnerabilities using `github/codeql-action`.

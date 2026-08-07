@@ -76,7 +76,7 @@
                 <div class="spec-item">
                     <span class="spec-label">Deployment Mode</span>
                     <span class="spec-value"
-                        >{$systemInfo.deploymentMode ?? "Normal"}</span
+                        >{$systemInfo.deploymentMode ?? "Standard"}</span
                     >
                 </div>
                 <div class="spec-item">
@@ -144,6 +144,7 @@
         flex-direction: column;
         gap: var(--space-4);
         max-width: 540px;
+        min-height: 100%;
     }
 
     /* Brand Hero Header */
@@ -344,6 +345,7 @@
         align-items: center;
         justify-content: center;
         padding: var(--space-3) 0;
+        margin-top: auto;
     }
     .copyright {
         font-size: var(--text-xs);

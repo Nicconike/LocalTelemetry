@@ -21,11 +21,11 @@ public class PawnIoTests
         var mockDevice = Substitute.For<IPawnIoTransport>();
 
         // MSR_IA32_TEMPERATURE_TARGET (0x1A2) returns tjMax = 100 in bits 16-23 -> (100 << 16) = 0x640000
-        mockDevice.Execute("ioctl_read_msr", Arg.Is<ulong[]>(a => a[0] == 0x1A2), 1)
+        mockDevice.Execute("ioctl_read_msr", Arg.Is<ulong[]>(a => a![0] == 0x1A2), 1)
                   .Returns([0x640000UL]);
 
         // MSR_IA32_PACKAGE_THERM_STATUS (0x1B1) returns digitalReadout = 40 in bits 16-23 -> (40 << 16) = 0x280000
-        mockDevice.Execute("ioctl_read_msr", Arg.Is<ulong[]>(a => a[0] == 0x1B1), 1)
+        mockDevice.Execute("ioctl_read_msr", Arg.Is<ulong[]>(a => a![0] == 0x1B1), 1)
                   .Returns([0x280000UL]);
 
         using var reader = new IntelMsrReader(mockDevice);

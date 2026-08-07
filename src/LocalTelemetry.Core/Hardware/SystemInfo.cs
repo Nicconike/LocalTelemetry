@@ -1547,9 +1547,15 @@ public static class SystemInfo
             string? display = key.GetValue("DisplayVersion")?.ToString();
             string? build = key.GetValue("CurrentBuild")?.ToString();
             if (string.IsNullOrEmpty(product)) return "";
+            string osName = product;
+            if (int.TryParse(build, out int buildNumber) && buildNumber >= 22000 &&
+                product.StartsWith("Windows 10", StringComparison.OrdinalIgnoreCase))
+            {
+                osName = "Windows 11" + product["Windows 10".Length..];
+            }
             _osVersionCache = string.IsNullOrEmpty(display)
-                ? $"{product} (build {build})"
-                : $"{product} {display} (build {build})";
+                ? $"{osName} (build {build})"
+                : $"{osName} {display} (build {build})";
         }
         catch (Exception ex) { Diagnostics.Log.Error(ex, "GetOsDisplayVersion"); _osVersionCache = string.Empty; }
         return _osVersionCache;
