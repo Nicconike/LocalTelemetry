@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [1.0.0-beta.4] - 08-08-2026
+
+### Bug Fixes
+
+- resolve SonarQube vulnerabilities, workflow errors and docs favicon (ci) ([43a4cde](https://github.com/Nicconike/LocalTelemetry/commit/43a4cdeb505cdc04c94c4d10b911a386e92813ba))
+
 ## [1.0.0-beta.3] - 08-08-2026
 
 ### Bug Fixes
@@ -57,6 +63,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - bump happy-dom from 18.0.1 to 20.11.1 in /tests/LocalTelemetry.App.Tests/Settings/wwwroot in the npm_and_yarn group across 1 directory (#2) (deps-dev) ([7fb2104](https://github.com/Nicconike/LocalTelemetry/commit/7fb2104cf3f662d8de4539ca1bc54dacedadabd4))
 
+[1.0.0-beta.4]: https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0-beta.3...v1.0.0-beta.4
 [1.0.0-beta.3]: https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0-beta.2...v1.0.0-beta.3
 [1.0.0-beta.2]: https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0-beta.1...v1.0.0-beta.2
 [1.0.0-beta.1]: https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0-beta.0...v1.0.0-beta.1
