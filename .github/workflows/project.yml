@@ -7,6 +7,9 @@ on:
         types: [opened]
     workflow_dispatch:
 
+permissions:
+    contents: read
+
 jobs:
     auto-project-setup:
         name: Auto Project Setup
@@ -16,7 +19,7 @@ jobs:
             pull-requests: write
 
         steps:
-            - name: Auto-Assign Sprint, Labels, Scope & Project #7 Fields
+            - name: Auto-Assign Sprint, Labels, Scope & Project
               uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
               with:
                   github-token: ${{ secrets.PROJECTS }}

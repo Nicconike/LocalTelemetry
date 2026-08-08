@@ -44,25 +44,14 @@ jobs:
                   key: ${{ runner.os }}-sonar-${{ hashFiles('**/*.csproj') }}
                   restore-keys: ${{ runner.os }}-sonar-
 
-            - name: Cache SonarQube Cloud scanner
-              id: cache-sonar-scanner
-              uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-              with:
-                  path: ${{ runner.temp }}\scanner
-                  key: ${{ runner.os }}-sonar-scanner
-                  restore-keys: ${{ runner.os }}-sonar-scanner
-
             - name: Install SonarCloud Scanner
-              if: steps.cache-sonar-scanner.outputs.cache-hit != 'true'
-              run: |
-                  New-Item -ItemType Directory -Force -Path ${{ runner.temp }}\scanner
-                  dotnet tool update dotnet-sonarscanner --tool-path ${{ runner.temp }}\scanner
+              run: dotnet tool install --global dotnet-sonarscanner
 
             - name: Begin SonarCloud Analysis
               env:
                   SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
               run: |
-                  ${{ runner.temp }}\scanner\dotnet-sonarscanner begin /k:"Nicconike_LocalTelemetry" /o:"nicconike" /d:sonar.token="${{ secrets.SONAR_TOKEN }}" /d:sonar.host.url="https://sonarcloud.io" /d:sonar.cs.cobertura.reportsPaths="**/TestResults/**/coverage.cobertura.xml" /d:sonar.scanner.scanAll=false
+                  dotnet-sonarscanner begin /k:"LocalTelemetry" /o:"nicconike" /d:sonar.token="$env:SONAR_TOKEN" /d:sonar.host.url="https://sonarcloud.io" /d:sonar.cs.cobertura.reportsPaths="**/TestResults/**/coverage.cobertura.xml" /d:sonar.scanner.scanAll=false
 
             - name: Install & Build Svelte SPA Frontend
               run: |
@@ -79,4 +68,4 @@ jobs:
             - name: End SonarCloud Analysis
               env:
                   SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-              run: ${{ runner.temp }}\scanner\dotnet-sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
+              run: dotnet-sonarscanner end /d:sonar.token="$env:SONAR_TOKEN"

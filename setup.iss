@@ -60,11 +60,12 @@ Filename: "{app}\LocalTelemetry.exe"; Description: "{cm:LaunchProgram,LocalTelem
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
-Type: filesandordirs; Name: "{localappdata}\LocalTelemetry"; Check: RetryDeleteData
 
 [Code]
 const
     StartupTaskName = 'LocalTelemetry Startup';
+    CSIDL_LOCAL_APPDATA = $001C;
+    ProfileListKey = 'SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList';
     PawnIoCleanupScript =
         '$log = $env:ProgramData + ''\LocalTelemetry\pawnio_cleanup.log''' + #13#10 +
         '''[PawnIO cleanup] started: '' + (Get-Date) | Set-Content $log' + #13#10 +
@@ -88,7 +89,7 @@ const
         'exit 0';
 
 var
-    DataDeletePending: Boolean;
+    PendingDataDirs: TStringList;
 
 function CreateStartupTask: Boolean;
 var
@@ -178,9 +179,27 @@ begin
     end;
 end;
 
-function RetryDeleteData: Boolean;
+function CollectLocalTelemetryDataDirs(const Dirs: TStringList): Integer;
+var
+    Profiles: TArrayOfString;
+    I: Integer;
+    ProfilePath, DataDir: string;
 begin
-    Result := DataDeletePending;
+    Result := 0;
+    if RegGetSubkeyNames(HKLM, ProfileListKey, Profiles) then
+        for I := 0 to GetArrayLength(Profiles) - 1 do
+        begin
+            ProfilePath := '';
+            if RegQueryStringValue(HKLM, ProfileListKey + '\' + Profiles[I], 'ProfileImagePath', ProfilePath) then
+            begin
+                DataDir := ProfilePath + '\AppData\Local\LocalTelemetry';
+                if DirExists(DataDir) and (Dirs.IndexOf(DataDir) = -1) then
+                begin
+                    Dirs.Add(DataDir);
+                    Result := Result + 1;
+                end;
+            end;
+        end;
 end;
 
 function InitializeUninstall: Boolean;
@@ -207,7 +226,9 @@ end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
-    DataDir, TempDir, AppDir, PawnIoLog, PawnIoScript: string;
+    TempDir, AppDir, PawnIoLog, PawnIoScript, PreservedMsg: string;
+    DataDirs: TStringList;
+    Count, I: Integer;
     ResultCode: Integer;
 begin
     if CurUninstallStep = usUninstall then
@@ -252,27 +273,62 @@ begin
 
         // Prompt user to remove AppData user settings, logs & traffic history.
         // Defaults to No (MB_DEFBUTTON2) - nothing is deleted unless the user
-        // explicitly approves. On approval, delete with retries; if the folder
-        // still cannot be removed, flag it so the [UninstallDelete] fallback
-        // (Check: RetryDeleteData) retries it during the final uninstall phase.
-        DataDir := ExpandConstant('{localappdata}\LocalTelemetry');
-        TempDir := ExpandConstant('{localappdata}\Temp\PawnIo');
-        DataDeletePending := False;
-        if DirExists(DataDir) then
-        begin
-            if MsgBox('Do you also want to remove all saved settings, traffic logs and local hardware monitoring history?',
-                      mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
+        // explicitly approves. The uninstaller runs elevated
+        // (PrivilegesRequired=admin), so {localappdata} would resolve to the
+        // admin account rather than the user who actually used the app. Instead
+        // of relying on that constant, enumerate every Windows user profile and
+        // collect the LocalTelemetry data folder from each one.
+        PendingDataDirs := TStringList.Create;
+        DataDirs := TStringList.Create;
+        try
+            Count := CollectLocalTelemetryDataDirs(DataDirs);
+            if Count > 0 then
             begin
-                if not DeleteUserData(DataDir) then
-                    DataDeletePending := True;
-                if DirExists(TempDir) then
-                    DelTree(TempDir, True, True, True);
-            end
-            else
-            begin
-                MsgBox('Your settings, logs and monitoring history have been preserved at:' + #13#10 + #13#10 + DataDir,
-                       mbInformation, MB_OK);
+                if Count > 1 then
+                    PreservedMsg := 'Do you also want to remove all saved settings, traffic logs and local hardware monitoring history for all ' +
+                                    IntToStr(Count) + ' user profiles on this system?'
+                else
+                    PreservedMsg := 'Do you also want to remove all saved settings, traffic logs and local hardware monitoring history?';
+                if MsgBox(PreservedMsg, mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
+                begin
+                    for I := 0 to DataDirs.Count - 1 do
+                        if not DeleteUserData(DataDirs[I]) then
+                            PendingDataDirs.Add(DataDirs[I]);
+                    TempDir := GetShellFolderByCSIDL(CSIDL_LOCAL_APPDATA, False);
+                    if TempDir <> '' then
+                    begin
+                        TempDir := TempDir + '\Temp\PawnIo';
+                        if DirExists(TempDir) then
+                            DelTree(TempDir, True, True, True);
+                    end;
+                end
+                else
+                begin
+                    PreservedMsg := 'Your settings, logs and monitoring history have been preserved at:' + #13#10;
+                    for I := 0 to DataDirs.Count - 1 do
+                    begin
+                        if I > 0 then
+                            PreservedMsg := PreservedMsg + #13#10;
+                        PreservedMsg := PreservedMsg + DataDirs[I];
+                    end;
+                    MsgBox(PreservedMsg, mbInformation, MB_OK);
+                end;
             end;
+        finally
+            DataDirs.Free;
+        end;
+    end
+    else if CurUninstallStep = usPostUninstall then
+    begin
+        // Final retry for any user data folders that could not be deleted above
+        // (e.g. files still locked while the app processes were shutting down).
+        if Assigned(PendingDataDirs) then
+        begin
+            for I := 0 to PendingDataDirs.Count - 1 do
+                if DirExists(PendingDataDirs[I]) then
+                    DeleteUserData(PendingDataDirs[I]);
+            PendingDataDirs.Free;
+            PendingDataDirs := nil;
         end;
     end;
 end;

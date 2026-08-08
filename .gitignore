@@ -436,4 +436,3 @@ docs/.vitepress/dist
 
 # Bun
 .bun/
-bun.lock

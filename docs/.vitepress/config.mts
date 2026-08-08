@@ -1,6 +1,26 @@
+import { execFileSync } from 'node:child_process';
+import { join } from 'node:path';
 import { defineConfig, type HeadConfig } from 'vitepress';
 import { withMermaid } from 'vitepress-plugin-mermaid';
-import { version } from '../package.json';
+import { version as packageVersion } from '../package.json';
+
+const gitCandidates =
+    process.platform === 'win32'
+        ? [join(process.env.ProgramFiles ?? String.raw`C:\Program Files`, 'Git', 'cmd', 'git.exe')]
+        : ['/usr/bin/git', '/usr/local/bin/git'];
+
+const version = (() => {
+    for (const git of gitCandidates) {
+        try {
+            const tag = execFileSync(git, ['describe', '--tags', '--abbrev=0'], { encoding: 'utf-8' }).trim();
+            return tag.startsWith('v') ? tag.slice(1) : tag;
+        } catch {
+            continue; // Try next candidate; fall back below if none resolves.
+        }
+    }
+    return packageVersion || 'dev';
+})();
+const isPrerelease = /[-+]/.test(version);
 
 // Retrieve Measurement ID from environment variable
 const gaId = process.env.GA_MEASUREMENT_ID;
@@ -70,7 +90,7 @@ export default withMermaid(
                 {
                     text: `v${version}`,
                     items: [
-                        { text: `v${version} (Prerelease)`, link: '/user-guide/' },
+                        { text: isPrerelease ? `v${version} (Prerelease)` : `v${version}`, link: '/user-guide/' },
                         { text: 'Changelog', link: 'https://github.com/Nicconike/LocalTelemetry/blob/master/CHANGELOG.md' },
                         { text: 'App Releases', link: 'https://github.com/Nicconike/LocalTelemetry/releases' }
                     ]

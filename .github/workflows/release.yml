@@ -199,7 +199,7 @@ jobs:
                       "changed=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
                   }
 
-            - name: Commit CHANGELOG (GitHub-Signed)
+            - name: Commit CHANGELOG
               if: ${{ steps.tag_version.outputs.new_tag != '' && steps.gen_changelog.outputs.changed == 'true' }}
               shell: pwsh
               env:
@@ -213,4 +213,4 @@ jobs:
                       sha = $sha
                       branch = "master"
                   } | ConvertTo-Json
-                  $body | gh api --method PUT "repos/${{ github.repository }}/contents/CHANGELOG.md" --input -
+                  $body | gh api --method PUT "repos/${{ github.repository }}/contents/CHANGELOG.md" --input - --silent

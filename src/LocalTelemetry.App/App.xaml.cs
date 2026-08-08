@@ -114,19 +114,6 @@ public sealed partial class App : WpfApplication
 
         _services = BuildContainer();
         _overlay = _services.GetRequiredService<TaskbarOverlay>();
-        _overlay.OnDoubleClick = action =>
-        {
-            string normalized = (action ?? string.Empty).ToLowerInvariant().Trim();
-            if (normalized is "taskmanager" or "taskmgr")
-            {
-                try { Process.Start("taskmgr"); }
-                catch (Exception ex) { Log.Error($"failed to launch taskmgr: {ex.Message}"); }
-            }
-            else
-            {
-                OpenSettings();
-            }
-        };
         _tray = _services.GetRequiredService<TrayIconManager>();
         _tray.SetOverlayVisible(_cfg.Overlay.Visible);
         _alerts = _services.GetRequiredService<AlertService>();
@@ -212,19 +199,19 @@ public sealed partial class App : WpfApplication
         }
     }
 
-    private void HandleUnhandledException(object sender, UnhandledExceptionEventArgs e)
+    private static void HandleUnhandledException(object sender, UnhandledExceptionEventArgs e)
     {
         if (e.ExceptionObject is Exception ex)
             Log.Error(ex, "Unhandled AppDomain exception");
     }
 
-    private void HandleUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
+    private static void HandleUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
     {
         Log.Error($"Unobserved Task exception: {e.Exception?.GetType().Name}: {e.Exception?.Message}");
         e.SetObserved();
     }
 
-    private void HandleDispatcherUnhandledException(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e)
+    private static void HandleDispatcherUnhandledException(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e)
     {
         Log.Error(e.Exception, "Dispatcher exception");
         e.Handled = true;
@@ -304,7 +291,9 @@ public sealed partial class App : WpfApplication
             {
                 try
                 {
-                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("taskmgr.exe") { UseShellExecute = true });
+                    var taskmgrPath = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.System), "taskmgr.exe");
+                    Process.Start(new ProcessStartInfo(taskmgrPath) { UseShellExecute = true });
                     Log.Info("Overlay double-click: launched taskmgr.exe");
                 }
                 catch (Exception ex)

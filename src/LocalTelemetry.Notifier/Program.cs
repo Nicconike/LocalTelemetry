@@ -73,7 +73,7 @@ internal static class Program
         }
         catch (ArgumentException) { NotifierLog.Warn("Parent process not found (already exited)"); }
         NotifierLog.Info("Parent exited, shutting down");
-        cts.Cancel();
+        await cts.CancelAsync();
     }
 
     internal static async Task RunPipeServerAsync(CancellationTokenSource cts, Action<string, string> toastDispatcher)
