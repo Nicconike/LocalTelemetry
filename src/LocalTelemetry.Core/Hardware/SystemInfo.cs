@@ -1,4 +1,4 @@
-﻿using System.Management;
+using System.Management;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics.X86;
 using System.Runtime.Versioning;
@@ -1663,7 +1663,7 @@ public static class SystemInfo
         string loc = GetDevPropStr(devInfoSet, devInfo, NativeMethods.SPDRP_LOCATION_INFORMATION);
         if (!string.IsNullOrEmpty(loc))
         {
-            var m = Regex.Match(loc, @"(?i)PCI\s*bus\s*(\d+)");
+            var m = Regex.Match(loc, @"(?i)PCI\s*bus\s*(\d+)", RegexOptions.None, TimeSpan.FromMilliseconds(250));
             if (m.Success && int.TryParse(m.Groups[1].Value, out int bus))
                 return bus > 0;
         }

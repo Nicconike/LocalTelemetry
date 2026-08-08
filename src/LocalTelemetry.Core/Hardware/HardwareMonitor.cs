@@ -362,7 +362,7 @@ public sealed class HardwareMonitor : IDisposable
                     || (vendor == "Intel" && name.Contains("Arc", StringComparison.OrdinalIgnoreCase))
                     || IsDiscreteBus(devInfoSet, devInfo)
                     || (vendor == "AMD" && System.Text.RegularExpressions.Regex.IsMatch(name,
-                        @"\b(RX|PRO|VII|WX|W[36]\d{3})\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase));
+                        @"\b(RX|PRO|VII|WX|W[36]\d{3})\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(250)));
 
                 string hwIdTrunc = hwId.Length > 80 ? hwId[..80] : hwId;
                 Log.Info($"GPU detected: '{name}' vendor={vendor ?? "null"} dedicated={dedicated} hwId='{hwIdTrunc}'");
@@ -414,7 +414,7 @@ public sealed class HardwareMonitor : IDisposable
     {
         string loc = GetDevProp(devInfoSet, devInfo, NativeMethods.SPDRP_LOCATION_INFORMATION);
         if (string.IsNullOrEmpty(loc)) return false;
-        var m = System.Text.RegularExpressions.Regex.Match(loc, @"(?i)PCI\s*bus\s*(\d+)");
+        var m = System.Text.RegularExpressions.Regex.Match(loc, @"(?i)PCI\s*bus\s*(\d+)", System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromMilliseconds(250));
         if (!m.Success) return false;
         return int.TryParse(m.Groups[1].Value, out int bus) && bus > 0;
     }

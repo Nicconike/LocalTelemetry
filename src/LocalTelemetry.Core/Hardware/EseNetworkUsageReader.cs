@@ -134,13 +134,16 @@ public static class EseNetworkUsageReader
     {
         try
         {
+            string tempDir = Path.Combine(Path.GetTempPath(), "LocalTelemetry");
+            Directory.CreateDirectory(tempDir);
+
             var psi = new ProcessStartInfo(esentutl, $"/p \"{dbPath}\" /o")
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
-                WorkingDirectory = Path.GetTempPath(),
+                WorkingDirectory = tempDir,
             };
             using var proc = new Process { StartInfo = psi };
             proc.Start();
@@ -149,7 +152,7 @@ public static class EseNetworkUsageReader
             // esentutl /p writes .INTEG.RAW debris to the working directory
             try
             {
-                foreach (string f in Directory.GetFiles(Path.GetTempPath(), "*.INTEG.RAW"))
+                foreach (string f in Directory.GetFiles(tempDir, "*.INTEG.RAW"))
                     File.Delete(f);
             }
             catch { }

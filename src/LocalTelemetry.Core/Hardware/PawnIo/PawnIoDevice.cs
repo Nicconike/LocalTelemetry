@@ -258,7 +258,8 @@ public sealed class PawnIoDevice : IPawnIoTransport
 
     private static void RunSc(string args)
     {
-        var psi = new ProcessStartInfo("sc", args)
+        string scPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "sc.exe");
+        var psi = new ProcessStartInfo(scPath, args)
         {
             UseShellExecute = true,
             Verb = "runas",
@@ -275,7 +276,8 @@ public sealed class PawnIoDevice : IPawnIoTransport
     {
         try
         {
-            var psi = new ProcessStartInfo("sc", "start PawnIO")
+            string scPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "sc.exe");
+            var psi = new ProcessStartInfo(scPath, "start PawnIO")
             {
                 UseShellExecute = true,
                 Verb = "runas",

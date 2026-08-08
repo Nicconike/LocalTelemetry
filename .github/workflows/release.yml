@@ -21,6 +21,9 @@ jobs:
             contents: read
             id-token: write
             attestations: write
+        env:
+            DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+            DOTNET_NOLOGO: "true"
         steps:
             # 1. Generate GitHub App Token for Protected Branch Commit/Push Access
             - name: Generate GitHub App Token

@@ -20,7 +20,7 @@ jobs:
                   fetch-depth: 0
 
             - name: Install commitlint config & plugin
-              run: npm install --no-save --no-package-lock --ignore-scripts commitlint-plugin-function-rules@4 @commitlint/config-conventional@19
+              run: npm install --no-save --no-package-lock --ignore-scripts commitlint-plugin-function-rules@4.0.1 @commitlint/config-conventional@19.8.0
 
             - name: Verify Conventional Commit Messages
               uses: wagoid/commitlint-github-action@b948419dd99f3fd78a6548d48f94e3df7f6bf3ed # v6.2.1
@@ -31,6 +31,9 @@ jobs:
         name: CI
         needs: commitlint
         runs-on: windows-latest
+        env:
+            DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+            DOTNET_NOLOGO: "true"
         steps:
             - name: Checkout Code
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

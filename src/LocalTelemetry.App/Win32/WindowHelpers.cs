@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using LocalTelemetry.Core.Diagnostics;
 using Microsoft.Win32;
@@ -119,7 +119,7 @@ internal static class WindowHelpers
         {
             var psi = new System.Diagnostics.ProcessStartInfo
             {
-                FileName = "schtasks.exe",
+                FileName = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "schtasks.exe"),
                 Arguments = $"/Query /TN \"{TaskName}\"",
                 UseShellExecute = false,
                 CreateNoWindow = true

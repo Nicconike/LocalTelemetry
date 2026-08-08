@@ -3,8 +3,8 @@ name: Project Automation
 on:
     issues:
         types: [opened]
-    pull_request:
-        types: [opened]
+    pull_request_target:
+        types: [opened, synchronize, reopened]
     workflow_dispatch:
 
 permissions:
@@ -66,7 +66,7 @@ jobs:
 
                       const ADD_ITEM_MUTATION = `
                           mutation($projectId: ID!, $contentId: ID!) {
-                              addProjectV2ItemByCodeId(input: {projectId: $projectId, contentId: $contentId}) {
+                              addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) {
                                   item { id }
                               }
                           }
@@ -290,7 +290,7 @@ jobs:
                           const allFields = project.fields.nodes;
 
                           const addItemRes = await github.graphql(ADD_ITEM_MUTATION, { projectId, contentId });
-                          const itemId = addItemRes.addProjectV2ItemByCodeId.item.id;
+                          const itemId = addItemRes.addProjectV2ItemById.item.id;
 
                           // A. Sprint: active -> next future -> create new iteration
                           const iterationField = allFields.find(f => f.configuration && f.configuration.iterations);

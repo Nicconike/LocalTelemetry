@@ -29,7 +29,7 @@ const gaId = process.env.GA_MEASUREMENT_ID;
 const base = process.env.VITE_BASE || '/';
 
 const headConfigs: HeadConfig[] = [
-    ['link', { rel: 'icon', type: 'image/x-icon', href: `${base}app.ico` }],
+    ['link', { rel: 'icon', type: 'image/x-icon', href: '/app.ico' }],
     ['meta', { name: 'theme-color', content: '#0284c7' }],
     ['meta', { name: 'og:type', content: 'website' }],
     ['meta', { name: 'og:title', content: 'LocalTelemetry Documentation' }],
