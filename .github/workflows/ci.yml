@@ -83,7 +83,7 @@ jobs:
               run: dotnet test tests/LocalTelemetry.App.Tests/LocalTelemetry.App.Tests.csproj --configuration Debug --no-build --verbosity minimal --collect:"XPlat Code Coverage" --logger "junit;LogFileName=junit.xml" --results-directory TestResults/app -p:Platform=x64
 
             - name: Upload Core Coverage to Codecov
-              uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+              uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
               with:
                   token: ${{ secrets.CODECOV_TOKEN }}
                   slug: Nicconike/LocalTelemetry
@@ -92,7 +92,7 @@ jobs:
                   disable_search: true
 
             - name: Upload Notifier Coverage to Codecov
-              uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+              uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
               with:
                   token: ${{ secrets.CODECOV_TOKEN }}
                   slug: Nicconike/LocalTelemetry
@@ -101,7 +101,7 @@ jobs:
                   disable_search: true
 
             - name: Upload App Coverage to Codecov
-              uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+              uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
               with:
                   token: ${{ secrets.CODECOV_TOKEN }}
                   slug: Nicconike/LocalTelemetry
@@ -111,7 +111,7 @@ jobs:
 
             - name: Upload test results to Codecov
               if: ${{ !cancelled() }}
-              uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+              uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
               with:
                   token: ${{ secrets.CODECOV_TOKEN }}
                   slug: Nicconike/LocalTelemetry
