@@ -429,6 +429,7 @@ src/LocalTelemetry.App/**/settings.json
 internet_usage.jsonl
 *.sys
 *.exe
+!src/LocalTelemetry.App/PawnIO_setup.exe
 
 # VitePress docs build output
 docs/.vitepress/cache

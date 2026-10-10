@@ -29,10 +29,11 @@ const isPrerelease = /[-+]/.test(version);
 const gaId = process.env.GA_MEASUREMENT_ID;
 
 // Subpath base for GitHub Pages project sites (e.g. /LocalTelemetry/)
-const base = process.env.VITE_BASE || '/';
+const rawBase = process.env.VITE_BASE || '/';
+const base = rawBase.endsWith('/') ? rawBase : `${rawBase}/`;
 
 const headConfigs: HeadConfig[] = [
-    ['link', { rel: 'icon', type: 'image/x-icon', href: '/app.ico' }],
+    ['link', { rel: 'icon', type: 'image/x-icon', href: `${base}app.ico` }],
     ['meta', { name: 'theme-color', content: '#0284c7' }],
     ['meta', { name: 'og:type', content: 'website' }],
     ['meta', { name: 'og:title', content: 'LocalTelemetry Documentation' }],

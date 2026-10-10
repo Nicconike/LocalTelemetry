@@ -27,9 +27,6 @@
     <a href="https://github.com/Nicconike/LocalTelemetry/releases">
         <img src="https://img.shields.io/github/downloads/nicconike/LocalTelemetry/total?logo=github&logoColor=white&color=0DBCBF&labelColor=101318&label=Downloads" alt="GitHub Downloads" />
     </a>
-    <a href="https://nicconike.github.io/LocalTelemetry/">
-        <img src="https://img.shields.io/badge/Docs-Online-0DBCBF?logo=vitepress&logoColor=white&labelColor=101318" alt="Documentation" />
-    </a>
     <a href="https://discord.gg/M2QevSgW3S">
         <img src="https://img.shields.io/badge/Chat_on-Discord-0DBCBF?logo=discord&logoColor=5865F2&labelColor=101318" alt="Discord" />
     </a>
@@ -81,10 +78,6 @@
 </p>
 
 ---
-
-<p align="center">
-    <strong>Real-time hardware telemetry displayed on the Windows taskbar.</strong>
-</p>
 
 ## Key Features
 
