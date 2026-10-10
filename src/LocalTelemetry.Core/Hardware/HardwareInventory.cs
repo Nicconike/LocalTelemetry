@@ -233,6 +233,7 @@ public static class HardwareInventory
         Log.Info($"Detected system {systemLine}, OS {osVersion}, form factor {formFactor}");
         if (!string.IsNullOrWhiteSpace(motherboardLine))
             Log.Info($"Detected motherboard {motherboardLine}");
+        // codeql[cs/exposure-of-sensitive-information] False positive: Hardware diagnostics log of processor model string
         Log.Info($"Detected processor {processorLine}");
         foreach (var gpu in gpuLines)
             Log.Info($"Detected graphics adapter {gpu}");

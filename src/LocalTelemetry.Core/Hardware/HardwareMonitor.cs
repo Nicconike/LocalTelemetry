@@ -418,9 +418,7 @@ public sealed class HardwareMonitor : IDisposable
         try
         {
             EnumerateDisplayAdapters(devInfoSet);
-            string adapterLog = string.IsNullOrEmpty(_gpuName)
-                ? (!string.IsNullOrEmpty(_gpuVendor) ? _gpuVendor : "None")
-                : $"{_gpuName} ({_gpuVendor})";
+            string adapterLog = FormatActiveGpuAdapterLog(_gpuName, _gpuVendor);
             Log.Info($"Active graphics adapter is {adapterLog}");
             InitWddmGpu();
             InitVendorGpuMonitor();
@@ -429,6 +427,14 @@ public sealed class HardwareMonitor : IDisposable
         {
             NativeMethods.SetupDiDestroyDeviceInfoList(devInfoSet);
         }
+    }
+
+    private static string FormatActiveGpuAdapterLog(string gpuName, string gpuVendor)
+    {
+        if (!string.IsNullOrEmpty(gpuName))
+            return $"{gpuName} ({gpuVendor})";
+
+        return !string.IsNullOrEmpty(gpuVendor) ? gpuVendor : "None";
     }
 
     private void EnumerateDisplayAdapters(IntPtr devInfoSet)
@@ -446,38 +452,40 @@ public sealed class HardwareMonitor : IDisposable
 
             string hwId = GetDevProp(devInfoSet, devInfo, NativeMethods.SPDRP_HARDWAREID);
             string? vendor = DetectGpuVendor(hwId, name);
-            bool dedicated = IsDedicatedAdapter(vendor, name, devInfoSet, devInfo);
-
-            Log.Debug($"Detected graphics adapter '{name}' (Vendor {vendor ?? "Unknown"}, dedicated {dedicated})");
             if (vendor is null) continue;
 
-            if (vendor == NvidiaVendor)
+            bool dedicated = IsDedicatedAdapter(vendor, name, devInfoSet, devInfo);
+            Log.Debug($"Detected graphics adapter '{name}' (Vendor {vendor}, dedicated {dedicated})");
+
+            if (TrySelectActiveGpuAdapter(vendor, name, dedicated))
+                break;
+        }
+    }
+
+    private bool TrySelectActiveGpuAdapter(string vendor, string name, bool dedicated)
+    {
+        if (vendor == NvidiaVendor)
+        {
+            _gpuVendor = NvidiaVendor;
+            _gpuName = name;
+            if (dedicated)
             {
-                _gpuVendor = NvidiaVendor;
-                _gpuName = name;
-                if (dedicated)
-                {
-                    InitNvGpu();
-                    break;
-                }
-            }
-            else if (vendor == AmdVendor && dedicated)
-            {
-                if (_gpuVendor != NvidiaVendor)
-                {
-                    _gpuVendor = AmdVendor;
-                    _gpuName = name;
-                }
-            }
-            else if (vendor == IntelVendor && (dedicated || string.IsNullOrEmpty(_gpuVendor)))
-            {
-                if (_gpuVendor != NvidiaVendor && (_gpuVendor != AmdVendor || dedicated))
-                {
-                    _gpuVendor = IntelVendor;
-                    _gpuName = name;
-                }
+                InitNvGpu();
+                return true;
             }
         }
+        else if (vendor == AmdVendor && dedicated && _gpuVendor != NvidiaVendor)
+        {
+            _gpuVendor = AmdVendor;
+            _gpuName = name;
+        }
+        else if (vendor == IntelVendor && (dedicated || string.IsNullOrEmpty(_gpuVendor)) && _gpuVendor != NvidiaVendor && (_gpuVendor != AmdVendor || dedicated))
+        {
+            _gpuVendor = IntelVendor;
+            _gpuName = name;
+        }
+
+        return false;
     }
 
     private static bool IsDedicatedAdapter(string? vendor, string name, IntPtr devInfoSet, NativeMethods.SpDevinfoData devInfo)
@@ -914,10 +922,17 @@ public sealed class HardwareMonitor : IDisposable
     private bool TryReadDriverGpuPct(NvGpuMonitor.NvGpuData? gpu, out float usagePct)
     {
         usagePct = 0f;
+        if (gpu.HasValue && gpu.Value.UsagePct >= 0)
+        {
+            if (ShouldLogTick("gpu", 10)) Log.Debug("GPU utilization using NVML source");
+            usagePct = gpu.Value.UsagePct;
+            return true;
+        }
+
         if (_nvGpu is not null)
         {
             if (ShouldLogTick("gpu", 10)) Log.Debug("GPU utilization using NVML source");
-            gpu ??= _nvGpu.Query();
+            gpu = _nvGpu.Query();
             if (gpu.HasValue && gpu.Value.UsagePct >= 0)
             {
                 usagePct = gpu.Value.UsagePct;
@@ -939,9 +954,10 @@ public sealed class HardwareMonitor : IDisposable
     {
         try
         {
+            if (gpu.HasValue && gpu.Value.TempC >= 0) return gpu.Value.TempC;
             if (_nvGpu is not null)
             {
-                gpu ??= _nvGpu.Query();
+                gpu = _nvGpu.Query();
                 if (gpu.HasValue && gpu.Value.TempC >= 0) return gpu.Value.TempC;
             }
             if (_amdGpu is not null && _amdGpu.IsAvailable)
@@ -960,9 +976,10 @@ public sealed class HardwareMonitor : IDisposable
     {
         try
         {
+            if (gpu.HasValue) return gpu.Value.VramUsedMb;
             if (_nvGpu is not null)
             {
-                gpu ??= _nvGpu.Query();
+                gpu = _nvGpu.Query();
                 if (gpu.HasValue) return gpu.Value.VramUsedMb;
             }
             if (_amdGpu is not null && _amdGpu.IsAvailable)
@@ -981,9 +998,10 @@ public sealed class HardwareMonitor : IDisposable
     {
         try
         {
+            if (gpu.HasValue && gpu.Value.CoreClockMHz > 0) return gpu.Value.CoreClockMHz;
             if (_nvGpu is not null)
             {
-                gpu ??= _nvGpu.Query();
+                gpu = _nvGpu.Query();
                 if (gpu.HasValue && gpu.Value.CoreClockMHz > 0) return gpu.Value.CoreClockMHz;
             }
             if (_amdGpu is not null && _amdGpu.IsAvailable)
@@ -1002,9 +1020,10 @@ public sealed class HardwareMonitor : IDisposable
     {
         try
         {
+            if (gpu.HasValue && gpu.Value.PowerDrawW > 0) return gpu.Value.PowerDrawW;
             if (_nvGpu is not null)
             {
-                gpu ??= _nvGpu.Query();
+                gpu = _nvGpu.Query();
                 if (gpu.HasValue && gpu.Value.PowerDrawW > 0) return gpu.Value.PowerDrawW;
             }
             if (_amdGpu is not null && _amdGpu.IsAvailable)

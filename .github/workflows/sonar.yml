@@ -77,6 +77,6 @@ jobs:
 
                   dotnet build --configuration Debug
 
-                  dotnet test --configuration Debug --no-build --verbosity minimal --collect:"XPlat Code Coverage" --results-directory TestResults
+                  dotnet test --configuration Debug --no-build --verbosity minimal --collect:"XPlat Code Coverage" --results-directory TestResults -p:Platform=x64
 
                   dotnet-sonarscanner end /d:sonar.token="$env:SONAR_TOKEN"

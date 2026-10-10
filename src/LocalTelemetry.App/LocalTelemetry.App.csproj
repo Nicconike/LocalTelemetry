@@ -40,7 +40,7 @@
 
     <ItemGroup>
         <Page Update="Settings\SettingsShell.xaml" SubType="Designer" Generator="MSBuild:Compile" />
-        <None Include="PawnIO_setup.exe">
+        <None Include="PawnIO_setup.exe" Condition="Exists('PawnIO_setup.exe')">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
             <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
         </None>

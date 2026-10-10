@@ -110,6 +110,13 @@ jobs:
             - name: Publish Single-File Executable
               run: dotnet publish src/LocalTelemetry.App/LocalTelemetry.App.csproj -c Release -r win-x64 --no-self-contained -p:PublishSingleFile=true -p:MinVerVersionOverride=${{ needs.prepare-release.outputs.new_version }} -o ./publish
 
+            - name: Download PawnIO Driver Installer
+              shell: pwsh
+              run: |
+                  $url = "https://github.com/namazso/PawnIO.Setup/releases/latest/download/PawnIO_setup.exe"
+                  Invoke-WebRequest -Uri $url -OutFile "./publish/PawnIO_setup.exe"
+                  Write-Host "Downloaded PawnIO_setup.exe into publish directory."
+
             - name: Compile Inno Setup Windows Installer
               shell: pwsh
               run: |
@@ -166,6 +173,8 @@ jobs:
 
             - name: Install git-cliff
               uses: taiki-e/install-action@cb33e69fad06166ca28a42b2575e4dadabf62ee8 # v2
+              with:
+                  tool: git-cliff
 
             - name: Generate Release Notes
               env:
