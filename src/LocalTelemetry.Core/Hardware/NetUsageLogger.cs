@@ -11,9 +11,8 @@ public sealed class NetUsageLogger : IDisposable
     private readonly TrafficHistoryFile _historyFile;
     private readonly object _lock = new();
     private readonly Dictionary<string, (double down, double up)> _perInterface = [];
-    private DateTime _lastDate = DateTime.Now.Date;
+    private DateTime _lastDate;
     private DateTime _lastSnapTime;
-    private string _activeNic = string.Empty;
 
     public TrafficHistoryFile HistoryFile => _historyFile;
 
@@ -30,15 +29,31 @@ public sealed class NetUsageLogger : IDisposable
             _historyFile.Load();
         }
         _lastDate = DateTime.Now.Date;
+        SyncWithHistory();
+        TrafficHistoryStore.HistoryUpdated += SyncWithHistory;
+    }
 
-        var todayRecords = _historyFile.GetMonth(_lastDate.Year, _lastDate.Month)
-            .Where(r => r.Day == _lastDate.Day);
-        foreach (var r in todayRecords)
+    public void SyncWithHistory()
+    {
+        lock (_lock)
         {
-            if (!string.IsNullOrEmpty(r.Interface))
-                _perInterface[r.Interface] = (r.DownBytes, r.UpBytes);
-            else if (_perInterface.Count == 0)
-                _perInterface[""] = (r.DownBytes, r.UpBytes);
+            var today = DateTime.Now.Date;
+            var todayRecords = _historyFile.GetMonth(today.Year, today.Month)
+                .Where(r => r.Day == today.Day);
+            foreach (var r in todayRecords)
+            {
+                string iface = r.Interface ?? "";
+                if (_perInterface.TryGetValue(iface, out var cur))
+                {
+                    // If the app was actively logging while the background import ran,
+                    // add the live deltas recorded during that window onto the imported baseline.
+                    _perInterface[iface] = (Math.Max(cur.down, r.DownBytes + cur.down), Math.Max(cur.up, r.UpBytes + cur.up));
+                }
+                else
+                {
+                    _perInterface[iface] = (r.DownBytes, r.UpBytes);
+                }
+            }
         }
     }
 
@@ -46,7 +61,7 @@ public sealed class NetUsageLogger : IDisposable
     {
         if (!_cfg.NetUsage.Enabled) return;
 
-        _activeNic = snap.NetInterfaceName;
+        string activeNic = snap.NetInterfaceName;
 
         double actualDt;
         if (_lastSnapTime == default)
@@ -73,16 +88,27 @@ public sealed class NetUsageLogger : IDisposable
                         _historyFile.SetDay(_lastDate.Year, _lastDate.Month, _lastDate.Day, downBytes, upBytes, kvp.Key, "LocalTelemetry");
                 }
                 _historyFile.Save();
+                Diagnostics.Log.Info($"Rolled over network usage history to new day ({today:dd-MM-yyyy})");
                 _perInterface.Clear();
                 _lastDate = today;
+
+                // If today already has records (e.g. from SRUM or previous run), seed them into memory
+                var todayRecords = _historyFile.GetMonth(today.Year, today.Month).Where(r => r.Day == today.Day);
+                foreach (var r in todayRecords)
+                {
+                    if (!string.IsNullOrEmpty(r.Interface))
+                        _perInterface[r.Interface] = (r.DownBytes, r.UpBytes);
+                    else if (_perInterface.Count == 0)
+                        _perInterface[""] = (r.DownBytes, r.UpBytes);
+                }
             }
 
-            if (!_perInterface.TryGetValue(_activeNic, out var cur))
+            if (!_perInterface.TryGetValue(activeNic, out var cur))
                 cur = (0, 0);
-            _perInterface[_activeNic] = (cur.down + deltaDown, cur.up + deltaUp);
+            _perInterface[activeNic] = (cur.down + deltaDown, cur.up + deltaUp);
 
-            var val = _perInterface[_activeNic];
-            _historyFile.SetDay(today.Year, today.Month, today.Day, (long)val.down, (long)val.up, _activeNic, "LocalTelemetry");
+            var val = _perInterface[activeNic];
+            _historyFile.SetDay(today.Year, today.Month, today.Day, (long)val.down, (long)val.up, activeNic, "LocalTelemetry");
         }
     }
 
@@ -102,5 +128,29 @@ public sealed class NetUsageLogger : IDisposable
         }
     }
 
-    public void Dispose() => FlushFinal();
+    public double GetTodayTotalGb()
+    {
+        lock (_lock)
+        {
+            double bytes = _perInterface.Values.Sum(v => v.down + v.up);
+            return bytes / (1024.0 * 1024.0 * 1024.0);
+        }
+    }
+
+    public double GetMonthTotalGb()
+    {
+        lock (_lock)
+        {
+            var now = DateTime.Now;
+            var monthRecords = _historyFile.GetMonth(now.Year, now.Month);
+            long historicalBytes = monthRecords.Sum(r => r.DownBytes + r.UpBytes);
+            return historicalBytes / (1024.0 * 1024.0 * 1024.0);
+        }
+    }
+
+    public void Dispose()
+    {
+        TrafficHistoryStore.HistoryUpdated -= SyncWithHistory;
+        FlushFinal();
+    }
 }

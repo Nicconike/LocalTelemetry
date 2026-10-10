@@ -1,5 +1,6 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using LocalTelemetry.Core.Diagnostics;
 
 namespace LocalTelemetry.Core.Hardware;
 
@@ -11,25 +12,27 @@ namespace LocalTelemetry.Core.Hardware;
 [SupportedOSPlatform("windows")]
 public sealed class IntelPowerGadget : IDisposable
 {
-    private bool _initialized;
-    private int _numNodes;
+    private readonly IIntelPowerGadgetNative _native;
+    private readonly bool _initialized;
+    private readonly int _numNodes;
     private bool _disposed;
 
     /// <summary>Gets whether the Intel Power Gadget library was initialized successfully.</summary>
     public bool IsAvailable { get; private set; }
 
-    public IntelPowerGadget()
-    {
-        // Probe the DLL before any P/Invoke - avoids DllNotFoundException entirely
-        // when Intel Power Gadget SDK is not installed (most systems).
-        if (!NativeLibrary.TryLoad("EnergyLib64.dll", out var lib))
-            return;
-        NativeLibrary.Free(lib);
+    public IntelPowerGadget() : this(null) { }
 
-        int ret = IntelEnergyLib_Initialize();
+    internal IntelPowerGadget(IIntelPowerGadgetNative? native)
+    {
+        _native = native ?? IntelPowerGadgetNativePInvoke.Instance;
+
+        if (!_native.TryLoadLibrary())
+            return;
+
+        int ret = _native.Initialize();
         if (ret != 0) return;
 
-        ret = IntelEnergyLib_GetNumNodes(ref _numNodes);
+        ret = _native.GetNumNodes(out _numNodes);
         if (ret != 0 || _numNodes <= 0) return;
 
         _initialized = true;
@@ -40,8 +43,7 @@ public sealed class IntelPowerGadget : IDisposable
     public double GetFrequency()
     {
         if (!_initialized || _numNodes <= 0) return double.NaN;
-        double freq = 0;
-        int ret = IntelEnergyLib_GetIAFrequency(0, ref freq);
+        int ret = _native.GetIAFrequency(0, out double freq);
         return ret == 0 ? freq : double.NaN;
     }
 
@@ -51,10 +53,80 @@ public sealed class IntelPowerGadget : IDisposable
         if (_disposed) return;
         _disposed = true;
         if (_initialized)
-            IntelEnergyLib_Shutdown();
+            _native.Shutdown();
+    }
+}
+
+internal interface IIntelPowerGadgetNative
+{
+    bool TryLoadLibrary();
+    int Initialize();
+    int Shutdown();
+    int GetNumNodes(out int nNodes);
+    int GetIAFrequency(int node, out double frequency);
+}
+
+internal sealed class IntelPowerGadgetNativePInvoke : IIntelPowerGadgetNative
+{
+    public static readonly IntelPowerGadgetNativePInvoke Instance = new();
+
+    public bool TryLoadLibrary()
+    {
+        try
+        {
+            if (!NativeLibrary.TryLoad("EnergyLib64.dll", out var lib))
+                return false;
+            NativeLibrary.Free(lib);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to verify native Intel Energy library availability");
+            return false;
+        }
     }
 
-    // P/Invoke into EnergyLib64.dll (Intel Power Gadget)
+    public int Initialize()
+    {
+        try { return IntelEnergyLib_Initialize(); }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to initialize Intel Energy library");
+            return -1;
+        }
+    }
+
+    public int Shutdown()
+    {
+        try { return IntelEnergyLib_Shutdown(); }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to shutdown Intel Energy library");
+            return -1;
+        }
+    }
+
+    public int GetNumNodes(out int nNodes)
+    {
+        nNodes = 0;
+        try { return IntelEnergyLib_GetNumNodes(ref nNodes); }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to get Intel Energy library node count");
+            return -1;
+        }
+    }
+
+    public int GetIAFrequency(int node, out double frequency)
+    {
+        frequency = 0;
+        try { return IntelEnergyLib_GetIAFrequency(node, ref frequency); }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to read Intel CPU frequency via Energy library");
+            return -1;
+        }
+    }
 
     [DllImport("EnergyLib64.dll", CallingConvention = CallingConvention.Cdecl)]
     private static extern int IntelEnergyLib_Initialize();

@@ -1,3 +1,7 @@
+using System.IO;
+using System.IO.Pipes;
+using System.Text;
+using FluentAssertions;
 using LocalTelemetry.App.Services;
 using Xunit;
 
@@ -6,20 +10,101 @@ namespace LocalTelemetry.App.Tests.Services;
 public class NotificationClientTests
 {
     [Fact]
-    public async Task NotificationClient_SendToastAsync_HandlesNoPipeServerGracefully()
+    public void NotificationClient_Dispose_ReleasesResources()
     {
-        using var client = new NotificationClient();
-
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
-        await client.SendToastAsync("Test Title", "Test Body", "Tag1", cts.Token);
+        var client = new NotificationClient();
+        var act = () => client.Dispose();
+        act.Should().NotThrow();
     }
 
     [Fact]
-    public async Task NotificationClient_SendShutdownAsync_HandlesNoPipeServerGracefully()
+    public async Task NotificationClient_SendToastAsync_FastTimeoutRetries()
     {
-        using var client = new NotificationClient();
+        // Pass 1ms connect timeout so attempt 0 and 1 retries execute in ~2ms total
+        using var client = new NotificationClient("NonExistentPipe_" + Guid.NewGuid().ToString("N"), 1);
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
-        await client.SendShutdownAsync(cts.Token);
+        await client.SendToastAsync("Test Title", "Test Body", "Tag1");
+    }
+
+    [Fact]
+    public async Task NotificationClient_SendShutdownAsync_FastTimeoutRetries()
+    {
+        using var client = new NotificationClient("NonExistentPipe_" + Guid.NewGuid().ToString("N"), 1);
+
+        await client.SendShutdownAsync();
+    }
+
+    [Fact]
+    public async Task NotificationClient_SendToastAsync_HandlesOperationCanceledException()
+    {
+        using var client = new NotificationClient("NonExistentPipe_" + Guid.NewGuid().ToString("N"), 1000);
+        using var cts = new CancellationTokenSource(1); // Cancel immediately
+
+        await client.SendToastAsync("Title", "Body", null, cts.Token);
+    }
+
+    [Fact]
+    public async Task NotificationClient_SendToastAsync_SuccessfulPipeCommunication()
+    {
+        string pipeName = "TestPipe_" + Guid.NewGuid().ToString("N");
+        string? received = null;
+
+        using var serverReady = new ManualResetEventSlim(false);
+        var serverTask = Task.Run(async () =>
+        {
+            using var server = new NamedPipeServerStream(pipeName, PipeDirection.In);
+            serverReady.Set();
+            await server.WaitForConnectionAsync();
+            using var reader = new StreamReader(server, Encoding.UTF8);
+            received = await reader.ReadLineAsync();
+        });
+
+        if (serverReady.Wait(TimeSpan.FromSeconds(2)))
+        {
+            using var client = new NotificationClient(pipeName, 2000);
+            await client.SendToastAsync("Test Title", "Test Body", "TestTag");
+            await serverTask.WaitAsync(TimeSpan.FromSeconds(2));
+
+            received.Should().NotBeNullOrEmpty();
+            received.Should().Contain("ShowToast");
+            received.Should().Contain("Test Title");
+            received.Should().Contain("Test Body");
+        }
+    }
+
+    [Fact]
+    public async Task NotificationClient_SendShutdownAsync_SuccessfulPipeCommunication()
+    {
+        string pipeName = "TestShutdownPipe_" + Guid.NewGuid().ToString("N");
+        string? received = null;
+
+        using var serverReady = new ManualResetEventSlim(false);
+        var serverTask = Task.Run(async () =>
+        {
+            using var server = new NamedPipeServerStream(pipeName, PipeDirection.In);
+            serverReady.Set();
+            await server.WaitForConnectionAsync();
+            using var reader = new StreamReader(server, Encoding.UTF8);
+            received = await reader.ReadLineAsync();
+        });
+
+        if (serverReady.Wait(TimeSpan.FromSeconds(2)))
+        {
+            using var client = new NotificationClient(pipeName, 2000);
+            await client.SendShutdownAsync();
+            await serverTask.WaitAsync(TimeSpan.FromSeconds(2));
+
+            received.Should().NotBeNullOrEmpty();
+            received.Should().Contain("Shutdown");
+        }
+    }
+
+    [Fact]
+    public void NotificationClient_MultipleDispose_DoesNotThrow()
+    {
+        var client = new NotificationClient();
+        client.Dispose();
+        var act = () => client.Dispose();
+        act.Should().NotThrow();
     }
 }

@@ -11,6 +11,9 @@ public static class TrafficHistoryStore
         _instance = file;
     }
 
+    /// <summary>Gets the underlying <see cref="TrafficHistoryFile"/> instance.</summary>
+    public static TrafficHistoryFile HistoryFile => Instance;
+
     private static TrafficHistoryFile Instance =>
         _instance ?? throw new InvalidOperationException("TrafficHistoryStore not initialized. Call Initialize() first.");
 
@@ -34,7 +37,19 @@ public static class TrafficHistoryStore
     public static void SetDay(int year, int month, int day, long downBytes, long upBytes, string interfaceName, string source)
         => Instance.SetDay(year, month, day, downBytes, upBytes, interfaceName, source);
 
+    /// <summary>Event raised whenever the traffic history has been updated or imported.</summary>
+    public static event Action? HistoryUpdated;
+
+    /// <summary>Notifies all listeners that history records have been updated.</summary>
+    public static void NotifyHistoryUpdated()
+    {
+        HistoryUpdated?.Invoke();
+    }
+
     /// <summary>Writes all in-memory changes to disk.</summary>
     public static void Save()
-        => Instance.Save();
+    {
+        Instance.Save();
+        NotifyHistoryUpdated();
+    }
 }

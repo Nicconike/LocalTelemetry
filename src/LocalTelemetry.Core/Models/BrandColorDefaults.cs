@@ -1,4 +1,5 @@
-﻿using System.Runtime.Versioning;
+using System.Collections.ObjectModel;
+using System.Runtime.Versioning;
 using LocalTelemetry.Core.Diagnostics;
 using LocalTelemetry.Core.Hardware;
 
@@ -131,25 +132,25 @@ public static class BrandColorDefaults
 
     // Auto-built category dictionaries
     /// <summary>CPU vendor → brand color map.</summary>
-    public static readonly Dictionary<string, string> CpuColors = BuildCategoryDict("cpu");
+    public static readonly ReadOnlyDictionary<string, string> CpuColors = new(BuildCategoryDict("cpu"));
 
     /// <summary>GPU vendor → brand color map.</summary>
-    public static readonly Dictionary<string, string> GpuColors = BuildCategoryDict("gpu");
+    public static readonly ReadOnlyDictionary<string, string> GpuColors = new(BuildCategoryDict("gpu"));
 
     /// <summary>RAM manufacturer → brand color map.</summary>
-    public static readonly Dictionary<string, string> RamColors = BuildCategoryDict("ram");
+    public static readonly ReadOnlyDictionary<string, string> RamColors = new(BuildCategoryDict("ram"));
 
     /// <summary>Disk manufacturer → brand color map.</summary>
-    public static readonly Dictionary<string, string> DiskColors = BuildCategoryDict("disk");
+    public static readonly ReadOnlyDictionary<string, string> DiskColors = new(BuildCategoryDict("disk"));
 
     /// <summary>NIC vendor → brand color map.</summary>
-    public static readonly Dictionary<string, string> NicColors = BuildCategoryDict("nic");
+    public static readonly ReadOnlyDictionary<string, string> NicColors = new(BuildCategoryDict("nic"));
 
     /// <summary>System OEM → brand color map (used for battery metrics).</summary>
-    public static readonly Dictionary<string, string> SystemOemColors = BuildCategoryDict("oem");
+    public static readonly ReadOnlyDictionary<string, string> SystemOemColors = new(BuildCategoryDict("oem"));
 
     /// <summary>Battery manufacturer → brand color map.</summary>
-    public static readonly Dictionary<string, string> BatteryColors = BuildCategoryDict("battery");
+    public static readonly ReadOnlyDictionary<string, string> BatteryColors = new(BuildCategoryDict("battery"));
 
     private static Dictionary<string, string> BuildCategoryDict(string category)
     {
@@ -182,19 +183,15 @@ public static class BrandColorDefaults
     {
         if (!string.IsNullOrEmpty(vendor))
         {
-            foreach (var kvp in DiskColors)
-            {
-                if (vendor.Contains(kvp.Key, StringComparison.OrdinalIgnoreCase))
-                    return kvp.Value;
-            }
+            var match = DiskColors.FirstOrDefault(kvp => vendor.Contains(kvp.Key, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrEmpty(match.Value))
+                return match.Value;
         }
         if (!string.IsNullOrEmpty(model))
         {
-            foreach (var kvp in DiskColors)
-            {
-                if (model.Contains(kvp.Key, StringComparison.OrdinalIgnoreCase))
-                    return kvp.Value;
-            }
+            var match = DiskColors.FirstOrDefault(kvp => model.Contains(kvp.Key, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrEmpty(match.Value))
+                return match.Value;
         }
         return string.Empty;
     }
@@ -213,12 +210,8 @@ public static class BrandColorDefaults
     {
         var mfr = SystemInfo.GetBatteryManufacturer();
         if (string.IsNullOrEmpty(mfr)) return string.Empty;
-        foreach (var kvp in BatteryColors)
-        {
-            if (mfr.Contains(kvp.Key, StringComparison.OrdinalIgnoreCase))
-                return kvp.Value;
-        }
-        return string.Empty;
+        var match = BatteryColors.FirstOrDefault(kvp => mfr.Contains(kvp.Key, StringComparison.OrdinalIgnoreCase));
+        return match.Value ?? string.Empty;
     }
 
     // Build default metric colors
@@ -229,45 +222,45 @@ public static class BrandColorDefaults
         var cpuVendor = SystemInfo.GetCpuVendor();
         var cpuColor = DetectCpuColor();
         if (cpuColor.Length > 0)
-            Log.Info($"BrandDetection: CPU manufacturer=\"{cpuVendor}\" → color={cpuColor}");
+            Log.Debug($"Detected CPU vendor: {cpuVendor} ({cpuColor})");
         else
-            Log.Info($"BrandDetection: CPU manufacturer=\"{cpuVendor}\" (not in CpuColors) → using fallback #00E5FF");
+            Log.Debug($"Detected CPU vendor '{cpuVendor}' (fallback color #00E5FF)");
 
         var gpuVendor = SystemInfo.GetGpuVendor();
         var gpuColor = DetectGpuColor();
         if (gpuColor.Length > 0)
-            Log.Info($"BrandDetection: GPU manufacturer=\"{gpuVendor}\" → color={gpuColor}");
+            Log.Debug($"Detected GPU vendor: {gpuVendor} ({gpuColor})");
         else
-            Log.Info($"BrandDetection: GPU → no GPU detected → using fallback #88CCFF");
+            Log.Debug("No dedicated GPU detected (fallback color #88CCFF)");
 
         var ramMfr = SystemInfo.GetRamManufacturer();
         var ramColor = DetectRamColor();
         if (ramColor.Length > 0)
-            Log.Info($"BrandDetection: RAM manufacturer=\"{ramMfr}\" → color={ramColor}");
+            Log.Debug($"Detected RAM vendor: {ramMfr} ({ramColor})");
         else
-            Log.Info($"BrandDetection: RAM manufacturer=\"{ramMfr}\" (not in RamColors) → using fallback #A78BFA");
+            Log.Debug($"Detected RAM vendor '{ramMfr}' (fallback color #A78BFA)");
 
         var diskMfr = SystemInfo.GetDiskManufacturer();
         var diskColor = DetectDiskColor();
         if (diskColor.Length > 0)
-            Log.Info($"BrandDetection: DISK manufacturer=\"{diskMfr}\" → color={diskColor}");
+            Log.Debug($"Detected Disk vendor: {diskMfr} ({diskColor})");
         else
-            Log.Info($"BrandDetection: DISK manufacturer=\"{diskMfr}\" (not in DiskColors) → using fallback #AAAAAA");
+            Log.Debug($"Detected Disk vendor '{diskMfr}' (fallback color #AAAAAA)");
 
         var nics = SystemInfo.GetNics();
         var nicMfr = nics.Length > 0 ? nics[0].Manufacturer : "?";
         var nicColor = DetectNicColor();
         if (nicColor.Length > 0)
-            Log.Info($"BrandDetection: NIC manufacturer=\"{nicMfr}\" → color={nicColor}");
+            Log.Debug($"Detected NIC vendor: {nicMfr} ({nicColor})");
         else
-            Log.Info($"BrandDetection: NIC manufacturer=\"{nicMfr}\" (not in NicColors) → using fallback");
+            Log.Debug($"Detected NIC vendor '{nicMfr}' (using default fallback)");
 
         var batMfr = SystemInfo.GetBatteryManufacturer();
         var batColor = DetectBatteryColor();
         if (batColor.Length > 0)
-            Log.Info($"BrandDetection: BATTERY manufacturer=\"{batMfr}\" → color={batColor}");
+            Log.Debug($"Detected Battery vendor: {batMfr} ({batColor})");
         else
-            Log.Info($"BrandDetection: BATTERY manufacturer=\"{batMfr}\" (not in BatteryColors) → using fallback #80E080");
+            Log.Debug($"Detected Battery vendor '{batMfr}' (fallback color #80E080)");
 
         var result = new Dictionary<string, string>
         {
@@ -297,9 +290,9 @@ public static class BrandColorDefaults
             string label = multiDisk ? $"DISK {i + 1}" : "DISK";
             string mfr = string.IsNullOrEmpty(disk.Vendor) ? disk.Model : disk.Vendor;
             if (perDiskColor.Length > 0)
-                Log.Info($"BrandDetection: {label} manufacturer=\"{mfr}\" → color={perDiskColor}");
+                Log.Debug($"Detected {label} vendor: {mfr} ({perDiskColor})");
             else
-                Log.Info($"BrandDetection: {label} manufacturer=\"{mfr}\" (not in DiskColors) → using fallback #AAAAAA");
+                Log.Debug($"Detected {label} vendor '{mfr}' (fallback color #AAAAAA)");
             string fallback = perDiskColor.Length > 0 ? perDiskColor : "#AAAAAA";
             result[$"disk_disk{i}_read"] = fallback;
             result[$"disk_disk{i}_write"] = fallback;
@@ -331,7 +324,7 @@ public static class BrandColorDefaults
             ["ram"] = metricDefaults[Metrics.RamPct],
             ["network"] = metricDefaults[Metrics.NetDown],
             ["battery"] = metricDefaults[Metrics.BatteryPct],
-            ["disk"] = diskColor.Length > 0 ? diskColor : "#AAAAAA",
+            ["disk"] = !string.IsNullOrEmpty(diskColor) ? diskColor : "#AAAAAA",
         };
     }
 }

@@ -2,9 +2,9 @@ name: Project Automation
 
 on:
     issues:
-        types: [opened]
-    pull_request_target:
-        types: [opened, synchronize, reopened]
+        types: [opened, closed]
+    pull_request:
+        types: [opened, closed]
     workflow_dispatch:
 
 permissions:
@@ -19,18 +19,38 @@ jobs:
             pull-requests: write
 
         steps:
-            - name: Auto-Assign Sprint, Labels, Scope & Project
-              uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+            - name: Auto-Assign Sprint, Priority, Effort, Labels, Scope & Project
+              uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+              env:
+                  PROJECTS: ${{ secrets.PROJECTS }}
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               with:
-                  github-token: ${{ secrets.PROJECTS }}
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
                   script: |
-                      const owner = context.repo.owner;
-                      const repo = context.repo.repo;
-                      const projectNumber = 7;
+                      const action = context.payload.action;
+                      const isIssue = !!context.payload.issue;
+                      const item = isIssue ? context.payload.issue : context.payload.pull_request;
+                      const title = item ? item.title.toLowerCase() : '';
+                      const author = item ? item.user.login : '';
+                      const number = item ? item.number : 0;
+                      const contentId = item ? item.node_id : '';
 
-                      // Single-select field precedence for the Scope field
-                      const SCOPE_PRECEDENCE = ["Core", "App", "Overlay", "Monitor", "Config", "CI"];
-                      const PROJECT_QUERY = `
+                      if (!item) {
+                          console.log("Ran via workflow_dispatch.");
+                          return;
+                      }
+
+                      const owner = context.repo.owner;
+                      const projectNumber = 7;
+                      const patToken = process.env.PROJECTS || process.env.GITHUB_TOKEN;
+                      const graphqlWithPat = github.graphql.defaults({
+                          headers: {
+                              authorization: `token ${patToken}`
+                          }
+                      });
+
+                      // 2. Add to User Project #7 & Fetch Field Schema
+                      const projectQuery = `
                           query($owner: String!, $number: Int!) {
                               user(login: $owner) {
                                   projectV2(number: $number) {
@@ -43,7 +63,6 @@ jobs:
                                                   configuration {
                                                       iterations {
                                                           id
-                                                          title
                                                           startDate
                                                           duration
                                                       }
@@ -57,32 +76,10 @@ jobs:
                                                       name
                                                   }
                                               }
-                                          }
-                                      }
-                                  }
-                              }
-                          }
-                      `;
-
-                      const ADD_ITEM_MUTATION = `
-                          mutation($projectId: ID!, $contentId: ID!) {
-                              addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) {
-                                  item { id }
-                              }
-                          }
-                      `;
-
-                      const UPDATE_FIELD_MUTATION = `
-                          mutation($fieldId: ID!, $configuration: ProjectV2IterationFieldConfigurationInput!) {
-                              updateProjectV2Field(input: { fieldId: $fieldId, configuration: $configuration }) {
-                                  field {
-                                      ... on ProjectV2IterationField {
-                                          configuration {
-                                              iterations {
+                                              ... on ProjectV2Field {
                                                   id
-                                                  title
-                                                  startDate
-                                                  duration
+                                                  name
+                                                  dataType
                                               }
                                           }
                                       }
@@ -91,306 +88,316 @@ jobs:
                           }
                       `;
 
-                      const UPDATE_SELECT_MUTATION = `
-                          mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
-                              updateProjectV2ItemFieldValue(input: {
-                                  projectId: $projectId,
-                                  itemId: $itemId,
-                                  fieldId: $fieldId,
-                                  value: { singleSelectOptionId: $optionId }
-                              }) {
-                                  projectV2Item { id }
-                              }
-                          }
-                      `;
+                      let project, projectId, allFields, itemId;
+                      try {
+                          const projectData = await graphqlWithPat(projectQuery, { owner, number: projectNumber });
+                          project = projectData.user ? projectData.user.projectV2 : null;
 
-                      const UPDATE_ITERATION_MUTATION = `
-                          mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $iterationId: String!) {
-                              updateProjectV2ItemFieldValue(input: {
-                                  projectId: $projectId,
-                                  itemId: $itemId,
-                                  fieldId: $fieldId,
-                                  value: { iterationId: $iterationId }
-                              }) {
-                                  projectV2Item { id }
-                              }
-                          }
-                      `;
-
-                      // Path -> board Scope. Factual ground truth for PRs (incl. dependabot).
-                      const pathScope = (path) => {
-                          const p = path.toLowerCase();
-                          if (p.startsWith('.github/') || p === 'global.json') return 'CI';
-                          if (p.startsWith('src/localtelemetry.core/config/')) return 'Config';
-                          if (p.startsWith('src/localtelemetry.core/')) return 'Core';
-                          if (p.startsWith('src/localtelemetry.app/overlay/')) return 'Overlay';
-                          if (p.startsWith('src/localtelemetry.app/')) return 'App';
-                          if (p.startsWith('src/localtelemetry.notifier/')) return 'App';
-                          return '';
-                      };
-
-                      // Title marker scopes (issues + PRs).
-                      const titleScopes = (title) => {
-                          const scopes = [];
-                          if (title.includes('(core)')) scopes.push('Core');
-                          if (title.includes('(app)')) scopes.push('App');
-                          if (title.includes('(overlay)')) scopes.push('Overlay');
-                          if (title.includes('(monitor)')) scopes.push('Monitor');
-                          if (title.includes('(config)')) scopes.push('Config');
-                          if (title.includes('(ci)') || title.includes('(actions)')) scopes.push('CI');
-                          return scopes;
-                      };
-
-                      const pickFieldScope = (scopes) => {
-                          for (const s of SCOPE_PRECEDENCE) {
-                              if (scopes.includes(s)) return s;
-                          }
-                          return '';
-                      };
-
-                      // Exact-first single-select matching
-                      const matchOption = (options, target) => {
-                          const t = target.toLowerCase();
-                          const exact = options.find(o => o.name.toLowerCase() === t);
-                          if (exact) return exact;
-                          return options.find(o => t.includes(o.name.toLowerCase()));
-                      };
-
-                      const processItem = async (item, isPrItem) => {
-                          const title = (item.title || '').toLowerCase();
-                          const author = item.user ? item.user.login : '';
-                          const number = item.number;
-                          const contentId = item.node_id;
-                          const isDependabot = author === 'dependabot[bot]';
-
-                          // Changed files (ground truth for dependabot kind + scope)
-                          let files = [];
-                          if (isPrItem) {
-                              try {
-                                  const res = await github.rest.pulls.listFiles({
-                                      owner,
-                                      repo,
-                                      pull_number: number,
-                                      per_page: 100
-                                  });
-                                  files = res.data;
-                              } catch (err) {
-                                  core.warning(`Failed to list files for PR #${number}: ${err.message}`);
-                              }
-                          }
-
-                          // ---------- 1. Kind + primary labels ----------
-                          const labels = new Set();
-                          let kindName = '';
-
-                          if (isDependabot) {
-                              labels.add('dependabot');
-                              const isActionsPr = files.length > 0 &&
-                                  files.every(f => f.filename.toLowerCase().startsWith('.github/'));
-                              if (isActionsPr) {
-                                  labels.add('actions');
-                                  labels.add('scope:ci');
-                                  kindName = '⚙️ CI';
-                              } else {
-                                  labels.add('dependencies');
-                                  kindName = '📦 Build';
-                              }
-                          } else if (title.includes('(deps)')) {
-                              labels.add('dependencies');
-                              kindName = '📦 Build';
-                          } else if (title.startsWith('feat')) {
-                              labels.add('enhancement');
-                              kindName = '✨ Feature';
-                          } else if (title.startsWith('fix')) {
-                              labels.add('bug');
-                              kindName = '🐛 Bug';
-                          } else if (title.startsWith('perf')) {
-                              labels.add('perf');
-                              kindName = '⚡ Perf';
-                          } else if (title.startsWith('refactor')) {
-                              labels.add('refactor');
-                              kindName = '♻️ Refactor';
-                          } else if (title.startsWith('test')) {
-                              labels.add('testing');
-                              kindName = '🧪 Test';
-                          } else if (title.startsWith('docs')) {
-                              labels.add('documentation');
-                              kindName = '📚 Docs';
-                          } else if (title.startsWith('build')) {
-                              labels.add('dependencies');
-                              kindName = '📦 Build';
-                          } else if (title.startsWith('ci')) {
-                              labels.add('ci');
-                              labels.add('actions');
-                              labels.add('scope:ci');
-                              kindName = '⚙️ CI';
-                          } else if (title.startsWith('chore')) {
-                              labels.add('chore');
-                              kindName = '🔧 Chore';
-                          } else if (title.startsWith('style')) {
-                              kindName = '🎨 Style';
-                          }
-                          // revert: intentionally unlabeled -> git-cliff groups it under "Reverts" via ^revert
-
-                          // ---------- 2. Scope ----------
-                          const scopeCandidates = [];
-
-                          for (const f of files) {
-                              const s = pathScope(f.filename);
-                              if (s && !scopeCandidates.includes(s)) scopeCandidates.push(s);
-                          }
-
-                          for (const s of titleScopes(title)) {
-                              if (!scopeCandidates.includes(s)) scopeCandidates.push(s);
-                          }
-                          if (kindName === '⚙️ CI' && scopeCandidates.length === 0) {
-                              scopeCandidates.push('CI');
-                          }
-
-                          for (const s of scopeCandidates) {
-                              labels.add('scope:' + s.toLowerCase());
-                          }
-
-                          if (title.includes('(core)') || title.includes('(config)') || title.includes('(monitor)')) {
-                              labels.add('csharp');
-                          }
-                          if (title.includes('(app)') || title.includes('(overlay)')) {
-                              labels.add('frontend');
-                          }
-
-                          const scopeName = pickFieldScope(scopeCandidates);
-
-                          // ---------- 3. Apply labels ----------
-                          const finalLabels = Array.from(labels);
-                          if (finalLabels.length > 0) {
-                              await github.rest.issues.addLabels({
-                                  owner,
-                                  repo,
-                                  issue_number: number,
-                                  labels: finalLabels
-                              });
-                              console.log(`Labeled #${number} with: ${finalLabels.join(', ')}`);
-                          }
-
-                          // ---------- 4. Add to Project #7 & update fields ----------
-                          let projectData;
-                          try {
-                              projectData = await github.graphql(PROJECT_QUERY, { owner, number: projectNumber });
-                          } catch (err) {
-                              core.setFailed(`Project automation failed for #${number}: ${err.message}`);
-                              return;
-                          }
-
-                          const project = projectData.user ? projectData.user.projectV2 : null;
                           if (!project) {
                               core.setFailed(`Project #${projectNumber} not found under user '${owner}'. Ensure PROJECTS secret is configured.`);
                               return;
                           }
-                          const projectId = project.id;
-                          const allFields = project.fields.nodes;
 
-                          const addItemRes = await github.graphql(ADD_ITEM_MUTATION, { projectId, contentId });
-                          const itemId = addItemRes.addProjectV2ItemById.item.id;
+                          projectId = project.id;
+                          allFields = project.fields.nodes;
 
-                          // A. Sprint: active -> next future -> create new iteration
-                          const iterationField = allFields.find(f => f.configuration && f.configuration.iterations);
-                          if (iterationField) {
-                              const today = new Date();
-                              let iterations = iterationField.configuration.iterations;
-
-                              let active = iterations.find(iter => {
-                                  const start = new Date(iter.startDate);
-                                  const end = new Date(start.getTime() + iter.duration * 86400000);
-                                  return today >= start && today < end;
-                              });
-
-                              if (!active) {
-                                  active = iterations.find(iter => new Date(iter.startDate) > today);
+                          // Add Item to Project #7
+                          const addItemMutation = `
+                              mutation($projectId: ID!, $contentId: ID!) {
+                                  addProjectV2ItemByCodeId(input: {projectId: $projectId, contentId: $contentId}) {
+                                      item { id }
+                                  }
                               }
+                          `;
+                          const addItemRes = await graphqlWithPat(addItemMutation, { projectId, contentId });
+                          itemId = addItemRes.addProjectV2ItemByCodeId.item.id;
+                      } catch (err) {
+                          core.setFailed(`Project fetch/addition failed: ${err.message}`);
+                          return;
+                      }
 
-                              if (!active) {
-                                  const nextDate = new Date(today);
-                                  nextDate.setDate(nextDate.getDate() + 1);
-                                  const startStr = nextDate.toISOString().split('T')[0];
-                                  const sprintNumber = iterations.length + 1;
-                                  const createRes = await github.graphql(UPDATE_FIELD_MUTATION, {
-                                      fieldId: iterationField.id,
-                                      configuration: {
-                                          startDate: startStr,
-                                          duration: 14,
-                                          iterations: [{ title: `Sprint ${sprintNumber}`, startDate: startStr, duration: 14 }]
+                      // Helper for updating single select fields accurately
+                      const updateSingleSelectField = async (fieldName, targetOptionName) => {
+                          const field = allFields.find(f => f.name && f.name.toLowerCase() === fieldName.toLowerCase());
+                          if (field && field.options && targetOptionName) {
+                              const matchedOption = field.options.find(opt =>
+                                  opt.name.toLowerCase() === targetOptionName.toLowerCase() ||
+                                  opt.name.toLowerCase().includes(targetOptionName.toLowerCase()) ||
+                                  targetOptionName.toLowerCase().includes(opt.name.toLowerCase())
+                              );
+                              if (matchedOption) {
+                                  const updateMutation = `
+                                      mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                                          updateProjectV2ItemFieldValue(input: {
+                                              projectId: $projectId,
+                                              itemId: $itemId,
+                                              fieldId: $fieldId,
+                                              value: { singleSelectOptionId: $optionId }
+                                          }) {
+                                              projectV2Item { id }
+                                          }
                                       }
-                                  });
-                                  iterations = createRes.updateProjectV2Field.field.configuration.iterations;
-                                  active = iterations[0];
-                                  console.log(`Created Sprint ${sprintNumber} starting ${startStr}`);
-                              }
-
-                              if (active) {
-                                  await github.graphql(UPDATE_ITERATION_MUTATION, {
+                                  `;
+                                  await graphqlWithPat(updateMutation, {
                                       projectId,
                                       itemId,
-                                      fieldId: iterationField.id,
-                                      iterationId: active.id
+                                      fieldId: field.id,
+                                      optionId: matchedOption.id
                                   });
-                                  console.log(`Assigned #${number} to Sprint (${active.title || active.id})`);
-                              }
-                          }
-
-                          // B. Kind
-                          if (kindName) {
-                              const kindField = allFields.find(f => f.name && f.name.toLowerCase() === 'kind');
-                              if (kindField) {
-                                  const opt = matchOption(kindField.options, kindName);
-                                  if (opt) {
-                                      await github.graphql(UPDATE_SELECT_MUTATION, {
-                                          projectId,
-                                          itemId,
-                                          fieldId: kindField.id,
-                                          optionId: opt.id
-                                      });
-                                      console.log(`Assigned #${number} to Kind: ${opt.name}`);
-                                  }
-                              }
-                          }
-
-                          // C. Scope
-                          if (scopeName) {
-                              const scopeField = allFields.find(f => f.name && f.name.toLowerCase() === 'scope');
-                              if (scopeField) {
-                                  const opt = matchOption(scopeField.options, scopeName);
-                                  if (opt) {
-                                      await github.graphql(UPDATE_SELECT_MUTATION, {
-                                          projectId,
-                                          itemId,
-                                          fieldId: scopeField.id,
-                                          optionId: opt.id
-                                      });
-                                      console.log(`Assigned #${number} to Scope: ${opt.name}`);
-                                  }
+                                  console.log(`Assigned #${number} to ${fieldName}: ${matchedOption.name}`);
                               }
                           }
                       };
 
-                      // ---------- Entry ----------
-                      if (context.payload.issue) {
-                          await processItem(context.payload.issue, false);
-                      } else if (context.payload.pull_request) {
-                          await processItem(context.payload.pull_request, true);
+                      // Helper for updating number fields (Effort)
+                      const updateNumberField = async (fieldName, numValue) => {
+                          const field = allFields.find(f => f.name && f.name.toLowerCase() === fieldName.toLowerCase());
+                          if (field && field.id && numValue !== undefined) {
+                              const updateMutation = `
+                                  mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $numValue: Float!) {
+                                      updateProjectV2ItemFieldValue(input: {
+                                          projectId: $projectId,
+                                          itemId: $itemId,
+                                          fieldId: $fieldId,
+                                          value: { number: $numValue }
+                                      }) {
+                                          projectV2Item { id }
+                                      }
+                                  `;
+                              await graphqlWithPat(updateMutation, {
+                                  projectId,
+                                  itemId,
+                                  fieldId: field.id,
+                                  numValue: parseFloat(numValue)
+                              });
+                              console.log(`Assigned #${number} to ${fieldName}: ${numValue}`);
+                          }
+                      };
+
+                      // --- CLOSED EVENT HANDLING (Status = Done or Cancelled) ---
+                      if (action === 'closed') {
+                          let isMergedOrCompleted = false;
+                          if (!isIssue) {
+                              isMergedOrCompleted = !!item.merged;
+                          } else {
+                              isMergedOrCompleted = item.state_reason === 'completed' || !item.state_reason;
+                          }
+
+                          if (isMergedOrCompleted) {
+                              await updateSingleSelectField('Status', 'Done');
+                              console.log(`Closed #${number} as Merged/Completed -> Status: Done`);
+                          } else {
+                              await updateSingleSelectField('Status', 'Cancelled');
+                              console.log(`Closed #${number} as Unmerged/Not Planned -> Status: Cancelled`);
+                          }
+                          return;
+                      }
+
+                      // --- OPENED EVENT HANDLING (Fields, Sprint, Labels Calculation) ---
+                      let labelsToAdd = new Set();
+                      let kindName = "";
+                      let scopeName = "";
+                      let priorityName = "🟡 Medium";
+                      let effortValue = 2; // Default Fibonacci point = 2
+
+                      if (author === 'dependabot[bot]' || author.includes('bot') || title.includes('(deps)')) {
+                          if (author === 'dependabot[bot]') labelsToAdd.add('dependabot');
+                          labelsToAdd.add('dependencies');
+                          labelsToAdd.add('scope:ci');
+                          kindName = "📦 Build";
+                          scopeName = "CI";
+                          priorityName = "🔵 Low";
+                          effortValue = 1;
                       } else {
-                          // workflow_dispatch: backfill all open issues + PRs (idempotent)
-                          let processed = 0;
-                          const issuesRes = await github.rest.issues.listForRepo({ owner, repo, state: 'open', per_page: 100 });
-                          for (const issue of issuesRes.data) {
-                              if (!issue.pull_request) {
-                                  await processItem(issue, false);
-                                  processed++;
-                              }
+                          // Conventional Commits Semantic Evaluation
+                          // 1. breaking: (Breaking Change)
+                          if (title.includes('breaking') || title.includes('!') || title.startsWith('breaking')) {
+                              labelsToAdd.add('enhancement');
+                              kindName = "💥 Breaking";
+                              priorityName = "🔴 Urgent";
+                              effortValue = 5;
                           }
-                          const pullsRes = await github.rest.pulls.list({ owner, repo, state: 'open', per_page: 100 });
-                          for (const pr of pullsRes.data) {
-                              await processItem(pr, true);
-                              processed++;
+                          // 2. feat: (Feature)
+                          else if (title.startsWith('feat')) {
+                              labelsToAdd.add('enhancement');
+                              kindName = "✨ Feature";
+                              priorityName = "🟠 High";
+                              effortValue = 3;
                           }
-                          console.log(`Backfilled ${processed} open issues/PRs into Project #${projectNumber}.`);
+                          // 3. fix: (Bug Fix)
+                          else if (title.startsWith('fix')) {
+                              labelsToAdd.add('bug');
+                              kindName = "🐛 Bug";
+                              priorityName = title.includes('critical') || title.includes('security') ? "🔴 Urgent" : "🟠 High";
+                              effortValue = 2;
+                          }
+                          // 4. perf: (Performance Optimization)
+                          else if (title.startsWith('perf')) {
+                              labelsToAdd.add('perf');
+                              labelsToAdd.add('enhancement');
+                              kindName = "⚡ Perf";
+                              priorityName = "🟡 Medium";
+                              effortValue = 3;
+                          }
+                          // 5. refactor: (Code Cleanup)
+                          else if (title.startsWith('refactor')) {
+                              labelsToAdd.add('refactor');
+                              kindName = "♻️ Refactor";
+                              priorityName = "🟡 Medium";
+                              effortValue = 2;
+                          }
+                          // 6. test: (Testing)
+                          else if (title.startsWith('test')) {
+                              labelsToAdd.add('testing');
+                              kindName = "🧪 Test";
+                              priorityName = "🟡 Medium";
+                              effortValue = 2;
+                          }
+                          // 7. docs: (Documentation)
+                          else if (title.startsWith('docs')) {
+                              labelsToAdd.add('documentation');
+                              kindName = "📚 Docs";
+                              priorityName = "🔵 Low";
+                              effortValue = 1;
+                          }
+                          // 8. build: (Build & Dependencies)
+                          else if (title.startsWith('build')) {
+                              labelsToAdd.add('dependencies');
+                              labelsToAdd.add('scope:ci');
+                              kindName = "📦 Build";
+                              scopeName = "CI";
+                              priorityName = "🔵 Low";
+                              effortValue = 1;
+                          }
+                          // 9. ci: (CI Workflows)
+                          else if (title.startsWith('ci')) {
+                              labelsToAdd.add('ci');
+                              labelsToAdd.add('actions');
+                              labelsToAdd.add('scope:ci');
+                              kindName = "⚙️ CI";
+                              scopeName = "CI";
+                              priorityName = "🔵 Low";
+                              effortValue = 1;
+                          }
+                          // 10. chore: (Housekeeping)
+                          else if (title.startsWith('chore')) {
+                              labelsToAdd.add('chore');
+                              kindName = "🔧 Chore";
+                              priorityName = "🔵 Low";
+                              effortValue = 1;
+                          }
+                          // 11. style: (Formatting)
+                          else if (title.startsWith('style')) {
+                              kindName = "🎨 Style";
+                              priorityName = "🔵 Low";
+                              effortValue = 1;
+                          }
+                          // 12. revert: (Revert Commit)
+                          else if (title.startsWith('revert')) {
+                              labelsToAdd.add('bug');
+                              kindName = "🐛 Bug";
+                              priorityName = "🟠 High";
+                              effortValue = 2;
+                          }
+
+                          // Fibonacci Scale for PRs based on total code additions + deletions
+                          if (!isIssue && item.additions !== undefined && item.deletions !== undefined) {
+                              const totalDiff = item.additions + item.deletions;
+                              if (totalDiff < 30) effortValue = 1;
+                              else if (totalDiff <= 100) effortValue = 2;
+                              else if (totalDiff <= 300) effortValue = 3;
+                              else if (totalDiff <= 600) effortValue = 5;
+                              else effortValue = 8;
+                          }
+
+                          // Multi-Scope Label Detection (Tags ALL matching component scopes)
+                          if (title.includes('(core)')) labelsToAdd.add('scope:core');
+                          if (title.includes('(app)')) labelsToAdd.add('scope:app');
+                          if (title.includes('(overlay)')) labelsToAdd.add('scope:overlay');
+                          if (title.includes('(monitor)')) labelsToAdd.add('scope:monitor');
+                          if (title.includes('(config)')) labelsToAdd.add('scope:config');
+                          if (title.includes('(ci)') || title.includes('(actions)')) labelsToAdd.add('scope:ci');
+
+                          if (title.includes('(core)') || title.includes('(config)') || title.includes('(monitor)')) labelsToAdd.add('csharp');
+                          if (title.includes('(app)') || title.includes('(overlay)')) labelsToAdd.add('frontend');
+
+                          // Architectural Scope Precedence for Single-Select Field (Core > App > Overlay > Monitor > Config > CI)
+                          if (title.includes('(core)')) scopeName = "Core";
+                          else if (title.includes('(app)')) scopeName = "App";
+                          else if (title.includes('(overlay)')) scopeName = "Overlay";
+                          else if (title.includes('(monitor)')) scopeName = "Monitor";
+                          else if (title.includes('(config)')) scopeName = "Config";
+                          else if (title.includes('(ci)') || title.includes('(actions)')) scopeName = "CI";
+                      }
+
+                      // Label Addition runs under GITHUB_TOKEN -> records actor as github-actions[bot]
+                      const finalLabels = Array.from(labelsToAdd);
+                      if (finalLabels.length > 0) {
+                          await github.rest.issues.addLabels({
+                              owner: context.repo.owner,
+                              repo: context.repo.repo,
+                              issue_number: number,
+                              labels: finalLabels
+                          });
+                          console.log(`Labeled #${number} as github-actions[bot] with: ${finalLabels.join(', ')}`);
+                      }
+
+                      // A. Assign Active Sprint / Iteration
+                      const iterationField = allFields.find(f => f.configuration && f.configuration.iterations);
+                      if (iterationField) {
+                          const todayStr = new Date().toISOString().split('T')[0];
+                          const iterations = iterationField.configuration.iterations;
+
+                          let activeIteration = iterations.find(iter => {
+                              const startStr = iter.startDate;
+                              const endDate = new Date(new Date(iter.startDate).getTime() + iter.duration * 86400000);
+                              const endStr = endDate.toISOString().split('T')[0];
+                              return todayStr >= startStr && todayStr < endStr;
+                          });
+
+                          if (!activeIteration) {
+                              activeIteration = iterations.find(iter => iter.startDate > todayStr);
+                          }
+
+                          if (activeIteration) {
+                              const updateSprintMutation = `
+                                  mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $iterationId: String!) {
+                                      updateProjectV2ItemFieldValue(input: {
+                                          projectId: $projectId,
+                                          itemId: $itemId,
+                                          fieldId: $fieldId,
+                                          value: { iterationId: $iterationId }
+                                      }) {
+                                          projectV2Item { id }
+                                      }
+                                  }
+                              `;
+                              await graphqlWithPat(updateSprintMutation, {
+                                  projectId,
+                                  itemId,
+                                  fieldId: iterationField.id,
+                                  iterationId: activeIteration.id
+                              });
+                              console.log(`Assigned #${number} to Sprint (${activeIteration.id})`);
+                          }
+                      }
+
+                      // B. Assign Kind Custom Field
+                      if (kindName) {
+                          await updateSingleSelectField('Kind', kindName);
+                      }
+
+                      // C. Assign Scope Custom Field
+                      if (scopeName) {
+                          await updateSingleSelectField('Scope', scopeName);
+                      }
+
+                      // D. Assign Priority Custom Field
+                      if (priorityName) {
+                          await updateSingleSelectField('Priority', priorityName);
+                      }
+
+                      // E. Assign Effort Custom Field (Number)
+                      if (effortValue !== undefined) {
+                          await updateNumberField('Effort', effortValue);
                       }

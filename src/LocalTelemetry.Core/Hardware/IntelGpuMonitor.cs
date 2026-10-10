@@ -11,7 +11,6 @@ namespace LocalTelemetry.Core.Hardware;
 [SupportedOSPlatform("windows")]
 public sealed partial class IntelGpuMonitor : IDisposable
 {
-    private const string DllName = "ControlLib.dll";
     private const int CtlResultSuccess = 0;
 
     /// <summary>Gets whether the IGCL interface was initialized successfully.</summary>
@@ -20,6 +19,7 @@ public sealed partial class IntelGpuMonitor : IDisposable
     /// <summary>Gets the name of the detected Intel GPU or empty if unavailable.</summary>
     public string GpuName { get; private set; } = string.Empty;
 
+    private readonly IIntelGpuNative _native;
     private IntPtr _apiHandle = IntPtr.Zero;
     private IntPtr _deviceHandle = IntPtr.Zero;
     private IntPtr _tempHandle = IntPtr.Zero;
@@ -30,68 +30,39 @@ public sealed partial class IntelGpuMonitor : IDisposable
     /// Initializes a new instance of <see cref="IntelGpuMonitor"/> and attempts
     /// to connect to the IGCL interface.
     /// </summary>
-    public IntelGpuMonitor()
+    public IntelGpuMonitor() : this(null) { }
+
+    internal IntelGpuMonitor(IIntelGpuNative? native)
     {
+        _native = native ?? IntelGpuNativePInvoke.Instance;
         try { Init(); }
-        catch (Exception ex) { Log.Error(ex, "Init failed"); IsAvailable = false; }
+        catch (Exception ex) { Log.Error(ex, "Failed to initialize Intel graphics monitor"); IsAvailable = false; }
     }
 
     private void Init()
     {
-        var initArgs = default(ctl_init_args_t);
-        initArgs.Size = (uint)Marshal.SizeOf<ctl_init_args_t>();
-        initArgs.Version = 0;
-        initArgs.flags = 1; // CTL_INIT_FLAG_USE_LEVEL_ZERO
+        int ret = _native.Init(out _apiHandle);
+        if (ret != CtlResultSuccess || _apiHandle == IntPtr.Zero) return;
 
-        int ret = ctlInit(ref initArgs, out _apiHandle);
-        if (ret != CtlResultSuccess) return;
-
-        uint count = 0;
-        ret = ctlEnumerateDevices(_apiHandle, ref count, null);
-        if (ret != CtlResultSuccess || count == 0) return;
-
-        var devices = new IntPtr[count];
-        ret = ctlEnumerateDevices(_apiHandle, ref count, devices);
-        if (ret != CtlResultSuccess) return;
+        ret = _native.EnumerateDevices(_apiHandle, out var devices);
+        if (ret != CtlResultSuccess || devices.Length == 0) return;
 
         _deviceHandle = devices[0];
 
-        var props = default(ctl_device_adapter_properties_t);
-        props.Size = (uint)Marshal.SizeOf<ctl_device_adapter_properties_t>();
-        props.Version = 0;
-        ret = ctlGetDeviceProperties(_deviceHandle, ref props);
-        if (ret == CtlResultSuccess)
-            GpuName = props.name ?? string.Empty;
+        if (_native.GetDeviceName(_deviceHandle, out var name) == CtlResultSuccess)
+            GpuName = name ?? string.Empty;
 
         // Temperature
-        uint tempCount = 0;
-        ret = ctlEnumTemperatureSensors(_deviceHandle, ref tempCount, null);
-        if (ret == CtlResultSuccess && tempCount > 0)
-        {
-            var temps = new IntPtr[tempCount];
-            ret = ctlEnumTemperatureSensors(_deviceHandle, ref tempCount, temps);
-            if (ret == CtlResultSuccess) _tempHandle = temps[0];
-        }
+        if (_native.GetTempSensor(_deviceHandle, out var tempH) == CtlResultSuccess)
+            _tempHandle = tempH;
 
         // Frequency
-        uint freqCount = 0;
-        ret = ctlEnumFrequencyDomains(_deviceHandle, ref freqCount, null);
-        if (ret == CtlResultSuccess && freqCount > 0)
-        {
-            var freqs = new IntPtr[freqCount];
-            ret = ctlEnumFrequencyDomains(_deviceHandle, ref freqCount, freqs);
-            if (ret == CtlResultSuccess) _freqHandle = freqs[0];
-        }
+        if (_native.GetFreqDomain(_deviceHandle, out var freqH) == CtlResultSuccess)
+            _freqHandle = freqH;
 
         // Memory
-        uint memCount = 0;
-        ret = ctlEnumMemoryModules(_deviceHandle, ref memCount, null);
-        if (ret == CtlResultSuccess && memCount > 0)
-        {
-            var mems = new IntPtr[memCount];
-            ret = ctlEnumMemoryModules(_deviceHandle, ref memCount, mems);
-            if (ret == CtlResultSuccess) _memHandle = mems[0];
-        }
+        if (_native.GetMemModule(_deviceHandle, out var memH) == CtlResultSuccess)
+            _memHandle = memH;
 
         IsAvailable = true;
     }
@@ -101,8 +72,7 @@ public sealed partial class IntelGpuMonitor : IDisposable
     public float GetTempC()
     {
         if (!IsAvailable || _tempHandle == IntPtr.Zero) return 0;
-        double t = 0;
-        int ret = ctlTemperatureGetState(_tempHandle, ref t);
+        int ret = _native.GetTempC(_tempHandle, out double t);
         return ret == CtlResultSuccess ? (float)t : 0;
     }
 
@@ -111,11 +81,8 @@ public sealed partial class IntelGpuMonitor : IDisposable
     public float GetClockMHz()
     {
         if (!IsAvailable || _freqHandle == IntPtr.Zero) return 0;
-        var state = default(ctl_freq_state_t);
-        state.Size = (uint)Marshal.SizeOf<ctl_freq_state_t>();
-        state.Version = 0;
-        int ret = ctlFrequencyGetState(_freqHandle, ref state);
-        return ret == CtlResultSuccess ? (float)state.actual : 0;
+        int ret = _native.GetClockMHz(_freqHandle, out double clock);
+        return ret == CtlResultSuccess ? (float)clock : 0;
     }
 
     /// <summary>Reads GPU VRAM usage in megabytes.</summary>
@@ -123,14 +90,51 @@ public sealed partial class IntelGpuMonitor : IDisposable
     public (float usedMb, float totalMb) GetVram()
     {
         if (!IsAvailable || _memHandle == IntPtr.Zero) return (0, 0);
-        var state = default(ctl_mem_state_t);
-        state.Size = (uint)Marshal.SizeOf<ctl_mem_state_t>();
-        state.Version = 0;
-        int ret = ctlMemoryGetState(_memHandle, ref state);
+        int ret = _native.GetVram(_memHandle, out ulong totalBytes, out ulong freeBytes);
         if (ret != CtlResultSuccess) return (0, 0);
-        float totalMb = (float)(state.size / (1024.0 * 1024.0));
-        float usedMb = (float)((state.size - state.free) / (1024.0 * 1024.0));
+        float totalMb = (float)(totalBytes / (1024.0 * 1024.0));
+        float usedMb = (float)((totalBytes - freeBytes) / (1024.0 * 1024.0));
         return (usedMb, totalMb);
+    }
+
+    /// <summary>
+    /// Resets the Intel IGCL connection and reacquires device handles.
+    /// Safe to call following display driver updates or waking from sleep.
+    /// </summary>
+    public void Reset()
+    {
+        try
+        {
+            if (_apiHandle != IntPtr.Zero)
+            {
+                _native.Close(_apiHandle);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to close Intel IGCL handle during reset");
+        }
+        finally
+        {
+            _apiHandle = IntPtr.Zero;
+            _deviceHandle = IntPtr.Zero;
+            _tempHandle = IntPtr.Zero;
+            _freqHandle = IntPtr.Zero;
+            _memHandle = IntPtr.Zero;
+            IsAvailable = false;
+        }
+
+        try
+        {
+            Init();
+            if (IsAvailable)
+                Log.Debug("Intel GPU monitor successfully re-initialized after reset");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to reset Intel graphics monitor");
+            IsAvailable = false;
+        }
     }
 
     /// <summary>Releases the IGCL API handle and resets availability.</summary>
@@ -138,50 +142,255 @@ public sealed partial class IntelGpuMonitor : IDisposable
     {
         if (_apiHandle != IntPtr.Zero)
         {
-            ctlClose(_apiHandle);
+            _native.Close(_apiHandle);
             _apiHandle = IntPtr.Zero;
         }
         IsAvailable = false;
         GC.SuppressFinalize(this);
     }
+}
 
-    // P/Invoke
+internal interface IIntelGpuNative
+{
+    int Init(out IntPtr apiHandle);
+    int Close(IntPtr apiHandle);
+    int EnumerateDevices(IntPtr apiHandle, out IntPtr[] devices);
+    int GetDeviceName(IntPtr deviceHandle, out string gpuName);
+    int GetTempSensor(IntPtr deviceHandle, out IntPtr tempHandle);
+    int GetTempC(IntPtr tempHandle, out double tempC);
+    int GetFreqDomain(IntPtr deviceHandle, out IntPtr freqHandle);
+    int GetClockMHz(IntPtr freqHandle, out double clockMHz);
+    int GetMemModule(IntPtr deviceHandle, out IntPtr memHandle);
+    int GetVram(IntPtr memHandle, out ulong totalBytes, out ulong freeBytes);
+}
 
+internal sealed class IntelGpuNativePInvoke : IIntelGpuNative
+{
+    public static readonly IntelGpuNativePInvoke Instance = new();
+    private const int CtlResultSuccess = 0;
     private const CallingConvention Cdecl = CallingConvention.Cdecl;
 
-    [DllImport(DllName, CallingConvention = Cdecl)]
-    private static extern int ctlInit(ref ctl_init_args_t pInitDesc, out IntPtr phAPIHandle);
+    public int Init(out IntPtr apiHandle)
+    {
+        apiHandle = IntPtr.Zero;
+        try
+        {
+            var initArgs = default(CtlInitArgs);
+            initArgs.Size = (uint)Marshal.SizeOf<CtlInitArgs>();
+            initArgs.Version = 0;
+            initArgs.flags = 1;
+            return ctlInit(ref initArgs, out apiHandle);
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to initialize Intel graphics control library (ctlInit)");
+            return -1;
+        }
+    }
 
-    [DllImport(DllName, CallingConvention = Cdecl)]
+    public int Close(IntPtr apiHandle)
+    {
+        try { return ctlClose(apiHandle); }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to close Intel graphics control library handle (ctlClose)");
+            return -1;
+        }
+    }
+
+    public int EnumerateDevices(IntPtr apiHandle, out IntPtr[] devices)
+    {
+        devices = [];
+        try
+        {
+            uint count = 0;
+            int ret = ctlEnumerateDevices(apiHandle, ref count, null);
+            if (ret == CtlResultSuccess && count > 0)
+            {
+                devices = new IntPtr[count];
+                ret = ctlEnumerateDevices(apiHandle, ref count, devices);
+                return ret;
+            }
+            return ret != CtlResultSuccess ? ret : -1;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to enumerate Intel graphics devices");
+            return -1;
+        }
+    }
+
+    public int GetDeviceName(IntPtr deviceHandle, out string gpuName)
+    {
+        gpuName = string.Empty;
+        try
+        {
+            var props = default(CtlDeviceAdapterProperties);
+            props.Size = (uint)Marshal.SizeOf<CtlDeviceAdapterProperties>();
+            int ret = ctlGetDeviceProperties(deviceHandle, ref props);
+            if (ret == CtlResultSuccess) gpuName = props.name ?? string.Empty;
+            return ret;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to get Intel graphics device properties");
+            return -1;
+        }
+    }
+
+    public int GetTempSensor(IntPtr deviceHandle, out IntPtr tempHandle)
+    {
+        tempHandle = IntPtr.Zero;
+        try
+        {
+            uint count = 0;
+            int ret = ctlEnumTemperatureSensors(deviceHandle, ref count, null);
+            if (ret == CtlResultSuccess && count > 0)
+            {
+                var temps = new IntPtr[count];
+                ret = ctlEnumTemperatureSensors(deviceHandle, ref count, temps);
+                if (ret == CtlResultSuccess) tempHandle = temps[0];
+                return ret;
+            }
+            return ret != CtlResultSuccess ? ret : -1;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to enumerate Intel graphics temperature sensors");
+            return -1;
+        }
+    }
+
+    public int GetTempC(IntPtr tempHandle, out double tempC)
+    {
+        tempC = 0;
+        try { return ctlTemperatureGetState(tempHandle, ref tempC); }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to read Intel graphics temperature sensor state");
+            return -1;
+        }
+    }
+
+    public int GetFreqDomain(IntPtr deviceHandle, out IntPtr freqHandle)
+    {
+        freqHandle = IntPtr.Zero;
+        try
+        {
+            uint count = 0;
+            int ret = ctlEnumFrequencyDomains(deviceHandle, ref count, null);
+            if (ret == CtlResultSuccess && count > 0)
+            {
+                var freqs = new IntPtr[count];
+                ret = ctlEnumFrequencyDomains(deviceHandle, ref count, freqs);
+                if (ret == CtlResultSuccess) freqHandle = freqs[0];
+                return ret;
+            }
+            return ret != CtlResultSuccess ? ret : -1;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to enumerate Intel graphics frequency domains");
+            return -1;
+        }
+    }
+
+    public int GetClockMHz(IntPtr freqHandle, out double clockMHz)
+    {
+        clockMHz = 0;
+        try
+        {
+            var state = default(CtlFreqState);
+            state.Size = (uint)Marshal.SizeOf<CtlFreqState>();
+            int ret = ctlFrequencyGetState(freqHandle, ref state);
+            if (ret == CtlResultSuccess) clockMHz = state.actual;
+            return ret;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to read Intel graphics frequency domain state");
+            return -1;
+        }
+    }
+
+    public int GetMemModule(IntPtr deviceHandle, out IntPtr memHandle)
+    {
+        memHandle = IntPtr.Zero;
+        try
+        {
+            uint count = 0;
+            int ret = ctlEnumMemoryModules(deviceHandle, ref count, null);
+            if (ret == CtlResultSuccess && count > 0)
+            {
+                var mems = new IntPtr[count];
+                ret = ctlEnumMemoryModules(deviceHandle, ref count, mems);
+                if (ret == CtlResultSuccess) memHandle = mems[0];
+                return ret;
+            }
+            return ret != CtlResultSuccess ? ret : -1;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to enumerate Intel graphics memory modules");
+            return -1;
+        }
+    }
+
+    public int GetVram(IntPtr memHandle, out ulong totalBytes, out ulong freeBytes)
+    {
+        totalBytes = 0;
+        freeBytes = 0;
+        try
+        {
+            var state = default(CtlMemState);
+            state.Size = (uint)Marshal.SizeOf<CtlMemState>();
+            int ret = ctlMemoryGetState(memHandle, ref state);
+            if (ret == CtlResultSuccess)
+            {
+                totalBytes = state.size;
+                freeBytes = state.free;
+            }
+            return ret;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to read Intel graphics memory state");
+            return -1;
+        }
+    }
+
+    [DllImport("ControlLib.dll", CallingConvention = Cdecl)]
+    private static extern int ctlInit(ref CtlInitArgs pInitDesc, out IntPtr phAPIHandle);
+
+    [DllImport("ControlLib.dll", CallingConvention = Cdecl)]
     private static extern int ctlClose(IntPtr hAPIHandle);
 
-    [DllImport(DllName, CallingConvention = Cdecl)]
+    [DllImport("ControlLib.dll", CallingConvention = Cdecl)]
     private static extern int ctlEnumerateDevices(IntPtr hAPIHandle, ref uint pCount, [In, Out] IntPtr[]? phDevices);
 
-    [DllImport(DllName, CallingConvention = Cdecl)]
-    private static extern int ctlGetDeviceProperties(IntPtr hDAhandle, ref ctl_device_adapter_properties_t pProperties);
+    [DllImport("ControlLib.dll", CallingConvention = Cdecl)]
+    private static extern int ctlGetDeviceProperties(IntPtr hDAhandle, ref CtlDeviceAdapterProperties pProperties);
 
-    [DllImport(DllName, CallingConvention = Cdecl)]
+    [DllImport("ControlLib.dll", CallingConvention = Cdecl)]
     private static extern int ctlEnumTemperatureSensors(IntPtr hDAhandle, ref uint pCount, [In, Out] IntPtr[]? phTemperature);
 
-    [DllImport(DllName, CallingConvention = Cdecl)]
+    [DllImport("ControlLib.dll", CallingConvention = Cdecl)]
     private static extern int ctlTemperatureGetState(IntPtr hTemperature, ref double pTemperature);
 
-    [DllImport(DllName, CallingConvention = Cdecl)]
+    [DllImport("ControlLib.dll", CallingConvention = Cdecl)]
     private static extern int ctlEnumFrequencyDomains(IntPtr hDAhandle, ref uint pCount, [In, Out] IntPtr[]? phFrequency);
 
-    [DllImport(DllName, CallingConvention = Cdecl)]
-    private static extern int ctlFrequencyGetState(IntPtr hFrequency, ref ctl_freq_state_t pState);
+    [DllImport("ControlLib.dll", CallingConvention = Cdecl)]
+    private static extern int ctlFrequencyGetState(IntPtr hFrequency, ref CtlFreqState pState);
 
-    [DllImport(DllName, CallingConvention = Cdecl)]
+    [DllImport("ControlLib.dll", CallingConvention = Cdecl)]
     private static extern int ctlEnumMemoryModules(IntPtr hDAhandle, ref uint pCount, [In, Out] IntPtr[]? phMemory);
 
-    [DllImport(DllName, CallingConvention = Cdecl)]
-    private static extern int ctlMemoryGetState(IntPtr hMemory, ref ctl_mem_state_t pState);
+    [DllImport("ControlLib.dll", CallingConvention = Cdecl)]
+    private static extern int ctlMemoryGetState(IntPtr hMemory, ref CtlMemState pState);
 
-    // Structs
     [StructLayout(LayoutKind.Sequential)]
-    private struct ctl_init_args_t
+    private struct CtlInitArgs
     {
         public uint Size;
         public byte Version;
@@ -192,7 +401,7 @@ public sealed partial class IntelGpuMonitor : IDisposable
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct ctl_device_adapter_properties_t
+    private struct CtlDeviceAdapterProperties
     {
         public uint Size;
         public byte Version;
@@ -201,7 +410,7 @@ public sealed partial class IntelGpuMonitor : IDisposable
         public uint device_type;
         public uint supported_subfunction_flags;
         public ulong driver_version;
-        public ctl_firmware_version_t firmware_version;
+        public CtlFirmwareVersion firmware_version;
         public uint pci_vendor_id;
         public uint pci_device_id;
         public uint rev_id;
@@ -214,12 +423,12 @@ public sealed partial class IntelGpuMonitor : IDisposable
         public uint Frequency;
         public ushort pci_subsys_id;
         public ushort pci_subsys_vendor_id;
-        public ctl_adapter_bdf_t adapter_bdf;
+        public CtlAdapterBdf adapter_bdf;
         public uint num_xe_cores;
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct ctl_firmware_version_t
+    private struct CtlFirmwareVersion
     {
         public ushort major;
         public ushort minor;
@@ -228,7 +437,7 @@ public sealed partial class IntelGpuMonitor : IDisposable
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct ctl_adapter_bdf_t
+    private struct CtlAdapterBdf
     {
         public uint bus;
         public uint device;
@@ -237,7 +446,7 @@ public sealed partial class IntelGpuMonitor : IDisposable
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct ctl_freq_state_t
+    private struct CtlFreqState
     {
         public uint Size;
         public byte Version;
@@ -250,7 +459,7 @@ public sealed partial class IntelGpuMonitor : IDisposable
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct ctl_mem_state_t
+    private struct CtlMemState
     {
         public uint Size;
         public byte Version;

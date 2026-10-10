@@ -4,19 +4,20 @@
  */
 
 :root {
-    /* Brand Theme Accent - Clean Electric Blue */
-    --vp-c-brand-1: #0284c7;
-    --vp-c-brand-2: #0369a1;
-    --vp-c-brand-3: #075985;
-    --vp-c-brand-soft: rgba(2, 132, 199, 0.14);
-
-    /* Native VitePress Layout Width Override (Wider Layout Default) */
-    --vp-layout-max-width: 1440px;
+    /* Brand Theme Accent - High Contrast Electric Blue (WCAG AA Compliant >= 4.5:1 on light backgrounds) */
+    --vp-c-brand-1: #0369a1;
+    --vp-c-brand-2: #075985;
+    --vp-c-brand-3: #0c4a6e;
+    --vp-c-brand-soft: rgba(3, 105, 161, 0.14);
 
     --vp-font-family-base: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+    /* Light Mode Hero Name Gradient (High Contrast) */
+    --vp-home-hero-name-color: transparent;
+    --vp-home-hero-name-background: linear-gradient(135deg, #0284c7 0%, #2563eb 50%, #7c3aed 100%);
 }
 
-/* Pure Obsidian Dark Mode for Documentation Pages (Zero Blue Tint) */
+/* Pure Obsidian Dark Mode for Documentation Pages */
 .dark {
     --vp-c-brand-1: #38bdf8;
     --vp-c-brand-2: #0284c7;
@@ -31,6 +32,10 @@
 
     /* Sidebar & Header Neutral Dark */
     --vp-c-sidebar-bg: #09090b;
+
+    --vp-c-text-1: #f4f4f5;
+    --vp-c-text-2: #a1a1aa;
+    --vp-c-text-3: #71717a;
 
     --vp-c-border: rgba(255, 255, 255, 0.1);
     --vp-c-divider: rgba(255, 255, 255, 0.08);
@@ -54,40 +59,41 @@
     margin-right: 8px;
 }
 
-/* Exact VitePress.dev Hero Underglow (Landing Page Only) */
+/* Exact Hero Underglow Matching Hero Text Gradient */
 .VPHomeHero .image-bg {
     position: absolute;
     top: 50%;
     left: 50%;
     border-radius: 50%;
-    width: 192px;
-    height: 192px;
-    background: linear-gradient(135deg, #38bdf8 0%, #a855f7 100%);
-    filter: blur(56px);
+    width: 190px;
+    height: 190px;
+    background: linear-gradient(135deg, #38bdf8 0%, #60a5fa 50%, #a855f7 100%);
+    filter: blur(36px);
     transform: translate(-50%, -50%);
     pointer-events: none;
+    opacity: 0.8;
 }
 
 @media (min-width: 640px) {
     .VPHomeHero .image-bg {
-        width: 256px;
-        height: 256px;
-        filter: blur(68px);
+        width: 220px;
+        height: 220px;
+        filter: blur(42px);
     }
 }
 
 @media (min-width: 960px) {
     .VPHomeHero .image-bg {
-        width: 320px;
-        height: 320px;
-        filter: blur(80px);
+        width: 250px;
+        height: 250px;
+        filter: blur(46px);
     }
 }
 
 .VPHomeHero .image-src {
-    max-height: 240px;
+    max-height: 180px;
     width: auto;
-    border-radius: 20px;
+    border-radius: 16px;
 }
 
 /* Documentation Content Enhancements */
@@ -98,29 +104,452 @@
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 
-/* Mermaid Diagrams Container & Text Clipping Fix */
+/* Lucide Line Icon Alignment & Dark Theme Styling */
+.vp-lucide-icon {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: -0.16em;
+    color: var(--vp-c-brand-1);
+    stroke-width: 2px;
+}
+
+.vp-doc h1 .vp-lucide-icon,
+.vp-doc h2 .vp-lucide-icon,
+.vp-doc h3 .vp-lucide-icon {
+    margin-right: 0.25em;
+    color: var(--vp-c-brand-1);
+}
+
+/* Mermaid Diagrams Container & High Readability */
 .mermaid {
-    display: flex;
-    justify-content: center;
-    margin: 28px 0;
-    padding: 12px;
+    position: relative;
+    margin: 32px 0;
+    padding: 44px 20px 24px 20px;
     overflow-x: auto;
-    border-radius: 8px;
-    background: var(--vp-c-bg-alt);
-    border: 1px solid var(--vp-c-border);
+    overflow-y: hidden;
+    border-radius: 12px;
+    background: #090a0f;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+    scrollbar-width: thin;
+    scrollbar-color: rgba(56, 189, 248, 0.3) rgba(255, 255, 255, 0.04);
 }
 
-.mermaid svg {
-    font-family: var(--vp-font-family-base) !important;
-    max-width: 100% !important;
-    height: auto !important;
-    overflow: visible !important;
+@media (min-width: 960px) {
+    .mermaid {
+        margin-left: -40px;
+        margin-right: -40px;
+        padding: 46px 28px 28px 28px;
+    }
 }
 
-/* Ensure text inside Mermaid foreignObjects & node labels does not wrap or clip */
-.mermaid .node label,
+@media (min-width: 1200px) {
+    .mermaid {
+        margin-left: -72px;
+        margin-right: -72px;
+        padding: 48px 32px 32px 32px;
+    }
+}
+
+/* Apply ONLY to direct diagram SVG, not toolbar buttons */
+.mermaid>svg {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+    overflow: visible;
+    filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.35));
+}
+
+/* Node Text Resets - Both In-page and Modal Lightbox */
 .mermaid .node foreignObject,
-.mermaid .label {
+.mermaid-modal-content .node foreignObject {
     overflow: visible !important;
-    white-space: nowrap !important;
+}
+
+.mermaid .node foreignObject>div,
+.mermaid-modal-content .node foreignObject>div {
+    overflow: visible !important;
+    line-height: 1.3 !important;
+    text-align: center !important;
+}
+
+.mermaid .node p,
+.mermaid .node span,
+.mermaid .node div,
+.mermaid .node *,
+.mermaid-modal-content .node p,
+.mermaid-modal-content .node span,
+.mermaid-modal-content .node div,
+.mermaid-modal-content .node * {
+    margin: 0 !important;
+    padding: 0 !important;
+    line-height: 1.3 !important;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+}
+
+/* Edge Labels: Seamless text along arrows - cleanly masks arrow line beneath without any visible box */
+.mermaid g.edgeLabel foreignObject,
+.mermaid-modal-content g.edgeLabel foreignObject {
+    overflow: visible !important;
+}
+
+.mermaid g.edgeLabel,
+.mermaid g.edgeLabel span,
+.mermaid g.edgeLabel p,
+.mermaid-modal-content g.edgeLabel,
+.mermaid-modal-content g.edgeLabel span,
+.mermaid-modal-content g.edgeLabel p {
+    background: transparent !important;
+    background-color: transparent !important;
+}
+
+.mermaid g.edgeLabel .labelBkg,
+.mermaid-modal-content g.edgeLabel .labelBkg {
+    background: #090a0f !important;
+    background-color: #090a0f !important;
+    fill: #090a0f !important;
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    border-radius: 4px !important;
+    padding: 1px 6px !important;
+}
+
+.mermaid g.edgeLabel p,
+.mermaid g.edgeLabel span,
+.mermaid-modal-content g.edgeLabel p,
+.mermaid-modal-content g.edgeLabel span {
+    color: #94a3b8 !important;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+    font-size: 11px !important;
+    font-weight: 500 !important;
+    line-height: 1.25 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* Custom scrollbars for wide diagrams */
+.mermaid::-webkit-scrollbar {
+    height: 6px;
+}
+
+.mermaid::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 3px;
+}
+
+.mermaid::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.18);
+    border-radius: 3px;
+}
+
+.mermaid::-webkit-scrollbar-thumb:hover {
+    background: var(--vp-c-brand-1);
+}
+
+/* Primary Action Button Matching Logo Gradient */
+.VPHomeHero .VPButton.brand {
+    background: linear-gradient(135deg, #38bdf8 0%, #60a5fa 50%, #a855f7 100%) !important;
+    border: none !important;
+    color: #ffffff !important;
+    font-weight: 600 !important;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease !important;
+}
+
+.VPHomeHero .VPButton.brand:hover {
+    filter: brightness(1.1) !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 6px 20px rgba(56, 189, 248, 0.4) !important;
+}
+
+.VPHomeHero .VPButton.alt {
+    border-color: var(--vp-c-border) !important;
+    background: var(--vp-c-bg-alt) !important;
+    transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease !important;
+}
+
+.VPHomeHero .VPButton.alt:hover {
+    border-color: rgba(96, 165, 250, 0.5) !important;
+    background: var(--vp-c-bg-elv) !important;
+    transform: translateY(-1px) !important;
+}
+
+/* Feature Cards & Icon Badges */
+.VPFeature {
+    border: 1px solid var(--vp-c-border) !important;
+    background: var(--vp-c-bg-alt) !important;
+    transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease !important;
+}
+
+.VPFeature:hover {
+    transform: translateY(-3px);
+    border-color: rgba(96, 165, 250, 0.4) !important;
+    box-shadow: 0 12px 32px rgba(56, 189, 248, 0.12);
+}
+
+.VPFeature .icon {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 48px !important;
+    height: 48px !important;
+    font-size: 24px !important;
+    line-height: 1 !important;
+    border-radius: 10px !important;
+    background: rgba(56, 189, 248, 0.08) !important;
+    border: 1px solid rgba(56, 189, 248, 0.18) !important;
+    margin-bottom: 18px !important;
+    color: var(--vp-c-brand-1) !important;
+    transition: background 0.25s ease, border-color 0.25s ease, color 0.25s ease !important;
+}
+
+.VPFeature:hover .icon {
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.18) 0%, rgba(168, 85, 247, 0.18) 100%) !important;
+    border-color: rgba(96, 165, 250, 0.5) !important;
+    color: #38bdf8 !important;
+}
+
+.VPFeature .icon img,
+.VPFeature .icon svg {
+    width: 24px !important;
+    height: 24px !important;
+}
+
+/* Breadcrumb Links Styling */
+.vp-breadcrumbs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82rem;
+    color: var(--vp-c-text-3);
+    margin-bottom: 16px;
+}
+
+.vp-breadcrumbs a {
+    color: var(--vp-c-text-2);
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+.vp-breadcrumbs a:hover {
+    color: var(--vp-c-brand-1);
+}
+
+.vp-breadcrumbs span.separator {
+    color: var(--vp-c-divider);
+    user-select: none;
+}
+
+.vp-breadcrumbs span.current {
+    color: var(--vp-c-text-1);
+    font-weight: 500;
+}
+
+/* Image Captions & Subtext */
+.vp-doc p>em:only-child,
+.vp-doc img+em,
+.vp-doc p:has(img)+p>em:only-child {
+    display: block;
+    font-size: 0.85rem;
+    line-height: 1.45;
+    color: var(--vp-c-text-2);
+    margin-top: -8px;
+    margin-bottom: 20px;
+    font-style: normal;
+}
+
+/* Documentation Content Enhancements */
+.vp-doc img {
+    border-radius: 12px;
+    border: 1px solid var(--vp-c-border);
+    margin: 16px 0;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+/* Lucide Line Icon Alignment & Dark Theme Styling */
+.vp-lucide-icon {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: -0.16em;
+    color: var(--vp-c-brand-1);
+    stroke-width: 2px;
+}
+
+.vp-doc h1 .vp-lucide-icon,
+.vp-doc h2 .vp-lucide-icon,
+.vp-doc h3 .vp-lucide-icon {
+    margin-right: 0.25em;
+    color: var(--vp-c-brand-1);
+}
+
+
+/* Landing Page Tight Natural Layout */
+.VPHome {
+    margin-bottom: 0 !important;
+}
+
+.VPHomeHero {
+    padding-top: calc(var(--vp-nav-height) + 14px) !important;
+    padding-bottom: 16px !important;
+}
+
+.VPFeatures.VPHomeFeatures {
+    padding-top: 0 !important;
+    padding-bottom: 16px !important;
+}
+
+/* Exact Alignment Across Hero, Features, and CTA Banner */
+.VPHomeHero .container,
+.VPFeatures .container,
+.VPHome .vp-doc {
+    max-width: 1040px !important;
+    margin: 0 auto !important;
+}
+
+.VPHome .vp-doc {
+    padding: 0 24px 18px !important;
+    width: 100% !important;
+}
+
+@media (min-width: 640px) {
+    .VPHome .vp-doc {
+        padding: 0 32px 18px !important;
+    }
+}
+
+@media (min-width: 960px) {
+    .VPHome .vp-doc {
+        padding: 0 40px 20px !important;
+    }
+}
+
+/* Horizontal Sleek CTA Banner */
+.home-cta-box {
+    position: relative;
+    border: 1px solid var(--vp-c-border);
+    background: var(--vp-c-bg-alt);
+    border-radius: 12px;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+    overflow: hidden;
+}
+
+.home-cta-box:hover {
+    border-color: rgba(96, 165, 250, 0.45);
+    box-shadow: 0 6px 20px rgba(56, 189, 248, 0.12);
+}
+
+.home-cta-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    text-align: left;
+    flex: 1;
+    min-width: 0;
+}
+
+.home-cta-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 2px 9px;
+    border-radius: 20px;
+    background: rgba(56, 189, 248, 0.1);
+    color: var(--vp-c-brand-1);
+    border: 1px solid rgba(56, 189, 248, 0.25);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.home-cta-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #38bdf8;
+    box-shadow: 0 0 8px #38bdf8;
+}
+
+.home-cta-text {
+    font-size: 0.9rem !important;
+    color: var(--vp-c-text-2) !important;
+    margin: 0 !important;
+    line-height: 1.45 !important;
+    white-space: normal !important;
+}
+
+.home-cta-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.home-cta-actions .VPButton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 14px;
+    height: 32px;
+    font-size: 12.5px;
+    font-weight: 600;
+    border-radius: 6px;
+    text-decoration: none !important;
+    transition: all 0.2s ease;
+}
+
+.home-cta-discord-btn {
+    background: #5865F2 !important;
+    color: #ffffff !important;
+    border: none !important;
+}
+
+.home-cta-discord-btn:hover {
+    background: #4752C4 !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(88, 101, 242, 0.4);
+}
+
+.home-cta-github-btn {
+    background: var(--vp-c-bg-elv) !important;
+    border: 1px solid var(--vp-c-border) !important;
+    color: var(--vp-c-text-1) !important;
+}
+
+.home-cta-github-btn:hover {
+    border-color: rgba(96, 165, 250, 0.5) !important;
+    transform: translateY(-1px);
+    color: var(--vp-c-brand-1) !important;
+}
+
+@media (max-width: 860px) {
+    .home-cta-box {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        padding: 16px 18px;
+    }
+
+    .home-cta-left {
+        flex-direction: column;
+        gap: 8px;
+        text-align: center;
+    }
+
+    .home-cta-text {
+        white-space: normal;
+    }
+}
+
+.VPFooter {
+    margin-top: 0 !important;
+    padding-top: 18px !important;
+    padding-bottom: 18px !important;
+    border-top: 1px solid var(--vp-c-divider) !important;
 }

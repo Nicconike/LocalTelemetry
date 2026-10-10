@@ -17,7 +17,10 @@ function copyMasterAppIcon() {
 }
 
 export default defineConfig({
-    plugins: [svelte(), copyMasterAppIcon()],
+    plugins: [
+        svelte(),
+        copyMasterAppIcon()
+    ],
     base: './',
     build: {
         outDir: 'dist',
@@ -33,13 +36,26 @@ export default defineConfig({
             },
         },
     },
+    server: {
+        fs: {
+            allow: ['..', '../../../../tests/LocalTelemetry.App.Tests/Settings/wwwroot']
+        }
+    },
     test: {
         environment: 'happy-dom',
         globals: true,
+        server: {
+            deps: {
+                inline: [/svelte/]
+            }
+        },
         include: ['../../../../tests/LocalTelemetry.App.Tests/Settings/wwwroot/**/*.test.ts'],
         coverage: {
             provider: 'v8',
             reporter: ['text', 'json', 'html'],
         },
     },
+    resolve: {
+        conditions: ['browser']
+    }
 });

@@ -30,10 +30,20 @@ describe('themes.ts', () => {
     it('applyThemeVars should apply CSS variables to document.documentElement', () => {
         applyThemeVars('midnight');
         const bg = document.documentElement.style.getPropertyValue('--color-bg');
-        expect(bg).toBe('#0d1117');
+        expect(bg).toBe('#0a0e17');
 
         applyThemeVars('unknown_theme_xyz');
         const fallbackBg = document.documentElement.style.getPropertyValue('--color-bg');
         expect(fallbackBg).toBe('#171614');
+    });
+
+    it('every theme should define brand and primary colors', () => {
+        for (const theme of themes) {
+            expect(theme.vars['--color-brand']).toBeTruthy();
+            expect(theme.vars['--color-primary']).toBeTruthy();
+        }
+        const defaultDark = themes.find((t) => t.value === 'default');
+        expect(defaultDark?.vars['--color-primary']).toBe('#0099b8');
+        expect(defaultDark?.vars['--color-brand']).toBe('#0099b8');
     });
 });

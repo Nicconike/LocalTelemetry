@@ -1,17 +1,17 @@
-name: CodeQL
+name: CodeQL Analysis
 
 on:
     push:
-        branches: ["master"]
+        branches: [master]
     pull_request:
-        branches: ["master"]
+        branches: [master]
 
 permissions:
     contents: read
 
 jobs:
     analyze:
-        name: CodeQL Analysis
+        name: CodeQL Security Scan
         runs-on: windows-latest
         permissions:
             security-events: write
@@ -19,7 +19,7 @@ jobs:
             DOTNET_CLI_TELEMETRY_OPTOUT: "1"
             DOTNET_NOLOGO: "true"
         steps:
-            - name: Checkout Repo
+            - name: Checkout Repository
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
             - name: Initialize CodeQL
@@ -27,21 +27,21 @@ jobs:
               with:
                   languages: "csharp"
 
-            - name: Setup Node & Bun
+            - name: Setup Bun Runtime
               uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
 
-            - name: Install & Build Svelte SPA Frontend
+            - name: Build Svelte Frontend Assets
               run: |
-                  bun install
+                  bun install --frozen-lockfile --ignore-scripts
                   bun run build
               working-directory: src/LocalTelemetry.App/Settings/wwwroot
 
-            - name: Setup .NET 10
+            - name: Setup .NET 10 SDK
               uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
               with:
                   dotnet-version: 10.0.x
 
-            - name: Build C# Solution
+            - name: Build .NET Solution
               run: dotnet build --configuration Debug
 
             - name: Perform CodeQL Analysis

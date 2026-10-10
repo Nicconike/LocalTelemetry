@@ -39,7 +39,7 @@ public sealed class SystemInfoWrapper : ISystemInfo
     public string GetPsuMaxCapacity() => SystemInfo.GetPsuMaxCapacity();
     public string GetDiskModel() => SystemInfo.GetDiskModel();
     public string GetDiskManufacturer() => SystemInfo.GetDiskManufacturer();
-    public List<(string Model, string Vendor, string BusType, long? SizeBytes, int DiskIndex, bool IsBootDrive)> GetAllDisks() => SystemInfo.GetAllDisks();
+    public List<DiskInfo> GetAllDisks() => SystemInfo.GetAllDisks();
     public (string Name, string Manufacturer)[] GetNics() => SystemInfo.GetNics();
     public string GetOsDisplayVersion() => SystemInfo.GetOsDisplayVersion();
     public string GetCpuColor() => SystemInfo.GetCpuColor();

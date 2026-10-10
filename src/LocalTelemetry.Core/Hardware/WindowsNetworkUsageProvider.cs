@@ -1,5 +1,6 @@
 using System.Net.NetworkInformation;
 using System.Runtime.Versioning;
+using LocalTelemetry.Core.Models;
 using Windows.Networking.Connectivity;
 
 namespace LocalTelemetry.Core.Hardware;
@@ -13,7 +14,7 @@ namespace LocalTelemetry.Core.Hardware;
 [SupportedOSPlatform("windows")]
 public static class WindowsNetworkUsageProvider
 {
-    private static void Log(string msg) { Diagnostics.Log.Info(msg); }
+    private static void Log(string msg) { Diagnostics.Log.Debug(msg); }
     private static void LogError(string msg) { Diagnostics.Log.Error(msg); }
 
     // Matches PhysicalInterfaceTypes in EseNetworkUsageReader
@@ -49,163 +50,422 @@ public static class WindowsNetworkUsageProvider
             return results;
 
         string adapterGuid = profile.NetworkAdapter.NetworkAdapterId.ToString();
-        string interfaceType;
+        string interfaceType = ResolveAdapterInterfaceName(adapterGuid, ianaType);
+
+        if (start.Date == end.Date)
+        {
+            await QuerySingleDayUsageAsync(profile, start, end, interfaceType, results);
+            return results;
+        }
+
+        await QueryHistoricalChunksAsync(profile, start, end, interfaceType, results, ct);
+        return results;
+    }
+
+    private static string ResolveAdapterInterfaceName(string adapterGuid, uint ianaType)
+    {
         try
         {
-            string? name = null;
             foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
             {
                 string id = ni.Id?.Trim("{}".ToCharArray()) ?? string.Empty;
-                if (id.Equals(adapterGuid, StringComparison.OrdinalIgnoreCase))
-                {
-                    name = ni.Name;
-                    break;
-                }
+                if (id.Equals(adapterGuid, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(ni.Name))
+                    return ni.Name;
             }
-            interfaceType = !string.IsNullOrEmpty(name) ? name : ianaType switch
-            {
-                6 => "Ethernet",
-                71 or 243 => "WiFi",
-                _ => $"IanaType{ianaType}"
-            };
         }
-        catch
+        catch (Exception ex)
         {
-            interfaceType = ianaType switch { 6 => "Ethernet", 71 or 243 => "WiFi", _ => $"IanaType{ianaType}" };
+            Diagnostics.Log.Debug(ex, $"Failed to resolve adapter interface name for GUID '{adapterGuid}'; falling back to IANA type lookup");
         }
 
-        // Query in 20-day chunks to avoid E_INVALIDARG on large PerDay ranges
+        return ianaType switch
+        {
+            6 => "Ethernet",
+            71 or 243 => "WiFi",
+            _ => $"IanaType{ianaType}"
+        };
+    }
+
+    private static async Task QuerySingleDayUsageAsync(
+        ConnectionProfile profile, DateTime start, DateTime end, string interfaceType, List<WindowsNetworkUsageRecord> results)
+    {
+        try
+        {
+            var usageList = await profile.GetNetworkUsageAsync(
+                start.ToUniversalTime(),
+                end.ToUniversalTime(),
+                DataUsageGranularity.Total,
+                new NetworkUsageStates());
+
+            long down = 0, up = 0;
+            foreach (var usage in usageList)
+            {
+                down += (long)usage.BytesReceived;
+                up += (long)usage.BytesSent;
+            }
+
+            results.Add(new WindowsNetworkUsageRecord
+            {
+                Date = start.ToString("dd-MM-yyyy"),
+                InterfaceType = interfaceType,
+                DownBytes = down,
+                UpBytes = up,
+            });
+        }
+        catch (Exception ex)
+        {
+            Log($"WinRT today total query skipped ({profile.ProfileName}): {ex.Message}");
+        }
+    }
+
+    private static async Task QueryHistoricalChunksAsync(
+        ConnectionProfile profile, DateTime start, DateTime end, string interfaceType, List<WindowsNetworkUsageRecord> results, CancellationToken ct)
+    {
         var chunkStart = start;
         while (chunkStart < end)
         {
             ct.ThrowIfCancellationRequested();
-            var chunkEnd = chunkStart.AddDays(20);
+            var chunkEnd = chunkStart.AddDays(30);
             if (chunkEnd > end) chunkEnd = end;
 
-            try
+            bool success = await QueryChunkSliceAsync(profile, chunkStart, chunkEnd, interfaceType, results, ct);
+            if (!success)
             {
-                var usageList = await profile.GetNetworkUsageAsync(
-                    chunkStart.ToUniversalTime(),
-                    chunkEnd.ToUniversalTime(),
-                    DataUsageGranularity.PerDay,
-                    new NetworkUsageStates());
-
-                int dayOffset = 0;
-                foreach (var usage in usageList)
+                // Fallback to 7-day slices if the 30-day query failed
+                var subStart = chunkStart;
+                while (subStart < chunkEnd)
                 {
-                    results.Add(new WindowsNetworkUsageRecord
-                    {
-                        Date = chunkStart.AddDays(dayOffset).ToString("dd-MM-yyyy"),
-                        InterfaceType = interfaceType,
-                        DownBytes = (long)usage.BytesReceived,
-                        UpBytes = (long)usage.BytesSent,
-                    });
-                    dayOffset++;
+                    ct.ThrowIfCancellationRequested();
+                    var subEnd = subStart.AddDays(7);
+                    if (subEnd > chunkEnd) subEnd = chunkEnd;
+
+                    await QueryChunkSliceAsync(profile, subStart, subEnd, interfaceType, results, ct);
+                    subStart = subEnd;
                 }
-            }
-            catch (Exception ex)
-            {
-                Log($"WinRT fallback: chunk {chunkStart:yyyy-MM-dd} to {chunkEnd:yyyy-MM-dd} skipped ({profile.ProfileName}): {ex.Message}");
             }
 
             chunkStart = chunkEnd;
         }
-
-        return results;
     }
 
-    /// <summary>Retrieves the Windows installation date from the registry.</summary>
-    /// <returns>Installation date or 30 days ago as a fallback.</returns>
+    private static async Task<bool> QueryChunkSliceAsync(
+        ConnectionProfile profile, DateTime sliceStart, DateTime sliceEnd, string interfaceType, List<WindowsNetworkUsageRecord> results, CancellationToken ct)
+    {
+        try
+        {
+            ct.ThrowIfCancellationRequested();
+            var usageList = await profile.GetNetworkUsageAsync(
+                sliceStart.ToUniversalTime(),
+                sliceEnd.ToUniversalTime(),
+                DataUsageGranularity.PerDay,
+                new NetworkUsageStates());
+
+            int dayOffset = 0;
+            foreach (var usage in usageList)
+            {
+                results.Add(new WindowsNetworkUsageRecord
+                {
+                    Date = sliceStart.AddDays(dayOffset).ToString("dd-MM-yyyy"),
+                    InterfaceType = interfaceType,
+                    DownBytes = (long)usage.BytesReceived,
+                    UpBytes = (long)usage.BytesSent,
+                });
+                dayOffset++;
+            }
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log($"WinRT network usage query {sliceStart:dd-MM-yyyy} to {sliceEnd:dd-MM-yyyy} skipped ({profile.ProfileName}): {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>Retrieves the Windows installation date from the registry without arbitrary day limits.</summary>
+    /// <returns>Installation date or 30 days ago as an emergency fallback.</returns>
     public static DateTime GetWindowsInstallDate()
     {
         try
         {
             using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
                 @"SOFTWARE\Microsoft\Windows NT\CurrentVersion");
-            if (key is not null && key.GetValue("InstallDate") is int unixTime)
-                return DateTimeOffset.FromUnixTimeSeconds(unixTime).UtcDateTime;
+            if (key is not null)
+            {
+                var installTimeVal = key.GetValue("InstallTime");
+                if (installTimeVal is long fileTime && fileTime > 0)
+                {
+                    var dt = DateTime.FromFileTimeUtc(fileTime).ToLocalTime().Date;
+                    if (dt.Year >= 2000 && dt <= DateTime.Today)
+                        return dt;
+                }
+
+                var installDateVal = key.GetValue("InstallDate");
+                if (installDateVal is int unixTime && unixTime > 0)
+                {
+                    var dt = DateTimeOffset.FromUnixTimeSeconds(unixTime).LocalDateTime.Date;
+                    if (dt.Year >= 2000 && dt <= DateTime.Today)
+                        return dt;
+                }
+                if (installDateVal is long unixTime64 && unixTime64 > 0)
+                {
+                    var dt = DateTimeOffset.FromUnixTimeSeconds(unixTime64).LocalDateTime.Date;
+                    if (dt.Year >= 2000 && dt <= DateTime.Today)
+                        return dt;
+                }
+            }
         }
         catch (Exception ex) { LogError($"GetWindowsInstallDate failed: {ex.Message}"); }
-        return DateTime.UtcNow.AddDays(-30);
+        return DateTime.Today.AddDays(-30);
     }
 
     /// <summary>
-    /// Imports SRUM usage history into the given <see cref="TrafficHistoryFile"/>,
-    /// skipping records already present.
-    /// <para>Uses direct ESE database access for historical data (no range limit) and
-    /// the WinRT API as a fallback for today's partial-day data and when ESE is unavailable.</para>
+    /// Imports SRUM usage history into the given <see cref="TrafficHistoryFile"/> on first launch
+    /// (when history is empty) from the Windows installation date.
+    /// <para>On subsequent launches, only today's baseline is refreshed, ensuring zero startup lag.</para>
     /// </summary>
     public static async Task ImportAndSaveHistoryAsync(TrafficHistoryFile historyFile, CancellationToken ct = default)
     {
         try
         {
-            DateTime start = GetWindowsInstallDate().ToLocalTime();
-            DateTime end = DateTime.Now;
-            DateTime yesterday = end.Date.AddDays(-1);
+            DateTime todayDate = DateTime.Today;
+            DateTime yesterday = todayDate.AddDays(-1);
 
-            // Phase 1: ESE reader for all historical data (no range limit, covers all interfaces)
-            var eseRecords = await EseNetworkUsageReader.ReadUsageAsync(start, yesterday, ct);
-            Log($"ESE import: {eseRecords.Count} records from {start:dd-MM-yyyy} to {yesterday:dd-MM-yyyy}");
+            bool hasHistorical = historyFile.GetAllRecords().Any(r => new DateTime(r.Year, r.Month, r.Day) < todayDate);
+            int historicalAdded = 0;
 
-            // Phase 2: WinRT for today's partial-day data (more current than ESE)
-            var todayRecords = await GetUsageAsync(DateTime.Today, end, ct);
-            if (todayRecords.Count > 0)
-                Log($"Today WinRT query returned {todayRecords.Count} record(s)");
-
-            var allRecords = new List<WindowsNetworkUsageRecord>(eseRecords);
-
-            // Prefer today's WinRT result over ESE (WinRT has sub-day granularity)
-            foreach (var tr in todayRecords)
+            if (!hasHistorical)
             {
-                var existing = allRecords.FindIndex(r =>
-                    r.Date == tr.Date &&
-                    string.Equals(r.InterfaceType, tr.InterfaceType, StringComparison.OrdinalIgnoreCase));
-                if (existing >= 0)
-                    allRecords[existing] = tr;
-                else
-                    allRecords.Add(tr);
-            }
+                DateTime start = GetWindowsInstallDate().Date;
+                DateTime maxRetentionStart = todayDate.AddDays(-60);
+                if (start < maxRetentionStart)
+                    start = maxRetentionStart;
 
-            // If ESE returned nothing, fall back to WinRT for the full range
-            if (allRecords.Count == 0)
-            {
-                Log("ESE import returned nothing, falling back to WinRT full range");
-                allRecords = await GetUsageAsync(start, end, ct);
-            }
-
-            if (allRecords.Count == 0) return;
-
-            int added = 0;
-            foreach (var r in allRecords)
-            {
-                var parts = r.Date.Split('-');
-                if (parts.Length != 3) continue;
-                if (!int.TryParse(parts[0], out int day)) continue;
-                if (!int.TryParse(parts[1], out int month)) continue;
-                if (!int.TryParse(parts[2], out int year)) continue;
-
-                var existing = historyFile.Find(year, month, day, r.InterfaceType);
-                if (existing.HasValue)
+                if (start <= yesterday)
                 {
-                    long existingTotal = existing.Value.UpBytes + existing.Value.DownBytes;
-                    long srumTotal = r.UpBytes + r.DownBytes;
-                    if (srumTotal <= existingTotal) continue;
+                    historicalAdded = await ImportHistoricalRecordsAsync(historyFile, start, yesterday, todayDate, ct);
                 }
-
-                historyFile.SetDay(year, month, day, r.DownBytes, r.UpBytes, r.InterfaceType, "imported");
-                added++;
             }
 
-            if (added > 0)
+            bool todayUpdated = await ImportTodayBaselineAsync(historyFile, todayDate, ct);
+
+            if (historicalAdded > 0 || todayUpdated)
             {
                 historyFile.Save();
-                Log($"SRUM import: added/updated {added} records");
+                TrafficHistoryStore.NotifyHistoryUpdated();
             }
         }
         catch (Exception ex)
         {
-            LogError($"SRUM import failed: {ex.Message}");
+            LogError($"ImportAndSaveHistoryAsync failed: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Refreshes network usage strictly for the current date (<see cref="DateTime.Today"/>)
+    /// without querying long-range historical records or touching the SRUM ESE database.
+    /// </summary>
+    public static async Task RefreshTodayUsageAsync(TrafficHistoryFile historyFile, CancellationToken ct = default)
+    {
+        try
+        {
+            DateTime todayDate = DateTime.Today;
+            bool todayUpdated = await ImportTodayBaselineAsync(historyFile, todayDate, ct);
+            if (todayUpdated)
+            {
+                historyFile.Save();
+                TrafficHistoryStore.NotifyHistoryUpdated();
+            }
+        }
+        catch (Exception ex)
+        {
+            LogError($"RefreshTodayUsageAsync failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Imports network usage history for a user-specified date range, merging records
+    /// strictly when non-zero traffic is present.
+    /// </summary>
+    public static async Task<WindowsUsageImportResult> ImportDateRangeAsync(
+        TrafficHistoryFile historyFile, DateTime start, DateTime end, CancellationToken ct = default)
+    {
+        try
+        {
+            if (start.Date > end.Date)
+            {
+                return new WindowsUsageImportResult
+                {
+                    Success = false,
+                    ErrorMessage = "Start date must be before or equal to End date.",
+                };
+            }
+
+            DateTime maxAllowed = DateTime.Today;
+            if (end.Date > maxAllowed)
+                end = maxAllowed;
+
+            DateTime startDate = start.Date;
+            DateTime earliestAllowed = DateTime.Today.AddDays(-60);
+            if (startDate < earliestAllowed)
+                startDate = earliestAllowed;
+
+            DateTime endDate = end.Date;
+
+            var allRecords = await EseNetworkUsageReader.ReadUsageAsync(startDate, endDate, ct);
+            if (allRecords.Count == 0)
+            {
+                allRecords = await GetUsageAsync(startDate, endDate, ct);
+            }
+
+            var uniqueDays = new HashSet<string>();
+            long totalDown = 0;
+            long totalUp = 0;
+
+            foreach (var r in allRecords)
+            {
+                if (r.DownBytes <= 0 && r.UpBytes <= 0)
+                    continue;
+
+                if (MergeHistoricalRecord(historyFile, r, DateTime.Today))
+                {
+                    uniqueDays.Add(r.Date);
+                    totalDown += r.DownBytes;
+                    totalUp += r.UpBytes;
+                }
+            }
+
+            if (endDate >= DateTime.Today)
+            {
+                bool todayUpdated = await ImportTodayBaselineAsync(historyFile, DateTime.Today, ct);
+                if (todayUpdated)
+                    uniqueDays.Add(DateTime.Today.ToString("dd-MM-yyyy"));
+            }
+
+            int addedCount = uniqueDays.Count;
+
+            if (addedCount > 0)
+            {
+                historyFile.Save();
+                TrafficHistoryStore.NotifyHistoryUpdated();
+            }
+
+            string? infoMsg = null;
+            if (addedCount == 0)
+            {
+                infoMsg = allRecords.Count == 0
+                    ? "No network activity found in Windows for this range. (Note: Windows only retains the last 60 days of activity.)"
+                    : "Selected date range is already up to date in LocalTelemetry.";
+            }
+
+            return new WindowsUsageImportResult
+            {
+                Success = true,
+                DaysImported = addedCount,
+                DownBytes = totalDown,
+                UpBytes = totalUp,
+                Message = infoMsg,
+            };
+        }
+        catch (Exception ex)
+        {
+            LogError($"ImportDateRangeAsync failed: {ex.Message}");
+            return new WindowsUsageImportResult
+            {
+                Success = false,
+                ErrorMessage = ex.Message,
+            };
+        }
+    }
+
+    private static async Task<int> ImportHistoricalRecordsAsync(
+        TrafficHistoryFile historyFile, DateTime start, DateTime end, DateTime todayDate, CancellationToken ct)
+    {
+        var allRecords = await EseNetworkUsageReader.ReadUsageAsync(start, end, ct);
+        Diagnostics.Log.Debug($"Windows network history scan found {allRecords.Count} records ({start:dd-MM-yyyy} to {end:dd-MM-yyyy})");
+
+        if (allRecords.Count == 0)
+        {
+            Diagnostics.Log.Debug("System database returned no entries, falling back to Windows Network API");
+            allRecords = await GetUsageAsync(start, end, ct);
+        }
+
+        var uniqueDays = new HashSet<string>();
+        foreach (var r in allRecords)
+        {
+            if (r.DownBytes <= 0 && r.UpBytes <= 0) continue;
+            if (MergeHistoricalRecord(historyFile, r, todayDate))
+                uniqueDays.Add(r.Date);
+        }
+
+        int historicalAdded = uniqueDays.Count;
+
+        if (historicalAdded > 0)
+            Diagnostics.Log.Info($"Imported {historicalAdded} days of network usage history ({start:dd-MM-yyyy} to {end:dd-MM-yyyy})");
+        else
+            Diagnostics.Log.Info("Network usage history is up to date");
+
+        return historicalAdded;
+    }
+
+    private static bool MergeHistoricalRecord(TrafficHistoryFile historyFile, WindowsNetworkUsageRecord r, DateTime todayDate)
+    {
+        var parts = r.Date.Split('-');
+        if (parts.Length != 3 || !int.TryParse(parts[0], out int day) || !int.TryParse(parts[1], out int month) || !int.TryParse(parts[2], out int year))
+            return false;
+
+        if (year == todayDate.Year && month == todayDate.Month && day == todayDate.Day)
+            return false;
+
+        var existing = historyFile.Find(year, month, day, r.InterfaceType);
+        if (existing.HasValue)
+        {
+            long existingTotal = existing.Value.UpBytes + existing.Value.DownBytes;
+            long srumTotal = r.UpBytes + r.DownBytes;
+            if (srumTotal <= existingTotal) return false;
+        }
+
+        historyFile.SetDay(year, month, day, r.DownBytes, r.UpBytes, r.InterfaceType, "WindowsImport");
+        return true;
+    }
+
+    private static async Task<bool> ImportTodayBaselineAsync(TrafficHistoryFile historyFile, DateTime todayDate, CancellationToken ct)
+    {
+        bool todayUpdated = false;
+        try
+        {
+            DateTime now = DateTime.Now;
+            var todayRecords = await GetUsageAsync(todayDate, now, ct);
+            foreach (var tr in todayRecords)
+            {
+                if (tr.DownBytes <= 0 && tr.UpBytes <= 0) continue;
+
+                var curToday = historyFile.Find(todayDate.Year, todayDate.Month, todayDate.Day, tr.InterfaceType);
+                if (!curToday.HasValue)
+                {
+                    historyFile.SetDay(todayDate.Year, todayDate.Month, todayDate.Day, tr.DownBytes, tr.UpBytes, tr.InterfaceType, "WindowsImport");
+                    todayUpdated = true;
+                    Diagnostics.Log.Info($"Today's network usage baseline with download {Metrics.Format("net_down", new() { NetDownBps = tr.DownBytes }, false, false).Replace("/s", "")}, upload {Metrics.Format("net_up", new() { NetUpBps = tr.UpBytes }, false, false).Replace("/s", "")}");
+                }
+                else
+                {
+                    long existingTotal = curToday.Value.UpBytes + curToday.Value.DownBytes;
+                    long winTotal = tr.UpBytes + tr.DownBytes;
+                    if (winTotal > existingTotal)
+                    {
+                        long finalDown = Math.Max(curToday.Value.DownBytes, tr.DownBytes);
+                        long finalUp = Math.Max(curToday.Value.UpBytes, tr.UpBytes);
+                        historyFile.SetDay(todayDate.Year, todayDate.Month, todayDate.Day, finalDown, finalUp, tr.InterfaceType, "WindowsImport");
+                        todayUpdated = true;
+                        Diagnostics.Log.Info($"Updated today's network usage baseline with download {Metrics.Format("net_down", new() { NetDownBps = finalDown }, false, false).Replace("/s", "")}, upload {Metrics.Format("net_up", new() { NetUpBps = finalUp }, false, false).Replace("/s", "")}");
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"Today baseline query skipped ({ex.Message})");
+        }
+        return todayUpdated;
     }
 }
 
@@ -222,3 +482,22 @@ public sealed class WindowsNetworkUsageRecord
     /// <summary>Total bytes uploaded on this date.</summary>
     public long UpBytes { get; set; }
 }
+
+/// <summary>Result summary returned after a manual Windows usage import.</summary>
+[SupportedOSPlatform("windows")]
+public sealed class WindowsUsageImportResult
+{
+    /// <summary>Whether the import operation completed successfully.</summary>
+    public bool Success { get; set; }
+    /// <summary>Number of day records added or updated.</summary>
+    public int DaysImported { get; set; }
+    /// <summary>Total download bytes merged during this import.</summary>
+    public long DownBytes { get; set; }
+    /// <summary>Total upload bytes merged during this import.</summary>
+    public long UpBytes { get; set; }
+    /// <summary>Error message if the import failed.</summary>
+    public string? ErrorMessage { get; set; }
+    /// <summary>Informational feedback message for the user.</summary>
+    public string? Message { get; set; }
+}
+

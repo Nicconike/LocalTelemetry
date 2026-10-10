@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using LocalTelemetry.Core.Diagnostics;
 
@@ -34,7 +34,7 @@ public sealed class WddmGpuMonitor : IDisposable
     public WddmGpuMonitor()
     {
         try { Init(); }
-        catch (Exception ex) { Log.Error(ex.Message); }
+        catch (Exception ex) { Log.Error(ex, "Failed to initialize WDDM GPU monitor"); }
     }
 
     private void Init()
@@ -42,7 +42,7 @@ public sealed class WddmGpuMonitor : IDisposable
         int status = PdhOpenQuery(IntPtr.Zero, IntPtr.Zero, out _query);
         if (status != 0)
         {
-            Log.Error($"PdhOpenQuery failed (0x{status:X8})");
+            Log.Error($"Failed to open performance data query (status 0x{status:X8})");
             return;
         }
 
@@ -57,7 +57,7 @@ public sealed class WddmGpuMonitor : IDisposable
 
         if (status != 0)
         {
-            Log.Error($"PdhAddEnglishCounter failed (0x{status:X8})");
+            Log.Error($"Failed to add GPU engine counter (status 0x{status:X8})");
             PdhCloseQuery(_query);
             _query = IntPtr.Zero;
             return;
@@ -67,14 +67,55 @@ public sealed class WddmGpuMonitor : IDisposable
         status = PdhCollectQueryData(_query);
         if (status != 0)
         {
-            Log.Error($"initial PdhCollectQueryData failed (0x{status:X8})");
+            Log.Error($"Initial collection of performance data failed (status 0x{status:X8})");
             PdhCloseQuery(_query);
             _query = IntPtr.Zero;
             return;
         }
 
         IsAvailable = true;
-        Log.Info("GPU Engine counter initialised (PDH wildcard)");
+        Log.Debug("GPU engine counter initialized successfully");
+    }
+
+    private int _consecutiveErrors;
+    private DateTime _lastResetTime = DateTime.MinValue;
+    private static readonly TimeSpan ResetCooldown = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// Closes the current PDH query and reinitializes GPU Engine counters.
+    /// Safe to call following display driver restarts or resolution changes.
+    /// </summary>
+    public void Reset()
+    {
+        if (_disposed) return;
+        IsAvailable = false;
+        _primed = false;
+        _consecutiveErrors = 0;
+
+        if (_query != IntPtr.Zero)
+        {
+            PdhCloseQuery(_query);
+            _query = IntPtr.Zero;
+            _counter = IntPtr.Zero;
+        }
+
+        if (_buffer != IntPtr.Zero)
+        {
+            Marshal.FreeHGlobal(_buffer);
+            _buffer = IntPtr.Zero;
+            _bufferCapacity = 0;
+        }
+
+        try
+        {
+            Init();
+            if (IsAvailable)
+                Log.Debug("WDDM GPU monitor successfully re-initialized after reset");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to reset WDDM GPU monitor");
+        }
     }
 
     // Query
@@ -89,7 +130,17 @@ public sealed class WddmGpuMonitor : IDisposable
         try
         {
             int status = PdhCollectQueryData(_query);
-            if (status != 0) return 0f;
+            if (status != 0)
+            {
+                _consecutiveErrors++;
+                if (_consecutiveErrors >= 5 && DateTime.UtcNow - _lastResetTime >= ResetCooldown)
+                {
+                    _lastResetTime = DateTime.UtcNow;
+                    Reset();
+                }
+                return 0f;
+            }
+            _consecutiveErrors = 0;
 
             // Second collection required for a valid rate delta
             if (!_primed) { _primed = true; return 0f; }
@@ -145,7 +196,7 @@ public sealed class WddmGpuMonitor : IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error($"query failed: {ex.Message}");
+            Log.Error(ex, "Failed to query WDDM GPU utilization");
             return 0f;
         }
     }

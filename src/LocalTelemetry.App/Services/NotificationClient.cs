@@ -1,4 +1,4 @@
-﻿using System.IO.Pipes;
+using System.IO.Pipes;
 using System.Runtime.Versioning;
 using System.Text;
 using System.Text.Json;
@@ -11,12 +11,20 @@ namespace LocalTelemetry.App.Services;
 /// non-elevated <c>LocalTelemetry.Notifier</c> helper process.
 /// </summary>
 [SupportedOSPlatform("windows")]
-public sealed class NotificationClient : IDisposable
+public class NotificationClient : IDisposable
 {
-    private const string PipeName = "LocalTelemetryNotifier";
-    private const int ConnectTimeoutMs = 5000;
+    private readonly string _pipeName;
+    private readonly int _connectTimeoutMs;
     private const int MaxRetries = 3;
     private readonly SemaphoreSlim _lock = new(1, 1);
+
+    public NotificationClient() : this("LocalTelemetryNotifier", 5000) { }
+
+    internal NotificationClient(string pipeName, int connectTimeoutMs)
+    {
+        _pipeName = pipeName;
+        _connectTimeoutMs = connectTimeoutMs;
+    }
 
     // Public API
     /// <summary>
@@ -26,7 +34,7 @@ public sealed class NotificationClient : IDisposable
     /// <param name="body">Toast body text.</param>
     /// <param name="tag">Optional tag for notification grouping/deduplication.</param>
     /// <param name="cancellationToken">Cancellation token for the pipe operation.</param>
-    public async Task SendToastAsync(string title, string body, string? tag = null, CancellationToken cancellationToken = default)
+    public virtual async Task SendToastAsync(string title, string body, string? tag = null, CancellationToken cancellationToken = default)
     {
         var msg = new NotificationMessage
         {
@@ -36,30 +44,31 @@ public sealed class NotificationClient : IDisposable
             Tag = tag
         };
 
-        await SendAsync(msg, cancellationToken);
+        await SendAsync(msg, cancellationToken: cancellationToken);
     }
 
     /// <summary>
     /// Sends a shutdown command to the notifier process.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token for the pipe operation.</param>
-    public async Task SendShutdownAsync(CancellationToken cancellationToken = default)
+    public virtual async Task SendShutdownAsync(CancellationToken cancellationToken = default)
     {
-        await SendAsync(new NotificationMessage { Action = "Shutdown" }, cancellationToken);
+        await SendAsync(new NotificationMessage { Action = "Shutdown" }, timeoutMs: 500, maxRetries: 1, cancellationToken: cancellationToken);
     }
 
     // Pipe Communication
-    private async Task SendAsync(NotificationMessage msg, CancellationToken cancellationToken = default)
+    private async Task SendAsync(NotificationMessage msg, int? timeoutMs = null, int maxRetries = MaxRetries, CancellationToken cancellationToken = default)
     {
         await _lock.WaitAsync(cancellationToken);
+        int timeout = timeoutMs ?? _connectTimeoutMs;
         try
         {
-            for (int attempt = 0; attempt < MaxRetries; attempt++)
+            for (int attempt = 0; attempt < maxRetries; attempt++)
             {
-                using var pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.Out);
+                using var pipe = new NamedPipeClientStream(".", _pipeName, PipeDirection.Out, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
                 try
                 {
-                    await pipe.ConnectAsync(ConnectTimeoutMs, cancellationToken);
+                    await pipe.ConnectAsync(timeout, cancellationToken);
 
                     string json = JsonSerializer.Serialize(msg) + "\n";
                     byte[] bytes = Encoding.UTF8.GetBytes(json);
@@ -71,12 +80,12 @@ public sealed class NotificationClient : IDisposable
                 {
                     if (attempt == 0)
                     {
-                        Log.Error("Notifier pipe: connection timeout, retrying...");
+                        Log.Warn("Notification service connection timed out; retrying...");
                         await Task.Delay(1000, cancellationToken);
                     }
                     else
                     {
-                        Log.Error("Notifier pipe: connection timeout (notifier not running?)");
+                        Log.Error("Failed to connect to notification service (service may not be running)");
                         return;
                     }
                 }
@@ -86,7 +95,8 @@ public sealed class NotificationClient : IDisposable
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex, "Notifier pipe: failed");
+                    if (msg.Action == "Shutdown" && ex is System.IO.IOException) return;
+                    Log.Error(ex, "Failed to transmit message to notification service");
                     return;
                 }
             }
@@ -101,7 +111,16 @@ public sealed class NotificationClient : IDisposable
     /// <summary>Releases the pipe connection semaphore.</summary>
     public void Dispose()
     {
-        _lock.Dispose();
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _lock.Dispose();
+        }
     }
 
     // DTOs

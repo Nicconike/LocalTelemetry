@@ -1,14 +1,15 @@
 <script>
     let {
-        value = $bindable(""),
+        value = $bindable(),
         options = [],
         label = "",
         id = "sel-" + Math.random().toString(36).slice(2),
         onchange,
+        inline = false,
     } = $props();
 </script>
 
-<div class="sel-wrap">
+<div class="sel-wrap" class:inline>
     {#if label}
         <label for={id} class="lbl">{label}</label>
     {/if}
@@ -35,6 +36,19 @@
         display: flex;
         flex-direction: column;
         gap: var(--space-1);
+    }
+    .sel-wrap.inline {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+    }
+    .sel-wrap.inline .lbl {
+        color: var(--color-text);
+    }
+    .sel-wrap.inline .sel-outer {
+        width: auto;
+        max-width: 100%;
     }
     .lbl {
         font-size: var(--text-sm);

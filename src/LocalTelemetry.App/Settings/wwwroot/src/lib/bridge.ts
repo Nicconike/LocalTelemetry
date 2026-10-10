@@ -20,7 +20,7 @@ export function onMessage(type: BridgeEventType, handler: (payload: unknown) => 
             const data = event.data;
             if (data?.type === type) handler(data.payload ?? data);
         } catch (err) {
-            console.warn('[LT] bridge.js: ignoring malformed message', err);
+            console.warn('Ignoring malformed bridge message', err);
         }
     }
 
@@ -54,5 +54,8 @@ export function requestHistoryData(year: number, month: number): void { post('ge
 export function requestHistoryMonths(): void { post('getHistoryMonths'); }
 
 export function importDatContent(content: string): void { post('importDat', { content }); }
+export function importWindowsUsage(startDate: string, endDate: string): void { post('importWindowsUsage', { startDate, endDate }); }
 
+export function openFolder(target: 'app' | 'data'): void { post('openFolder', { target }); }
 export function openUrl(url: string): void { post('openUrl', { url }); }
+export function checkForUpdates(force = true): void { post('checkForUpdates', { force }); }

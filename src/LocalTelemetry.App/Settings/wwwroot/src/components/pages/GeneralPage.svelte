@@ -25,21 +25,19 @@
                 label="Start with Windows"
             />
             <Toggle
-                bind:checked={$settings.startMinimized}
-                label="Start minimized"
-            />
-            <Toggle
-                bind:checked={$settings.minimizeToTray}
-                label="Minimize to Tray on close"
+                bind:checked={$settings.showSystemTrayIcon}
+                label="Show System Tray Icon"
+                disabled={!$settings.overlay?.visible}
+                description={!$settings.overlay?.visible ? "Cannot disable: Overlay is hidden (at least one entry point must remain enabled)" : ""}
             />
         </SectionCard>
 
         <SectionCard
             title="Update Interval"
-            description="How often metrics are refreshed."
+            description="How often metrics are refreshed"
         >
             <Select
-                label="Polling interval"
+                label="Polling Interval"
                 bind:value={$settings.monitoring.intervalMs}
                 options={intervalOptions}
             />
@@ -48,7 +46,7 @@
         <SectionCard title="Units">
             <Toggle
                 bind:checked={$settings.monitoring.useFahrenheit}
-                label="Show temperatures in °F"
+                label="Show Temperatures in °F"
             />
         </SectionCard>
     </div>

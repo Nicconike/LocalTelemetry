@@ -11,51 +11,69 @@ permissions:
 
 jobs:
     commitlint:
-        name: CommitLint
+        name: Validate Commit Messages
         runs-on: ubuntu-latest
         steps:
-            - name: Checkout Code
+            - name: Checkout Repository
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   fetch-depth: 0
 
-            - name: Install commitlint config & plugin
+            - name: Install Commitlint Dependencies
               run: npm install --no-save --no-package-lock --ignore-scripts commitlint-plugin-function-rules@4.0.1 @commitlint/config-conventional@19.8.0
 
-            - name: Verify Conventional Commit Messages
+            - name: Verify Conventional Commits
               uses: wagoid/commitlint-github-action@b948419dd99f3fd78a6548d48f94e3df7f6bf3ed # v6.2.1
               with:
                   configFile: commitlint.config.mjs
 
-    ci:
-        name: CI
-        needs: commitlint
+    test-frontend:
+        name: Frontend Unit Tests
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout Repository
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+            - name: Setup Bun Runtime
+              uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+
+            - name: Execute Vitest Suite
+              run: |
+                  bun install --frozen-lockfile --ignore-scripts
+                  bun run test --reporter=default --reporter=junit --outputFile=test-report.junit.xml
+              working-directory: tests/LocalTelemetry.App.Tests/Settings/wwwroot
+
+            - name: Upload Test Results
+              if: always()
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: frontend-test-results
+                  path: tests/LocalTelemetry.App.Tests/Settings/wwwroot/test-report.junit.xml
+                  retention-days: 14
+
+    test-windows:
+        name: Build & Test .NET Solution
+        needs: [commitlint]
         runs-on: windows-latest
         env:
             DOTNET_CLI_TELEMETRY_OPTOUT: "1"
             DOTNET_NOLOGO: "true"
         steps:
-            - name: Checkout Code
+            - name: Checkout Repository
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   fetch-depth: 0
 
-            - name: Setup Node & Bun
+            - name: Setup Bun Runtime
               uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
 
-            - name: Install & Run Frontend Unit Tests (Vitest)
+            - name: Build Svelte Frontend Assets
               run: |
-                  bun install
-                  bun x vitest run --reporter=default --reporter=junit --outputFile=test-report.junit.xml
-              working-directory: tests/LocalTelemetry.App.Tests/Settings/wwwroot
-
-            - name: Install & Build Svelte SPA Frontend
-              run: |
-                  bun install
+                  bun install --frozen-lockfile --ignore-scripts
                   bun run build
               working-directory: src/LocalTelemetry.App/Settings/wwwroot
 
-            - name: Cache .NET Packages
+            - name: Cache NuGet Packages
               uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
               with:
                   path: ~/.nuget/packages
@@ -70,16 +88,16 @@ jobs:
             - name: Verify C# Code Formatting
               run: dotnet format --verify-no-changes
 
-            - name: Build C# Solution
+            - name: Build .NET Solution
               run: dotnet build --configuration Debug
 
-            - name: Run Core Unit Tests with Coverage & Test Results
+            - name: Run Core Unit Tests with Coverage
               run: dotnet test tests/LocalTelemetry.Core.Tests/LocalTelemetry.Core.Tests.csproj --configuration Debug --no-build --verbosity minimal --collect:"XPlat Code Coverage" --logger "junit;LogFileName=junit.xml" --results-directory TestResults/core -p:Platform=x64
 
-            - name: Run Notifier Unit Tests with Coverage & Test Results
+            - name: Run Notifier Unit Tests with Coverage
               run: dotnet test tests/LocalTelemetry.Notifier.Tests/LocalTelemetry.Notifier.Tests.csproj --configuration Debug --no-build --verbosity minimal --collect:"XPlat Code Coverage" --logger "junit;LogFileName=junit.xml" --results-directory TestResults/notifier -p:Platform=x64
 
-            - name: Run App Unit Tests with Coverage & Test Results
+            - name: Run App Unit Tests with Coverage
               run: dotnet test tests/LocalTelemetry.App.Tests/LocalTelemetry.App.Tests.csproj --configuration Debug --no-build --verbosity minimal --collect:"XPlat Code Coverage" --logger "junit;LogFileName=junit.xml" --results-directory TestResults/app -p:Platform=x64
 
             - name: Upload Core Coverage to Codecov
@@ -109,7 +127,7 @@ jobs:
                   flags: app
                   disable_search: true
 
-            - name: Upload test results to Codecov
+            - name: Upload Test Results to Codecov
               if: ${{ !cancelled() }}
               uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
               with:
@@ -120,14 +138,11 @@ jobs:
                       TestResults/core/junit.xml
                       TestResults/notifier/junit.xml
                       TestResults/app/junit.xml
-                      tests/LocalTelemetry.App.Tests/Settings/wwwroot/test-report.junit.xml
 
             - name: Upload Test Results & Coverage Artifacts
               if: always()
               uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:
-                  name: test-results
-                  path: |
-                      **/TestResults/
-                      tests/LocalTelemetry.App.Tests/Settings/wwwroot/test-report.junit.xml
-                  retention-days: 7
+                  name: dotnet-test-results
+                  path: TestResults/
+                  retention-days: 14

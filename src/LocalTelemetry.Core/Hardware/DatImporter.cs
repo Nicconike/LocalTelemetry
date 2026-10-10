@@ -10,7 +10,7 @@ public static class DatImporter
     /// <returns>Number of days successfully imported.</returns>
     public static int Import(string content)
     {
-        int imported = 0;
+        var uniqueDays = new HashSet<(int year, int month, int day)>();
         using var reader = new StringReader(content);
 
         string? header = reader.ReadLine();
@@ -45,9 +45,9 @@ public static class DatImporter
             long upBytes = upKB * 1024;
             long downBytes = downKB * 1024;
 
-            TrafficHistoryStore.SetDay(year, month, day, downBytes, upBytes, "import", "import");
-            imported++;
+            TrafficHistoryStore.SetDay(year, month, day, downBytes, upBytes, "Dat File", "DatImport");
+            uniqueDays.Add((year, month, day));
         }
-        return imported;
+        return uniqueDays.Count;
     }
 }

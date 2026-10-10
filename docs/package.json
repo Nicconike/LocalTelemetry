@@ -1,18 +1,34 @@
 {
     "name": "localtelemetry-docs",
-    "version": "1.0.0-beta.1",
+    "version": "1.0.0-rc.1",
     "private": true,
     "type": "module",
     "scripts": {
-        "docs:dev": "vitepress dev",
-        "docs:build": "vitepress build",
-        "docs:preview": "vitepress preview"
+        "docs:dev": "node scripts/build-versions.mjs && vitepress dev",
+        "docs:build": "node scripts/build-versions.mjs && vitepress build",
+        "docs:preview": "vitepress preview",
+        "docs:snapshot": "node scripts/snapshot-docs.mjs"
     },
     "devDependencies": {
-        "@types/node": "^22.13.0",
-        "mermaid": "^11.16.0",
-        "typescript": "^5.7.3",
+        "@iconify-json/lucide": "^1.2.134",
+        "@types/node": "^26.2.0",
+        "dayjs": "^1.11.13",
+        "debug": "^4.4.0",
+        "fastdom": "^1.0.12",
+        "mermaid": "^11.17.0",
+        "typescript": "^7.0.2",
         "vitepress": "^1.6.4",
         "vitepress-plugin-mermaid": "^2.0.17"
+    },
+    "overrides": {
+        "nanoid": "^3.3.18",
+        "dompurify": "^3.4.13",
+        "esbuild": "^0.25.0",
+        "cross-spawn": "^7.0.6",
+        "body-parser": "^1.20.3",
+        "fast-xml-parser": "^4.5.1",
+        "cookie": "^0.7.0",
+        "send": "^0.19.0",
+        "express": "^4.20.0"
     }
 }

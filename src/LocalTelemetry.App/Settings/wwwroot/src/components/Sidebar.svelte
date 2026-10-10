@@ -2,47 +2,32 @@
     import { createEventDispatcher } from "svelte";
     import { activePage } from "../lib/store.ts";
 
+    import {
+        Settings,
+        PictureInPicture,
+        HeartPulse,
+        LayoutGrid,
+        Wifi,
+        ArrowUpDown,
+        BellRing,
+        Laptop,
+        SwatchBook,
+        Info,
+    } from "lucide-svelte";
+
     const dispatch = createEventDispatcher();
 
     const pages = [
-        {
-            id: "general",
-            label: "General",
-            icon: "M12 1a2 2 0 0 0-2 2v.3a6.9 6.9 0 0 0-2.4 1l-.2-.2a2 2 0 0 0-2.8.8l-.7 1.1a2 2 0 0 0 .8 2.7l.2.2a7 7 0 0 0 0 2l-.2.2a2 2 0 0 0-.8 2.7l.7 1.2a2 2 0 0 0 2.8.8l.2-.2a6.9 6.9 0 0 0 2.4 1v.3a2 2 0 0 0 4 0v-.3a6.9 6.9 0 0 0 2.4-1l.2.2a2 2 0 0 0 2.8-.8l.7-1.2a2 2 0 0 0-.8-2.7l-.2-.2a7 7 0 0 0 0-2l.2-.2a2 2 0 0 0 .8-2.7l-.7-1.1a2 2 0 0 0-2.8-.8l-.2.2a6.9 6.9 0 0 0-2.4-1V3a2 2 0 0 0-2-2zm0 7a4 4 0 1 1 0 8 4 4 0 0 1 0-8z",
-        },
-        {
-            id: "overlay",
-            label: "Overlay",
-            icon: "M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5",
-        },
-        {
-            id: "monitoring",
-            label: "Monitoring",
-            icon: "M18 20V10M12 20V4M6 20v-6",
-        },
-        {
-            id: "layout",
-            label: "Layout",
-            icon: "M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z",
-        },
-        { id: "network", label: "Network", icon: "M22 12h-4l-3 9-4-18-3 9H2" },
-        { id: "traffic", label: "Traffic", icon: "M23 6l-8 8-4-4-8 8" },
-        {
-            id: "alerts",
-            label: "Alerts",
-            icon: "M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01",
-        },
-        { id: "system", label: "System", icon: "M2 3h20v14H2zM8 21h8M12 17v4" },
-        {
-            id: "appearance",
-            label: "Appearance",
-            icon: "M12 1v2M12 21v2M1 12h2M21 12h2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10z",
-        },
-        {
-            id: "about",
-            label: "About",
-            icon: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 14h-2v-2h2v2zm0-4h-2V7h2v5z",
-        },
+        { id: "general", label: "General", component: Settings },
+        { id: "overlay", label: "Overlay", component: PictureInPicture },
+        { id: "monitoring", label: "Monitoring", component: HeartPulse },
+        { id: "layout", label: "Layout", component: LayoutGrid },
+        { id: "network", label: "Network", component: Wifi },
+        { id: "traffic", label: "Traffic", component: ArrowUpDown },
+        { id: "alerts", label: "Alerts", component: BellRing },
+        { id: "system", label: "System", component: Laptop },
+        { id: "appearance", label: "Appearance", component: SwatchBook },
+        { id: "about", label: "About", component: Info },
     ];
 
     function navigate(pageId) {
@@ -60,22 +45,12 @@
                     onclick={() => navigate(page.id)}
                     aria-current={$activePage === page.id ? "page" : undefined}
                 >
-                    <svg
+                    <svelte:component
+                        this={page.component}
                         class="nav-icon"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        aria-hidden="true"
-                    >
-                        <path
-                            d={page.icon}
-                            stroke="currentColor"
-                            stroke-width="1.8"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                        />
-                    </svg>
+                        size={16}
+                        strokeWidth={1.8}
+                    />
                     {page.label}
                 </button>
             </li>
@@ -123,17 +98,21 @@
     }
     .nav-item.active {
         background: var(--color-primary-hl);
-        color: var(--color-primary);
+        color: var(--color-text);
     }
-    .nav-item .nav-icon {
+
+    /* Make all icons use the theme brand color dynamically */
+    .nav-item :global(.nav-icon) {
         flex-shrink: 0;
-        opacity: 0.5;
-        transition: opacity var(--transition);
+        color: var(--color-brand, var(--color-primary, #00e5ff));
+        opacity: 0.55;
+        transition: opacity var(--transition), color var(--transition);
     }
-    .nav-item:hover .nav-icon {
-        opacity: 0.75;
+    .nav-item:hover :global(.nav-icon) {
+        opacity: 0.85;
     }
-    .nav-item.active .nav-icon {
+    .nav-item.active :global(.nav-icon) {
+        color: var(--color-brand, var(--color-primary, #00e5ff));
         opacity: 1;
     }
 </style>

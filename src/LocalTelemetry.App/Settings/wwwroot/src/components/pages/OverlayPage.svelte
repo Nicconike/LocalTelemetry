@@ -1,6 +1,6 @@
 <script>
     import { settings } from "../../lib/store.ts";
-    import { saveSettings } from "../../lib/bridge.ts";
+
     import Toggle from "../ui/Toggle.svelte";
     import Slider from "../ui/Slider.svelte";
     import Select from "../ui/Select.svelte";
@@ -30,7 +30,8 @@
             <Toggle
                 bind:checked={$settings.overlay.visible}
                 label="Show Overlay"
-                onchange={apply}
+                disabled={!$settings.showSystemTrayIcon}
+                description={!$settings.showSystemTrayIcon ? "Cannot disable: System Tray Icon is hidden (at least one entry point must remain enabled)" : ""}
             />
             <Select
                 label="Double-click action"
@@ -52,7 +53,6 @@
                 max={200}
                 step={4}
                 unit="px"
-                onchange={apply}
             />
         </SectionCard>
 
@@ -64,7 +64,6 @@
                 max={100}
                 step={5}
                 unit="%"
-                onchange={apply}
             />
             <Slider
                 label="Scale"
@@ -73,7 +72,6 @@
                 max={200}
                 step={5}
                 unit="%"
-                onchange={apply}
             />
         </SectionCard>
     </div>

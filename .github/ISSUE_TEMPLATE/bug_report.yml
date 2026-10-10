@@ -43,8 +43,8 @@ body:
       id: version
       attributes:
           label: LocalTelemetry Version
-          description: "The version you are using (e.g., v1.0.0-beta.1). Check Settings > About."
-          placeholder: v1.0.0-beta.1
+          description: "The version you are using (e.g., v1.0.0). Check Settings > About."
+          placeholder: v1.0.0
       validations:
           required: true
 

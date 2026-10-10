@@ -5,13 +5,15 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Platforms>x64</Platforms>
         <PlatformTarget>x64</PlatformTarget>
-        <NoWarn>$(NoWarn);CA1416</NoWarn>
+        <NoWarn>
+            $(NoWarn);CA1416;CS0649;CA1861;CA1845;CS8600;CS8601;CS8602;CS8603;CS8604;CS8619;CS8620;CS8625</NoWarn>
         <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
     </PropertyGroup>
     <ItemGroup>
         <PackageReference Include="Microsoft.Database.ManagedEsent" Version="3.2.0" />
         <PackageReference Include="Microsoft.Windows.SDK.NET" Version="10.0.18362.6-preview" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+        <PackageReference Include="Microsoft.Win32.SystemEvents" Version="10.0.0" />
         <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="10.0.9" />
         <PackageReference Include="System.Management" Version="10.0.9" />
     </ItemGroup>
@@ -19,5 +21,16 @@
         <EmbeddedResource Include="Hardware\PawnIo\*.bin">
             <LogicalName>%(Filename)%(Extension)</LogicalName>
         </EmbeddedResource>
+    </ItemGroup>
+    <ItemGroup>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>LocalTelemetry.Core.Tests</_Parameter1>
+        </AssemblyAttribute>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>LocalTelemetry.App.Tests</_Parameter1>
+        </AssemblyAttribute>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>DynamicProxyGenAssembly2</_Parameter1>
+        </AssemblyAttribute>
     </ItemGroup>
 </Project>

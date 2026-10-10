@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Microsoft.Win32.SafeHandles;
 
@@ -35,7 +35,7 @@ internal static class NativeMethods
 
     // Structs
     [StructLayout(LayoutKind.Sequential)]
-    internal struct SP_DEVINFO_DATA
+    internal struct SpDevinfoData
     {
         public uint cbSize;
         public Guid ClassGuid;
@@ -44,7 +44,7 @@ internal static class NativeMethods
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct MEMORYSTATUSEX
+    internal struct MemoryStatusEx
     {
         public uint dwLength;
         public uint dwMemoryLoad;
@@ -58,7 +58,7 @@ internal static class NativeMethods
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct SYSTEM_POWER_STATUS
+    internal struct SystemPowerStatus
     {
         public byte ACLineStatus; // 1=on line, 0=off line, 255=unknown
         public byte BatteryFlag;  // 128=no battery, 1=high, 2=low, 4=critical, 8=charging
@@ -69,7 +69,7 @@ internal static class NativeMethods
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct PROCESSOR_POWER_INFORMATION
+    internal struct ProcessorPowerInformation
     {
         public uint Number;
         public uint MaxMhz;
@@ -80,24 +80,24 @@ internal static class NativeMethods
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct LUID
+    internal struct Luid
     {
         public int LowPart;
         public int HighPart;
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct LUID_AND_ATTRIBUTES
+    internal struct LuidAndAttributes
     {
-        public LUID Luid;
+        public Luid Luid;
         public uint Attributes;
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct TOKEN_PRIVILEGES
+    internal struct TokenPrivileges
     {
         public int PrivilegeCount;
-        public LUID_AND_ATTRIBUTES Privileges;
+        public LuidAndAttributes Privileges;
     }
 
     // SetupAPI
@@ -108,12 +108,12 @@ internal static class NativeMethods
     [DllImport("setupapi.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool SetupDiEnumDeviceInfo(
-        IntPtr deviceInfoSet, uint memberIndex, ref SP_DEVINFO_DATA deviceInfoData);
+        IntPtr deviceInfoSet, uint memberIndex, ref SpDevinfoData deviceInfoData);
 
     [DllImport("setupapi.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool SetupDiGetDeviceRegistryProperty(
-        IntPtr deviceInfoSet, ref SP_DEVINFO_DATA deviceInfoData, uint property,
+        IntPtr deviceInfoSet, ref SpDevinfoData deviceInfoData, uint property,
         out uint propertyRegDataType, IntPtr propertyBuffer, uint propertyBufferSize,
         out uint requiredSize);
 
@@ -124,7 +124,7 @@ internal static class NativeMethods
     // Kernel32
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    internal static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX lpBuffer);
+    internal static extern bool GlobalMemoryStatusEx(ref MemoryStatusEx lpBuffer);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     internal static extern uint GetSystemFirmwareTable(
@@ -156,19 +156,19 @@ internal static class NativeMethods
     [DllImport("kernel32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool GetSystemPowerStatus(
-        out SYSTEM_POWER_STATUS lpSystemPowerStatus);
+        out SystemPowerStatus lpSystemPowerStatus);
 
-    internal enum FIRMWARE_TYPE
+    internal enum FirmwareType
     {
-        FirmwareTypeUnknown,
-        FirmwareTypeBios,
-        FirmwareTypeUefi,
-        FirmwareTypeMax
+        Unknown,
+        Bios,
+        Uefi,
+        Max
     }
 
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    internal static extern bool GetFirmwareType(out FIRMWARE_TYPE firmwareType);
+    internal static extern bool GetFirmwareType(out FirmwareType firmwareType);
 
     // PowrProf
     [DllImport("powrprof.dll")]
@@ -192,12 +192,20 @@ internal static class NativeMethods
     [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Auto)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool LookupPrivilegeValue(
-        string? lpSystemName, string lpName, out LUID lpLuid);
+        string? lpSystemName, string lpName, out Luid lpLuid);
 
     [DllImport("advapi32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool AdjustTokenPrivileges(
         SafeFileHandle tokenHandle, bool disableAllPrivileges,
-        ref TOKEN_PRIVILEGES newState, uint bufferLength,
+        ref TokenPrivileges newState, uint bufferLength,
         IntPtr previousState, IntPtr returnLength);
+
+    internal const int SM_CXVIRTUALSCREEN = 78;
+    internal const int SM_CYVIRTUALSCREEN = 79;
+    internal const int SM_CMONITORS = 80;
+
+    // User32
+    [DllImport("user32.dll")]
+    internal static extern int GetSystemMetrics(int nIndex);
 }

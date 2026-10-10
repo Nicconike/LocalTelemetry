@@ -23,7 +23,7 @@ public sealed class PawnIoDevice : IPawnIoTransport
     private SafeFileHandle? _handle;
     private bool _disposed;
 
-    private PawnIoDevice(SafeFileHandle handle)
+    internal PawnIoDevice(SafeFileHandle handle)
     {
         _handle = handle;
     }
@@ -48,7 +48,7 @@ public sealed class PawnIoDevice : IPawnIoTransport
         if (handle.IsInvalid)
         {
             int err = Marshal.GetLastWin32Error();
-            Log.Info($"PawnIo driver not present (Win32 error {err})");
+            Log.Debug($"PawnIo driver not present (Win32 error {err})");
             handle.Dispose();
             return null;
         }
@@ -71,16 +71,16 @@ public sealed class PawnIoDevice : IPawnIoTransport
                 if (!NativeMethods.LookupPrivilegeValue(null, "SeBackupPrivilege", out var luid))
                     return;
 
-                var tp = new NativeMethods.TOKEN_PRIVILEGES
+                var tp = new NativeMethods.TokenPrivileges
                 {
                     PrivilegeCount = 1,
-                    Privileges = new NativeMethods.LUID_AND_ATTRIBUTES
+                    Privileges = new NativeMethods.LuidAndAttributes
                     {
                         Luid = luid,
                         Attributes = NativeMethods.SE_PRIVILEGE_ENABLED,
                     }
                 };
-                int len = Marshal.SizeOf<NativeMethods.TOKEN_PRIVILEGES>();
+                int len = Marshal.SizeOf<NativeMethods.TokenPrivileges>();
                 if (NativeMethods.AdjustTokenPrivileges(token, false, ref tp, (uint)len, IntPtr.Zero, IntPtr.Zero)
                     && Marshal.GetLastWin32Error() == 0)
                 {
@@ -102,7 +102,7 @@ public sealed class PawnIoDevice : IPawnIoTransport
         bool ok = NativeMethods.DeviceIoControl(_handle, IOCTL_PIO_LOAD_BINARY,
             blob, (uint)blob.Length, null, 0, out _, IntPtr.Zero);
         if (!ok)
-            Log.Error($"LoadModule failed: len={blob.Length} error={Marshal.GetLastWin32Error()}");
+            Log.Error($"Failed to load PawnIO kernel module ({blob.Length} bytes, Win32 error {Marshal.GetLastWin32Error()})");
 
         return ok;
     }
@@ -123,7 +123,7 @@ public sealed class PawnIoDevice : IPawnIoTransport
         byte[] nameBytes = Encoding.ASCII.GetBytes(name ?? "");
         int nameLen = Math.Min(nameBytes.Length, 31);
         Buffer.BlockCopy(nameBytes, 0, inBuffer, 0, nameLen);
-        if (nameLen < 32) inBuffer[nameLen] = 0; // null-terminate for kernel driver
+        if (nameLen < 32) inBuffer[nameLen] = 0;
 
         if (input is not null)
             Buffer.BlockCopy(input, 0, inBuffer, 32, inCount * 8);
@@ -137,7 +137,17 @@ public sealed class PawnIoDevice : IPawnIoTransport
                     outBuffer, (uint)outBufSize,
                     out _, IntPtr.Zero))
             {
-                Log.Error($"Execute failed: name='{name}' error={Marshal.GetLastWin32Error()}");
+                int err = Marshal.GetLastWin32Error();
+                if (err is 6 or 1167) // ERROR_INVALID_HANDLE or ERROR_DEVICE_NOT_CONNECTED
+                {
+                    Log.Warn($"PawnIo driver disconnected (Win32 error {err})");
+                    _disposed = true;
+                    _handle.Dispose();
+                }
+                else
+                {
+                    Log.Error($"Failed to execute IOCTL command '{name}' (Win32 error {err})");
+                }
                 return [];
             }
 
@@ -190,43 +200,88 @@ public sealed class PawnIoDevice : IPawnIoTransport
     /// Cleans up any stale installation first.
     /// </summary>
     /// <returns><see langword="true"/> if installation succeeded or already installed.</returns>
+    /// <summary>
+    /// Test seam: replaces <see cref="Process.Start"/> for all elevated launches
+    /// (installer, <c>sc.exe</c>). Returns the process exit code; <see langword="null"/>
+    /// means the process could not be started.
+    /// </summary>
+    internal static Func<ProcessStartInfo, int?>? ProcessRunner { get; set; }
+
+    /// <summary>Test seam: replaces the HTTPS download of the PawnIO setup executable.</summary>
+    internal static Func<byte[]>? InstallerDownloader { get; set; }
+
+    /// <summary>
+    /// Test seam: replaces the destructive stale-install cleanup
+    /// (<c>sc.exe stop/delete</c>, HKLM uninstall keys, Program Files removal).
+    /// </summary>
+    internal static Action? CleanupHandler { get; set; }
+
+    /// <summary>
+    /// Downloads and runs the PawnIO setup installer with silent flags.
+    /// Cleans up any stale installation first.
+    /// </summary>
+    /// <returns><see langword="true"/> if installation succeeded or already installed.</returns>
     public static bool TryInstall()
     {
         CleanupStaleInstall();
 
-        Log.Info("Downloading installer...");
         try
         {
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-            var setupBytes = client.GetByteArrayAsync(
-                "https://github.com/namazso/PawnIO.Setup/releases/latest/download/PawnIO_setup.exe")
-                .GetAwaiter().GetResult();
+            string? installerPath = null;
+            bool isTemporaryFile = false;
 
-            string tmpPath = Path.Combine(Path.GetTempPath(), "PawnIO_setup.exe");
-            File.WriteAllBytes(tmpPath, setupBytes);
+            string localPath = Path.Combine(AppContext.BaseDirectory, "PawnIO_setup.exe");
+            if (InstallerDownloader is null && File.Exists(localPath))
+            {
+                Log.Info("Using bundled PawnIO installer");
+                installerPath = localPath;
+            }
+            else
+            {
+                Log.Info("Downloading PawnIO installer");
+                byte[] setupBytes;
+                if (InstallerDownloader is not null)
+                {
+                    setupBytes = InstallerDownloader();
+                }
+                else if (TestEnvironment.IsTestHost())
+                {
+                    Log.Error("PawnIO installer download blocked in test host");
+                    return false;
+                }
+                else
+                {
+                    using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+                    setupBytes = client.GetByteArrayAsync(
+                        "https://github.com/namazso/PawnIO.Setup/releases/latest/download/PawnIO_setup.exe")
+                        .GetAwaiter().GetResult();
+                }
 
-            var psi = new ProcessStartInfo(tmpPath, "-install -silent")
+                string tmpPath = Path.Combine(Path.GetTempPath(), "PawnIO_setup.exe");
+                File.WriteAllBytes(tmpPath, setupBytes);
+                installerPath = tmpPath;
+                isTemporaryFile = true;
+            }
+
+            var psi = new ProcessStartInfo(installerPath, "-install -silent")
             {
                 UseShellExecute = true,
                 Verb = "runas",
                 CreateNoWindow = true,
             };
-            using var proc = Process.Start(psi);
-            if (proc is null)
+
+            int exitCode = RunInstaller(psi);
+            if (isTemporaryFile && installerPath is not null)
             {
-                try { File.Delete(tmpPath); } catch (Exception ex) { Log.Error(ex, "Delete temp file (early) failed"); }
-                return false;
+                try { File.Delete(installerPath); } catch (Exception ex) { Log.Error(ex, "Failed to delete temporary installer file"); }
             }
 
-            proc.WaitForExit(90000);
-            try { File.Delete(tmpPath); } catch (Exception ex) { Log.Error(ex, "Delete temp file failed"); }
+            Log.Info($"PawnIO installer completed with exit code {exitCode}");
 
-            Log.Info($"Installer exit code {proc.ExitCode}");
-
-            if (proc.ExitCode == 0)
+            if (exitCode == 0)
                 return true;
 
-            if (proc.ExitCode == 183)
+            if (exitCode == 183)
             {
                 Thread.Sleep(2000);
                 return true;
@@ -236,9 +291,52 @@ public sealed class PawnIoDevice : IPawnIoTransport
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Download failed");
+            Log.Error(ex, "Failed to install PawnIO driver");
             return false;
         }
+    }
+
+    private static bool IsProcessElevated()
+    {
+        using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+        return new System.Security.Principal.WindowsPrincipal(identity)
+            .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+    }
+
+    /// <summary>
+    /// Guards every real elevated launch. Elevated operations are skipped entirely when
+    /// running under a test host, or when the current process is not already elevated, so
+    /// a UAC prompt can never be triggered here.
+    /// </summary>
+    private static bool CanRunElevatedOperation()
+    {
+        if (TestEnvironment.IsTestHost())
+        {
+            Log.Error("PawnIO elevated launch blocked in test host");
+            return false;
+        }
+
+        if (!IsProcessElevated())
+        {
+            Log.Warn("Process is not elevated; skipping PawnIO operation to prevent UAC prompt");
+            return false;
+        }
+
+        return true;
+    }
+
+    private static int RunInstaller(ProcessStartInfo psi)
+    {
+        if (ProcessRunner is not null)
+            return ProcessRunner(psi) ?? -1;
+
+        if (!CanRunElevatedOperation())
+            return -1;
+
+        using var proc = Process.Start(psi);
+        if (proc is null) return -1;
+        proc.WaitForExit(90000);
+        return proc.ExitCode;
     }
 
     /// <summary>
@@ -247,6 +345,12 @@ public sealed class PawnIoDevice : IPawnIoTransport
     /// </summary>
     public static void CleanupStaleInstall()
     {
+        if (CleanupHandler is not null)
+        {
+            CleanupHandler();
+            return;
+        }
+
         try { RunSc("stop PawnIO"); } catch (Exception ex) { Log.Error(ex, "Stop service cleanup failed"); }
         try { RunSc("delete PawnIO"); } catch (Exception ex) { Log.Error(ex, "Delete service cleanup failed"); }
 
@@ -265,6 +369,16 @@ public sealed class PawnIoDevice : IPawnIoTransport
             Verb = "runas",
             CreateNoWindow = true,
         };
+
+        if (ProcessRunner is not null)
+        {
+            ProcessRunner(psi);
+            return;
+        }
+
+        if (!CanRunElevatedOperation())
+            return;
+
         using var proc = Process.Start(psi);
         if (proc is not null)
             proc.WaitForExit(5000);
@@ -283,6 +397,16 @@ public sealed class PawnIoDevice : IPawnIoTransport
                 Verb = "runas",
                 CreateNoWindow = true,
             };
+
+            if (ProcessRunner is not null)
+            {
+                int exitCode = ProcessRunner(psi) ?? -1;
+                return exitCode == 0 || exitCode == 1056;
+            }
+
+            if (!CanRunElevatedOperation())
+                return false;
+
             using var proc = Process.Start(psi);
             if (proc is not null)
             {

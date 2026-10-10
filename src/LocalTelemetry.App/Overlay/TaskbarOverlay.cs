@@ -1,9 +1,10 @@
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using LocalTelemetry.App.Win32;
 using LocalTelemetry.Core.Config;
 using LocalTelemetry.Core.Diagnostics;
+using LocalTelemetry.Core.Hardware;
 using LocalTelemetry.Core.Models;
-using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
 
 namespace LocalTelemetry.App.Overlay;
@@ -18,7 +19,6 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
 {
     private readonly AppSettings _cfg;
     private readonly TaskbarEmbedder _embedder;
-    private readonly ILogger<TaskbarOverlay> _log;
     private readonly SynchronizationContext _uiCtx;
 
     private TelemetrySnapshot _snap = TelemetrySnapshot.Empty;
@@ -34,8 +34,6 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
     private System.Threading.Timer? _posTimer;
     private System.Threading.Timer? _themeTimer;
     private IntPtr _lastTrayHwnd = IntPtr.Zero;
-
-    private Bitmap? _renderBmp;
     private Font? _cachedFont;
     private string _fontCacheKey = string.Empty;
     private readonly Dictionary<int, SolidBrush> _brushCache = [];
@@ -52,20 +50,33 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
     /// <summary>Gets whether the overlay window is currently shown.</summary>
     public bool Visible { get; private set; }
 
+    /// <summary>Gets the current deployment lifecycle state of the overlay.</summary>
+    public OverlayDeploymentState DeploymentState => _embedder.State;
+
+    internal static bool SkipShowWindowForTesting { get; set; }
+    internal static bool SkipMouseHookForTesting { get; set; }
+    internal static bool SkipTimersForTesting { get; set; }
+    internal static bool SkipEmbedForTesting { get; set; }
+
     /// <summary>Fired on double-click when <see cref="AppSettings.Overlay.DoubleClickAction"/> is set to a non-"none" action.</summary>
     public Action<string>? OnDoubleClick { get; set; }
+
+    /// <summary>Fired when the user requests Settings from the overlay context menu.</summary>
+    public Action? OnOpenSettingsRequested { get; set; }
+    /// <summary>Fired when the user toggles overlay visibility from the overlay context menu.</summary>
+    public Action? OnToggleOverlayRequested { get; set; }
+    /// <summary>Fired when the user requests exiting the application from the overlay context menu.</summary>
+    public Action? OnExitRequested { get; set; }
 
     /// <summary>
     /// Initialises a new overlay instance. The window is not created until <see cref="Show"/> is called.
     /// </summary>
     /// <param name="cfg">Application settings used for layout, colors and behaviour.</param>
     /// <param name="embedder">Taskbar embedding strategy (child-window or layered float).</param>
-    /// <param name="log">Logger for diagnostic output.</param>
-    public TaskbarOverlay(AppSettings cfg, TaskbarEmbedder embedder, ILogger<TaskbarOverlay> log)
+    public TaskbarOverlay(AppSettings cfg, TaskbarEmbedder embedder)
     {
         _cfg = cfg;
         _embedder = embedder;
-        _log = log;
         _uiCtx = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
         UpdateKeyColor();
     }
@@ -75,69 +86,96 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        if (Handle != IntPtr.Zero)
+        if (Handle != IntPtr.Zero && NativeMethods.IsWindow(Handle))
         {
             if (!Visible)
             {
-                Log.Info("Show: re-showing hidden window");
-                Visible = true;
+                Log.Debug("Re-showing existing taskbar overlay window");
+                _dpi = GetDpi();
+                _lastRenderedSnap = TelemetrySnapshot.Empty;
                 var resz = MeasureSize();
                 _overlayWidth = resz.Width;
                 _overlayHeight = resz.Height;
-                _embedder.Embed(Handle, resz);
-                NativeMethods.ShowWindow(Handle, NativeMethods.SW_SHOWNOACTIVATE);
-                RefreshOverlay();
+                if (!SkipEmbedForTesting)
+                    _embedder.Embed(Handle, resz);
+
+                if (!SkipEmbedForTesting && _embedder.State != OverlayDeploymentState.Active)
+                {
+                    Log.Error($"Taskbar overlay failed to re-embed into active state ({_embedder.State})");
+                    Visible = false;
+                    return;
+                }
+
+                Visible = true;
+                if (!SkipShowWindowForTesting)
+                    NativeMethods.ShowWindow(Handle, NativeMethods.SW_SHOWNOACTIVATE);
+                if (!SkipMouseHookForTesting)
+                    StartMouseHook();
+                if (!SkipShowWindowForTesting)
+                    RefreshOverlay();
             }
             return;
         }
 
-        Log.Info("Show: creating new window");
-        var cp = new CreateParams
-        {
-            Caption = string.Empty,
-            ClassStyle = NativeMethods.CS_DBLCLKS,
-            Style = NativeMethods.WS_POPUP,
-            ExStyle = NativeMethods.WS_EX_TOOLWINDOW | NativeMethods.WS_EX_NOACTIVATE,
-            Width = _overlayWidth,
-            Height = _overlayHeight,
-            X = 0,
-            Y = 0,
-            Parent = IntPtr.Zero,
-        };
-        CreateHandle(cp);
+        EnsureWindowCreated();
 
         _dpi = GetDpi();
-        Log.Info($"Show: FollowWindowsTheme={_cfg.Overlay.FollowWindowsTheme}");
         if (_cfg.Overlay.FollowWindowsTheme)
         {
             DetectSystemTheme();
-            _themeTimer = new System.Threading.Timer(_ => ThemeTick(), null, 2_000, 2_000);
-            Log.Info("Show: theme polling timer started (2s interval)");
+            if (!SkipTimersForTesting && _themeTimer is null)
+            {
+                _themeTimer = new System.Threading.Timer(_ => ThemeTick(), null, 2_000, 2_000);
+                Log.Debug("Windows theme polling timer started (2s interval)");
+            }
         }
         UpdateKeyColor();
         var sz = MeasureSize();
         _overlayWidth = sz.Width;
         _overlayHeight = sz.Height;
 
-        _embedder.Embed(Handle, sz);
+        if (!SkipEmbedForTesting)
+            _embedder.Embed(Handle, sz);
 
-        _lastTrayHwnd = TaskbarEmbedder.FindExplorerTrayWnd();
-        _watchTimer = new System.Threading.Timer(_ => WatchTick(), null, 5_000, 5_000);
-        _posTimer = new System.Threading.Timer(_ => PosTick(), null, 200, 200);
+        if (!SkipTimersForTesting && _watchTimer is null)
+        {
+            _lastTrayHwnd = TaskbarEmbedder.FindExplorerTrayWnd();
+            _watchTimer = new System.Threading.Timer(_ => WatchTick(), null, 5_000, 5_000);
+            _posTimer = new System.Threading.Timer(_ => PosTick(), null, 200, 200);
+        }
+
+        if (!SkipEmbedForTesting && _embedder.State != OverlayDeploymentState.Active)
+        {
+            Log.Error($"Taskbar overlay failed to deploy into active state ({_embedder.State})");
+            Visible = false;
+            return;
+        }
 
         Visible = true;
-        Log.Info($"Show: done, sz={sz.Width}x{sz.Height}, " +
-            $"IsChildMode={_embedder.IsChildMode}, IsFallback={_embedder.IsFallback}");
+        if (!SkipShowWindowForTesting)
+            NativeMethods.ShowWindow(Handle, NativeMethods.SW_SHOWNOACTIVATE);
+        if (!SkipMouseHookForTesting)
+            StartMouseHook();
+        if (!SkipShowWindowForTesting)
+            RefreshOverlay();
+        Log.Info($"Taskbar overlay shown ({sz.Width}x{sz.Height}, {(_embedder.IsChildMode ? "child" : "floating")} mode)");
     }
 
     /// <summary>Hides the overlay window without destroying it.</summary>
     public void Hide()
     {
-        Log.Info($"Hide: Handle={(long)Handle:X}");
-        if (Handle == IntPtr.Zero) return;
+        Log.Info("Hiding taskbar overlay window");
+        if (Handle == IntPtr.Zero || !NativeMethods.IsWindow(Handle))
+        {
+            Visible = false;
+            return;
+        }
         Visible = false;
-        NativeMethods.ShowWindow(Handle, NativeMethods.SW_HIDE);
-        _embedder.Detach(Handle);
+        StopMouseHook();
+        if (!SkipShowWindowForTesting)
+            NativeMethods.ShowWindow(Handle, NativeMethods.SW_HIDE);
+        if (!SkipEmbedForTesting)
+            _embedder.Detach(Handle);
     }
 
     /// <summary>
@@ -147,24 +185,17 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
     /// <param name="snap">The latest telemetry snapshot.</param>
     public void UpdateSnapshot(TelemetrySnapshot snap)
     {
-        if (!_cfg.Overlay.Visible || _disposed) return;
+        if (!_cfg.Overlay.Visible || _disposed || Handle == IntPtr.Zero) return;
         _snap = snap;
-        if (Handle == IntPtr.Zero) return;
 
         _uiCtx.Post(_ =>
         {
             try
             {
-                if (_disposed || Handle == IntPtr.Zero) return;
-                if (!ValuesChanged(snap, _lastRenderedSnap)) return;
+                if (_disposed || Handle == IntPtr.Zero || !ValuesChanged(snap, _lastRenderedSnap))
+                    return;
 
-                var sz = MeasureSize();
-                if (sz.Width != _overlayWidth || sz.Height != _overlayHeight)
-                {
-                    _overlayWidth = sz.Width;
-                    _overlayHeight = sz.Height;
-                    _embedder.Reposition(Handle, sz);
-                }
+                ApplyOverlayDimensions(MeasureSize());
 
                 if (_embedder.IsChildMode)
                     Invalidate();
@@ -173,31 +204,59 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
 
                 _lastRenderedSnap = snap;
             }
-            catch (Exception ex) { Log.Error($"UpdateSnapshot render error: {ex.Message}"); }
+            catch (Exception ex) { Log.Error(ex, "Failed to render telemetry snapshot to overlay"); }
         }, null);
+    }
+
+    private void ApplyOverlayDimensions(Size sz)
+    {
+        if (sz.Width != _overlayWidth || sz.Height != _overlayHeight)
+        {
+            _overlayWidth = sz.Width;
+            _overlayHeight = sz.Height;
+            _embedder.Reposition(Handle, sz);
+        }
     }
 
     private static bool ValuesChanged(TelemetrySnapshot a, TelemetrySnapshot b)
     {
-        // Compare at display precision to avoid redraw on sub-threshold noise
-        if (MathF.Round(a.CpuUsagePct) != MathF.Round(b.CpuUsagePct)) return true;
-        if (MathF.Round(a.CpuTempPackageC) != MathF.Round(b.CpuTempPackageC)) return true;
-        if (MathF.Round(a.CpuFreqGhz, 2) != MathF.Round(b.CpuFreqGhz, 2)) return true;
-        if (MathF.Round(a.CpuPackagePowerW) != MathF.Round(b.CpuPackagePowerW)) return true;
-        if (MathF.Round(a.RamUsagePct) != MathF.Round(b.RamUsagePct)) return true;
-        if (MathF.Round(a.RamUsedGb, 1) != MathF.Round(b.RamUsedGb, 1)) return true;
-        if (MathF.Round(a.GpuUsagePct) != MathF.Round(b.GpuUsagePct)) return true;
-        if (MathF.Round(a.GpuTempC) != MathF.Round(b.GpuTempC)) return true;
-        if (MathF.Round(a.GpuVramUsedMb) != MathF.Round(b.GpuVramUsedMb)) return true;
-        if (MathF.Round(a.GpuFreqMHz) != MathF.Round(b.GpuFreqMHz)) return true;
-        if (MathF.Round(a.GpuPowerW) != MathF.Round(b.GpuPowerW)) return true;
-        if (Math.Abs(a.NetDownBps - b.NetDownBps) > 100) return true;
-        if (Math.Abs(a.NetUpBps - b.NetUpBps) > 100) return true;
-        if (a.NetTotalBytes != b.NetTotalBytes) return true;
-        if (MathF.Round(a.DiskReadMbps, 1) != MathF.Round(b.DiskReadMbps, 1)) return true;
-        if (MathF.Round(a.DiskWriteMbps, 1) != MathF.Round(b.DiskWriteMbps, 1)) return true;
-        if (a.NetInterfaceName != b.NetInterfaceName) return true;
-        return false;
+        return HasCpuValuesChanged(a, b)
+            || HasRamValuesChanged(a, b)
+            || HasGpuValuesChanged(a, b)
+            || HasNetOrDiskValuesChanged(a, b);
+    }
+
+    private static bool HasCpuValuesChanged(TelemetrySnapshot a, TelemetrySnapshot b)
+    {
+        return MathF.Abs(a.CpuUsagePct - b.CpuUsagePct) >= 0.5f
+            || MathF.Abs(a.CpuTempPackageC - b.CpuTempPackageC) >= 0.5f
+            || MathF.Abs(a.CpuFreqGhz - b.CpuFreqGhz) >= 0.005f
+            || MathF.Abs(a.CpuPackagePowerW - b.CpuPackagePowerW) >= 0.5f;
+    }
+
+    private static bool HasRamValuesChanged(TelemetrySnapshot a, TelemetrySnapshot b)
+    {
+        return MathF.Abs(a.RamUsagePct - b.RamUsagePct) >= 0.5f
+            || MathF.Abs(a.RamUsedGb - b.RamUsedGb) >= 0.05f;
+    }
+
+    private static bool HasGpuValuesChanged(TelemetrySnapshot a, TelemetrySnapshot b)
+    {
+        return MathF.Abs(a.GpuUsagePct - b.GpuUsagePct) >= 0.5f
+            || MathF.Abs(a.GpuTempC - b.GpuTempC) >= 0.5f
+            || MathF.Abs(a.GpuVramUsedMb - b.GpuVramUsedMb) >= 0.5f
+            || MathF.Abs(a.GpuFreqMHz - b.GpuFreqMHz) >= 0.5f
+            || MathF.Abs(a.GpuPowerW - b.GpuPowerW) >= 0.5f;
+    }
+
+    private static bool HasNetOrDiskValuesChanged(TelemetrySnapshot a, TelemetrySnapshot b)
+    {
+        return Math.Abs(a.NetDownBps - b.NetDownBps) > 100
+            || Math.Abs(a.NetUpBps - b.NetUpBps) > 100
+            || a.NetTotalBytes != b.NetTotalBytes
+            || MathF.Abs(a.DiskReadMbps - b.DiskReadMbps) >= 0.05f
+            || MathF.Abs(a.DiskWriteMbps - b.DiskWriteMbps) >= 0.05f
+            || a.NetInterfaceName != b.NetInterfaceName;
     }
 
     /// <summary>Triggers a visual flash (orange tint) on the overlay for the given duration.</summary>
@@ -221,7 +280,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
     public void RefreshOverlay()
     {
         if (Handle == IntPtr.Zero || _disposed || !Visible || !_cfg.Overlay.Visible) return;
-        if (!_refreshLogged) { _refreshLogged = true; Log.Info("RefreshOverlay"); }
+        if (!_refreshLogged) { _refreshLogged = true; Log.Debug("Refreshed overlay display"); }
         _uiCtx.Post(_ =>
         {
             if (_disposed || Handle == IntPtr.Zero) return;
@@ -232,6 +291,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
             foreach (var b in _brushCache.Values) b.Dispose();
             _brushCache.Clear();
             UpdateKeyColor();
+            _dpi = GetDpi();
             var sz = MeasureSize();
             _overlayWidth = sz.Width;
             _overlayHeight = sz.Height;
@@ -247,14 +307,37 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
     {
         switch (m.Msg)
         {
+            case NativeMethods.WM_SETCURSOR:
+                NativeMethods.SetCursor(NativeMethods.LoadCursor(IntPtr.Zero, NativeMethods.IDC_ARROW));
+                m.Result = (IntPtr)1;
+                return;
+            case NativeMethods.WM_DESTROY:
+            case NativeMethods.WM_NCDESTROY:
+                if (Visible && !_disposed)
+                {
+                    Log.Debug("Taskbar overlay window received WM_DESTROY/WM_NCDESTROY (parent taskbar destroyed or closed)");
+                }
+                break;
             case NativeMethods.WM_PAINT:
                 WmPaint();
                 return;
             case NativeMethods.WM_ERASEBKGND:
                 return;
             case NativeMethods.WM_DPICHANGED:
+            case NativeMethods.WM_DPICHANGED_BEFOREPARENT:
+            case NativeMethods.WM_DPICHANGED_AFTERPARENT:
                 HandleDpiChanged();
                 return;
+            case NativeMethods.WM_DISPLAYCHANGE:
+                HardwareLifecycleManager.Instance.NotifyDisplayChanged();
+                break;
+            case NativeMethods.WM_DEVICECHANGE:
+                int dbtEvent = m.WParam.ToInt32();
+                if (dbtEvent is NativeMethods.DBT_DEVICEARRIVAL or NativeMethods.DBT_DEVICEREMOVECOMPLETE or NativeMethods.DBT_DEVNODES_CHANGED)
+                {
+                    HardwareLifecycleManager.Instance.NotifyDevicePnPChanged();
+                }
+                break;
             case NativeMethods.WM_TABLET_QUERYSYSTEMGESTURESTATUS:
                 m.Result = IntPtr.Zero;
                 return;
@@ -284,8 +367,48 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
                 if (!string.IsNullOrEmpty(_cfg.Overlay.DoubleClickAction))
                     OnDoubleClick?.Invoke(_cfg.Overlay.DoubleClickAction);
                 return;
+            case NativeMethods.WM_RBUTTONUP:
+            case NativeMethods.WM_CONTEXTMENU:
+                Log.Debug("Right-click message received in WndProc");
+                ShowOverlayContextMenu();
+                return;
         }
         base.WndProc(ref m);
+    }
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+    /// <summary>Fired to display the overlay context menu at the specified point.</summary>
+    public Action<Point>? ShowContextMenuAction { get; set; }
+
+    /// <summary>Callback to query if the overlay context menu is currently open.</summary>
+    public Func<bool>? IsContextMenuOpen { get; set; }
+
+    /// <summary>Callback to query the screen bounds of the overlay context menu.</summary>
+    public Func<Rectangle>? GetContextMenuBounds { get; set; }
+
+    /// <summary>Callback to close the overlay context menu on click-outside.</summary>
+    public Action? CloseContextMenuAction { get; set; }
+
+    private void ShowOverlayContextMenu()
+    {
+        var pos = Cursor.Position;
+        Log.Debug($"Right-click detected at screen coordinates ({pos.X}, {pos.Y})");
+        if (ShowContextMenuAction is null)
+        {
+            Log.Error("Cannot display context menu (ShowContextMenuAction is not configured)");
+            return;
+        }
+
+        try
+        {
+            ShowContextMenuAction.Invoke(pos);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, $"Exception occurred while invoking ShowContextMenuAction at ({pos.X}, {pos.Y})");
+        }
     }
 
     private void WmPaint()
@@ -297,6 +420,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
         {
             using var g = Graphics.FromHdc(hdc);
             using var buf = BufferedGraphicsManager.Current.Allocate(g, new Rectangle(0, 0, _overlayWidth, _overlayHeight));
+            buf.Graphics.Clear(_keyColor);
             DrawContent(buf.Graphics);
             buf.Render(g);
         }
@@ -315,7 +439,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
         else RenderFloat();
     }
 
-    private bool DetectSystemTheme()
+    private void DetectSystemTheme()
     {
         try
         {
@@ -327,34 +451,26 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
             _isLightTheme = isLight;
 
             if (changed)
-                Log.Info($"DetectSystemTheme: changed to {(isLight ? "light" : "dark")}");
-            else
-                _log.LogDebug("DetectSystemTheme: isLight={IsLight}", isLight);
-
-            return changed;
+                Log.Debug($"System color theme detected as {(isLight ? "light" : "dark")}");
         }
         catch (Exception ex)
         {
-            _log.LogDebug(ex, "DetectSystemTheme failed");
-            return false;
+            Log.Debug(ex, "Failed to detect system color theme");
         }
     }
 
     private void ThemeTick()
     {
+        if (SkipTimersForTesting) return;
         try
         {
             using var key = Registry.CurrentUser.OpenSubKey(
                 @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
             var raw = key?.GetValue("SystemUsesLightTheme", 0);
             bool isLight = raw is int val && val == 1;
-            if (isLight == _isLightTheme)
-            {
-                _log.LogDebug("ThemeTick: no change (isLight={IsLight})", isLight);
-                return;
-            }
+            if (isLight == _isLightTheme) return;
 
-            Log.Info($"ThemeTick: theme change detected (isLight={isLight}, was={_isLightTheme}), scheduling RefreshOverlay");
+            Log.Info($"Windows color theme changed to {(isLight ? "light" : "dark")}; applying matching theme");
             _uiCtx.Post(_ =>
             {
                 if (_disposed) return;
@@ -363,7 +479,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
         }
         catch (Exception ex)
         {
-            _log.LogDebug(ex, "ThemeTick: registry read failed");
+            Log.Debug(ex, "Failed to read system theme from registry during periodic check");
         }
     }
 
@@ -388,7 +504,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
         }
         catch (Exception ex)
         {
-            _log.LogDebug(ex, "UpdateKeyColor parsing failed, using fallback");
+            Log.Debug(ex, "Failed to parse overlay transparency key color; using default fallback");
             _keyColor = Color.FromArgb(28, 27, 25);
         }
         _embedder.KeyColor = _keyColor;
@@ -484,10 +600,46 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
         OverlayConfig oc, MonitoringConfig mc, int colCount)
     {
         var cols = new List<ColumnInfo>();
-        int total = oc.Row1.Count;
+        var rawParts = CollectRawParts(oc, mc, colCount);
+        if (rawParts.Count == 0) return cols;
 
-        // Phase 1: collect raw text parts
+        int[] maxLenPerCol = new int[colCount];
+        foreach (var rp in rawParts)
+        {
+            if (rp.rawPart.Length > maxLenPerCol[rp.colIdx])
+                maxLenPerCol[rp.colIdx] = rp.rawPart.Length;
+        }
+
+        var topEntryByCol = new (int colIdx, bool isTop, string id, string rawPart)[colCount];
+        var botEntryByCol = new (int colIdx, bool isTop, string id, string rawPart)[colCount];
+        foreach (var rp in rawParts)
+        {
+            if (rp.isTop)
+                topEntryByCol[rp.colIdx] = rp;
+            else
+                botEntryByCol[rp.colIdx] = rp;
+        }
+
+        int colonW = TextRenderer.MeasureText(g, ":", font, Size.Empty, flags).Width;
+        var ctx = new RenderMeasureContext(g, font, flags, mc, colonW);
+        for (int i = 0; i < colCount; i++)
+        {
+            var topEntry = topEntryByCol[i];
+            var botEntry = botEntryByCol[i];
+            if (topEntry.rawPart == null && botEntry.rawPart == null) continue;
+
+            cols.Add(BuildSingleColumn(ctx, topEntry, botEntry, maxLenPerCol[i]));
+        }
+        return cols;
+    }
+
+    private readonly record struct RenderMeasureContext(Graphics G, Font Font, TextFormatFlags Flags, MonitoringConfig Mc, int ColonW);
+
+    private List<(int colIdx, bool isTop, string id, string rawPart)> CollectRawParts(
+        OverlayConfig oc, MonitoringConfig mc, int colCount)
+    {
         var rawParts = new List<(int colIdx, bool isTop, string id, string rawPart)>();
+        int total = oc.Row1.Count;
 
         for (int i = 0; i < colCount; i++)
         {
@@ -495,118 +647,109 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
             int botIdx = i * 2 + 1;
             string topId = topIdx < total ? oc.Row1[topIdx] : "";
             string botId = botIdx < total ? oc.Row1[botIdx] : "";
-            bool topOn = !string.IsNullOrEmpty(topId) && IsMetricEnabled(topId, mc) && IsMetricAvailable(topId, _snap);
-            bool botOn = !string.IsNullOrEmpty(botId) && IsMetricEnabled(botId, mc) && IsMetricAvailable(botId, _snap);
-            if (!topOn && !botOn) continue;
 
-            if (topOn)
-            {
-                Metrics.AllMetricsById.TryGetValue(topId, out var desc);
-                string part = desc is not null && desc.Group == "disk"
-                    ? GetDiskLabel(topId)
-                    : desc?.ShortLabel ?? "???";
-                rawParts.Add((i, true, topId, part));
-            }
-            if (botOn)
-            {
-                Metrics.AllMetricsById.TryGetValue(botId, out var desc);
-                string part = desc is not null && desc.Group == "disk"
-                    ? GetDiskLabel(botId)
-                    : desc?.ShortLabel ?? "???";
-                rawParts.Add((i, false, botId, part));
-            }
+            if (!string.IsNullOrEmpty(topId) && IsMetricEnabled(topId, mc) && IsMetricAvailable(topId, _snap))
+                rawParts.Add((i, true, topId, ResolveMetricLabel(topId)));
+
+            if (!string.IsNullOrEmpty(botId) && IsMetricEnabled(botId, mc) && IsMetricAvailable(botId, _snap))
+                rawParts.Add((i, false, botId, ResolveMetricLabel(botId)));
         }
 
-        if (rawParts.Count == 0) return cols;
+        return rawParts;
+    }
 
-        // Phase 1.5: compute max char length per column for label padding
-        int[] maxLenPerCol = new int[colCount];
-        foreach (var rp in rawParts)
+    private string ResolveMetricLabel(string metricId)
+    {
+        Metrics.AllMetricsById.TryGetValue(metricId, out var desc);
+        return desc is not null && desc.Group == "disk"
+            ? GetDiskLabel(metricId)
+            : desc?.ShortLabel ?? "???";
+    }
+
+    private ColumnInfo BuildSingleColumn(
+        in RenderMeasureContext ctx,
+        (int colIdx, bool isTop, string id, string rawPart) topEntry,
+        (int colIdx, bool isTop, string id, string rawPart) botEntry,
+        int maxLen)
+    {
+        string topId = topEntry.rawPart != null ? topEntry.id : "";
+        string botId = botEntry.rawPart != null ? botEntry.id : "";
+        bool topOn = topEntry.rawPart != null;
+        bool botOn = botEntry.rawPart != null;
+
+        string topLabel = string.Empty, topVal = string.Empty, botLabel = string.Empty, botVal = string.Empty;
+        int topValW = 0, botValW = 0, labelPartPx = 0;
+
+        if (topOn)
         {
-            int len = rp.rawPart.Length;
-            if (len > maxLenPerCol[rp.colIdx])
-                maxLenPerCol[rp.colIdx] = len;
+            topLabel = topEntry.rawPart!.PadRight(maxLen);
+            labelPartPx = TextRenderer.MeasureText(ctx.G, topLabel, ctx.Font, Size.Empty, ctx.Flags).Width;
+            topVal = Metrics.Format(topId, _snap, ctx.Mc.UseNetBits, ctx.Mc.UseFahrenheit);
+            int topReservedW = TextRenderer.MeasureText(ctx.G, " " + Metrics.WidestValueString(topId, ctx.Mc.UseNetBits, ctx.Mc.UseFahrenheit), ctx.Font, Size.Empty, ctx.Flags).Width;
+            int topActualW = TextRenderer.MeasureText(ctx.G, " " + topVal, ctx.Font, Size.Empty, ctx.Flags).Width;
+            topValW = Math.Max(topReservedW, topActualW);
         }
 
-        // Phase 2: build column layout - label and colon drawn separately
-        var topEntryByCol = new (int colIdx, bool isTop, string id, string rawPart)[colCount];
-        var botEntryByCol = new (int colIdx, bool isTop, string id, string rawPart)[colCount];
-        for (int ri = 0; ri < rawParts.Count; ri++)
+        if (botOn)
         {
-            var rp = rawParts[ri];
-            if (rp.isTop)
-                topEntryByCol[rp.colIdx] = rp;
-            else
-                botEntryByCol[rp.colIdx] = rp;
+            botLabel = botEntry.rawPart!.PadRight(maxLen);
+            int lblPx = TextRenderer.MeasureText(ctx.G, botLabel, ctx.Font, Size.Empty, ctx.Flags).Width;
+            labelPartPx = topOn ? Math.Max(labelPartPx, lblPx) : lblPx;
+            botVal = Metrics.Format(botId, _snap, ctx.Mc.UseNetBits, ctx.Mc.UseFahrenheit);
+            int botReservedW = TextRenderer.MeasureText(ctx.G, " " + Metrics.WidestValueString(botId, ctx.Mc.UseNetBits, ctx.Mc.UseFahrenheit), ctx.Font, Size.Empty, ctx.Flags).Width;
+            int botActualW = TextRenderer.MeasureText(ctx.G, " " + botVal, ctx.Font, Size.Empty, ctx.Flags).Width;
+            botValW = Math.Max(botReservedW, botActualW);
         }
-        int colonW = TextRenderer.MeasureText(g, ":", font, Size.Empty, flags).Width;
-        for (int i = 0; i < colCount; i++)
-        {
-            var (colIdx, isTop, id, rawPart) = topEntryByCol[i];
-            var botEntry = botEntryByCol[i];
-            if (rawPart == null && botEntry.rawPart == null) continue;
 
-            string topId = rawPart != null ? id : "";
-            string botId = botEntry.rawPart != null ? botEntry.id : "";
-            bool topOn = rawPart != null;
-            bool botOn = botEntry.rawPart != null;
+        int fullW = labelPartPx + ctx.ColonW + Math.Max(topOn ? topValW : 0, botOn ? botValW : 0);
 
-            string topLabel = string.Empty;
-            string topVal = string.Empty;
-            string botLabel = string.Empty;
-            string botVal = string.Empty;
-            int topValW = 0, botValW = 0, labelPartPx = 0;
-            int maxLen = maxLenPerCol[i];
-
-            if (topOn)
-            {
-                topLabel = rawPart!.PadRight(maxLen);
-                labelPartPx = TextRenderer.MeasureText(g, topLabel, font, Size.Empty, flags).Width;
-                topVal = Metrics.Format(topId, _snap, mc.UseNetBits, mc.UseFahrenheit);
-                topValW = TextRenderer.MeasureText(g, " " + Metrics.WidestValueString(topId, mc.UseNetBits, mc.UseFahrenheit), font, Size.Empty, flags).Width;
-            }
-            if (botOn)
-            {
-                botLabel = botEntry.rawPart!.PadRight(maxLen);
-                int lblPx = TextRenderer.MeasureText(g, botLabel, font, Size.Empty, flags).Width;
-                labelPartPx = topOn ? Math.Max(labelPartPx, lblPx) : lblPx;
-                botVal = Metrics.Format(botId, _snap, mc.UseNetBits, mc.UseFahrenheit);
-                botValW = TextRenderer.MeasureText(g, " " + Metrics.WidestValueString(botId, mc.UseNetBits, mc.UseFahrenheit), font, Size.Empty, flags).Width;
-            }
-
-            int fullW = labelPartPx + colonW + Math.Max(
-                topOn ? topValW : 0,
-                botOn ? botValW : 0);
-
-            cols.Add(new(topId, botId, topOn, botOn, topLabel, topVal, botLabel, botVal,
-                topValW, botValW, fullW, labelPartPx, colonW));
-        }
-        return cols;
+        return new(topId, botId, topOn, botOn, topLabel, topVal, botLabel, botVal,
+            topValW, botValW, fullW, labelPartPx, ctx.ColonW);
     }
 
     private string GetDiskLabel(string id)
     {
         int last = id.LastIndexOf('_');
-        if (last > 5)
+        if (last <= 5) return _snap.PrimaryDiskType;
+
+        string diskId = id[5..last];
+        string aspect = id[(last + 1)..];
+        string suffix = aspect == "read" ? "R" : "W";
+        int idx = diskId.StartsWith("disk") && int.TryParse(diskId[4..], out int di) ? di : -1;
+
+        if (idx >= 0 && idx < _snap.Disks.Count && !string.IsNullOrEmpty(_snap.Disks[idx].BusType))
         {
-            string diskId = id[5..last];
-            string aspect = id[(last + 1)..];
-            string suffix = aspect == "read" ? "R" : "W";
-            int idx = diskId.StartsWith("disk") && int.TryParse(diskId[4..], out int di) ? di : -1;
-            if (idx >= 0 && idx < _snap.Disks.Count && !string.IsNullOrEmpty(_snap.Disks[idx].BusType))
-            {
-                string busType = _snap.Disks[idx].BusType;
-                int sameTypeCount = 0;
-                for (int di2 = 0; di2 < _snap.Disks.Count; di2++)
-                {
-                    if (_snap.Disks[di2].BusType == busType) sameTypeCount++;
-                }
-                string num = sameTypeCount > 1 ? (idx + 1).ToString() : "";
-                return $"{busType}{num}{suffix}";
-            }
-            return $"{diskId.ToUpperInvariant()}{suffix}";
+            string baseLabel = GetDiskBaseLabel(_snap.Disks[idx].BusType);
+            var (sameTypeCount, typePos) = CountDisksOfSameType(baseLabel, idx);
+            string num = sameTypeCount > 1 ? typePos.ToString() : "";
+            return $"{baseLabel}{num}{suffix}";
         }
-        return _snap.PrimaryDiskType;
+
+        return $"{diskId.ToUpperInvariant()}{suffix}";
+    }
+
+    private static string GetDiskBaseLabel(string rawType)
+    {
+        if (rawType.Contains("NVMe", StringComparison.OrdinalIgnoreCase)) return "NVMe";
+        if (rawType.Contains("HDD", StringComparison.OrdinalIgnoreCase)) return "HDD";
+        if (rawType.Contains("SATA", StringComparison.OrdinalIgnoreCase)) return "SATA";
+        return rawType;
+    }
+
+    private (int sameTypeCount, int typePos) CountDisksOfSameType(string baseLabel, int targetIdx)
+    {
+        int sameTypeCount = 0;
+        int typePos = 0;
+        for (int di = 0; di < _snap.Disks.Count; di++)
+        {
+            string otherBase = GetDiskBaseLabel(_snap.Disks[di].BusType);
+            if (otherBase.Equals(baseLabel, StringComparison.OrdinalIgnoreCase))
+            {
+                sameTypeCount++;
+                if (di <= targetIdx) typePos++;
+            }
+        }
+        return (sameTypeCount, typePos);
     }
 
     private static bool IsMetricEnabled(string id, MonitoringConfig mc) => id switch
@@ -671,63 +814,8 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
     private void RenderFloat()
     {
         if (Handle == IntPtr.Zero || !Visible || !_cfg.Overlay.Visible || _overlayWidth <= 0 || _overlayHeight <= 0) return;
-        if (_embedder.IsChildMode) { Invalidate(); return; }
-
-        // Float mode: always use per-window alpha (SetLayeredWindowAttributes) via WM_PAINT
-        // instead of UpdateLayeredWindow, because per-pixel alpha windows skip WM_NCHITTEST
-        // for background pixels regardless of click-through state.
-        if (_embedder.IsFallback)
-        {
-            Invalidate();
-            return;
-        }
-
-        if (_renderBmp is null || _renderBmp.Width != _overlayWidth || _renderBmp.Height != _overlayHeight)
-        {
-            _renderBmp?.Dispose();
-            _renderBmp = new Bitmap(_overlayWidth, _overlayHeight,
-                System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-        }
-        using (var g = Graphics.FromImage(_renderBmp))
-        {
-            g.Clear(Color.Transparent);
-            DrawContent(g);
-        }
-        PushBitmap(_renderBmp);
-    }
-
-    private void PushBitmap(Bitmap bmp)
-    {
-        var screenDC = NativeMethods.GetDC(IntPtr.Zero);
-        var memDC = NativeMethods.CreateCompatibleDC(screenDC);
-        var hBmp = bmp.GetHbitmap(Color.FromArgb(0, 0, 0, 0));
-        var old = NativeMethods.SelectObject(memDC, hBmp);
-
-        try
-        {
-            var bounds = Bounds;
-            var pDst = new NativeMethods.POINT { X = bounds.X, Y = bounds.Y };
-            var sz = new NativeMethods.SIZE { cx = _overlayWidth, cy = _overlayHeight };
-            var pSrc = new NativeMethods.POINT { X = 0, Y = 0 };
-            var bf = new NativeMethods.BLENDFUNCTION
-            {
-                BlendOp = NativeMethods.AC_SRC_OVER,
-                BlendFlags = 0,
-                SourceConstantAlpha = (byte)(_cfg.Overlay.Opacity * 255 / 100),
-                AlphaFormat = NativeMethods.AC_SRC_ALPHA,
-            };
-
-            NativeMethods.UpdateLayeredWindow(
-                Handle, screenDC, ref pDst, ref sz,
-                memDC, ref pSrc, 0, ref bf, NativeMethods.ULW_ALPHA);
-        }
-        finally
-        {
-            NativeMethods.SelectObject(memDC, old);
-            NativeMethods.DeleteObject(hBmp);
-            NativeMethods.DeleteDC(memDC);
-            NativeMethods.ReleaseDC(IntPtr.Zero, screenDC);
-        }
+        if (SkipShowWindowForTesting) return;
+        Invalidate();
     }
 
     private Size MeasureSize()
@@ -776,6 +864,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
     {
         if (Handle == IntPtr.Zero) return;
         NativeMethods.InvalidateRect(Handle, IntPtr.Zero, false);
+        NativeMethods.UpdateWindow(Handle);
     }
 
     private float GetDpi()
@@ -797,12 +886,19 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
 
     private void PosTick()
     {
+        if (SkipTimersForTesting) return;
         if (_disposed || Handle == IntPtr.Zero || !Visible) return;
-        if (!_embedder.IsChildMode) return;
+        if (!_embedder.IsEmbedded || _embedder.State == OverlayDeploymentState.Failed) return;
 
         _uiCtx.Post(_ =>
         {
             if (_disposed || Handle == IntPtr.Zero) return;
+            float dpi = GetDpi();
+            if (MathF.Abs(dpi - _dpi) > 0.001f)
+            {
+                HandleDpiChanged();
+                return;
+            }
             var sz = MeasureSize();
             if (sz.Width != _overlayWidth || sz.Height != _overlayHeight)
             {
@@ -813,17 +909,95 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
         }, null);
     }
 
+    private void EnsureWindowCreated()
+    {
+        if (Handle != IntPtr.Zero && NativeMethods.IsWindow(Handle))
+        {
+            return;
+        }
+
+        if (Handle != IntPtr.Zero)
+        {
+            try
+            {
+                DestroyHandle();
+            }
+            catch (Exception ex)
+            {
+                Log.Debug($"Resetting dead window handle: {ex.Message}");
+            }
+        }
+
+        Log.Info("Creating taskbar overlay native window");
+        var cp = new CreateParams
+        {
+            Caption = "LocalTelemetry_Overlay",
+            ClassStyle = NativeMethods.CS_DBLCLKS,
+            Style = unchecked((int)NativeMethods.WS_POPUP),
+            ExStyle = unchecked((int)(
+                NativeMethods.WS_EX_TOOLWINDOW |
+                NativeMethods.WS_EX_NOACTIVATE |
+                NativeMethods.WS_EX_TOPMOST |
+                NativeMethods.WS_EX_LAYERED)),
+            Width = _overlayWidth > 0 ? _overlayWidth : 200,
+            Height = _overlayHeight > 0 ? _overlayHeight : 32,
+            X = 0,
+            Y = 0,
+            Parent = IntPtr.Zero,
+        };
+        CreateHandle(cp);
+        UpdateKeyColor();
+    }
+
+    /// <summary>
+    /// Re-creates and re-embeds the overlay window if Explorer restarted, taskbar was recreated, or the native window was destroyed.
+    /// </summary>
+    /// <param name="reason">Diagnostic reason for the recovery attempt.</param>
+    public void RecoverTaskbar(string reason)
+    {
+        if (_disposed || !_cfg.Overlay.Visible) return;
+
+        Log.Info($"Re-embedding taskbar overlay due to {reason}");
+        try
+        {
+            EnsureWindowCreated();
+
+            var sz = MeasureSize();
+            _overlayWidth = sz.Width;
+            _overlayHeight = sz.Height;
+            if (!SkipEmbedForTesting && Handle != IntPtr.Zero)
+            {
+                _embedder.OnTaskbarRecreated(Handle, sz);
+            }
+            if (!SkipShowWindowForTesting && Handle != IntPtr.Zero)
+            {
+                RefreshOverlay();
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to recover taskbar overlay after explorer restart");
+        }
+    }
+
     private void WatchTick()
     {
+        if (SkipTimersForTesting) return;
+        if (!_cfg.Overlay.Visible || _disposed) return;
+
         var current = TaskbarEmbedder.FindExplorerTrayWnd();
-        if (current == IntPtr.Zero || current == _lastTrayHwnd) return;
+        if (current == IntPtr.Zero) return;
+
+        bool trayChanged = current != _lastTrayHwnd;
+        bool windowDead = Handle == IntPtr.Zero || !NativeMethods.IsWindow(Handle);
+
+        if (!trayChanged && !windowDead) return;
         _lastTrayHwnd = current;
 
-        if (Handle == IntPtr.Zero) return;
         _uiCtx.Post(_ =>
         {
-            if (_disposed || Handle == IntPtr.Zero) return;
-            _embedder.OnTaskbarRecreated(Handle, new Size(_overlayWidth, _overlayHeight));
+            if (_disposed) return;
+            RecoverTaskbar(trayChanged ? "taskbar window change" : "taskbar window recovery");
         }, null);
     }
 
@@ -845,16 +1019,105 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
         if (_disposed) return;
         _disposed = true;
         Visible = false;
+        StopMouseHook();
         StopTimers();
-        _renderBmp?.Dispose();
         _cachedFont?.Dispose();
         foreach (var b in _brushCache.Values) b.Dispose();
         _brushCache.Clear();
 
         if (Handle != IntPtr.Zero)
         {
-            _embedder.Detach(Handle);
+            if (!SkipEmbedForTesting)
+                _embedder.Detach(Handle);
             DestroyHandle();
         }
+    }
+
+    private void StartMouseHook()
+    {
+    }
+
+    private void StopMouseHook()
+    {
+    }
+
+    private Rectangle GetScreenBounds()
+    {
+        if (Handle == IntPtr.Zero || _overlayWidth <= 0 || _overlayHeight <= 0) return Rectangle.Empty;
+        var pt = new NativeMethods.POINT { X = 0, Y = 0 };
+        NativeMethods.ClientToScreen(Handle, ref pt);
+        return new Rectangle(pt.X, pt.Y, _overlayWidth, _overlayHeight);
+    }
+
+    private IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+    {
+        if (nCode >= 0)
+        {
+            int msg = wParam.ToInt32();
+            if (msg is NativeMethods.WM_LBUTTONDOWN or NativeMethods.WM_RBUTTONDOWN or NativeMethods.WM_MBUTTONDOWN
+                    or NativeMethods.WM_NCLBUTTONDOWN or NativeMethods.WM_NCRBUTTONDOWN or NativeMethods.WM_NCMBUTTONDOWN)
+            {
+                if (IsContextMenuOpen?.Invoke() == true)
+                {
+                    var hookStruct = Marshal.PtrToStructure<NativeMethods.MSLLHOOKSTRUCT>(lParam);
+                    var clickPt = new Point(hookStruct.pt.X, hookStruct.pt.Y);
+                    var bounds = GetContextMenuBounds?.Invoke() ?? Rectangle.Empty;
+                    if (!bounds.Contains(clickPt))
+                    {
+                        CloseContextMenuAction?.Invoke();
+                    }
+                }
+            }
+
+            if (Visible && _cfg.Overlay.Visible && Handle != IntPtr.Zero)
+            {
+                var hookStruct = Marshal.PtrToStructure<NativeMethods.MSLLHOOKSTRUCT>(lParam);
+                var pt = new Point(hookStruct.pt.X, hookStruct.pt.Y);
+
+                if (GetScreenBounds().Contains(pt) && HandleOverlayMouseMessage(msg, out var handledResult))
+                {
+                    return handledResult;
+                }
+            }
+        }
+        return NativeMethods.CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
+    }
+
+    private bool HandleOverlayMouseMessage(int msg, out IntPtr result)
+    {
+        result = IntPtr.Zero;
+
+        if (msg == NativeMethods.WM_SETCURSOR || msg == NativeMethods.WM_MOUSEMOVE)
+        {
+            NativeMethods.SetCursor(NativeMethods.LoadCursor(IntPtr.Zero, NativeMethods.IDC_ARROW));
+            return false;
+        }
+
+        if (msg == NativeMethods.WM_RBUTTONDOWN)
+        {
+            result = (IntPtr)1;
+            return true;
+        }
+
+        if (msg == NativeMethods.WM_RBUTTONUP)
+        {
+            Log.Debug("Mouse hook captured right-click release (WM_RBUTTONUP) on overlay");
+            _uiCtx.Post(_ => ShowOverlayContextMenu(), null);
+            result = (IntPtr)1;
+            return true;
+        }
+
+        if (msg == NativeMethods.WM_LBUTTONDBLCLK)
+        {
+            _uiCtx.Post(_ =>
+            {
+                if (!string.IsNullOrEmpty(_cfg.Overlay.DoubleClickAction))
+                    OnDoubleClick?.Invoke(_cfg.Overlay.DoubleClickAction);
+            }, null);
+            result = (IntPtr)1;
+            return true;
+        }
+
+        return false;
     }
 }

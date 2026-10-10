@@ -4,6 +4,7 @@
     import SectionCard from "../ui/SectionCard.svelte";
 
     const modeLabels = ["Off", "Errors", "Full"];
+    const systemLogLevels = ["Off", "Error", "Warning", "Info", "Debug"];
 
     const categories = [
         { key: "Cpu", label: "CPU", logKey: "logCpuMode" },
@@ -63,6 +64,54 @@
         </SectionCard>
 
         <SectionCard
+            title="CPU Monitoring Mode"
+            description="Customize how CPU frequency and utilization are calculated."
+        >
+            <div class="log-grid" style="grid-template-columns: 1fr;">
+                <div class="log-card">
+                    <span class="log-label">Clock Mode</span>
+                    <div class="btn-group">
+                        {#each ["average", "max"] as val}
+                            <button
+                                class="btn-mode"
+                                class:active={$settings.monitoring
+                                    .cpuFreqMode === val}
+                                onclick={() => {
+                                    $settings.monitoring.cpuFreqMode = val;
+                                    change();
+                                }}
+                            >
+                                {val === "average"
+                                    ? "Average"
+                                    : "Max Active Core"}
+                            </button>
+                        {/each}
+                    </div>
+                </div>
+                <div class="log-card">
+                    <span class="log-label">Usage Source</span>
+                    <div class="btn-group">
+                        {#each ["overall", "max"] as val}
+                            <button
+                                class="btn-mode"
+                                class:active={$settings.monitoring
+                                    .cpuUsageMode === val}
+                                onclick={() => {
+                                    $settings.monitoring.cpuUsageMode = val;
+                                    change();
+                                }}
+                            >
+                                {val === "overall"
+                                    ? "Overall (Task Manager)"
+                                    : "Max Thread (Gaming)"}
+                            </button>
+                        {/each}
+                    </div>
+                </div>
+            </div>
+        </SectionCard>
+
+        <SectionCard
             title="GPU Usage Source"
             description="Driver reports kernel busy time (NVML/ADL); WDDM reports max engine utilisation (like Task Manager)."
         >
@@ -86,8 +135,8 @@
         </SectionCard>
 
         <SectionCard
-            title="Logging"
-            description="Enable debug logging and choose per-category log mode."
+            title="Metrics Logging"
+            description="Log periodic sensor telemetry readings to daily metrics files."
         >
             <Toggle
                 bind:checked={$settings.enableFileLogging}
@@ -118,6 +167,26 @@
                     {/each}
                 </div>
             {/if}
+        </SectionCard>
+
+        <SectionCard
+            title="System Logging"
+            description="Controls logging verbosity written to lt_system.log. Set to Debug only when diagnosing hardware issues."
+        >
+            <div class="log-card">
+                <span class="log-label">Log Level</span>
+                <div class="btn-group">
+                    {#each systemLogLevels as lvl}
+                        <button
+                            class="btn-mode"
+                            class:active={$settings.systemLogLevel === lvl}
+                            onclick={() => {
+                                $settings.systemLogLevel = lvl;
+                            }}>{lvl}</button
+                        >
+                    {/each}
+                </div>
+            </div>
         </SectionCard>
     </div>
 {/if}

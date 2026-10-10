@@ -29,11 +29,7 @@ internal static class WindowHelpers
     private const string TaskName = "LocalTelemetry Startup";
     private const string TaskDescription = "Starts LocalTelemetry at user logon (silent, highest privileges).";
 
-    // Task Scheduler COM constants (taskschd):
-    // TASK_LOGON_INTERACTIVE_TOKEN = 3, TASK_RUNLEVEL_HIGHEST = 1,
-    // TASK_TRIGGER_LOGON = 9, TASK_ACTION_EXEC = 0, TASK_CREATE_OR_UPDATE = 6.
-    // NOTE: schtasks.exe /Create /SC ONLOGON silently fails with 0x80004005 on some
-    // Windows 11 builds, so creation uses the Task Scheduler COM API instead.
+    internal static Action<bool>? SetStartupAction { get; set; }
 
     /// <summary>
     /// Adds or removes the "LocalTelemetry Startup" scheduled task.
@@ -42,6 +38,12 @@ internal static class WindowHelpers
     /// </summary>
     public static void SetStartup(bool enable)
     {
+        if (SetStartupAction is not null)
+        {
+            SetStartupAction(enable);
+            return;
+        }
+
         try
         {
             if (enable)
@@ -51,12 +53,23 @@ internal static class WindowHelpers
         }
         catch (Exception ex)
         {
-            Log.Error($"SetStartup({enable}) failed: {ex.Message}");
+            Log.Error(ex, $"Failed to {(enable ? "enable" : "disable")} run at startup");
         }
     }
 
+    internal static Func<dynamic>? TaskSchedulerFactory { get; set; }
+
+    /// <summary>Test seam: replaces the <c>schtasks.exe /Query</c> exit code used by <see cref="IsStartupEnabled"/>.</summary>
+    internal static Func<int>? StartupQueryExitCode { get; set; }
+
+    /// <summary>Test seam: replaces the legacy Run-key registry delete in <see cref="RemoveStartupTask"/>.</summary>
+    internal static Action? LegacyRegistryCleanupAction { get; set; }
+
     private static dynamic ConnectScheduler()
     {
+        if (TaskSchedulerFactory is not null)
+            return TaskSchedulerFactory();
+
         Type type = Type.GetTypeFromProgID("Schedule.Service")
             ?? throw new InvalidOperationException("Task Scheduler COM (Schedule.Service) is not registered");
         dynamic scheduler = Activator.CreateInstance(type)!;
@@ -71,11 +84,19 @@ internal static class WindowHelpers
 
         dynamic scheduler = ConnectScheduler();
         dynamic root = scheduler.GetFolder("\\");
+
         dynamic task = scheduler.NewTask(0);
 
         task.RegistrationInfo.Description = TaskDescription;
         task.Principal.LogonType = 3; // TASK_LOGON_INTERACTIVE_TOKEN
         task.Principal.RunLevel = 1;  // TASK_RUNLEVEL_HIGHEST
+
+        // Ensure task runs on laptops/battery and doesn't terminate prematurely
+        task.Settings.DisallowStartIfOnBatteries = false;
+        task.Settings.StopIfGoingOnBatteries = false;
+        task.Settings.ExecutionTimeLimit = "PT0S"; // Infinite execution time (no 72h auto-kill)
+        task.Settings.StartWhenAvailable = true;
+        task.Settings.Priority = 4; // Normal priority (interactive task; prevents logon task throttling)
 
         dynamic trigger = task.Triggers.Create(9); // TASK_TRIGGER_LOGON
         trigger.Enabled = true;
@@ -83,9 +104,10 @@ internal static class WindowHelpers
         dynamic action = task.Actions.Create(0);   // TASK_ACTION_EXEC
         action.Path = exe;
         action.Arguments = "--minimized";
+        action.WorkingDirectory = System.IO.Path.GetDirectoryName(exe) ?? string.Empty;
 
         root.RegisterTaskDefinition(TaskName, task, 6, string.Empty, string.Empty, 3, string.Empty);
-        Log.Info($"SetStartup: created task '{TaskName}' -> {exe} --minimized");
+        Log.Debug($"Created startup scheduled task '{TaskName}' -> {exe} --minimized");
     }
 
     private static void RemoveStartupTask()
@@ -94,21 +116,43 @@ internal static class WindowHelpers
         {
             dynamic scheduler = ConnectScheduler();
             dynamic root = scheduler.GetFolder("\\");
+
+            bool exists;
+            try
+            {
+                exists = root.GetTask(TaskName) is not null;
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, $"Task '{TaskName}' does not exist or could not be queried");
+                exists = false;
+            }
+
+            if (!exists) return;
+
             root.DeleteTask(TaskName, 0);
+            Log.Debug($"Removed startup scheduled task '{TaskName}'");
         }
         catch (Exception ex) when (ex is COMException or System.IO.FileNotFoundException)
         {
-            Log.Info($"SetStartup: task '{TaskName}' already absent ({ex.Message})");
+            Log.Debug($"Startup scheduled task '{TaskName}' delete failed ({ex.Message.TrimEnd('\r', '\n')})");
         }
 
         try
         {
-            using var key = Registry.CurrentUser.OpenSubKey(RunKey, writable: true);
-            key?.DeleteValue(AppName, throwOnMissingValue: false);
+            if (LegacyRegistryCleanupAction is not null)
+            {
+                LegacyRegistryCleanupAction();
+            }
+            else
+            {
+                using var key = Registry.CurrentUser.OpenSubKey(RunKey, writable: true);
+                key?.DeleteValue(AppName, throwOnMissingValue: false);
+            }
         }
         catch (Exception ex)
         {
-            Log.Error($"Cleanup legacy startup registry key failed: {ex.Message}");
+            Log.Error(ex, "Failed to clean up legacy startup registry key");
         }
     }
 
@@ -117,16 +161,23 @@ internal static class WindowHelpers
     {
         try
         {
-            var psi = new System.Diagnostics.ProcessStartInfo
+            if (StartupQueryExitCode is not null)
             {
-                FileName = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "schtasks.exe"),
-                Arguments = $"/Query /TN \"{TaskName}\"",
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            using var p = System.Diagnostics.Process.Start(psi);
-            p?.WaitForExit(2000);
-            if (p?.ExitCode == 0) return true;
+                if (StartupQueryExitCode() == 0) return true;
+            }
+            else
+            {
+                var psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "schtasks.exe"),
+                    Arguments = $"/Query /TN \"{TaskName}\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                using var p = System.Diagnostics.Process.Start(psi);
+                p?.WaitForExit(2000);
+                if (p?.ExitCode == 0) return true;
+            }
 
             using RegistryKey? hkcuKey = Registry.CurrentUser.OpenSubKey(RunKey);
             if (hkcuKey?.GetValue(AppName) is not null) return true;
@@ -136,7 +187,7 @@ internal static class WindowHelpers
         }
         catch (Exception ex)
         {
-            Log.Error($"IsStartupEnabled check failed: {ex.Message}");
+            Log.Error(ex, "Failed to check if run at startup is enabled");
             return false;
         }
     }
@@ -156,8 +207,9 @@ internal static class WindowHelpers
         {
             return ColorTranslator.FromHtml(hex.StartsWith('#') ? hex : '#' + hex);
         }
-        catch (ArgumentException)
+        catch (ArgumentException ex)
         {
+            Log.Debug(ex, $"Invalid hex color string '{hex}', using fallback");
             // Invalid hex string - use fallback color.
             return fallback == default ? Color.White : fallback;
         }

@@ -2,11 +2,11 @@
 
 ## Supported Versions
 
-| Version            | Supported     |
-| ------------------ | ------------- |
-| Latest release     | ✅             |
-| Pre-release / Beta | ⚠️ Best effort |
-| Older releases     | ❌             |
+| Version                         | Supported     |
+| ------------------------------- | ------------- |
+| Latest release                  | ✅             |
+| Pre-release / Release Candidate | ⚠️ Best effort |
+| Older releases                  | ❌             |
 
 ## Reporting a Vulnerability
 

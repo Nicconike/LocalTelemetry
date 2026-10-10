@@ -1,8 +1,11 @@
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { defineConfig, type HeadConfig } from 'vitepress';
+import type { DefaultTheme } from 'vitepress/theme';
 import { withMermaid } from 'vitepress-plugin-mermaid';
 import { version as packageVersion } from '../package.json';
+import { lucideMarkdownPlugin, lucideFrontmatterPlugin } from './markdown-lucide.js';
+import { versions } from './versions.mjs';
 
 const gitCandidates =
     process.platform === 'win32'
@@ -33,7 +36,7 @@ const headConfigs: HeadConfig[] = [
     ['meta', { name: 'theme-color', content: '#0284c7' }],
     ['meta', { name: 'og:type', content: 'website' }],
     ['meta', { name: 'og:title', content: 'LocalTelemetry Documentation' }],
-    ['meta', { name: 'og:description', content: 'Embed real-time CPU, GPU, RAM, Disk and Network telemetry directly into your Windows Taskbar.' }]
+    ['meta', { name: 'og:description', content: 'Real-time hardware telemetry displayed on the Windows taskbar' }]
 ];
 
 if (gaId && gaId !== 'GA-MEASUREMENT_ID') {
@@ -52,15 +55,119 @@ if (gaId && gaId !== 'GA-MEASUREMENT_ID') {
     );
 }
 
+// Sidebar definitions with page links relative to each guide root
+const userGuideSidebar = [
+    {
+        text: 'Getting Started',
+        items: [
+            { text: 'Overview & Introduction', link: '' },
+            { text: 'Quickstart Guide', link: 'quickstart' },
+            { text: 'Installation & Setup', link: 'installation' }
+        ]
+    },
+    {
+        text: 'Features & Customization',
+        items: [
+            { text: 'System Tray & Taskbar Overlay', link: 'tray-and-overlay' },
+            { text: 'Telemetry Metrics & Sensors', link: 'metrics-and-sensors' },
+            { text: 'Threshold Alerts & Toast Notifications', link: 'alerts-and-notifications' },
+            { text: 'Traffic & Network History', link: 'network-history' },
+            { text: 'Svelte 5 Settings & Customization', link: 'customization' }
+        ]
+    },
+    {
+        text: 'Help & Support',
+        items: [
+            { text: 'Troubleshooting & FAQ', link: 'troubleshooting' }
+        ]
+    }
+];
+
+const developerGuideSidebar = [
+    {
+        text: 'Developer Overview',
+        items: [
+            { text: 'Architecture & System Overview', link: '' },
+            { text: 'Dev Environment Setup', link: 'setup' },
+            { text: 'Repository Structure', link: 'repository-structure' }
+        ]
+    },
+    {
+        text: 'Technical Deep Dives',
+        items: [
+            { text: 'Core Engine & Backend (.NET 10)', link: 'backend-architecture' },
+            { text: 'Hardware Drivers & Sensor Polling', link: 'hardware-drivers' },
+            { text: 'Win32 Taskbar Hooking & Overlay', link: 'taskbar-overlay-interop' },
+            { text: 'Svelte 5 Frontend & WebView2 Bridge', link: 'frontend-webview' },
+            { text: 'Standalone Notifier IPC Subsystem', link: 'notifier-ipc' }
+        ]
+    },
+    {
+        text: 'Reference & Specifications',
+        items: [
+            { text: 'C# Core API & Models', link: 'reference/core-api' },
+            { text: 'WebView2 & Named Pipe IPC Protocol', link: 'reference/ipc-protocol' },
+            { text: 'settings.json Configuration Schema', link: 'reference/settings-schema' }
+        ]
+    },
+    {
+        text: 'Release & Contribution',
+        items: [
+            { text: 'Building & Inno Setup Packaging', link: 'building-and-packaging' },
+            { text: 'CI/CD Pipelines & Workflows', link: 'ci-cd' },
+            { text: 'Contributing & Coding Standards', link: 'contributing' }
+        ]
+    }
+];
+
+// Expand the relative sidebar definitions into one sidebar per docs version
+function buildSidebar(): DefaultTheme.Sidebar {
+    const sidebar: DefaultTheme.Sidebar = {};
+    for (const { link: versionBase } of versions) {
+        const base = versionBase === '/' ? '/' : versionBase;
+        sidebar[`${base}user-guide/`] = userGuideSidebar.map((group) => ({
+            ...group,
+            items: group.items.map(({ text, link }) => ({
+                text,
+                link: `${base}user-guide/${link}`
+            }))
+        }));
+        sidebar[`${base}developer-guide/`] = developerGuideSidebar.map((group) => ({
+            ...group,
+            items: group.items.map(({ text, link }) => ({
+                text,
+                link: `${base}developer-guide/${link}`
+            }))
+        }));
+    }
+    return sidebar;
+}
+
 export default withMermaid(
     defineConfig({
         title: 'LocalTelemetry',
-        description: 'Lightweight, real-time Windows taskbar hardware monitoring utility',
+        description: 'Real-time hardware telemetry displayed on the Windows taskbar',
         lang: 'en-US',
         base,
         cleanUrls: true,
         lastUpdated: true,
         head: headConfigs,
+
+        markdown: {
+            headers: {
+                level: [2, 3]
+            },
+            config: (md) => {
+                md.use(lucideMarkdownPlugin);
+            }
+        },
+
+        rewrites: {
+            'latest/index.md': 'index.md',
+            'latest/user-guide/:path': 'user-guide/:path',
+            'latest/developer-guide/:path': 'developer-guide/:path',
+            'latest/developer-guide/reference/:path': 'developer-guide/reference/:path'
+        },
 
         mermaid: {
             theme: 'dark',
@@ -69,13 +176,23 @@ export default withMermaid(
                 fontSize: '13px'
             },
             flowchart: {
-                useMaxWidth: true,
+                useMaxWidth: false,
                 htmlLabels: true,
                 padding: 16
             },
             sequence: {
-                useMaxWidth: true,
+                useMaxWidth: false,
                 showSequenceNumbers: true
+            }
+        },
+
+        vite: {
+            plugins: [lucideFrontmatterPlugin()],
+            optimizeDeps: {
+                include: ['fastdom', 'mermaid', 'debug', 'dayjs']
+            },
+            build: {
+                chunkSizeWarningLimit: 3000
             }
         },
 
@@ -88,72 +205,20 @@ export default withMermaid(
                 { text: 'User Guide', link: '/user-guide/' },
                 { text: 'Developer Guide', link: '/developer-guide/' },
                 {
-                    text: `v${version}`,
+                    text: 'Latest',
                     items: [
-                        { text: isPrerelease ? `v${version} (Prerelease)` : `v${version}`, link: '/user-guide/' },
-                        { text: 'Changelog', link: 'https://github.com/Nicconike/LocalTelemetry/blob/master/CHANGELOG.md' },
-                        { text: 'App Releases', link: 'https://github.com/Nicconike/LocalTelemetry/releases' }
+                        ...versions.map((v) => ({ text: v.text, link: v.link })),
+                        {
+                            items: [
+                                { text: 'Changelog', link: 'https://github.com/Nicconike/LocalTelemetry/blob/master/CHANGELOG.md' },
+                                { text: 'App Releases', link: 'https://github.com/Nicconike/LocalTelemetry/releases' }
+                            ]
+                        }
                     ]
                 }
             ],
 
-            sidebar: {
-                '/user-guide/': [
-                    {
-                        text: 'Getting Started',
-                        items: [
-                            { text: 'Overview & Introduction', link: '/user-guide/' },
-                            { text: 'Installation & Setup', link: '/user-guide/installation' },
-                            { text: 'Quickstart Guide', link: '/user-guide/quickstart' }
-                        ]
-                    },
-                    {
-                        text: 'Features & Customization',
-                        items: [
-                            { text: 'System Tray & Taskbar Overlay', link: '/user-guide/tray-and-overlay' },
-                            { text: 'Telemetry Metrics & Sensors', link: '/user-guide/metrics-and-sensors' },
-                            { text: 'Threshold Alerts & Toast Notifications', link: '/user-guide/alerts-and-notifications' },
-                            { text: 'Svelte 5 Settings & Customization', link: '/user-guide/customization' },
-                            { text: 'Traffic & Network History', link: '/user-guide/network-history' }
-                        ]
-                    },
-                    {
-                        text: 'Help & Support',
-                        items: [
-                            { text: 'Troubleshooting & FAQ', link: '/user-guide/troubleshooting' }
-                        ]
-                    }
-                ],
-
-                '/developer-guide/': [
-                    {
-                        text: 'Developer Overview',
-                        items: [
-                            { text: 'Architecture & System Overview', link: '/developer-guide/' },
-                            { text: 'Dev Environment Setup', link: '/developer-guide/setup' },
-                            { text: 'Repository Structure', link: '/developer-guide/repository-structure' }
-                        ]
-                    },
-                    {
-                        text: 'Technical Deep Dives',
-                        items: [
-                            { text: 'Core Engine & App Backend (.NET 10)', link: '/developer-guide/backend-architecture' },
-                            { text: 'Hardware Drivers & PawnIo Integration', link: '/developer-guide/hardware-drivers' },
-                            { text: 'Win32 Taskbar Hooking & Overlay', link: '/developer-guide/taskbar-overlay-interop' },
-                            { text: 'Svelte 5 Frontend & WebView2 Bridge', link: '/developer-guide/frontend-webview2' },
-                            { text: 'Standalone Notifier IPC Subsystem', link: '/developer-guide/notifier-ipc' }
-                        ]
-                    },
-                    {
-                        text: 'Release & Contribution',
-                        items: [
-                            { text: 'Building & Inno Setup Packaging', link: '/developer-guide/building-and-packaging' },
-                            { text: 'CI/CD Pipelines & GitHub Workflows', link: '/developer-guide/ci-cd' },
-                            { text: 'Contributing & Coding Standards', link: '/developer-guide/contributing' }
-                        ]
-                    }
-                ]
-            },
+            sidebar: buildSidebar(),
 
             editLink: {
                 pattern: 'https://github.com/Nicconike/LocalTelemetry/edit/master/docs/:path',
@@ -177,12 +242,21 @@ export default withMermaid(
                 provider: 'local'
             },
 
+            outline: {
+                level: [2, 3],
+                label: 'On this page'
+            },
+
+            returnToTopLabel: 'Return to top',
+            externalLinkIcon: true,
+
             socialLinks: [
+                { icon: 'discord', link: 'https://discord.gg/M2QevSgW3S' },
                 { icon: 'github', link: 'https://github.com/Nicconike/LocalTelemetry' }
             ],
 
             footer: {
-                message: 'Released under the GNU General Public License v3.0.',
+                message: 'Released under the GNU General Public License v3.0',
                 copyright: 'Copyright © 2026 Nicconike'
             }
         }

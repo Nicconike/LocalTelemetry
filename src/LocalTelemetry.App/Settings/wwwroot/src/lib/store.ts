@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store';
 import type { Writable } from 'svelte/store';
-import type { SettingsDto, SystemInfo, TrafficDay, TrafficTodayPayload } from "./types.ts";
+import type { SettingsDto, SystemInfo, TrafficDay, TrafficTodayPayload, WindowsUsageImportResultPayload } from "./types.ts";
 
 export const settings: Writable<SettingsDto | null> = writable(null);
 export const pristineSettings: Writable<string> = writable('');
@@ -22,5 +22,6 @@ export const trafficMonths: Writable<string[]> = writable([]);
 export const trafficCache: Map<string, TrafficDay[]> = new Map();
 
 export const importResult: Writable<{ daysImported: number; error?: string } | null> = writable(null);
+export const windowsImportResult: Writable<WindowsUsageImportResultPayload | null> = writable(null);
 
 export const systemInfo: Writable<SystemInfo> = writable({} as SystemInfo);

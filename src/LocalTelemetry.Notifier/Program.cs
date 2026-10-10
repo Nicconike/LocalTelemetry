@@ -10,15 +10,33 @@ namespace LocalTelemetry.Notifier;
 [SupportedOSPlatform("windows")]
 internal static class Program
 {
-    private const string PipeName = "LocalTelemetryNotifier";
+    internal static string PipeName { get; set; } = "LocalTelemetryNotifier";
 
-    internal static int ReconnectDelayMs = 1000;
-    internal static Func<INotifierPipeServer>? PipeServerFactory;
-    internal static Func<string, string, ToastForm> ToastFactory = static (title, body) => new ToastForm(title, body);
+    internal static int ReconnectDelayMs { get; set; } = 1000;
+    internal static Func<INotifierPipeServer>? PipeServerFactory { get; set; }
+    internal static Func<string, string, ToastForm> ToastFactory { get; set; } = static (title, body) => new ToastForm(title, body);
 
     [STAThread]
     private static void Main(string[] args)
     {
+        // Per-monitor V2 DPI awareness must be set before any HWND is created,
+        // otherwise toast forms are bitmap-stretched after a display scale change.
+        Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            if (e.ExceptionObject is Exception ex)
+                NotifierLog.Error(ex, "Unhandled AppDomain exception in Notifier process");
+        };
+
+        string logPath = ResolveLogPath();
+        NotifierLog.Init(logPath);
+        if (NotifierLog.LastError is not null)
+        {
+            // Log file initialization failed
+            Debug.WriteLine($"NotifierLog.Init failed for '{logPath}': {NotifierLog.LastError}");
+        }
+
         int parentPid = args.Length > 0 && int.TryParse(args[0], out int p) ? p : 0;
 
         if (parentPid > 0)
@@ -28,22 +46,7 @@ internal static class Program
 
         using var shutdownCts = new CancellationTokenSource();
 
-        // Monitor parent process
-        if (parentPid > 0)
-        {
-            _ = Task.Run(() => MonitorParentProcessAsync(
-                () =>
-                {
-                    try
-                    {
-                        using var parent = Process.GetProcessById(parentPid);
-                        parent.WaitForExit();
-                    }
-                    catch (ArgumentException) { NotifierLog.Warn("Parent process not found (already exited)"); }
-                    return Task.CompletedTask;
-                },
-                shutdownCts));
-        }
+        SetupParentMonitoring(parentPid, shutdownCts);
 
         // Hidden form to provide Windows message pump (required for WinForms/WPF)
         using var hiddenForm = new HiddenForm();
@@ -54,15 +57,55 @@ internal static class Program
         };
         hiddenForm.FormClosing += (_, _) => NotifierLog.Info("Message pump exiting");
 
-        _ = Task.Run(() =>
-        {
-            try { shutdownCts.Token.WaitHandle.WaitOne(); }
-            catch (OperationCanceledException) { }
-            hiddenForm.BeginInvoke(() => hiddenForm.Close());
-        });
+        SetupShutdownListener(hiddenForm, shutdownCts);
 
         Application.Run(hiddenForm);
         NotifierLog.Info("Exited");
+        NotifierLog.Shutdown();
+    }
+
+    private static void SetupParentMonitoring(int parentPid, CancellationTokenSource shutdownCts)
+    {
+        if (parentPid <= 0) return;
+
+        _ = Task.Run(() => MonitorParentProcessAsync(
+            async () =>
+            {
+                try
+                {
+                    using var parent = Process.GetProcessById(parentPid);
+                    await parent.WaitForExitAsync(shutdownCts.Token).ConfigureAwait(false);
+                }
+                catch (ArgumentException) { NotifierLog.Warn("Parent process not found (already exited)"); }
+                catch (OperationCanceledException)
+                {
+                    // Expected when shutdown is initiated elsewhere
+                }
+            },
+            shutdownCts), shutdownCts.Token);
+    }
+
+    private static void SetupShutdownListener(HiddenForm hiddenForm, CancellationTokenSource shutdownCts)
+    {
+        _ = Task.Run(() =>
+        {
+            shutdownCts.Token.WaitHandle.WaitOne();
+            if (hiddenForm.IsHandleCreated)
+                hiddenForm.BeginInvoke(() => hiddenForm.Close());
+            else
+                hiddenForm.Load += (_, _) => hiddenForm.Close();
+        }, CancellationToken.None);
+    }
+
+    /// <summary>Resolves the notifier log path using the same data-dir rule as <c>AppSettings.InitPaths</c>.</summary>
+    private static string ResolveLogPath()
+    {
+        string exeDir = AppContext.BaseDirectory;
+        string markerFile = Path.Combine(exeDir, "app.mode");
+        string dataDir = File.Exists(markerFile)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LocalTelemetry")
+            : exeDir;
+        return Path.Combine(dataDir, "lt_notifier.log");
     }
 
     internal static async Task MonitorParentProcessAsync(Func<Task> waitForParentExit, CancellationTokenSource cts)
@@ -113,7 +156,7 @@ internal static class Program
             return PipeServerFactory();
 
         return new NamedPipeServerStreamWrapper(new NamedPipeServerStream(
-            PipeName, PipeDirection.In, 1, PipeTransmissionMode.Message, PipeOptions.Asynchronous));
+            PipeName, PipeDirection.In, 1, PipeTransmissionMode.Message, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly));
     }
 
     internal interface INotifierPipeServer : IDisposable
@@ -158,13 +201,13 @@ internal static class Program
 
                 if (msg.Action == "ShowToast")
                 {
-                    NotifierLog.Info($"Toast: {msg.Title} - {msg.Body}");
+                    NotifierLog.Info($"Displaying toast '{msg.Title}' - '{msg.Body}'");
                     toastHandler(msg.Title ?? "LocalTelemetry", msg.Body ?? string.Empty);
                 }
                 else if (msg.Action == "Shutdown")
                 {
                     NotifierLog.Info("Shutdown requested");
-                    cts.Cancel();
+                    await cts.CancelAsync().ConfigureAwait(false);
                     return;
                 }
                 else
@@ -188,7 +231,7 @@ internal static class Program
         }
         catch (Exception ex)
         {
-            NotifierLog.Error(ex, "ShowToast failed");
+            NotifierLog.Error(ex, "Failed to display toast notification");
         }
     }
 

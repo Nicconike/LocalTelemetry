@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using LocalTelemetry.Core.Diagnostics;
 using LocalTelemetry.Core.Models;
@@ -9,34 +9,65 @@ namespace LocalTelemetry.Core.Config;
 /// <summary>Root configuration model serialized to <c>settings.json</c>.</summary>
 public sealed class AppSettings
 {
+    /// <summary>Full path to the application executable directory.</summary>
+    [JsonIgnore] public static string ExeDir { get; private set; } = string.Empty;
+    /// <summary>Full path to the user data directory (AppData in standard mode, exeDir in portable mode).</summary>
+    [JsonIgnore] public static string DataDir { get; private set; } = string.Empty;
+    /// <summary>Whether running in standard mode vs portable mode.</summary>
+    [JsonIgnore] public static bool IsStandardMode { get; private set; }
     /// <summary>Full path to the <c>settings.json</c> config file.</summary>
     [JsonIgnore] public static string ConfigPath { get; private set; } = string.Empty;
     /// <summary>Full path to the <c>internet_usage.jsonl</c> traffic history file.</summary>
     [JsonIgnore] public static string NetUsagePath { get; private set; } = string.Empty;
+    /// <summary>Full path to the dedicated logs directory (<c>logs/</c>).</summary>
+    [JsonIgnore] public static string LogsDir { get; private set; } = string.Empty;
     /// <summary>Full path to the metrics log file (<c>lt_DD-MM-YYYY.log</c>).</summary>
     [JsonIgnore] public static string MetricsLogPath { get; private set; } = string.Empty;
     /// <summary>Full path to the system log file (<c>lt_system.log</c>).</summary>
     [JsonIgnore] public static string SystemLogPath { get; private set; } = string.Empty;
+    /// <summary>Full path to the cached hardware state file (<c>hardware_state.json</c>).</summary>
+    [JsonIgnore] public static string HardwareStatePath { get; private set; } = string.Empty;
+    /// <summary>Records the last error encountered during directory creation, if any.</summary>
+    [JsonIgnore] public static Exception? LastDirectoryError { get; internal set; }
     /// <summary>Initializes all static paths from the application executable directory.</summary>
     public static void InitPaths(string exeDir)
     {
+        ExeDir = exeDir;
         string markerFile = Path.Combine(exeDir, "app.mode");
         bool standardMode = File.Exists(markerFile);
+        IsStandardMode = standardMode;
 
         string dataDir = standardMode
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LocalTelemetry")
             : exeDir;
+        DataDir = dataDir;
 
         if (standardMode && !Directory.Exists(dataDir))
         {
             try { Directory.CreateDirectory(dataDir); }
-            catch { /* fallback to exeDir if directory creation fails */ dataDir = exeDir; }
+            catch (Exception ex)
+            {
+                LastDirectoryError = ex;
+                System.Diagnostics.Debug.WriteLine($"[AppSettings.InitPaths] Failed to create data directory '{dataDir}': {ex}");
+                dataDir = exeDir;
+            }
         }
+
+        string logsDir = Path.Combine(dataDir, "logs");
+        try { Directory.CreateDirectory(logsDir); }
+        catch (Exception ex)
+        {
+            LastDirectoryError = ex;
+            System.Diagnostics.Debug.WriteLine($"[AppSettings.InitPaths] Failed to create logs directory '{logsDir}': {ex}");
+            logsDir = dataDir;
+        }
+        LogsDir = logsDir;
 
         ConfigPath = Path.Combine(dataDir, "settings.json");
         NetUsagePath = Path.Combine(dataDir, "internet_usage.jsonl");
-        MetricsLogPath = Path.Combine(dataDir, $"lt_{DateTime.Now:dd-MM-yyyy}.log");
-        SystemLogPath = Path.Combine(dataDir, "lt_system.log");
+        MetricsLogPath = Path.Combine(logsDir, $"lt_{DateTime.Now:dd-MM-yyyy}.log");
+        SystemLogPath = Path.Combine(logsDir, "lt_system.log");
+        HardwareStatePath = Path.Combine(dataDir, "hardware_state.json");
     }
 
     /// <summary>Loads settings from <see cref="ConfigPath"/>, creating defaults if missing or corrupt.</summary>
@@ -57,15 +88,15 @@ public sealed class AppSettings
         }
         catch (Exception ex)
         {
-            Log.Error(ex, $"Corrupt config at {ConfigPath}");
+            Log.Error(ex, $"Corrupted configuration file detected at {ConfigPath}");
             try
             {
                 File.Copy(ConfigPath, ConfigPath + ".corrupt", overwrite: true);
-                Log.Info($"Backed up corrupt config to {ConfigPath}.corrupt");
+                Log.Info($"Backed up corrupted configuration to {ConfigPath}.corrupt");
             }
             catch (Exception backupEx)
             {
-                Log.Error(backupEx, $"Failed to back up corrupt config");
+                Log.Error(backupEx, "Failed to create backup of corrupted configuration");
             }
         }
         var fresh = new AppSettings();
@@ -79,35 +110,29 @@ public sealed class AppSettings
         var mc = cfg.Overlay.MetricColors;
         var allDefaults = BrandColorDefaults.BuildDefaultMetricColors();
         bool dirty = false;
-        foreach (var kvp in allDefaults)
+        foreach (var kvp in allDefaults.Where(kvp => !mc.ContainsKey(kvp.Key)))
         {
-            if (!mc.ContainsKey(kvp.Key))
-            {
-                mc[kvp.Key] = kvp.Value;
-                dirty = true;
-            }
+            mc[kvp.Key] = kvp.Value;
+            dirty = true;
         }
         if (dirty)
         {
             cfg.Save();
-            Log.Info($"Migrated config: filled {mc.Count} MetricColors entries");
+            Log.Debug($"Configuration migration completed: populated {mc.Count} metric color entries");
         }
 
         // Ensure GroupColors has all known group entries (from configs saved before group colors existed)
         var gc = cfg.Overlay.GroupColors;
         bool groupDirty = false;
-        foreach (var kvp in BrandColorDefaults.BuildDefaultGroupColors(allDefaults))
+        foreach (var kvp in BrandColorDefaults.BuildDefaultGroupColors(allDefaults).Where(kvp => !gc.ContainsKey(kvp.Key)))
         {
-            if (!gc.ContainsKey(kvp.Key))
-            {
-                gc[kvp.Key] = kvp.Value;
-                groupDirty = true;
-            }
+            gc[kvp.Key] = kvp.Value;
+            groupDirty = true;
         }
         if (groupDirty)
         {
             cfg.Save();
-            Log.Info($"Migrated config: filled {gc.Count} GroupColors entries");
+            Log.Debug($"Configuration migration completed: populated {gc.Count} group color entries");
         }
     }
 
@@ -116,11 +141,17 @@ public sealed class AppSettings
     {
         try
         {
+            if (!ShowSystemTrayIcon && !Overlay.Visible)
+            {
+                ShowSystemTrayIcon = true;
+                Log.Warn("Cannot disable both System Tray Icon and Overlay. System Tray Icon kept enabled to prevent lockout.");
+            }
+
             var json = JsonSerializer.Serialize(this, JsonOpts);
             File.WriteAllText(ConfigPath, json);
-            Log.Info($"AppSettings.Save: wrote {json.Length} chars to {ConfigPath}, visible={Overlay.Visible}");
+            Log.Debug($"Configuration saved successfully ({json.Length} characters, Overlay Visible: {Overlay.Visible})");
         }
-        catch (Exception ex) { Log.Error(ex, "Save FAILED"); }
+        catch (Exception ex) { Log.Error(ex, "Failed to save configuration settings"); }
     }
 
     /// <summary>Whether the app is registered to run automatically at user logon.</summary>
@@ -129,8 +160,12 @@ public sealed class AppSettings
     public bool StartMinimized { get; set; } = false;
     /// <summary>Whether closing the window minimizes to tray instead of exiting.</summary>
     public bool MinimizeToTrayOnClose { get; set; } = false;
+    /// <summary>Whether the system tray notification icon is visible.</summary>
+    public bool ShowSystemTrayIcon { get; set; } = true;
     /// <summary>Whether metrics file logging is enabled (<c>lt_DD-MM-YYYY.log</c>). System logging to <c>lt_system.log</c> is always on.</summary>
     public bool EnableFileLogging { get; set; } = true;
+    /// <summary>System log level threshold (<c>"Off"</c>, <c>"Error"</c>, <c>"Warning"</c>, <c>"Info"</c>, <c>"Debug"</c>). Default: <c>"Info"</c>.</summary>
+    public string SystemLogLevel { get; set; } = "Info";
 
     /// <summary>Hardware polling configuration.</summary>
     public MonitoringConfig Monitoring { get; set; } = new();
@@ -140,6 +175,8 @@ public sealed class AppSettings
     public AlertConfig Alerts { get; set; } = new();
     /// <summary>Network usage logging configuration.</summary>
     public NetUsageConfig NetUsage { get; set; } = new();
+    /// <summary>Update checking configuration.</summary>
+    public UpdateConfig Updates { get; set; } = new();
     /// <summary>Themes the settings window (<c>"default"</c>, <c>"dark"</c>, etc.).</summary>
     public string WindowTheme { get; set; } = "default";
 
@@ -169,6 +206,10 @@ public sealed class MonitoringConfig
     public bool EnableDisk { get; set; } = true;
     /// <summary>Whether battery monitoring is enabled.</summary>
     public bool EnableBattery { get; set; } = true;
+    /// <summary>CPU Frequency calculation method: "average" or "max".</summary>
+    public string CpuFreqMode { get; set; } = "average";
+    /// <summary>CPU Usage calculation method: "overall" or "max".</summary>
+    public string CpuUsageMode { get; set; } = "overall";
     /// <summary>Display temperatures in Fahrenheit instead of Celsius.</summary>
     public bool UseFahrenheit { get; set; } = false;
     /// <summary>Display network rates in bits/sec instead of bytes/sec.</summary>
@@ -224,25 +265,27 @@ public sealed class OverlayConfig
     /// <summary>Background color as a hex string.</summary>
     public string BgColor { get; set; } = "#1c1b19";
 
+    private const string DefaultCyanColor = "#00E5FF";
+    private const string DefaultSkyBlueColor = "#88CCFF";
+
     /// <summary>Per-metric value colors for the widget (overrides ValueColor).</summary>
     public Dictionary<string, string> MetricColors { get; set; } = new()
     {
-        [Metrics.CpuPct] = "#00E5FF",
-        [Metrics.CpuTemp] = "#00E5FF",
-        [Metrics.CpuFreq] = "#00E5FF",
-        [Metrics.CpuPower] = "#00E5FF",
+        [Metrics.CpuPct] = DefaultCyanColor,
+        [Metrics.CpuTemp] = DefaultCyanColor,
+        [Metrics.CpuFreq] = DefaultCyanColor,
+        [Metrics.CpuPower] = DefaultCyanColor,
         [Metrics.RamPct] = "#A78BFA",
         [Metrics.RamUsed] = "#A78BFA",
-        [Metrics.GpuPct] = "#88CCFF",
-        [Metrics.GpuTemp] = "#88CCFF",
-        [Metrics.GpuVram] = "#88CCFF",
-        [Metrics.GpuFreq] = "#88CCFF",
-        [Metrics.GpuPower] = "#88CCFF",
+        [Metrics.GpuPct] = DefaultSkyBlueColor,
+        [Metrics.GpuTemp] = DefaultSkyBlueColor,
+        [Metrics.GpuVram] = DefaultSkyBlueColor,
+        [Metrics.GpuFreq] = DefaultSkyBlueColor,
+        [Metrics.GpuPower] = DefaultSkyBlueColor,
         [Metrics.NetDown] = "#38BDF8",
         [Metrics.NetUp] = "#4ADE80",
         [Metrics.NetTotal] = "#FBBF24",
         [Metrics.BatteryPct] = "#80E080",
-
         [Metrics.BatteryRate] = "#80E080",
     };
 
@@ -302,16 +345,20 @@ public sealed class AlertConfig
     public bool AlertGpuFreq { get; set; }
     /// <summary>Alert when GPU power exceeds <see cref="GpuPowerMaxW"/>.</summary>
     public bool AlertGpuPower { get; set; }
+    /// <summary>Alert when today's network usage exceeds <see cref="NetDailyMaxGb"/>.</summary>
+    public bool AlertNetDaily { get; set; }
+    /// <summary>Alert when current month's network usage exceeds <see cref="NetMonthlyMaxGb"/>.</summary>
+    public bool AlertNetMonthly { get; set; }
 
     // Thresholds
     /// <summary>CPU temperature threshold in Celsius.</summary>
     public float CpuTempMaxC { get; set; } = 90f;
     /// <summary>GPU temperature threshold in Celsius.</summary>
-    public float GpuTempMaxC { get; set; } = 88f;
+    public float GpuTempMaxC { get; set; } = 85f;
     /// <summary>CPU usage threshold in percent.</summary>
     public float CpuUsageMaxPct { get; set; } = 95f;
     /// <summary>RAM usage threshold in percent.</summary>
-    public float RamUsageMaxPct { get; set; } = 92f;
+    public float RamUsageMaxPct { get; set; } = 90f;
     /// <summary>GPU usage threshold in percent.</summary>
     public float GpuUsageMaxPct { get; set; } = 95f;
     /// <summary>GPU VRAM usage threshold in megabytes.</summary>
@@ -326,6 +373,10 @@ public sealed class AlertConfig
     public float GpuFreqMinMhz { get; set; } = 300f;
     /// <summary>GPU power threshold in watts.</summary>
     public float GpuPowerMaxW { get; set; } = 150f;
+    /// <summary>Daily network usage threshold in gigabytes.</summary>
+    public float NetDailyMaxGb { get; set; } = 50f;
+    /// <summary>Monthly network usage threshold in gigabytes.</summary>
+    public float NetMonthlyMaxGb { get; set; } = 1000f;
 
     // Actions
     /// <summary>Whether to show a Windows toast notification on alert.</summary>
@@ -344,4 +395,18 @@ public sealed class NetUsageConfig
 {
     /// <summary>Whether daily network usage tracking is enabled.</summary>
     public bool Enabled { get; set; } = true;
+}
+
+// Update Config
+/// <summary>Update checking configuration.</summary>
+public sealed class UpdateConfig
+{
+    /// <summary>Update check frequency: "weekly", "monthly", or "manual". Default is "manual" for new installs.</summary>
+    public string CheckFrequency { get; set; } = "manual";
+
+    /// <summary>Whether to include pre-release and Release Candidate (RC) builds when checking for updates.</summary>
+    public bool IncludePrereleases { get; set; } = true;
+
+    /// <summary>UTC timestamp of the last update check.</summary>
+    public DateTime LastCheckUtc { get; set; } = DateTime.MinValue;
 }

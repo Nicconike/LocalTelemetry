@@ -1,8 +1,10 @@
-﻿using System.Runtime.Versioning;
+using System.Runtime.Versioning;
 using LocalTelemetry.App.Overlay;
 using LocalTelemetry.Core.Config;
+using LocalTelemetry.Core.Diagnostics;
 using LocalTelemetry.Core.Models;
-using Microsoft.Extensions.Logging;
+
+using LocalTelemetry.Core.Hardware;
 
 namespace LocalTelemetry.App.Services;
 
@@ -13,16 +15,18 @@ namespace LocalTelemetry.App.Services;
 [SupportedOSPlatform("windows")]
 public sealed class AlertService(
     AppSettings cfg,
-    ILogger<AlertService> log,
     TaskbarOverlay overlay,
-    NotificationClient notifClient)
+    NotificationClient notifClient,
+    NetUsageLogger? netLogger = null)
 {
     private readonly AppSettings _cfg = cfg;
-    private readonly ILogger _log = log;
     private readonly TaskbarOverlay _overlay = overlay;
     private readonly NotificationClient _notifClient = notifClient;
+    private readonly NetUsageLogger? _netLogger = netLogger;
     private readonly Dictionary<string, DateTime> _cooldowns = [];
     private readonly HashSet<string> _firedOnce = [];
+    private readonly HashSet<string> _activeAlerts = [];
+    private readonly Dictionary<string, float> _lastAlertedValue = [];
     private readonly DateTime _startupTime = DateTime.UtcNow;
 
 
@@ -40,130 +44,240 @@ public sealed class AlertService(
 
         bool f = _cfg.Monitoring.UseFahrenheit;
 
-        if (_cfg.Alerts.AlertCpuTemp)
-            TryFire(Metrics.CpuTemp, snap.CpuTempPackageC,
-                    _cfg.Alerts.CpuTempMaxC,
-                    $"WARNING: CPU at {Metrics.TempString(snap.CpuTempPackageC, f)}");
+        EvaluateCpuAlerts(snap, f);
+        EvaluateGpuAlerts(snap, f);
+        EvaluateRamAndMiscAlerts(snap);
+        EvaluateNetAlerts();
+    }
 
-        if (_cfg.Alerts.AlertGpuTemp)
-            TryFire(Metrics.GpuTemp, snap.GpuTempC,
-                    _cfg.Alerts.GpuTempMaxC,
-                    $"WARNING: GPU at {Metrics.TempString(snap.GpuTempC, f)}");
+    private void EvaluateCpuAlerts(TelemetrySnapshot snap, bool useFahrenheit)
+    {
+        if (_cfg.Alerts.AlertCpuTemp)
+            EvaluateThreshold(Metrics.CpuTemp, "CPU Temperature", snap.CpuTempPackageC, _cfg.Alerts.CpuTempMaxC,
+                unit: useFahrenheit ? "°F" : "°C",
+                displayValue: Metrics.TempString(snap.CpuTempPackageC, useFahrenheit),
+                displayThreshold: Metrics.TempString(_cfg.Alerts.CpuTempMaxC, useFahrenheit),
+                hysteresis: 6f,
+                escalationDelta: 5f);
 
         if (_cfg.Alerts.AlertCpuUsage)
-            TryFire(Metrics.CpuPct, snap.CpuUsagePct,
-                    _cfg.Alerts.CpuUsageMaxPct,
-                    $"WARNING: CPU at {snap.CpuUsagePct:F0}%");
-
-        if (_cfg.Alerts.AlertRamUsage)
-            TryFire(Metrics.RamPct, snap.RamUsagePct,
-                    _cfg.Alerts.RamUsageMaxPct,
-                    $"WARNING: RAM at {snap.RamUsagePct:F0}%");
-
-        if (_cfg.Alerts.AlertGpuUsage)
-            TryFire(Metrics.GpuPct, snap.GpuUsagePct,
-                    _cfg.Alerts.GpuUsageMaxPct,
-                    $"WARNING: GPU at {snap.GpuUsagePct:F0}%");
-
-        if (_cfg.Alerts.AlertGpuVram)
-            TryFire(Metrics.GpuVram, snap.GpuVramUsedMb,
-                    _cfg.Alerts.GpuVramMaxMb,
-                    $"WARNING: GPU VRAM at {snap.GpuVramUsedMb:F0} MB");
+            EvaluateThreshold(Metrics.CpuPct, "CPU Usage", snap.CpuUsagePct, _cfg.Alerts.CpuUsageMaxPct,
+                unit: "%",
+                displayValue: $"{snap.CpuUsagePct:F0}%",
+                displayThreshold: $"{_cfg.Alerts.CpuUsageMaxPct:F0}%",
+                hysteresis: 8f,
+                escalationDelta: 5f);
 
         if (_cfg.Alerts.AlertCpuFreq)
-            TryFire(Metrics.CpuFreq, snap.CpuFreqGhz * 1000f,
-                    _cfg.Alerts.CpuFreqMinMhz,
-                    $"WARNING: CPU throttled at {snap.CpuFreqGhz:F2} GHz",
-                    lowAlert: true);
+            EvaluateThreshold(Metrics.CpuFreq, "CPU Frequency", snap.CpuFreqGhz * 1000f, _cfg.Alerts.CpuFreqMinMhz,
+                unit: "MHz",
+                displayValue: $"{snap.CpuFreqGhz:F2} GHz",
+                displayThreshold: $"{_cfg.Alerts.CpuFreqMinMhz / 1000f:F2} GHz",
+                lowAlert: true,
+                hysteresis: 200f);
 
         if (_cfg.Alerts.AlertCpuPower)
-            TryFire(Metrics.CpuPower, snap.CpuPackagePowerW,
-                    _cfg.Alerts.CpuPowerMaxW,
-                    $"WARNING: CPU at {snap.CpuPackagePowerW:F0} W");
+            EvaluateThreshold(Metrics.CpuPower, "CPU Package Power", snap.CpuPackagePowerW, _cfg.Alerts.CpuPowerMaxW,
+                unit: "W",
+                displayValue: $"{snap.CpuPackagePowerW:F0} W",
+                displayThreshold: $"{_cfg.Alerts.CpuPowerMaxW:F0} W",
+                hysteresis: 10f,
+                escalationDelta: 15f);
+    }
+
+    private void EvaluateGpuAlerts(TelemetrySnapshot snap, bool useFahrenheit)
+    {
+        if (_cfg.Alerts.AlertGpuTemp)
+            EvaluateThreshold(Metrics.GpuTemp, "GPU Temperature", snap.GpuTempC, _cfg.Alerts.GpuTempMaxC,
+                unit: useFahrenheit ? "°F" : "°C",
+                displayValue: Metrics.TempString(snap.GpuTempC, useFahrenheit),
+                displayThreshold: Metrics.TempString(_cfg.Alerts.GpuTempMaxC, useFahrenheit),
+                hysteresis: 6f,
+                escalationDelta: 5f);
+
+        if (_cfg.Alerts.AlertGpuUsage)
+            EvaluateThreshold(Metrics.GpuPct, "GPU Usage", snap.GpuUsagePct, _cfg.Alerts.GpuUsageMaxPct,
+                unit: "%",
+                displayValue: $"{snap.GpuUsagePct:F0}%",
+                displayThreshold: $"{_cfg.Alerts.GpuUsageMaxPct:F0}%",
+                hysteresis: 8f,
+                escalationDelta: 5f);
+
+        if (_cfg.Alerts.AlertGpuVram)
+            EvaluateThreshold(Metrics.GpuVram, "GPU VRAM", snap.GpuVramUsedMb, _cfg.Alerts.GpuVramMaxMb,
+                unit: "MB",
+                displayValue: $"{snap.GpuVramUsedMb:F0} MB",
+                displayThreshold: $"{_cfg.Alerts.GpuVramMaxMb:F0} MB",
+                hysteresis: 512f,
+                escalationDelta: 512f);
 
         if (_cfg.Alerts.AlertGpuFreq)
-            TryFire(Metrics.GpuFreq, snap.GpuFreqMHz,
-                    _cfg.Alerts.GpuFreqMinMhz,
-                    $"WARNING: GPU throttled at {snap.GpuFreqMHz:F0} MHz",
-                    lowAlert: true);
+            EvaluateThreshold(Metrics.GpuFreq, "GPU Frequency", snap.GpuFreqMHz, _cfg.Alerts.GpuFreqMinMhz,
+                unit: "MHz",
+                displayValue: $"{snap.GpuFreqMHz:F0} MHz",
+                displayThreshold: $"{_cfg.Alerts.GpuFreqMinMhz:F0} MHz",
+                lowAlert: true,
+                hysteresis: 150f);
 
         if (_cfg.Alerts.AlertGpuPower)
-            TryFire(Metrics.GpuPower, snap.GpuPowerW,
-                    _cfg.Alerts.GpuPowerMaxW,
-                    $"WARNING: GPU at {snap.GpuPowerW:F0} W");
-
-        if (_cfg.Alerts.AlertBatteryLow
-            && snap.BatteryPct > 0 && !snap.BatteryIsCharging
-            && snap.BatteryPct <= _cfg.Alerts.BatteryLowPct)
-        {
-            FireBatteryLow(snap);
-        }
+            EvaluateThreshold(Metrics.GpuPower, "GPU Power", snap.GpuPowerW, _cfg.Alerts.GpuPowerMaxW,
+                unit: "W",
+                displayValue: $"{snap.GpuPowerW:F0} W",
+                displayThreshold: $"{_cfg.Alerts.GpuPowerMaxW:F0} W",
+                hysteresis: 15f,
+                escalationDelta: 20f);
     }
 
-    // Firing Logic
-    private void FireBatteryLow(TelemetrySnapshot snap)
+    private void EvaluateRamAndMiscAlerts(TelemetrySnapshot snap)
     {
-        DateTime now = DateTime.UtcNow;
+        if (_cfg.Alerts.AlertRamUsage)
+            EvaluateThreshold(Metrics.RamPct, "RAM Usage", snap.RamUsagePct, _cfg.Alerts.RamUsageMaxPct,
+                unit: "%",
+                displayValue: $"{snap.RamUsagePct:F0}%",
+                displayThreshold: $"{_cfg.Alerts.RamUsageMaxPct:F0}%",
+                hysteresis: 5f,
+                escalationDelta: 4f);
 
-        if (_cfg.Alerts.FireOncePerSession)
+        if (_cfg.Alerts.AlertBatteryLow && snap.BatteryPct > 0 && !snap.BatteryIsCharging)
         {
-            if (_firedOnce.Contains(Metrics.BatteryPct)) return;
-            _firedOnce.Add(Metrics.BatteryPct);
+            EvaluateThreshold(Metrics.BatteryPct, "Battery Level", snap.BatteryPct, _cfg.Alerts.BatteryLowPct,
+                unit: "%",
+                displayValue: $"{snap.BatteryPct:F0}%",
+                displayThreshold: $"≤ {_cfg.Alerts.BatteryLowPct:F0}%",
+                lowAlert: true,
+                hysteresis: 5f);
         }
-        else
-        {
-            if (_cooldowns.TryGetValue(Metrics.BatteryPct, out DateTime last)
-                && (now - last).TotalSeconds < _cfg.Alerts.CooldownSecs)
-                return;
-            _cooldowns[Metrics.BatteryPct] = now;
-        }
-
-        _log.LogError("Alert: Battery low: {Pct}%", snap.BatteryPct);
-        if (_cfg.Alerts.FlashOverlay)
-            _overlay.Flash(TimeSpan.FromMilliseconds(800));
-        if (_cfg.Alerts.ShowToastNotif)
-            ShowToast("LocalTelemetry", $"WARNING: Battery at {snap.BatteryPct:F0}%");
     }
 
-    private void TryFire(string metricId, float value, float threshold, string message, bool lowAlert = false)
+    private void EvaluateNetAlerts()
+    {
+        if (_netLogger is null) return;
+
+        if (_cfg.Alerts.AlertNetDaily)
+        {
+            float todayGb = (float)_netLogger.GetTodayTotalGb();
+            EvaluateThreshold("net_daily", "Daily Internet Usage", todayGb, _cfg.Alerts.NetDailyMaxGb,
+                unit: "GB",
+                displayValue: $"{todayGb:F1} GB",
+                displayThreshold: $"{_cfg.Alerts.NetDailyMaxGb:F1} GB",
+                hysteresis: 0f);
+        }
+
+        if (_cfg.Alerts.AlertNetMonthly)
+        {
+            float monthGb = (float)_netLogger.GetMonthTotalGb();
+            EvaluateThreshold("net_monthly", "Monthly Internet Usage", monthGb, _cfg.Alerts.NetMonthlyMaxGb,
+                unit: "GB",
+                displayValue: $"{monthGb:F1} GB",
+                displayThreshold: $"{_cfg.Alerts.NetMonthlyMaxGb:F1} GB",
+                hysteresis: 0f);
+        }
+    }
+
+    // Firing Logic with Hysteresis & Escalation
+    private void EvaluateThreshold(
+        string metricId,
+        string metricName,
+        float value,
+        float threshold,
+        string unit,
+        string displayValue,
+        string displayThreshold,
+        bool lowAlert = false,
+        float hysteresis = 0f,
+        float escalationDelta = 0f)
     {
         if (value <= 0f)
         {
-            _log.LogDebug("Alert skipped: {MetricId} sensor unavailable (value={Value})", metricId, value);
+            Log.Debug($"Alert check skipped for {metricId}, sensor unavailable (value={value:F1})");
             return;
         }
 
-        if (lowAlert)
-        {
-            if (value > threshold) return;
-        }
-        else
-        {
-            if (value < threshold) return;
-        }
+        bool isBreached = lowAlert ? value <= threshold : value >= threshold;
+        bool wasActive = _activeAlerts.Contains(metricId);
 
-        DateTime now = DateTime.UtcNow;
+        if (isBreached)
+        {
+            // Initial breach into warning state
+            if (!wasActive)
+            {
+                if (!CanFireAlert(metricId)) return;
 
-        if (_cfg.Alerts.FireOncePerSession)
-        {
-            if (_firedOnce.Contains(metricId)) return;
-            _firedOnce.Add(metricId);
-        }
-        else
-        {
-            if (_cooldowns.TryGetValue(metricId, out DateTime last)
-                && (now - last).TotalSeconds < _cfg.Alerts.CooldownSecs)
+                _activeAlerts.Add(metricId);
+                _lastAlertedValue[metricId] = value;
+
+                string title = lowAlert switch
+                {
+                    true when metricId == Metrics.CpuFreq => "CPU Throttling",
+                    true when metricId == Metrics.BatteryPct => "Low Battery",
+                    _ => metricId.StartsWith("net_", StringComparison.Ordinal)
+                        ? "Network Limit Reached"
+                        : $"{metricName} High"
+                };
+
+                string body = lowAlert
+                    ? $"{metricName} at {displayValue} (limit: {displayThreshold})"
+                    : $"{metricName} at {displayValue} (limit: {displayThreshold})";
+
+                DispatchAlert(metricId, title, body, $"{metricName} reached {displayValue} (limit: {displayThreshold})");
                 return;
-            _cooldowns[metricId] = now;
-        }
+            }
 
-        _log.LogError("Alert: {Message}", message);
+            // Already active: check for significant escalation
+            if (escalationDelta > 0f && _lastAlertedValue.TryGetValue(metricId, out float lastVal))
+            {
+                bool isEscalated = lowAlert ? (lastVal - value) >= escalationDelta : (value - lastVal) >= escalationDelta;
+                if (isEscalated && CanFireAlert(metricId))
+                {
+                    _lastAlertedValue[metricId] = value;
+                    string title = $"{metricName} Critical";
+                    string body = $"Surged to {displayValue} (was {lastVal:F0} {unit}, limit: {displayThreshold})";
+                    DispatchAlert(metricId, title, body, $"{metricName} critical surge at {displayValue} (limit: {displayThreshold})");
+                }
+            }
+        }
+        else if (wasActive)
+        {
+            // Check if metric cooled down past the hysteresis buffer
+            bool isRecovered = lowAlert ? value >= (threshold + hysteresis) : value <= (threshold - hysteresis);
+            if (isRecovered)
+            {
+                _activeAlerts.Remove(metricId);
+                _lastAlertedValue.Remove(metricId);
+                Log.Info($"Alert normalized for {metricName}, dropped to {displayValue} (recovered below {displayThreshold})");
+            }
+        }
+    }
+
+    private void DispatchAlert(string metricId, string title, string body, string logSummary)
+    {
+        var actions = new List<string>();
+        if (_cfg.Alerts.ShowToastNotif) actions.Add("Toast");
+        if (_cfg.Alerts.FlashOverlay) actions.Add("Overlay Flash");
+        string actionStr = actions.Count > 0 ? string.Join(", ", actions) : "None (Muted)";
+
+        Log.Warn($"Alert triggered for {logSummary} [Actions: {actionStr}]");
 
         if (_cfg.Alerts.FlashOverlay)
             _overlay.Flash(TimeSpan.FromMilliseconds(800));
 
         if (_cfg.Alerts.ShowToastNotif)
-            ShowToast("LocalTelemetry", message);
+            ShowToast(title, body);
+    }
+
+    private bool CanFireAlert(string metricId)
+    {
+        DateTime now = DateTime.UtcNow;
+
+        if (_cfg.Alerts.FireOncePerSession)
+            return _firedOnce.Add(metricId);
+
+        if (_cooldowns.TryGetValue(metricId, out DateTime last)
+            && (now - last).TotalSeconds < _cfg.Alerts.CooldownSecs)
+            return false;
+
+        _cooldowns[metricId] = now;
+        return true;
     }
 
     // Toast Helpers
@@ -172,7 +286,7 @@ public sealed class AlertService(
         _notifClient.SendToastAsync(title, text).ContinueWith(t =>
         {
             if (t.Exception is not null)
-                _log.LogError(t.Exception, "Toast send failed");
+                Log.Error(t.Exception, "Failed to send toast notification");
         }, TaskContinuationOptions.OnlyOnFaulted);
     }
 }

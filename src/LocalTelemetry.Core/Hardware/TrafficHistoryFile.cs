@@ -13,7 +13,7 @@ public sealed class TrafficHistoryFile
     public string FilePath => _filePath;
     public int Count { get; private set; }
 
-    private static void Log(string msg) => Diagnostics.Log.Info(msg);
+    private static void Log(string msg) => Diagnostics.Log.Debug(msg);
 
     public TrafficHistoryFile(string filePath)
     {
@@ -28,7 +28,7 @@ public sealed class TrafficHistoryFile
             _dirtySinceLastSave = false;
             if (!File.Exists(_filePath))
             {
-                Log($"file not found: {_filePath}, starting empty");
+                Log($"Traffic history file not found: {_filePath}, starting empty");
                 Count = 0;
                 return;
             }
@@ -72,6 +72,14 @@ public sealed class TrafficHistoryFile
 
                         string iface = root.TryGetProperty("interface", out var i) ? i.GetString() ?? "" : "";
                         string source = root.TryGetProperty("source", out var s) ? s.GetString() ?? "LocalTelemetry" : "LocalTelemetry";
+                        if (string.Equals(source, "imported", StringComparison.OrdinalIgnoreCase) || string.Equals(source, "srum", StringComparison.OrdinalIgnoreCase))
+                        {
+                            source = "WindowsImport";
+                        }
+                        else if (string.Equals(source, "import", StringComparison.OrdinalIgnoreCase) || string.Equals(source, "dat", StringComparison.OrdinalIgnoreCase))
+                        {
+                            source = "DatImport";
+                        }
 
                         var key = (year, month, day, iface);
                         if (!seen.Add(key))
@@ -86,13 +94,13 @@ public sealed class TrafficHistoryFile
                     catch (Exception ex)
                     {
                         skipped++;
-                        Log($"skipped line {lineCount}: {ex.Message}");
+                        Log($"Skipped malformed traffic history line {lineCount}: {ex.Message}");
                     }
                 }
             }
             catch (Exception ex)
             {
-                Log($"read error: {ex.Message}");
+                Log($"Failed to read traffic history file: {ex.Message}");
             }
 
             _records.Sort((a, b) =>
@@ -106,14 +114,14 @@ public sealed class TrafficHistoryFile
 
             // Cleanup: remove empty-interface records superseded by a named-interface record for the same date
             var superseded = new HashSet<(int, int, int)>();
-            foreach (var r in _records)
-                if (!string.IsNullOrEmpty(r.Interface))
-                    superseded.Add((r.Year, r.Month, r.Day));
+            foreach (var r in _records.Where(r => !string.IsNullOrEmpty(r.Interface)))
+                superseded.Add((r.Year, r.Month, r.Day));
             _records.RemoveAll(r =>
                 string.IsNullOrEmpty(r.Interface) && superseded.Contains((r.Year, r.Month, r.Day)));
 
+            int uniqueDays = _records.Select(r => (r.Year, r.Month, r.Day)).Distinct().Count();
             Count = _records.Count;
-            Log($"loaded {lineCount} lines, parsed {parsed} records, skipped {skipped}");
+            Log($"Loaded {_records.Count} records across {uniqueDays} days of network usage history from {Path.GetFileName(_filePath)}");
         }
     }
 
@@ -166,12 +174,11 @@ public sealed class TrafficHistoryFile
                     writer.WriteLine(FormatLine(r));
                 }
 
-                Log($"saved {_records.Count} records to {_filePath}");
                 _dirtySinceLastSave = false;
             }
             catch (Exception ex)
             {
-                Diagnostics.Log.Error($"save failed: {ex.Message}");
+                Diagnostics.Log.Error(ex, "Failed to save network traffic history");
             }
         }
     }
@@ -221,8 +228,8 @@ public sealed class TrafficHistoryFile
             else
             {
                 _records.Add(new DailyRecord(year, month, day, downBytes, upBytes, interfaceName, source));
-                _dirtySinceLastSave = true;
             }
+            _dirtySinceLastSave = true;
             Count = _records.Count;
         }
     }
@@ -232,6 +239,15 @@ public sealed class TrafficHistoryFile
         lock (_lock)
         {
             return [.. _records.Where(r => r.Year == year && r.Month == month)];
+        }
+    }
+
+    /// <summary>Returns whether any record exists for the given date.</summary>
+    public bool HasRecordOn(DateTime date)
+    {
+        lock (_lock)
+        {
+            return _records.Any(r => r.Year == date.Year && r.Month == date.Month && r.Day == date.Day);
         }
     }
 

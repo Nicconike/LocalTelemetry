@@ -12,6 +12,7 @@
         trafficMonths,
         systemInfo,
         importResult,
+        windowsImportResult,
     } from "../lib/store.ts";
     import {
         requestSettings,
@@ -91,7 +92,7 @@
                 allTrafficHistory.set(records);
                 const now = new Date();
                 const currentMonth = records.filter((r) => {
-                    const p = r.date.split("/");
+                    const p = r.date.split("-");
                     return (
                         p.length === 3 &&
                         parseInt(p[1]) === now.getMonth() + 1 &&
@@ -110,9 +111,32 @@
             });
 
             const unsub7 = onMessage("trafficToday", (payload) => {
-                trafficToday.set({
-                    downBytes: payload.downBytes ?? 0,
-                    upBytes: payload.upBytes ?? 0,
+                const downBytes = payload.downBytes ?? 0;
+                const upBytes = payload.upBytes ?? 0;
+                trafficToday.set({ downBytes, upBytes });
+
+                const d = new Date();
+                const todayStr = `${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}`;
+                allTrafficHistory.update((list) => {
+                    const otherDays = list.filter((r) => r.date !== todayStr);
+                    const todayRecords = list.filter(
+                        (r) => r.date === todayStr,
+                    );
+                    if (todayRecords.length <= 1) {
+                        const iface =
+                            todayRecords[0]?.interfaceName ?? "Ethernet";
+                        return [
+                            {
+                                date: todayStr,
+                                downBytes,
+                                upBytes,
+                                interfaceName: iface,
+                                source: "LocalTelemetry",
+                            },
+                            ...otherDays,
+                        ];
+                    }
+                    return list;
                 });
             });
 
@@ -120,6 +144,18 @@
                 importResult.set({
                     daysImported: payload?.daysImported ?? 0,
                     error: payload?.error,
+                });
+                requestTrafficHistoryAll();
+                requestTrafficMonths();
+            });
+
+            const unsub9 = onMessage("windowsUsageImportResult", (payload) => {
+                windowsImportResult.set({
+                    success: payload?.success ?? false,
+                    daysImported: payload?.daysImported ?? 0,
+                    downBytes: payload?.downBytes ?? 0,
+                    upBytes: payload?.upBytes ?? 0,
+                    message: payload?.message,
                 });
                 requestTrafficHistoryAll();
                 requestTrafficMonths();
@@ -139,6 +175,7 @@
                 unsub6();
                 unsub7();
                 unsub8();
+                unsub9();
             };
         }
     });
@@ -316,7 +353,7 @@
     .content {
         flex: 1;
         overflow-y: auto;
-        padding: var(--space-5) var(--space-6);
+        padding: 10px var(--space-6);
     }
 
     .save-bar {

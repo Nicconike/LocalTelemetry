@@ -3,11 +3,12 @@
         checked = $bindable(false),
         disabled = false,
         label = "",
+        description = "",
         onchange,
     } = $props();
 </script>
 
-<label class="toggle" class:disabled>
+<label class="toggle" class:disabled class:has-desc={!!description}>
     <input
         type="checkbox"
         bind:checked
@@ -18,8 +19,11 @@
     <span class="track">
         <span class="thumb"></span>
     </span>
-    {#if label}
-        <span class="lbl">{label}</span>
+    {#if label || description}
+        <span class="lbl-col">
+            {#if label}<span class="lbl">{label}</span>{/if}
+            {#if description}<span class="desc">{description}</span>{/if}
+        </span>
     {/if}
 </label>
 
@@ -30,6 +34,12 @@
         gap: var(--space-2);
         cursor: pointer;
         user-select: none;
+    }
+    .toggle.has-desc {
+        align-items: flex-start;
+    }
+    .toggle.has-desc .track {
+        margin-top: 1px;
     }
     .toggle.disabled {
         opacity: 0.45;
@@ -76,8 +86,21 @@
         background: #fff;
     }
 
+    .lbl-col {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+    }
+
     .lbl {
         font-size: var(--text-sm);
         color: var(--color-text);
+        line-height: 1.3;
+    }
+
+    .desc {
+        font-size: var(--text-xs);
+        color: var(--color-text-muted);
+        line-height: 1.3;
     }
 </style>

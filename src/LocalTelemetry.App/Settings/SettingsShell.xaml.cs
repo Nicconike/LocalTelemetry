@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Net.NetworkInformation;
 using System.Runtime.Versioning;
@@ -7,7 +8,9 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media.Imaging;
+using LocalTelemetry.App.Services;
 using LocalTelemetry.App.Win32;
+using LocalTelemetry.Core.Models;
 using LocalTelemetry.Core.Config;
 using LocalTelemetry.Core.Diagnostics;
 using LocalTelemetry.Core.Hardware;
@@ -21,12 +24,36 @@ public sealed partial class SettingsShell : Window
     /// <summary>Fires after settings are saved from the UI.</summary>
     public event Action? SettingsApplied;
 
+    internal static Action<string>? PostJsonActionOverride { get; set; }
+    internal static Action<string>? UrlLauncherAction { get; set; }
+    internal static Action<string>? FolderLauncherAction { get; set; }
+    internal static bool SkipWebView2InitForTesting { get; set; }
+    internal static bool SkipInitializeComponentForTesting { get; set; }
+    internal static bool SkipShowForTesting { get; set; }
+    internal static Action<string, string>? MessageBoxAction { get; set; }
+
+    public new void Show()
+    {
+        if (SkipShowForTesting) return;
+        base.Show();
+    }
+
+    public new bool Activate()
+    {
+        if (SkipShowForTesting) return true;
+        return base.Activate();
+    }
+
     private const string SettingsHost = "localtelemetry.settings";
     private const string SettingsEntryPoint = "index.html";
+    private const string PayloadProp = "payload";
+    private const string NvidiaVendor = "NVIDIA";
+    private const string EnabledStr = "enabled";
+    private const string DisabledStr = "disabled";
 
     private readonly AppSettings _cfg;
     private readonly string _wwwRoot;
-    private readonly NetUsageLogger _netLogger;
+    private readonly UpdateCheckService _updateChecker;
     private bool _webViewReady;
 
     // NIC list caching and real-time updates
@@ -35,6 +62,12 @@ public sealed partial class SettingsShell : Window
 
     // Traffic today push timer (5s interval)
     private System.Threading.Timer? _trafficTodayTimer;
+
+    // App resource usage (CPU/RAM) on window title
+    private System.Windows.Threading.DispatcherTimer? _appUsageTimer;
+    private TimeSpan _lastProcessorTime;
+    private DateTime _lastUsageCheckTime;
+    private Process? _currentProcess;
 
     private static readonly JsonSerializerOptions JsonOut = new()
     {
@@ -50,11 +83,14 @@ public sealed partial class SettingsShell : Window
 
     // Construction
 
-    public SettingsShell(AppSettings cfg, NetUsageLogger netLogger)
+    public SettingsShell(AppSettings cfg, NetUsageLogger? _ = null)
     {
-        InitializeComponent();
+        if (!SkipInitializeComponentForTesting)
+        {
+            InitializeComponent();
+        }
         _cfg = cfg;
-        _netLogger = netLogger;
+        _updateChecker = new UpdateCheckService(cfg);
         _wwwRoot = Path.Combine(AppContext.BaseDirectory, "wwwroot");
 
         // Set taskbar/alt-tab icon from the embedded application icon
@@ -80,10 +116,10 @@ public sealed partial class SettingsShell : Window
         // (WebView2 native popups render at stale screen coordinates after move)
         LocationChanged += (_, _) =>
         {
-            if (_webViewReady && WebView.CoreWebView2 is not null)
+            if (_webViewReady && WebView?.CoreWebView2 is not null)
             {
                 try { WebView.CoreWebView2.ExecuteScriptAsync("try{document.activeElement?.blur()}catch(e){}"); }
-                catch (Exception) { Log.Error("WebView2 blur script failed after window move"); }
+                catch (Exception ex) { Log.Error(ex, "WebView2 blur script failed after window move"); }
             }
         };
     }
@@ -92,7 +128,42 @@ public sealed partial class SettingsShell : Window
     // Guard with _webViewReady so re-showing the window doesn't re-init.
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        if (_webViewReady) return;
+        if (_appUsageTimer == null)
+        {
+            _currentProcess = Process.GetCurrentProcess();
+            _lastProcessorTime = _currentProcess.TotalProcessorTime;
+            _lastUsageCheckTime = DateTime.UtcNow;
+
+            _appUsageTimer = new System.Windows.Threading.DispatcherTimer();
+            _appUsageTimer.Interval = TimeSpan.FromSeconds(2);
+            _appUsageTimer.Tick += (s, ev) =>
+            {
+                if (_currentProcess == null) return;
+                try
+                {
+                    _currentProcess.Refresh();
+                    var cpuTime = _currentProcess.TotalProcessorTime;
+                    var now = DateTime.UtcNow;
+                    var timeDelta = now - _lastUsageCheckTime;
+                    var cpuDelta = cpuTime - _lastProcessorTime;
+
+                    _lastProcessorTime = cpuTime;
+                    _lastUsageCheckTime = now;
+
+                    double cpuPct = 0;
+                    if (timeDelta.TotalMilliseconds > 0)
+                    {
+                        cpuPct = (cpuDelta.TotalMilliseconds / timeDelta.TotalMilliseconds) * 100.0 / Environment.ProcessorCount;
+                    }
+
+                    WindowTitleText.Text = $"LocalTelemetry ({cpuPct:0.0}% CPU)";
+                }
+                catch (Exception ex) { Debug.WriteLine("Usage update failed: " + ex.Message); }
+            };
+            _appUsageTimer.Start();
+        }
+
+        if (_webViewReady || SkipWebView2InitForTesting) return;
         await InitWebViewAsync();
     }
 
@@ -109,10 +180,12 @@ public sealed partial class SettingsShell : Window
                 ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LocalTelemetry", "webview2_data")
                 : Path.Combine(exeDir, "webview2_data");
 
+            var envOptions = new CoreWebView2EnvironmentOptions { Language = "en-GB" };
             CoreWebView2Environment env =
                 await CoreWebView2Environment.CreateAsync(
                     browserExecutableFolder: null,
-                    userDataFolder: dataDir);
+                    userDataFolder: dataDir,
+                    options: envOptions);
 
             await WebView.EnsureCoreWebView2Async(env);
 
@@ -156,77 +229,193 @@ public sealed partial class SettingsShell : Window
                 _ => Dispatcher.Invoke(SendTrafficToday),
                 null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
 
+            TrafficHistoryStore.HistoryUpdated += OnHistoryUpdated;
+
             _webViewReady = true;
+            SendTrafficToday();
+            SendTrafficMonths();
+            SendAllTrafficHistory();
         }
         catch (Exception ex)
         {
-            // WebView2 Runtime not installed or failed to init - show dialog
-            // instead of crashing the whole app
-            System.Windows.MessageBox.Show(
-                $"Settings window failed to initialise WebView2:\n\n{ex.Message}\n\n" +
-                "Install the WebView2 Runtime from:\nhttps://developer.microsoft.com/en-us/microsoft-edge/webview2/",
-                "LocalTelemetry - Settings Error",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            if (MessageBoxAction is not null)
+            {
+                MessageBoxAction("LocalTelemetry - Settings Error", ex.Message);
+            }
+            else
+            {
+                System.Windows.MessageBox.Show(
+                    $"Settings window failed to initialise WebView2:\n\n{ex.Message}\n\n" +
+                    "Install the WebView2 Runtime from:\nhttps://developer.microsoft.com/en-us/microsoft-edge/webview2/",
+                    "LocalTelemetry - Settings Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
             Hide();
         }
+    }
+
+    internal static bool IsValidMessageSource(string? source)
+    {
+        return !string.IsNullOrWhiteSpace(source) &&
+               source.StartsWith($"https://{SettingsHost}", StringComparison.OrdinalIgnoreCase);
     }
 
     // Inbound message handler
     private void OnWebMessageReceived(
         object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
+        if (!IsValidMessageSource(e.Source))
+        {
+            Log.Warn($"Rejected web message from untrusted source '{e.Source}'");
+            return;
+        }
+
+        HandleWebMessageJson(e.WebMessageAsJson);
+    }
+
+    internal void HandleWebMessageJson(string json)
+    {
         try
         {
-            using JsonDocument doc = JsonDocument.Parse(e.WebMessageAsJson);
+            using JsonDocument doc = JsonDocument.Parse(json);
             JsonElement root = doc.RootElement;
 
             string type = root.TryGetProperty("type", out JsonElement t)
                 ? t.GetString() ?? string.Empty
                 : string.Empty;
 
-            Log.Info($"OnWebMessageReceived: type='{type}'");
+            if (type is not ("getSettings" or "getNics" or "getSystemInfo" or "getTrafficMonths" or "getTrafficHistoryAll" or "getHistoryMonths" or "getHistoryData"))
+            {
+                Log.Debug($"Received settings command '{type}'");
+            }
 
             switch (type)
             {
                 case "getSettings": SendSettings(); break;
                 case "saveSettings":
-                    if (root.TryGetProperty("payload", out JsonElement payload))
+                    if (root.TryGetProperty(PayloadProp, out JsonElement payload))
                         ApplySettings(payload);
                     break;
                 case "getNics": SendNics(); break;
                 case "getTrafficMonths": SendTrafficMonths(); break;
                 case "getSystemInfo": SendSystemInfo(); break;
-                case "openUrl":
-                    if (root.TryGetProperty("payload", out JsonElement urlPayload)
-                        && urlPayload.TryGetProperty("url", out JsonElement urlEl))
-                    {
-                        string url = urlEl.GetString() ?? string.Empty;
-                        if (Uri.TryCreate(url, UriKind.Absolute, out Uri? parsedUri) &&
-                           (parsedUri.Scheme == Uri.UriSchemeHttp || parsedUri.Scheme == Uri.UriSchemeHttps))
-                        {
-                            Process.Start(new ProcessStartInfo { FileName = parsedUri.AbsoluteUri, UseShellExecute = true });
-                        }
-                        else
-                        {
-                            Log.Error($"Security Warning: Rejecting invalid or non-HTTP openUrl request: '{url}'");
-                        }
-                    }
-                    break;
+                case "openUrl": HandleOpenUrl(root); break;
+                case "openFolder": HandleOpenFolder(root); break;
                 case "getTrafficHistoryAll": SendAllTrafficHistory(); break;
-                case "importDat": HandleImportDat(e); break;
+                case "importDat": HandleImportJson(json); break;
+                case "importWindowsUsage": HandleImportWindowsUsage(root); break;
+                case "checkForUpdates": HandleCheckForUpdatesMsg(root); break;
                 default: break;
             }
         }
-        catch (JsonException ex) { Log.Error(ex, "OnWebMessageReceived JSON error"); }
-        catch (Exception ex) { Log.Error(ex, "OnWebMessageReceived error"); }
+        catch (JsonException ex) { Log.Error(ex, "Failed to parse incoming web message JSON"); }
+        catch (Exception ex) { Log.Error(ex, "An error occurred while handling incoming web message"); }
+    }
+
+    private void HandleOpenUrl(JsonElement root)
+    {
+        if (!root.TryGetProperty(PayloadProp, out JsonElement urlPayload)
+            || !urlPayload.TryGetProperty("url", out JsonElement urlEl))
+        {
+            return;
+        }
+
+        string url = urlEl.GetString() ?? string.Empty;
+        if (Uri.TryCreate(url, UriKind.Absolute, out Uri? parsedUri) &&
+           (parsedUri.Scheme == Uri.UriSchemeHttp || parsedUri.Scheme == Uri.UriSchemeHttps))
+        {
+            Log.Info($"Opened external link in browser ({parsedUri.AbsoluteUri})");
+            if (UrlLauncherAction is not null)
+            {
+                UrlLauncherAction(parsedUri.AbsoluteUri);
+                return;
+            }
+
+            if (SkipShowForTesting || SkipWebView2InitForTesting)
+                return;
+
+            Process.Start(new ProcessStartInfo { FileName = parsedUri.AbsoluteUri, UseShellExecute = true });
+        }
+        else
+        {
+            Log.Error($"Rejecting invalid or non-HTTP openUrl request '{url}'");
+        }
+    }
+
+    private static void HandleOpenFolder(JsonElement root)
+    {
+        if (!root.TryGetProperty(PayloadProp, out JsonElement folderPayload)
+            || !folderPayload.TryGetProperty("target", out JsonElement targetEl))
+        {
+            return;
+        }
+
+        string target = targetEl.GetString() ?? string.Empty;
+        string dirToOpen;
+        string folderLabel;
+
+        if (target.Equals("app", StringComparison.OrdinalIgnoreCase))
+        {
+            dirToOpen = AppSettings.ExeDir;
+            folderLabel = "application";
+        }
+        else if (target.Equals("logs", StringComparison.OrdinalIgnoreCase))
+        {
+            dirToOpen = AppSettings.LogsDir;
+            folderLabel = "logs";
+        }
+        else
+        {
+            dirToOpen = AppSettings.DataDir;
+            folderLabel = "data";
+        }
+
+        if (!string.IsNullOrEmpty(dirToOpen) && Directory.Exists(dirToOpen))
+        {
+            Log.Info($"Opened {folderLabel} folder in Windows Explorer ({dirToOpen})");
+            if (FolderLauncherAction is not null)
+            {
+                FolderLauncherAction(dirToOpen);
+                return;
+            }
+
+            if (SkipShowForTesting || SkipWebView2InitForTesting)
+                return;
+
+            string explorerPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = explorerPath,
+                Arguments = $"\"{dirToOpen}\"",
+                UseShellExecute = true
+            });
+        }
+    }
+
+    private void HandleCheckForUpdatesMsg(JsonElement root)
+    {
+        bool force = root.TryGetProperty(PayloadProp, out JsonElement forcePayload)
+            && forcePayload.TryGetProperty("force", out JsonElement forceEl)
+            && forceEl.GetBoolean();
+        if (force)
+        {
+            Log.Info("User requested manual software update check");
+        }
+        _ = HandleCheckForUpdatesAsync(force);
     }
 
     // Outbound messages
     private void PostJson(string json)
     {
-        if (!_webViewReady || WebView.CoreWebView2 is null) return;
-        WebView.CoreWebView2.PostWebMessageAsJson(json);
+        if (PostJsonActionOverride is not null)
+        {
+            PostJsonActionOverride(json);
+            return;
+        }
+        var wv = WebView;
+        if (!_webViewReady || wv is null || wv.CoreWebView2 is null) return;
+        wv.CoreWebView2.PostWebMessageAsJson(json);
     }
 
     public void SendUpdatedSettings()
@@ -238,8 +427,7 @@ public sealed partial class SettingsShell : Window
     {
         var dto = SettingsDtoMapping.ToDto(_cfg);
         var json = JsonSerializer.Serialize(new { type = "settings", payload = dto }, JsonOut);
-        // Log overlay visibility so we can confirm initial state
-        Log.Info($"SendSettings: overlay.visible={dto.Overlay.Visible}, jsonLen={json.Length}");
+        Log.Debug($"Dispatched configuration to settings UI (overlay visible: {dto.Overlay.Visible})");
         PostJson(json);
     }
 
@@ -249,7 +437,7 @@ public sealed partial class SettingsShell : Window
         _lastNics = nics;
         var envelope = new { type = "nics", payload = nics };
         PostJson(JsonSerializer.Serialize(envelope, JsonOut));
-        Log.Info($"SendNics: {nics.Count} adapter(s): {string.Join(", ", nics)}");
+        Log.Debug($"Dispatched network adapters to settings UI ({nics.Count} found)");
     }
 
     /// <summary>
@@ -286,7 +474,11 @@ public sealed partial class SettingsShell : Window
                 .Select(g => g.Address)
                 .ToList();
         }
-        catch (Exception) { return []; }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to get gateway addresses for network interface");
+            return [];
+        }
     }
 
     /// <summary>Debounced handler for <see cref="NetworkChange.NetworkAddressChanged"/>.</summary>
@@ -306,7 +498,7 @@ public sealed partial class SettingsShell : Window
             _lastNics = current;
             var envelope = new { type = "nics", payload = current };
             PostJson(JsonSerializer.Serialize(envelope, JsonOut));
-            Log.Info($"CheckAndSendNics: updated to {current.Count} adapter(s)");
+            Log.Info($"Active network adapter list changed ({current.Count} adapter{(current.Count == 1 ? "" : "s")} available)");
         }
     }
 
@@ -316,7 +508,7 @@ public sealed partial class SettingsShell : Window
         var allRecords = TrafficHistoryStore.GetAll();
         var mapped = allRecords.Select(r => new
         {
-            date = $"{r.Day:D2}/{r.Month:D2}/{r.Year:D4}",
+            date = $"{r.Day:D2}-{r.Month:D2}-{r.Year:D4}",
             downBytes = r.DownBytes,
             upBytes = r.UpBytes,
             interfaceName = r.Interface,
@@ -345,6 +537,19 @@ public sealed partial class SettingsShell : Window
         PostJson(JsonSerializer.Serialize(envelope, JsonOut));
     }
 
+    private void OnHistoryUpdated()
+    {
+        Dispatcher.Invoke(() =>
+        {
+            if (_webViewReady)
+            {
+                SendTrafficToday();
+                SendTrafficMonths();
+                SendAllTrafficHistory();
+            }
+        });
+    }
+
     private void SendTrafficMonths()
     {
         var months = TrafficHistoryStore.GetAvailableMonths();
@@ -353,17 +558,19 @@ public sealed partial class SettingsShell : Window
         PostJson(JsonSerializer.Serialize(envelope, JsonOut));
     }
 
-    private void HandleImportDat(CoreWebView2WebMessageReceivedEventArgs e)
+    internal const int MaxImportContentLength = 10 * 1024 * 1024; // 10 MB
+
+    internal void HandleImportJson(string json)
     {
         try
         {
-            using var doc = JsonDocument.Parse(e.WebMessageAsJson);
+            using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
-            string content = root.TryGetProperty("payload", out var p)
-                ? p.TryGetProperty("content", out var c)
-                    ? c.GetString() ?? ""
-                    : ""
-                : "";
+            string content = "";
+            if (root.TryGetProperty("payload", out var p) && p.TryGetProperty("content", out var c))
+            {
+                content = c.GetString() ?? "";
+            }
 
             if (string.IsNullOrEmpty(content))
             {
@@ -371,15 +578,22 @@ public sealed partial class SettingsShell : Window
                 return;
             }
 
+            if (content.Length > MaxImportContentLength)
+            {
+                PostImportError("File exceeds maximum allowed size (10 MB)");
+                return;
+            }
+
             int days = DatImporter.Import(content);
             TrafficHistoryStore.Save();
+            Log.Info($"User imported network usage database ({days} day{(days == 1 ? "" : "s")} recorded)");
 
             var envelope = new { type = "importDatResult", payload = new { daysImported = days } };
             PostJson(JsonSerializer.Serialize(envelope, JsonOut));
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "HandleImportDat failed");
+            Log.Error(ex, "Failed to import network usage database content");
             PostImportError(ex.Message);
         }
     }
@@ -390,72 +604,121 @@ public sealed partial class SettingsShell : Window
         PostJson(JsonSerializer.Serialize(envelope, JsonOut));
     }
 
+    private async void HandleImportWindowsUsage(JsonElement root)
+    {
+        try
+        {
+            if (!root.TryGetProperty(PayloadProp, out JsonElement payload)
+                || !payload.TryGetProperty("startDate", out JsonElement startEl)
+                || !payload.TryGetProperty("endDate", out JsonElement endEl))
+            {
+                PostWindowsImportResult(false, 0, 0, 0, "Missing start or end date.");
+                return;
+            }
+
+            string startStr = startEl.GetString() ?? string.Empty;
+            string endStr = endEl.GetString() ?? string.Empty;
+
+            string[] dateFormats = ["dd-MM-yyyy", "yyyy-MM-dd", "d-M-yyyy", "dd/MM/yyyy"];
+            if (!DateTime.TryParseExact(startStr, dateFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime start) &&
+                !DateTime.TryParse(startStr, out start))
+            {
+                PostWindowsImportResult(false, 0, 0, 0, "Invalid start date format (expected DD-MM-YYYY).");
+                return;
+            }
+
+            if (!DateTime.TryParseExact(endStr, dateFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime end) &&
+                !DateTime.TryParse(endStr, out end))
+            {
+                PostWindowsImportResult(false, 0, 0, 0, "Invalid end date format (expected DD-MM-YYYY).");
+                return;
+            }
+
+            TrafficHistoryFile historyFile;
+            try
+            {
+                historyFile = TrafficHistoryStore.HistoryFile;
+            }
+            catch (Exception ex)
+            {
+                PostWindowsImportResult(false, 0, 0, 0, $"Traffic history not initialized: {ex.Message}");
+                return;
+            }
+
+            var result = await WindowsNetworkUsageProvider.ImportDateRangeAsync(historyFile, start, end);
+            PostWindowsImportResult(result.Success, result.DaysImported, result.DownBytes, result.UpBytes, result.Message ?? result.ErrorMessage);
+
+            if (result.Success && result.DaysImported > 0)
+            {
+                SendAllTrafficHistory();
+                SendTrafficMonths();
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to handle importWindowsUsage message");
+            PostWindowsImportResult(false, 0, 0, 0, ex.Message);
+        }
+    }
+
+    private void PostWindowsImportResult(bool success, int daysImported, long downBytes, long upBytes, string? message)
+    {
+        var envelope = new
+        {
+            type = "windowsUsageImportResult",
+            payload = new
+            {
+                success,
+                daysImported,
+                downBytes,
+                upBytes,
+                message = message ?? string.Empty,
+            }
+        };
+        PostJson(JsonSerializer.Serialize(envelope, JsonOut));
+    }
+
+    private async Task HandleCheckForUpdatesAsync(bool force)
+    {
+        try
+        {
+            Log.Debug($"Dispatching software update check (Forced: {force})");
+            var result = await _updateChecker.CheckForUpdatesAsync(force).ConfigureAwait(false);
+            var resJson = JsonSerializer.Serialize(new
+            {
+                type = "updateCheckResult",
+                payload = result
+            }, JsonOut);
+            await Dispatcher.InvokeAsync(() => PostJson(resJson));
+            Log.Debug($"Software update check result sent to frontend (Update Available: {result.IsUpdateAvailable})");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to dispatch software update check to frontend");
+            var errResult = new UpdateCheckResult
+            {
+                IsUpdateAvailable = false,
+                CurrentVersion = UpdateCheckService.GetCurrentVersionString(),
+                ErrorMessage = ex.Message
+            };
+            var resJson = JsonSerializer.Serialize(new { type = "updateCheckResult", payload = errResult }, JsonOut);
+            await Dispatcher.InvokeAsync(() => PostJson(resJson));
+        }
+    }
+
+    // System info
     // System info
     private void SendSystemInfo()
     {
-        var asm = typeof(SettingsShell).Assembly;
-        var infoVerAttr = asm.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
-            .OfType<System.Reflection.AssemblyInformationalVersionAttribute>()
-            .FirstOrDefault();
-
-        string version = infoVerAttr?.InformationalVersion ?? asm.GetName()?.Version?.ToString() ?? "0.0.0";
-        // Strip git commit hash suffix if present (e.g. 1.0.0+9e26f47 -> 1.0.0)
-        if (version.Contains('+')) version = version.Split('+')[0];
-
-        string buildDate = string.Empty;
-        try
-        {
-            // Single-file publish embeds the app dll into the exe, so fall back to the
-            // running executable when the dll isn't present on disk.
-            string assemblyPath = Path.Combine(AppContext.BaseDirectory, $"{asm.GetName().Name}.dll");
-            if (!File.Exists(assemblyPath))
-                assemblyPath = Environment.ProcessPath ?? assemblyPath;
-            if (File.Exists(assemblyPath))
-                buildDate = File.GetLastWriteTime(assemblyPath).ToString("yyyy-MM-dd HH:mm");
-        }
-        catch (Exception ex) { Log.Error(ex, "Get build date failed"); }
-
+        var (version, buildDate) = GetAppVersionInfo();
         string exeDir = AppContext.BaseDirectory;
         bool standardMode = File.Exists(Path.Combine(exeDir, "app.mode"));
         string deploymentMode = standardMode ? "Standard" : "Portable";
         string targetRuntime = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription;
 
-        var gpus = SystemInfo.GetGpus();
-        if (gpus.Any(g => g.Vendor == "NVIDIA") && !NvGpuMonitor.LatestData.HasValue)
-        {
-            using var nvml = new NvGpuMonitor();
-            if (nvml.IsAvailable) nvml.Query();
-        }
-
-        using var amdMon = gpus.Any(g => g.Vendor == "AMD" && g.IsDedicated) ? new AmdGpuMonitor() : null;
-        float? amdTdpW = amdMon?.IsAvailable == true ? amdMon.GetPowerLimitW() : null;
-
-        var gpuList = gpus.Select(g =>
-        {
-            string? vramGb;
-            if (g.Vendor == "NVIDIA" && NvGpuMonitor.LatestData.HasValue)
-                vramGb = $"{NvGpuMonitor.LatestData.Value.VramTotalMb / 1024f:F1}";
-            else if (g.VramBytes.HasValue)
-                vramGb = $"{g.VramBytes.Value / (1024.0 * 1024.0 * 1024.0):F1}";
-            else
-                vramGb = null;
-
-            string? driver = g.Vendor == "NVIDIA" ? NvGpuMonitor.LatestDriverVersion : g.DriverVersion;
-
-            string? tdpW;
-            if (g.Vendor == "NVIDIA" && NvGpuMonitor.LatestData.HasValue && NvGpuMonitor.LatestData.Value.TdpW > 0)
-                tdpW = $"{NvGpuMonitor.LatestData.Value.TdpW:F0} W";
-            else if (g.Vendor == "AMD" && amdTdpW.HasValue && amdTdpW.Value > 0)
-                tdpW = $"{amdTdpW.Value:F0} W";
-            else
-                tdpW = null;
-
-            return new { name = g.Name, vendor = g.Vendor, dedicated = g.IsDedicated, vramGb, driver, tdpW };
-        }).ToList();
-
+        var gpuList = BuildGpuList();
         var nics = SystemInfo.GetNics();
         string systemType = SystemInfo.GetSystemTypeLabel();
-        bool isLaptop = systemType == "Laptop";
 
         long totalRamBytes = SystemInfo.GetTotalRamBytes();
         string? ramGbStr = totalRamBytes > 0
@@ -491,6 +754,9 @@ public sealed partial class SettingsShell : Window
                 model = d.Model,
                 vendor = d.Vendor,
                 busType = d.BusType,
+                mediaType = d.MediaType,
+                displayType = d.DisplayType,
+                formattedSize = d.FormattedSize,
                 sizeGb = d.SizeBytes.HasValue ? $"{d.SizeBytes.Value / (1024.0 * 1024.0 * 1024.0):F1}" : null,
                 diskIndex = d.DiskIndex,
                 boot = d.IsBootDrive
@@ -505,39 +771,108 @@ public sealed partial class SettingsShell : Window
             ["ramType"] = SystemInfo.GetRamType(),
             ["nics"] = nics.Select(n => n.Name).ToList(),
             ["systemType"] = systemType,
+            ["exeDir"] = AppSettings.ExeDir,
+            ["dataDir"] = AppSettings.DataDir,
+            ["logsDir"] = AppSettings.LogsDir,
+            ["isStandardMode"] = AppSettings.IsStandardMode,
         };
 
-        if (isLaptop)
-        {
-            string bm = SystemInfo.GetBatteryManufacturer();
-            if (!string.IsNullOrEmpty(bm))
-                payload["batteryManufacturer"] = bm;
-            string bn = SystemInfo.GetBatteryDeviceName();
-            if (!string.IsNullOrEmpty(bn))
-                payload["batteryDeviceName"] = bn;
-            string dc = SystemInfo.GetBatteryDesignCapacity();
-            if (!string.IsNullOrEmpty(dc))
-                payload["batteryDesignCapacity"] = dc;
-            string fc = SystemInfo.GetBatteryFullChargedCapacity();
-            if (!string.IsNullOrEmpty(fc))
-                payload["batteryFullChargedCapacity"] = fc;
-        }
-        else
-        {
-            string psuName = SystemInfo.GetPsuName();
-            if (!string.IsNullOrEmpty(psuName))
-                payload["psu"] = psuName;
-            string psuCap = SystemInfo.GetPsuMaxCapacity();
-            if (!string.IsNullOrEmpty(psuCap))
-                payload["psuCapacity"] = psuCap;
-        }
+        AppendPowerInfo(payload, systemType == "Laptop");
 
         var envelope = new
         {
             type = "systemInfo",
-            payload
+            payload,
         };
         PostJson(JsonSerializer.Serialize(envelope, JsonOut));
+    }
+
+    private static (string version, string buildDate) GetAppVersionInfo()
+    {
+        var asm = typeof(SettingsShell).Assembly;
+        var infoVerAttr = asm.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+            .OfType<System.Reflection.AssemblyInformationalVersionAttribute>()
+            .FirstOrDefault();
+
+        string version = infoVerAttr?.InformationalVersion ?? asm.GetName()?.Version?.ToString() ?? "0.0.0";
+        if (version.Contains('+')) version = version.Split('+')[0];
+
+        string buildDate = string.Empty;
+        try
+        {
+            string assemblyPath = Path.Combine(AppContext.BaseDirectory, $"{asm.GetName().Name}.dll");
+            if (!File.Exists(assemblyPath))
+                assemblyPath = Environment.ProcessPath ?? assemblyPath;
+            if (File.Exists(assemblyPath))
+                buildDate = File.GetLastWriteTime(assemblyPath).ToString("dd-MM-yyyy, hh:mm tt", System.Globalization.CultureInfo.InvariantCulture);
+        }
+        catch (Exception ex) { Log.Error(ex, "Failed to determine application build timestamp"); }
+
+        return (version, buildDate);
+    }
+
+    private static void AppendPowerInfo(Dictionary<string, object?> payload, bool isLaptop)
+    {
+        if (isLaptop)
+        {
+            string bm = SystemInfo.GetBatteryManufacturer();
+            if (!string.IsNullOrEmpty(bm)) payload["batteryManufacturer"] = bm;
+            string bn = SystemInfo.GetBatteryDeviceName();
+            if (!string.IsNullOrEmpty(bn)) payload["batteryDeviceName"] = bn;
+            string dc = SystemInfo.GetBatteryDesignCapacity();
+            if (!string.IsNullOrEmpty(dc)) payload["batteryDesignCapacity"] = dc;
+            string fc = SystemInfo.GetBatteryFullChargedCapacity();
+            if (!string.IsNullOrEmpty(fc)) payload["batteryFullChargedCapacity"] = fc;
+        }
+        else
+        {
+            string psuName = SystemInfo.GetPsuName();
+            if (!string.IsNullOrEmpty(psuName)) payload["psu"] = psuName;
+            string psuCap = SystemInfo.GetPsuMaxCapacity();
+            if (!string.IsNullOrEmpty(psuCap)) payload["psuCapacity"] = psuCap;
+        }
+    }
+
+    private sealed record GpuInfoDto(string Name, string Vendor, bool Dedicated, string? VramGb, string? Driver, string? TdpW);
+
+    private static List<GpuInfoDto> BuildGpuList()
+    {
+        var gpus = SystemInfo.GetGpus();
+        if (gpus.Any(g => g.Vendor == NvidiaVendor) && !NvGpuMonitor.LatestData.HasValue)
+        {
+            using var nvml = new NvGpuMonitor();
+            if (nvml.IsAvailable) nvml.Query();
+        }
+
+        using var amdMon = gpus.Any(g => g.Vendor == "AMD" && g.IsDedicated) ? new AmdGpuMonitor() : null;
+        float? amdTdpW = amdMon?.IsAvailable == true ? amdMon.GetPowerLimitW() : null;
+
+        return gpus.Select(g =>
+        {
+            string? vramGb = FormatGpuVramGb(g);
+            string? driver = g.Vendor == NvidiaVendor ? NvGpuMonitor.LatestDriverVersion : g.DriverVersion;
+            string? tdpW = FormatGpuTdpW(g, amdTdpW);
+
+            return new GpuInfoDto(g.Name, g.Vendor, g.IsDedicated, vramGb, driver, tdpW);
+        }).ToList();
+    }
+
+    private static string? FormatGpuVramGb((string Name, string Vendor, bool IsDedicated, long? VramBytes, string? DriverVersion) g)
+    {
+        if (g.Vendor == NvidiaVendor && NvGpuMonitor.LatestData.HasValue)
+            return $"{NvGpuMonitor.LatestData.Value.VramTotalMb / 1024f:F1}";
+        if (g.VramBytes.HasValue)
+            return $"{g.VramBytes.Value / (1024.0 * 1024.0 * 1024.0):F1}";
+        return null;
+    }
+
+    private static string? FormatGpuTdpW((string Name, string Vendor, bool IsDedicated, long? VramBytes, string? DriverVersion) g, float? amdTdpW)
+    {
+        if (g.Vendor == NvidiaVendor && NvGpuMonitor.LatestData.HasValue && NvGpuMonitor.LatestData.Value.TdpW > 0)
+            return $"{NvGpuMonitor.LatestData.Value.TdpW:F0} W";
+        if (g.Vendor == "AMD" && amdTdpW.HasValue && amdTdpW.Value > 0)
+            return $"{amdTdpW.Value:F0} W";
+        return null;
     }
 
     // Settings application
@@ -546,20 +881,28 @@ public sealed partial class SettingsShell : Window
         var dto = JsonSerializer.Deserialize<SettingsDto>(payload.GetRawText(), JsonIn);
         if (dto is null)
         {
-            Log.Error("ApplySettings: null DTO");
+            Log.Error("Failed to apply settings due to invalid payload data");
             PostJson("{\"type\":\"saved\",\"error\":\"invalid payload\"}");
             return;
         }
         try
         {
+            bool beforeStartup = _cfg.RunAtStartup;
             string before = JsonSerializer.Serialize(_cfg, JsonOut);
             SettingsDtoMapping.ApplyTo(_cfg, dto);
             string after = JsonSerializer.Serialize(_cfg, JsonOut);
 
             if (before != after)
             {
-                Log.Info($"ApplySettings: saved ({after.Length} chars)");
-                WindowHelpers.SetStartup(_cfg.RunAtStartup);
+                var diffs = ComputeSettingsDiff(before, after);
+                foreach (var diff in diffs.Where(d => !string.IsNullOrWhiteSpace(d)))
+                {
+                    Log.Info(diff);
+                }
+                if (beforeStartup != _cfg.RunAtStartup)
+                {
+                    WindowHelpers.SetStartup(_cfg.RunAtStartup);
+                }
                 _cfg.Save();
             }
 
@@ -568,9 +911,520 @@ public sealed partial class SettingsShell : Window
         }
         catch (Exception ex)
         {
-            Log.Error($"ApplySettings failed: {ex}");
+            Log.Error(ex, "Failed to apply configuration settings");
             PostJson(JsonSerializer.Serialize(new { type = "saved", error = ex.Message }));
         }
+    }
+
+    private static List<string> ComputeSettingsDiff(string beforeJson, string afterJson)
+    {
+        var rawChanges = new List<(string Path, string OldVal, string NewVal)>();
+        try
+        {
+            using var docBefore = JsonDocument.Parse(beforeJson);
+            using var docAfter = JsonDocument.Parse(afterJson);
+            CompareElements(docBefore.RootElement, docAfter.RootElement, "", rawChanges);
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to compute settings diff");
+            return [];
+        }
+
+        var alertChanges = rawChanges.Where(c => c.Path.StartsWith("alerts.", StringComparison.OrdinalIgnoreCase)).ToList();
+        var colorChanges = rawChanges.Where(c => c.Path.StartsWith("overlay.groupcolors.", StringComparison.OrdinalIgnoreCase)
+                                              || c.Path.StartsWith("overlay.metriccolors.", StringComparison.OrdinalIgnoreCase)).ToList();
+
+        var result = rawChanges
+            .Where(c => !c.Path.StartsWith("alerts.", StringComparison.OrdinalIgnoreCase)
+                     && !c.Path.StartsWith("overlay.groupcolors.", StringComparison.OrdinalIgnoreCase)
+                     && !c.Path.StartsWith("overlay.metriccolors.", StringComparison.OrdinalIgnoreCase))
+            .Select(c => FormatHumanReadableChange(c.Path, c.OldVal, c.NewVal))
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .ToList();
+
+        if (alertChanges.Count > 0)
+        {
+            result.Add(ConsolidateAlertsDiff(alertChanges));
+        }
+
+        if (colorChanges.Count > 0)
+        {
+            result.AddRange(ConsolidateColorDiffs(colorChanges));
+        }
+
+        return result;
+    }
+
+    private static readonly (string ToggleKey, string ThreshKey, string Label, string Unit, bool IsLow)[] AlertMetricPairs =
+    [
+        ("alerts.alertcputemp", "alerts.cputempmaxc", "CPU temp", "°C", false),
+        ("alerts.alertgputemp", "alerts.gputempmaxc", "GPU temp", "°C", false),
+        ("alerts.alertramusage", "alerts.ramusagemaxpct", "RAM usage", "%", false),
+        ("alerts.alertcpuusage", "alerts.cpuusagemaxpct", "CPU usage", "%", false),
+        ("alerts.alertgpuusage", "alerts.gpuusagemaxpct", "GPU usage", "%", false),
+        ("alerts.alertgpuvram", "alerts.gpuvrammaxmb", "GPU VRAM", " MB", false),
+        ("alerts.alertbatterylow", "alerts.batterylowpct", "Low battery", "%", true),
+        ("alerts.alertcpufreq", "alerts.cpufreqminmhz", "CPU throttle", " MHz", true),
+        ("alerts.alertcpupower", "alerts.cpupowermaxw", "CPU power", " W", false),
+        ("alerts.alertgpufreq", "alerts.gpufreqminmhz", "GPU throttle", " MHz", true),
+        ("alerts.alertgpupower", "alerts.gpupowermaxw", "GPU power", " W", false),
+        ("alerts.alertnetdaily", "alerts.netdailymaxgb", "Daily network limit", " GB", false),
+        ("alerts.alertnetmonthly", "alerts.netmonthlymaxgb", "Monthly network limit", " GB", false),
+    ];
+
+    private static string ConsolidateAlertsDiff(List<(string Path, string OldVal, string NewVal)> alertChanges)
+    {
+        var map = alertChanges.ToDictionary(
+            c => c.Path.ToLowerInvariant(),
+            c => (OldVal: c.OldVal.Trim('"').Trim(), NewVal: c.NewVal.Trim('"').Trim()));
+
+        if (map.TryGetValue("alerts.enabled", out var masterToggle))
+        {
+            if (masterToggle.NewVal.Equals("false", StringComparison.OrdinalIgnoreCase))
+                return "Alerts disabled";
+
+            var enabledSummaries = new List<string>();
+            foreach (var (toggleKey, threshKey, label, unit, isLow) in AlertMetricPairs)
+            {
+                if (map.TryGetValue(toggleKey, out var toggle) && toggle.NewVal.Equals("true", StringComparison.OrdinalIgnoreCase))
+                {
+                    string prefix = isLow ? "≤ " : "";
+                    if (map.TryGetValue(threshKey, out var thresh))
+                        enabledSummaries.Add($"{label} ({prefix}{thresh.NewVal}{unit})");
+                    else
+                        enabledSummaries.Add($"{label} enabled");
+                }
+            }
+
+            if (enabledSummaries.Count > 0)
+                return $"Alerts enabled: {string.Join(", ", enabledSummaries)}";
+
+            return "Alerts enabled";
+        }
+
+        var formattedItems = new List<string>();
+        var handledKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (toggleKey, threshKey, label, unit, isLow) in AlertMetricPairs)
+        {
+            bool hasToggle = map.TryGetValue(toggleKey, out var toggle);
+            bool hasThresh = map.TryGetValue(threshKey, out var thresh);
+
+            if (hasToggle && hasThresh)
+            {
+                handledKeys.Add(toggleKey);
+                handledKeys.Add(threshKey);
+                if (toggle.NewVal.Equals("true", StringComparison.OrdinalIgnoreCase))
+                {
+                    string prefix = isLow ? "≤ " : "";
+                    formattedItems.Add($"{label} alert enabled ({prefix}{thresh.NewVal}{unit})");
+                }
+                else
+                {
+                    formattedItems.Add($"{label} alert disabled");
+                }
+            }
+            else if (hasToggle)
+            {
+                handledKeys.Add(toggleKey);
+                formattedItems.Add($"{label} alert {ToggleStr(toggle.NewVal)}");
+            }
+            else if (hasThresh)
+            {
+                handledKeys.Add(threshKey);
+                string prefix = isLow ? "≤ " : "";
+                formattedItems.Add($"{label} threshold set to {prefix}{thresh.NewVal}{unit}");
+            }
+        }
+
+        foreach (var change in alertChanges)
+        {
+            string key = change.Path.ToLowerInvariant();
+            if (handledKeys.Contains(key)) continue;
+
+            string? formatted = FormatAppearanceAlertsOrUpdatesChange(key, change.NewVal.Trim('"').Trim());
+            if (!string.IsNullOrWhiteSpace(formatted))
+                formattedItems.Add(formatted);
+        }
+
+        return formattedItems.Count switch
+        {
+            0 => "Alerts configuration updated",
+            1 => formattedItems[0],
+            _ => $"Alerts updated: {string.Join(", ", formattedItems)}"
+        };
+    }
+
+    private static readonly Dictionary<string, string> MetricGroupMap = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["cpu_pct"] = "cpu",
+        ["cpu_temp"] = "cpu",
+        ["cpu_freq"] = "cpu",
+        ["cpu_power"] = "cpu",
+        ["ram_pct"] = "ram",
+        ["ram_used"] = "ram",
+        ["gpu_pct"] = "gpu",
+        ["gpu_temp"] = "gpu",
+        ["gpu_vram"] = "gpu",
+        ["gpu_freq"] = "gpu",
+        ["gpu_power"] = "gpu",
+        ["net_down"] = "net",
+        ["net_up"] = "net",
+        ["net_total"] = "net",
+        ["battery_pct"] = "battery",
+        ["battery_rate"] = "battery",
+    };
+
+    private static List<string> ConsolidateColorDiffs(List<(string Path, string OldVal, string NewVal)> colorChanges)
+    {
+        var result = new List<string>();
+        var groupMap = new Dictionary<string, (string OldVal, string NewVal)>(StringComparer.OrdinalIgnoreCase);
+        var metricChanges = new List<(string MetricId, string OldVal, string NewVal)>();
+
+        foreach (var (path, oldVal, newVal) in colorChanges)
+        {
+            string cleanOld = oldVal.Trim('"').Trim();
+            string cleanNew = newVal.Trim('"').Trim();
+            if (path.StartsWith("overlay.groupcolors.", StringComparison.OrdinalIgnoreCase))
+            {
+                string group = path[20..];
+                groupMap[group] = (cleanOld, cleanNew);
+            }
+            else if (path.StartsWith("overlay.metriccolors.", StringComparison.OrdinalIgnoreCase))
+            {
+                string metricId = path[21..];
+                metricChanges.Add((metricId, cleanOld, cleanNew));
+            }
+        }
+
+        var handledMetrics = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (group, (oldVal, newVal)) in groupMap)
+        {
+            string groupName = CapitalizeGroupName(group);
+            var matchingMetrics = metricChanges
+                .Where(m => (MetricGroupMap.TryGetValue(m.MetricId, out var g) && g.Equals(group, StringComparison.OrdinalIgnoreCase))
+                         || (group.Equals("disk", StringComparison.OrdinalIgnoreCase) && m.MetricId.StartsWith("disk_", StringComparison.OrdinalIgnoreCase)))
+                .Where(m => string.Equals(m.NewVal, newVal, StringComparison.OrdinalIgnoreCase))
+                .Select(m => GetMetricName(m.MetricId))
+                .ToList();
+
+            if (matchingMetrics.Count > 0)
+            {
+                result.Add($"{groupName} group color changed to {newVal} (applied to {string.Join(", ", matchingMetrics)})");
+                foreach (var m in metricChanges.Where(m => (MetricGroupMap.TryGetValue(m.MetricId, out var g) && g.Equals(group, StringComparison.OrdinalIgnoreCase))
+                         || (group.Equals("disk", StringComparison.OrdinalIgnoreCase) && m.MetricId.StartsWith("disk_", StringComparison.OrdinalIgnoreCase)))
+                         .Where(m => string.Equals(m.NewVal, newVal, StringComparison.OrdinalIgnoreCase)))
+                {
+                    handledMetrics.Add(m.MetricId);
+                }
+            }
+            else
+            {
+                result.Add($"{groupName} group color changed from {oldVal} to {newVal}");
+            }
+        }
+
+        foreach (var (metricId, oldVal, newVal) in metricChanges)
+        {
+            if (handledMetrics.Contains(metricId)) continue;
+            result.Add($"Metric '{GetMetricName(metricId)}' color changed from {oldVal} to {newVal}");
+        }
+
+        return result;
+    }
+
+    private static string CapitalizeGroupName(string group) => group.ToLowerInvariant() switch
+    {
+        "cpu" => "CPU",
+        "gpu" => "GPU",
+        "ram" => "RAM",
+        "net" => "Network",
+        "disk" => "Disk",
+        "battery" => "Battery",
+        _ => char.ToUpperInvariant(group[0]) + group[1..]
+    };
+
+    private static void CompareElements(JsonElement e1, JsonElement e2, string path, List<(string Path, string OldVal, string NewVal)> changes)
+    {
+        if (e1.ValueKind != e2.ValueKind)
+        {
+            changes.Add((path, e1.GetRawText(), e2.GetRawText()));
+            return;
+        }
+
+        if (e1.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var prop in e2.EnumerateObject())
+            {
+                string propPath = string.IsNullOrEmpty(path) ? prop.Name : $"{path}.{prop.Name}";
+                if (e1.TryGetProperty(prop.Name, out var v1))
+                {
+                    CompareElements(v1, prop.Value, propPath, changes);
+                }
+                else
+                {
+                    changes.Add((propPath, "", prop.Value.GetRawText()));
+                }
+            }
+        }
+        else
+        {
+            if (e1.GetRawText() != e2.GetRawText())
+            {
+                changes.Add((path, e1.GetRawText(), e2.GetRawText()));
+            }
+        }
+    }
+
+    private static string FormatHumanReadableChange(string path, string oldVal, string newVal)
+    {
+        static string Clean(string val) => val.Trim('"').Trim();
+
+        oldVal = Clean(oldVal);
+        newVal = Clean(newVal);
+
+        string normPath = path.ToLowerInvariant();
+
+        string? categoryMsg = FormatGeneralOrLoggingChange(normPath, newVal)
+            ?? FormatMonitoringChange(normPath, newVal)
+            ?? FormatNetworkChange(normPath, newVal)
+            ?? FormatOverlayChange(normPath, path, oldVal, newVal)
+            ?? FormatAppearanceAlertsOrUpdatesChange(normPath, newVal);
+
+        return categoryMsg ?? $"{path} changed from {oldVal} to {newVal}";
+    }
+
+    private static string? FormatGeneralOrLoggingChange(string normPath, string newVal) => normPath switch
+    {
+        "showsystemtrayicon" => newVal.Equals("true", StringComparison.OrdinalIgnoreCase)
+            ? "System tray icon shown" : "System tray icon hidden",
+        "runatstartup" => $"Run at startup {ToggleStr(newVal)}",
+        "startminimized" => $"Start minimized {ToggleStr(newVal)}",
+        "minimizetotrayonclose" => $"Minimize to tray on close {ToggleStr(newVal)}",
+        "datadirectory" => $"Data directory set to '{newVal}'",
+        "enablefilelogging" => $"Metrics logging {ToggleStr(newVal)}",
+        "systemloglevel" => $"System log level set to {newVal}",
+        _ => null
+    };
+
+    private static string? FormatMonitoringChange(string normPath, string newVal) => normPath switch
+    {
+        "monitoring.pollintervalms" => $"Polling interval changed to {newVal} ms",
+        "monitoring.enablecpu" => $"CPU tracking {ToggleStr(newVal)}",
+        "monitoring.enablegpu" => $"GPU tracking {ToggleStr(newVal)}",
+        "monitoring.enableram" => $"RAM tracking {ToggleStr(newVal)}",
+        "monitoring.enabledisk" => $"Disk tracking {ToggleStr(newVal)}",
+        "monitoring.enablenet" => $"Network tracking {ToggleStr(newVal)}",
+        "monitoring.enablebattery" => $"Battery tracking {ToggleStr(newVal)}",
+        "monitoring.cpuusagemode" => $"CPU usage source changed to {newVal.ToUpperInvariant()}",
+        "monitoring.usefahrenheit" => $"Temperature unit changed to {(newVal.Equals("true", StringComparison.OrdinalIgnoreCase) ? "Fahrenheit" : "Celsius")}",
+        "monitoring.usenetbits" => $"Network speed unit changed to {(newVal.Equals("true", StringComparison.OrdinalIgnoreCase) ? "Bits/s" : "Bytes/s")}",
+        "monitoring.cpufreqmode" => $"CPU clock mode changed to {newVal.ToUpperInvariant()}",
+        "monitoring.gpuusagesource" => $"GPU usage source changed to {newVal.ToUpperInvariant()}",
+        "monitoring.diskactivitysource" => $"Disk activity source changed to {newVal}",
+        "monitoring.logcpumode" => $"CPU logging level set to {FormatLogMode(newVal)}",
+        "monitoring.loggpumode" => $"GPU logging level set to {FormatLogMode(newVal)}",
+        "monitoring.logrammode" => $"RAM logging level set to {FormatLogMode(newVal)}",
+        "monitoring.lognetmode" => $"Network logging level set to {FormatLogMode(newVal)}",
+        "monitoring.logbatterymode" => $"Battery logging level set to {FormatLogMode(newVal)}",
+        "monitoring.logdiskmode" => $"Disk logging level set to {FormatLogMode(newVal)}",
+        "monitoring.preferrednic" => string.Equals(newVal, "auto", StringComparison.OrdinalIgnoreCase)
+            ? "Preferred network interface set to Auto"
+            : $"Preferred network interface set to '{newVal}'",
+        _ => null
+    };
+
+    private static string FormatLogMode(string modeVal) => modeVal switch
+    {
+        "0" => "Off",
+        "1" => "Errors Only",
+        "2" => "Full (All Metrics)",
+        _ => modeVal
+    };
+
+    private static string? FormatNetworkChange(string normPath, string newVal) => normPath switch
+    {
+        "network.selectedinterface" => string.IsNullOrEmpty(newVal) ? "Network adapter set to All Adapters" : $"Network adapter set to '{newVal}'",
+        "network.unitformat" => $"Network unit format set to {newVal}",
+        "network.speedunit" => $"Network speed unit set to {newVal}",
+        "network.autoresetmonthly" => $"Monthly network auto-reset {ToggleStr(newVal)}",
+        _ => null
+    };
+
+    private static string? FormatOverlayChange(string normPath, string path, string oldVal, string newVal) => normPath switch
+    {
+        "overlay.visible" => newVal.Equals("true", StringComparison.OrdinalIgnoreCase)
+            ? "Taskbar overlay turned on" : "Taskbar overlay turned off",
+        "overlay.placement" => $"Position changed to {newVal}",
+        "overlay.placementoffset" => $"Offset changed to {newVal} px",
+        "overlay.opacity" => $"Opacity changed to {newVal}%",
+        "overlay.scalepct" => $"Scale changed to {newVal}%",
+        "overlay.fontsizepx" => $"Font size changed to {newVal} px",
+        "overlay.fontbold" => $"Bold font {ToggleStr(newVal)}",
+        "overlay.labelcolor" => $"Label color changed to {newVal}",
+        "overlay.valuecolor" => $"Value color changed to {newVal}",
+        "overlay.bgcolor" => $"Background color changed to {newVal}",
+        "overlay.showtoastnotif" => $"Toast notifications {ToggleStr(newVal)}",
+        "overlay.flashoverlay" => $"Flashing alerts {ToggleStr(newVal)}",
+        "overlay.showlabels" => newVal.Equals("true", StringComparison.OrdinalIgnoreCase)
+            ? "Labels shown" : "Labels hidden",
+        "overlay.doubleclickaction" => newVal.Equals("taskmanager", StringComparison.OrdinalIgnoreCase)
+            ? "Double-click action set to Task Manager" : "Double-click action set to Open Settings",
+        "overlay.followwindowstheme" => $"Follow Windows theme {ToggleStr(newVal)}",
+        "overlay.row1" or "overlay.metrics" => FormatOverlayLayoutChange(oldVal, newVal),
+        _ when normPath.StartsWith("overlay.metriccolors.", StringComparison.Ordinal) =>
+            $"Metric '{GetMetricName(path[21..])}' color changed from {oldVal} to {newVal}",
+        _ when normPath.StartsWith("overlay.groupcolors.", StringComparison.Ordinal) =>
+            $"{char.ToUpperInvariant(path[20]) + path[21..]} group color changed from {oldVal} to {newVal}",
+        _ when normPath.StartsWith("overlay.usercustomized", StringComparison.Ordinal) =>
+            "", // Internal tracking array; avoid redundant logging
+        _ => null
+    };
+
+    private static string? FormatAppearanceAlertsOrUpdatesChange(string normPath, string newVal) => normPath switch
+    {
+        "windowtheme" => $"Window theme changed to {newVal}",
+        "alerts.enabled" => $"Alerts {ToggleStr(newVal)}",
+        "alerts.alertcputemp" => $"CPU temperature alert {ToggleStr(newVal)}",
+        "alerts.alertgputemp" => $"GPU temperature alert {ToggleStr(newVal)}",
+        "alerts.alertcpuusage" => $"CPU usage alert {ToggleStr(newVal)}",
+        "alerts.alertramusage" => $"RAM usage alert {ToggleStr(newVal)}",
+        "alerts.alertgpuusage" => $"GPU usage alert {ToggleStr(newVal)}",
+        "alerts.alertgpuvram" => $"GPU VRAM alert {ToggleStr(newVal)}",
+        "alerts.alertbatterylow" => $"Battery low alert {ToggleStr(newVal)}",
+        "alerts.alertcpufreq" => $"CPU frequency alert {ToggleStr(newVal)}",
+        "alerts.alertcpupower" => $"CPU power alert {ToggleStr(newVal)}",
+        "alerts.alertgpufreq" => $"GPU frequency alert {ToggleStr(newVal)}",
+        "alerts.alertgpupower" => $"GPU power alert {ToggleStr(newVal)}",
+        "alerts.alertnetdaily" => $"Daily network limit alert {ToggleStr(newVal)}",
+        "alerts.alertnetmonthly" => $"Monthly network limit alert {ToggleStr(newVal)}",
+        "alerts.fireoncepersession" => $"Fire alerts only once per session {ToggleStr(newVal)}",
+        "alerts.cputempmaxc" => $"CPU temp threshold set to {newVal}°C",
+        "alerts.gputempmaxc" => $"GPU temp threshold set to {newVal}°C",
+        "alerts.cpuusagemaxpct" => $"CPU usage threshold set to {newVal}%",
+        "alerts.ramusagemaxpct" => $"RAM usage threshold set to {newVal}%",
+        "alerts.gpuusagemaxpct" => $"GPU usage threshold set to {newVal}%",
+        "alerts.gpuvrammaxmb" => $"GPU VRAM threshold set to {newVal} MB",
+        "alerts.batterylowpct" => $"Low battery threshold set to {newVal}%",
+        "alerts.cpufreqminmhz" => $"CPU frequency threshold set to {newVal} MHz",
+        "alerts.cpupowermaxw" => $"CPU power threshold set to {newVal} W",
+        "alerts.gpufreqminmhz" => $"GPU frequency threshold set to {newVal} MHz",
+        "alerts.gpupowermaxw" => $"GPU power threshold set to {newVal} W",
+        "alerts.netdailymaxgb" => $"Daily network limit set to {newVal} GB",
+        "alerts.netmonthlymaxgb" => $"Monthly network limit set to {newVal} GB",
+        "alerts.cooldownsecs" => $"Alert cooldown set to {newVal}s",
+        "alerts.showtoastnotif" => $"Alert toast notifications {ToggleStr(newVal)}",
+        "alerts.flashoverlay" => $"Alert overlay flashing {ToggleStr(newVal)}",
+        "netusage.enabled" => $"Network usage tracking {ToggleStr(newVal)}",
+        "updates.includeprereleases" => $"Include pre-release builds {ToggleStr(newVal)}",
+        "updates.checkfrequency" => newVal.Length > 0 ? $"Update check frequency set to {char.ToUpperInvariant(newVal[0]) + newVal[1..]}" : "Update check frequency changed",
+        _ => null
+    };
+
+    private static string ToggleStr(string newVal) => newVal.Equals("true", StringComparison.OrdinalIgnoreCase) ? EnabledStr : DisabledStr;
+
+    private static string GetMetricName(string metricId) => metricId.ToLowerInvariant() switch
+    {
+        "cpu_pct" => "CPU Usage",
+        "cpu_temp" => "CPU Temperature",
+        "cpu_freq" => "CPU Frequency",
+        "cpu_power" => "CPU Power",
+        "ram_pct" => "RAM Usage %",
+        "ram_used" => "RAM Used",
+        "gpu_pct" => "GPU Usage",
+        "gpu_temp" => "GPU Temperature",
+        "gpu_vram" => "GPU VRAM",
+        "gpu_freq" => "GPU Frequency",
+        "gpu_power" => "GPU Power",
+        "net_down" => "Download Speed",
+        "net_up" => "Upload Speed",
+        "net_total" => "Total Network Usage",
+        "battery_pct" => "Battery %",
+        "battery_rate" => "Battery Rate",
+        _ when metricId.StartsWith("disk_", StringComparison.Ordinal) => $"Disk {metricId[5..].ToUpperInvariant()}",
+        _ => metricId
+    };
+
+    private static List<string> ParseMetricIds(string val)
+    {
+        var metricIds = new List<string>();
+        if (string.IsNullOrWhiteSpace(val)) return metricIds;
+        string trimmed = val.Trim();
+
+        if (trimmed.StartsWith('[') && trimmed.EndsWith(']'))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(trimmed);
+                if (doc.RootElement.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var elem in doc.RootElement.EnumerateArray())
+                    {
+                        string? id = elem.GetString();
+                        if (!string.IsNullOrWhiteSpace(id))
+                            metricIds.Add(id.Trim());
+                    }
+                }
+                return metricIds;
+            }
+            catch (JsonException ex)
+            {
+                Log.Debug(ex, "Failed to parse metrics layout as JSON; falling back to delimiter split");
+                var parts = trimmed.Trim('[', ']').Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                metricIds.AddRange(parts.Select(p => p.Trim('"', '\'')).Where(p => !string.IsNullOrWhiteSpace(p)));
+                return metricIds;
+            }
+        }
+
+        var fallbackParts = trimmed.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        metricIds.AddRange(fallbackParts.Select(p => p.Trim('"', '\'')).Where(p => !string.IsNullOrWhiteSpace(p)));
+        return metricIds;
+    }
+
+    private static string FormatOverlayLayoutChange(string oldVal, string newVal)
+    {
+        var newIds = ParseMetricIds(newVal);
+        var oldIds = ParseMetricIds(oldVal);
+
+        if (newIds.Count == 0)
+            return "Metrics layout cleared (0 metrics)";
+
+        // If oldVal was empty or unparseable, format as configured/updated count
+        if (oldIds.Count == 0)
+        {
+            var names = newIds.Select(GetMetricName);
+            string metricPlural = newIds.Count == 1 ? "metric" : "metrics";
+            return $"Metrics layout updated ({newIds.Count} {metricPlural} - {string.Join(", ", names)})";
+        }
+
+        var added = newIds.Except(oldIds).Select(GetMetricName).ToList();
+        var removed = oldIds.Except(newIds).Select(GetMetricName).ToList();
+
+        if (added.Count > 0 && removed.Count == 0)
+        {
+            string metricPlural = added.Count == 1 ? "metric" : "metrics";
+            return $"Added {metricPlural} to overlay ({string.Join(", ", added)})";
+        }
+
+        if (removed.Count > 0 && added.Count == 0)
+        {
+            string metricPlural = removed.Count == 1 ? "metric" : "metrics";
+            return $"Removed {metricPlural} from overlay ({string.Join(", ", removed)})";
+        }
+
+        if (added.Count > 0 && removed.Count > 0)
+        {
+            return $"Metrics layout updated (Added {string.Join(", ", added)}, Removed {string.Join(", ", removed)})";
+        }
+
+        if (!oldIds.SequenceEqual(newIds))
+        {
+            return "Metrics layout reordered";
+        }
+
+        return string.Empty;
     }
 
     // Title-bar & caption buttons
@@ -585,13 +1439,10 @@ public sealed partial class SettingsShell : Window
         DragMove();
     }
 
-    /// <summary>Close or minimize to tray based on setting.</summary>
+    /// <summary>Closes the settings configuration window.</summary>
     private void CloseButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_cfg.MinimizeToTrayOnClose)
-            Close();
-        else
-            System.Windows.Application.Current.Shutdown();
+        Close();
     }
 
     // Disposal
@@ -603,7 +1454,12 @@ public sealed partial class SettingsShell : Window
 
         // Properly dispose WebView2 to prevent phantom COM objects
         if (_webViewReady)
-            WebView.Dispose();
+            WebView?.Dispose();
         base.OnClosed(e);
     }
 }
+
+
+
+
+

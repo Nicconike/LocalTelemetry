@@ -244,20 +244,22 @@
 
                 <div class="sec-header">Storage</div>
                 {#if info.disks?.length}
-                    {#each info.disks as disk}
+                    {#each info.disks as disk, i}
                         <div class="hw-row">
-                            <span class="hw-label"
-                                >Disk {disk.diskIndex + 1}</span
-                            >
-                            <span class="hw-value" title={disk.model}>
-                                {disk.model}
-                                {#if disk.sizeGb}
-                                    ({disk.sizeGb}){/if}
-                                {#if disk.busType}
-                                    [{busTypeToLabel(disk.busType)}]{/if}
+                            <span class="hw-label">
+                                Disk {i + 1}
                                 {#if disk.boot}
                                     <span class="boot-badge">Boot</span>
                                 {/if}
+                            </span>
+                            <span class="hw-value" title={disk.model}>
+                                {disk.model}
+                                {#if disk.formattedSize}
+                                    ({disk.formattedSize}){:else if disk.sizeGb}
+                                    ({disk.sizeGb} GB){/if}
+                                {#if disk.displayType}
+                                    [{disk.displayType}]{:else if disk.busType}
+                                    [{busTypeToLabel(disk.busType)}]{/if}
                             </span>
                         </div>
                     {/each}

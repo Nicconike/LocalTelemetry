@@ -1,4 +1,5 @@
-﻿using LocalTelemetry.Core.Config;
+using LocalTelemetry.Core.Config;
+using LocalTelemetry.Core.Diagnostics;
 using LocalTelemetry.Core.Hardware;
 
 namespace LocalTelemetry.App.Settings;
@@ -10,14 +11,14 @@ public sealed class SettingsDto
     /// <summary>Whether to launch the application on Windows login.</summary>
     public bool RunAtStartup { get; set; }
 
-    /// <summary>Whether to start the application minimized to the tray.</summary>
-    public bool StartMinimized { get; set; }
-
-    /// <summary>Whether closing the settings window minimizes to tray instead of exiting.</summary>
-    public bool MinimizeToTray { get; set; } = false;
+    /// <summary>Whether the system tray notification icon is visible.</summary>
+    public bool ShowSystemTrayIcon { get; set; } = true;
 
     /// <summary>Whether to write diagnostic log output to a file.</summary>
     public bool EnableFileLogging { get; set; }
+
+    /// <summary>System log level threshold ("Off", "Error", "Warning", "Info", "Debug").</summary>
+    public string SystemLogLevel { get; set; } = "Info";
 
     /// <summary>Monitoring (polling) configuration.</summary>
     public MonitoringDto Monitoring { get; set; } = new();
@@ -30,6 +31,9 @@ public sealed class SettingsDto
 
     /// <summary>Network usage logging configuration.</summary>
     public NetUsageDto NetUsage { get; set; } = new();
+
+    /// <summary>Update checking configuration.</summary>
+    public UpdateConfigDto Updates { get; set; } = new();
 
     /// <summary>Active window theme identifier (e.g. "default", "dark").</summary>
     public string WindowTheme { get; set; } = "default";
@@ -72,6 +76,11 @@ public sealed class MonitoringDto
 
     /// <summary>Whether battery metrics are polled and displayed.</summary>
     public bool TrackBattery { get; set; } = true;
+
+    /// <summary>CPU frequency mode: "average" or "max".</summary>
+    public string CpuFreqMode { get; set; } = "average";
+    /// <summary>CPU usage mode: "overall" or "max".</summary>
+    public string CpuUsageMode { get; set; } = "overall";
 
     /// <summary>GPU usage source: "driver" (NVML/ADL) or "wddm" (D3DKMTQueryStatistics).</summary>
     public string GpuUsageSource { get; set; } = "driver";
@@ -193,6 +202,12 @@ public sealed class AlertsDto
     /// <summary>Alert when GPU power exceeds <see cref="GpuPowerMaxW"/>.</summary>
     public bool AlertGpuPower { get; set; }
 
+    /// <summary>Alert when today's network usage exceeds <see cref="NetDailyMaxGb"/>.</summary>
+    public bool AlertNetDaily { get; set; }
+
+    /// <summary>Alert when current month's network usage exceeds <see cref="NetMonthlyMaxGb"/>.</summary>
+    public bool AlertNetMonthly { get; set; }
+
     // Thresholds
     /// <summary>CPU usage threshold (percent) above which an alert fires.</summary>
     public float CpuUsageMaxPct { get; set; } = 90;
@@ -227,6 +242,12 @@ public sealed class AlertsDto
     /// <summary>GPU power threshold (watts) above which an alert fires.</summary>
     public float GpuPowerMaxW { get; set; } = 150;
 
+    /// <summary>Daily network usage threshold (GB) above which an alert fires.</summary>
+    public float NetDailyMaxGb { get; set; } = 50;
+
+    /// <summary>Monthly network usage threshold (GB) above which an alert fires.</summary>
+    public float NetMonthlyMaxGb { get; set; } = 1000;
+
     // Actions
     /// <summary>Whether to show a Windows toast notification on alert.</summary>
     public bool ShowToastNotif { get; set; } = true;
@@ -249,6 +270,17 @@ public sealed class NetUsageDto
     public bool Enabled { get; set; } = true;
 }
 
+// UpdateConfigDto
+/// <summary>DTO for update checking configuration.</summary>
+public sealed class UpdateConfigDto
+{
+    /// <summary>Update check frequency ("weekly", "monthly", or "manual").</summary>
+    public string CheckFrequency { get; set; } = "manual";
+
+    /// <summary>Whether to include pre-release and Release Candidate (RC) builds.</summary>
+    public bool IncludePrereleases { get; set; } = true;
+}
+
 // SettingsDtoMapping
 /// <summary>Static mapping methods for converting between <see cref="AppSettings"/> and <see cref="SettingsDto"/>.</summary>
 public static class SettingsDtoMapping
@@ -261,9 +293,9 @@ public static class SettingsDtoMapping
         return new SettingsDto
         {
             RunAtStartup = src.RunAtStartup,
-            StartMinimized = src.StartMinimized,
-            MinimizeToTray = src.MinimizeToTrayOnClose,
+            ShowSystemTrayIcon = src.ShowSystemTrayIcon,
             EnableFileLogging = src.EnableFileLogging,
+            SystemLogLevel = string.IsNullOrEmpty(src.SystemLogLevel) ? "Info" : src.SystemLogLevel,
             Monitoring = new MonitoringDto
             {
                 IntervalMs = src.Monitoring.PollIntervalMs,
@@ -278,6 +310,8 @@ public static class SettingsDtoMapping
                 TrackDisk = src.Monitoring.EnableDisk,
                 TrackBattery = src.Monitoring.EnableBattery,
                 HasBattery = SystemInfo.HasBattery(),
+                CpuFreqMode = src.Monitoring.CpuFreqMode,
+                CpuUsageMode = src.Monitoring.CpuUsageMode,
                 GpuUsageSource = src.Monitoring.GpuUsageSource,
                 LogCpuMode = src.Monitoring.LogCpuMode,
                 LogGpuMode = src.Monitoring.LogGpuMode,
@@ -321,6 +355,8 @@ public static class SettingsDtoMapping
                 AlertCpuPower = src.Alerts.AlertCpuPower,
                 AlertGpuFreq = src.Alerts.AlertGpuFreq,
                 AlertGpuPower = src.Alerts.AlertGpuPower,
+                AlertNetDaily = src.Alerts.AlertNetDaily,
+                AlertNetMonthly = src.Alerts.AlertNetMonthly,
                 CpuUsageMaxPct = src.Alerts.CpuUsageMaxPct,
                 RamUsageMaxPct = src.Alerts.RamUsageMaxPct,
                 GpuUsageMaxPct = src.Alerts.GpuUsageMaxPct,
@@ -332,6 +368,8 @@ public static class SettingsDtoMapping
                 CpuPowerMaxW = src.Alerts.CpuPowerMaxW,
                 GpuFreqMinMhz = src.Alerts.GpuFreqMinMhz,
                 GpuPowerMaxW = src.Alerts.GpuPowerMaxW,
+                NetDailyMaxGb = src.Alerts.NetDailyMaxGb,
+                NetMonthlyMaxGb = src.Alerts.NetMonthlyMaxGb,
                 ShowToastNotif = src.Alerts.ShowToastNotif,
                 FlashOverlay = src.Alerts.FlashOverlay,
                 CooldownSecs = src.Alerts.CooldownSecs,
@@ -340,6 +378,11 @@ public static class SettingsDtoMapping
             NetUsage = new NetUsageDto
             {
                 Enabled = src.NetUsage.Enabled,
+            },
+            Updates = new UpdateConfigDto
+            {
+                CheckFrequency = src.Updates.CheckFrequency,
+                IncludePrereleases = src.Updates.IncludePrereleases,
             },
             WindowTheme = src.WindowTheme,
         };
@@ -351,9 +394,9 @@ public static class SettingsDtoMapping
     public static void ApplyTo(AppSettings settings, SettingsDto dto)
     {
         settings.RunAtStartup = dto.RunAtStartup;
-        settings.MinimizeToTrayOnClose = dto.MinimizeToTray;
-        settings.StartMinimized = dto.StartMinimized;
+        settings.ShowSystemTrayIcon = dto.ShowSystemTrayIcon;
         settings.EnableFileLogging = dto.EnableFileLogging;
+        settings.SystemLogLevel = string.IsNullOrEmpty(dto.SystemLogLevel) ? "Info" : dto.SystemLogLevel;
 
         settings.Monitoring.PollIntervalMs = Math.Max(100, dto.Monitoring.IntervalMs);
         settings.Monitoring.UseFahrenheit = dto.Monitoring.UseFahrenheit;
@@ -366,6 +409,8 @@ public static class SettingsDtoMapping
         settings.Monitoring.EnableNet = dto.Monitoring.TrackNet;
         settings.Monitoring.EnableDisk = dto.Monitoring.TrackDisk;
         settings.Monitoring.EnableBattery = dto.Monitoring.TrackBattery;
+        settings.Monitoring.CpuFreqMode = dto.Monitoring.CpuFreqMode;
+        settings.Monitoring.CpuUsageMode = dto.Monitoring.CpuUsageMode;
         settings.Monitoring.GpuUsageSource = dto.Monitoring.GpuUsageSource;
         settings.Monitoring.LogCpuMode = dto.Monitoring.LogCpuMode;
         settings.Monitoring.LogGpuMode = dto.Monitoring.LogGpuMode;
@@ -374,6 +419,11 @@ public static class SettingsDtoMapping
         settings.Monitoring.LogDiskMode = dto.Monitoring.LogDiskMode;
         settings.Monitoring.LogBatteryMode = dto.Monitoring.LogBatteryMode;
         settings.Overlay.Visible = dto.Overlay.Visible;
+        if (!settings.ShowSystemTrayIcon && !settings.Overlay.Visible)
+        {
+            settings.ShowSystemTrayIcon = true;
+            Log.Warn("Cannot disable both System Tray Icon and Overlay. Retaining System Tray Icon to prevent lockout.");
+        }
         settings.Overlay.DoubleClickAction = string.IsNullOrEmpty(dto.Overlay.DoubleClickAction)
             ? "settings" : dto.Overlay.DoubleClickAction;
         settings.Overlay.Placement = MapPositionToPlacement(dto.Overlay.Position);
@@ -411,6 +461,8 @@ public static class SettingsDtoMapping
         settings.Alerts.AlertCpuPower = dto.Alerts.AlertCpuPower;
         settings.Alerts.AlertGpuFreq = dto.Alerts.AlertGpuFreq;
         settings.Alerts.AlertGpuPower = dto.Alerts.AlertGpuPower;
+        settings.Alerts.AlertNetDaily = dto.Alerts.AlertNetDaily;
+        settings.Alerts.AlertNetMonthly = dto.Alerts.AlertNetMonthly;
         settings.Alerts.CpuUsageMaxPct = dto.Alerts.CpuUsageMaxPct;
         settings.Alerts.RamUsageMaxPct = dto.Alerts.RamUsageMaxPct;
         settings.Alerts.GpuUsageMaxPct = dto.Alerts.GpuUsageMaxPct;
@@ -422,26 +474,36 @@ public static class SettingsDtoMapping
         settings.Alerts.CpuPowerMaxW = dto.Alerts.CpuPowerMaxW;
         settings.Alerts.GpuFreqMinMhz = dto.Alerts.GpuFreqMinMhz;
         settings.Alerts.GpuPowerMaxW = dto.Alerts.GpuPowerMaxW;
+        settings.Alerts.NetDailyMaxGb = dto.Alerts.NetDailyMaxGb;
+        settings.Alerts.NetMonthlyMaxGb = dto.Alerts.NetMonthlyMaxGb;
         settings.Alerts.ShowToastNotif = dto.Alerts.ShowToastNotif;
         settings.Alerts.FlashOverlay = dto.Alerts.FlashOverlay;
         settings.Alerts.CooldownSecs = dto.Alerts.CooldownSecs;
         settings.Alerts.FireOncePerSession = dto.Alerts.FireOncePerSession;
 
         settings.NetUsage.Enabled = dto.NetUsage.Enabled;
+        if (dto.Updates is not null)
+        {
+            settings.Updates.CheckFrequency = dto.Updates.CheckFrequency ?? "weekly";
+            settings.Updates.IncludePrereleases = dto.Updates.IncludePrereleases;
+        }
         settings.WindowTheme = dto.WindowTheme;
     }
 
+    private const string PositionLeft = "left";
+    private const string PositionRight = "right";
+
     private static string MapPlacementToPosition(string placement) => placement switch
     {
-        "left" => "left",
-        "center" => "left",
-        "right" => "right",
-        _ => "right",
+        PositionLeft => PositionLeft,
+        "center" => PositionLeft,
+        PositionRight => PositionRight,
+        _ => PositionRight,
     };
 
     private static string MapPositionToPlacement(string position) => position switch
     {
-        "left" => "left",
-        _ => "right",
+        PositionLeft => PositionLeft,
+        _ => PositionRight,
     };
 }

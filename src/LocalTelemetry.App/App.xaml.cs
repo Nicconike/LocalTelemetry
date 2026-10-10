@@ -38,10 +38,30 @@ public sealed partial class App : WpfApplication
     private AppSettings _cfg = new AppSettings();
     private SynchronizationContext? _uiCtx;
     private NotificationClient? _notifClient;
+    private Process? _notifierProcess;
+    private bool _notifierLaunched;
+    private DateTime _startupUtc;
+
+    // Test seams
+    internal static Func<bool>? IsAdministratorCheck { get; set; }
+    internal static Action<string[]>? ElevateAndExitAction { get; set; }
+    internal static Action<string>? NotifierLauncherAction { get; set; }
+    internal static Action<string>? TaskManagerLauncherAction { get; set; }
+    internal static Action<ProcessStartInfo>? TaskManagerProcessLauncher { get; set; }
+    internal static Action? QuitAppAction { get; set; }
+    internal static Func<string, Task>? SrumImporterAction { get; set; }
+    internal static Action<ISystemInfo, string>? HardwareInventoryAction { get; set; }
+    internal static IPawnIoManager? PawnIoManagerOverride { get; set; }
+    internal static bool SuppressSettingsWindowForTesting { get; set; }
+    internal static bool SuppressOverlayForTesting { get; set; }
+    internal static bool SuppressHardwareMonitorForTesting { get; set; }
+    internal static Action<string, string>? MessageBoxAction { get; set; }
+    internal static Func<AppSettings, NetUsageLogger, SettingsShell>? SettingsShellFactory { get; set; }
 
     // Elevation
     private static bool IsAdministrator()
     {
+        if (IsAdministratorCheck is not null) return IsAdministratorCheck();
         using WindowsIdentity identity = WindowsIdentity.GetCurrent();
         var principal = new WindowsPrincipal(identity);
         return principal.IsInRole(WindowsBuiltInRole.Administrator);
@@ -49,6 +69,12 @@ public sealed partial class App : WpfApplication
 
     private static void ElevateAndExit(string[] args)
     {
+        if (ElevateAndExitAction is not null)
+        {
+            ElevateAndExitAction(args);
+            return;
+        }
+
         string exe = Environment.ProcessPath!;
         var sb = new System.Text.StringBuilder();
         foreach (var a in args)
@@ -74,9 +100,16 @@ public sealed partial class App : WpfApplication
         }
         catch (Exception ex)
         {
-            System.Windows.MessageBox.Show(
-                $"LocalTelemetry requires administrator privileges.\n\n{ex.Message}",
-                "Elevation failed", MessageBoxButton.OK, MessageBoxImage.Error);
+            if (MessageBoxAction is not null)
+            {
+                MessageBoxAction("Elevation failed", ex.Message);
+            }
+            else
+            {
+                System.Windows.MessageBox.Show(
+                    $"LocalTelemetry requires administrator privileges.\n\n{ex.Message}",
+                    "Elevation failed", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         Environment.Exit(0);
@@ -93,14 +126,16 @@ public sealed partial class App : WpfApplication
             return;
         }
 
-        Log.Info("running as administrator");
+        Log.Debug("Running as administrator");
 
         AppDomain.CurrentDomain.UnhandledException += HandleUnhandledException;
         TaskScheduler.UnobservedTaskException += HandleUnobservedTaskException;
         DispatcherUnhandledException += HandleDispatcherUnhandledException;
+        SessionEnding += HandleSessionEnding;
 
         ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
 
+        _startupUtc = DateTime.UtcNow;
         _uiCtx = SynchronizationContext.Current;
 
         string exeDir = AppContext.BaseDirectory;
@@ -110,74 +145,84 @@ public sealed partial class App : WpfApplication
         bool fileRunAtStartup = _cfg.RunAtStartup;
         _cfg.RunAtStartup = WindowHelpers.IsStartupEnabled();
         Log.Init(AppSettings.SystemLogPath, AppSettings.MetricsLogPath, _cfg.EnableFileLogging);
-        Log.Info($"config loaded from {AppSettings.ConfigPath}");
+        Log.SystemLevel = Log.ParseLevel(_cfg.SystemLogLevel);
+        if (AppSettings.LastDirectoryError is not null)
+        {
+            Log.Warn(AppSettings.LastDirectoryError, "Directory initialization fallback triggered");
+        }
+        _metricsWasEnabled = _cfg.EnableFileLogging;
+        _lastRunAtStartup = _cfg.RunAtStartup;
+        string appVer = UpdateCheckService.GetCurrentVersionString();
+        string mode = AppSettings.IsStandardMode ? "Standard" : "Portable";
+        string osName = SystemInfo.GetOsDisplayVersion();
+        Log.SessionStart(appVer, IsAdministrator(), AppSettings.ConfigPath, mode, osName);
 
         _services = BuildContainer();
         _overlay = _services.GetRequiredService<TaskbarOverlay>();
         _tray = _services.GetRequiredService<TrayIconManager>();
+        _tray.SetTrayVisible(_cfg.ShowSystemTrayIcon);
         _tray.SetOverlayVisible(_cfg.Overlay.Visible);
         _alerts = _services.GetRequiredService<AlertService>();
         _monitor = _services.GetRequiredService<HardwareMonitor>();
         _notifClient = _services.GetRequiredService<NotificationClient>();
-        Log.Info("Services Initialized (overlay, tray, alerts, monitor, notifier)");
+        Log.Info("Core services initialized");
 
-        // Launch non-elevated notification helper (child process inherits user token, not admin)
-        LaunchNotifier();
-
-        // Create the single TrafficHistoryFile and import SRUM history BEFORE logger seeds today's data
+        // Load existing traffic history file (fast local file load)
         var historyFile = new TrafficHistoryFile(AppSettings.NetUsagePath);
         historyFile.Load();
 
-        try
-        {
-            var srumTask = Task.Factory.StartNew(
-                () => WindowsNetworkUsageProvider.ImportAndSaveHistoryAsync(historyFile),
-                CancellationToken.None,
-                TaskCreationOptions.None,
-                TaskScheduler.Default).Unwrap();
-            srumTask.GetAwaiter().GetResult();
-            Log.Info("SRUM: history import complete");
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "SRUM pre-import failed");
-        }
-
         _netLogger = new NetUsageLogger(_cfg, historyFile);
-        Log.Info("NetUsage: logger initialized");
+        Log.Debug("Traffic history logger initialized");
 
         TrafficHistoryStore.Initialize(historyFile);
-        Log.Info("TrafficHistoryStore: initialized");
+        Log.Debug("Traffic history store initialized");
 
         // Persist startup state if the config file disagreed with actual Windows state
         if (fileRunAtStartup != _cfg.RunAtStartup)
         {
             _cfg.Save();
-            Log.Info($"Synced RunAtStartup with Windows system state: {_cfg.RunAtStartup}");
+            Log.Info($"Synchronized Windows startup state (startup {(_cfg.RunAtStartup ? "enabled" : "disabled")})");
         }
 
         WireEvents();
 
         bool minimized = Array.Exists(e.Args, a => a == "--minimized") || _cfg.StartMinimized;
 
-        ApplyVendorColors(_cfg);
-
-        if (_cfg.Overlay.Visible)
+        if (!SuppressOverlayForTesting && _cfg.Overlay.Visible)
             _overlay.Show();
 
-        _monitor.Start();
-
-        Log.Info($"System: {Environment.MachineName}, {SystemInfo.GetOsDisplayVersion()}, {SystemInfo.GetSystemTypeLabel()}");
-        Log.Info($"Motherboard: {SystemInfo.GetMotherboardManufacturer()} {SystemInfo.GetMotherboardProductName()} ({SystemInfo.GetMotherboardVersion()}, BIOS: {SystemInfo.GetBiosVersion()})");
-        if (SystemInfo.HasBattery())
-            Log.Info($"Battery: {SystemInfo.GetBatteryManufacturer()} {SystemInfo.GetBatteryDeviceName()}, design={SystemInfo.GetBatteryDesignCapacity()}, fullCharge={SystemInfo.GetBatteryFullChargedCapacity()}");
+        if (!SuppressHardwareMonitorForTesting)
+            _monitor.Start();
 
         if (!minimized)
             OpenSettings();
 
-        if (_cfg.RunAtStartup)
-            WindowHelpers.SetStartup(true);
-        Log.Info($"startup complete (elevated=true, overlayVisible={_cfg.Overlay.Visible}, startMinimized={minimized})");
+        Log.Info($"Application started (overlay {(_cfg.Overlay.Visible ? "visible" : "hidden")}, mode {(minimized ? "minimized" : "normal")})");
+
+        // Asynchronous non-blocking background initialization
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                if (HardwareInventoryAction is not null)
+                    HardwareInventoryAction(new SystemInfoWrapper(), AppSettings.HardwareStatePath);
+                else
+                    HardwareInventory.LogHardwareConfiguration(new SystemInfoWrapper(), AppSettings.HardwareStatePath);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Failed to log hardware configuration");
+            }
+
+            ApplyVendorColors(_cfg);
+
+            LaunchNotifier();
+
+            RunSrumPreImport(historyFile);
+
+            if (_cfg.RunAtStartup)
+                WindowHelpers.SetStartup(true);
+        });
     }
 
     private bool _metricsWasEnabled;
@@ -188,10 +233,7 @@ public sealed partial class App : WpfApplication
         try
         {
             Log.EnableMetrics(enable);
-            if (enable)
-                Log.Info($"Metrics logging enabled: {AppSettings.MetricsLogPath}");
-            else
-                Log.Info("Metrics logging disabled");
+            Log.Info(enable ? "Metrics logging enabled" : "Metrics logging disabled");
         }
         catch (Exception ex)
         {
@@ -217,6 +259,16 @@ public sealed partial class App : WpfApplication
         e.Handled = true;
     }
 
+    private void HandleSessionEnding(object sender, SessionEndingCancelEventArgs e)
+    {
+        string reason = e.ReasonSessionEnding == ReasonSessionEnding.Shutdown
+            ? "Windows System Shutdown"
+            : "Windows User Logoff";
+
+        TimeSpan uptime = _startupUtc != default ? DateTime.UtcNow - _startupUtc : TimeSpan.Zero;
+        Log.SessionEnd(reason, uptime);
+    }
+
     internal static void ApplyVendorColors(AppSettings cfg)
     {
         var vendorDefaults = BrandColorDefaults.BuildDefaultMetricColors();
@@ -236,6 +288,30 @@ public sealed partial class App : WpfApplication
                 continue;
 
             cfg.Overlay.GroupColors[kvp.Key] = kvp.Value;
+        }
+    }
+
+    private static void RunSrumPreImport(TrafficHistoryFile historyFile)
+    {
+        try
+        {
+            if (SrumImporterAction is not null)
+            {
+                SrumImporterAction(historyFile.FilePath).GetAwaiter().GetResult();
+                return;
+            }
+
+            var srumTask = Task.Factory.StartNew(
+                () => WindowsNetworkUsageProvider.ImportAndSaveHistoryAsync(historyFile),
+                CancellationToken.None,
+                TaskCreationOptions.None,
+                TaskScheduler.Default).Unwrap();
+            srumTask.GetAwaiter().GetResult();
+            Log.Debug("Historical network usage import completed");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to import network usage history");
         }
     }
 
@@ -261,7 +337,10 @@ public sealed partial class App : WpfApplication
         sc.AddSingleton(_cfg);
         sc.AddSingleton<HardwareMonitor>();
         sc.AddSingleton<ISystemInfo, SystemInfoWrapper>();
-        sc.AddSingleton<IPawnIoManager, PawnIoManagerWrapper>();
+        if (PawnIoManagerOverride is not null)
+            sc.AddSingleton(PawnIoManagerOverride);
+        else
+            sc.AddSingleton<IPawnIoManager, PawnIoManagerWrapper>();
         sc.AddSingleton<TaskbarEmbedder>();
         sc.AddSingleton<TaskbarOverlay>();
         sc.AddSingleton<TrayIconManager>();
@@ -279,35 +358,92 @@ public sealed partial class App : WpfApplication
         _tray!.ToggleOverlayRequested += () =>
         {
             _cfg.Overlay.Visible = !_cfg.Overlay.Visible;
-            Log.Info($"Tray toggle overlay: visible={_cfg.Overlay.Visible}");
+            Log.Info($"User toggled overlay visibility via system tray to {(_cfg.Overlay.Visible ? "visible" : "hidden")}");
             _cfg.Save();
             HandleSettingsApplied();
         };
+        _tray!.TaskManagerRequested += () =>
+        {
+            LaunchTaskManager();
+        };
+        _tray!.TaskbarCreated += () =>
+        {
+            if (_cfg.Overlay.Visible)
+            {
+                _overlay!.RecoverTaskbar("TaskbarCreated notification from explorer");
+            }
+        };
+
+        _overlay!.ShowContextMenuAction = pt =>
+        {
+            try
+            {
+                Log.Debug($"Forwarding right-click context menu display to TrayIconManager at ({pt.X}, {pt.Y})");
+                _tray!.ShowOverlayContextMenu(pt);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, $"Failed to show context menu via tray manager at ({pt.X}, {pt.Y})");
+            }
+        };
+
+        _overlay!.IsContextMenuOpen = () => _tray?.IsOverlayContextMenuOpen == true;
+        _overlay!.GetContextMenuBounds = () => _tray?.OverlayContextMenuBounds ?? System.Drawing.Rectangle.Empty;
+        _overlay!.CloseContextMenuAction = () => _tray?.CloseOverlayContextMenu();
+
+        _overlay!.OnOpenSettingsRequested = () => OpenSettings();
+        _overlay!.OnToggleOverlayRequested = () =>
+        {
+            _cfg.Overlay.Visible = !_cfg.Overlay.Visible;
+            Log.Info($"User toggled overlay visibility via overlay menu to {(_cfg.Overlay.Visible ? "visible" : "hidden")}");
+            _cfg.Save();
+            HandleSettingsApplied();
+        };
+        _overlay!.OnExitRequested = () => QuitApp();
 
         _overlay!.OnDoubleClick += (action) =>
         {
-            Log.Info($"Overlay double-click triggered: action='{action}'");
             if (string.Equals(action, "taskmanager", StringComparison.OrdinalIgnoreCase))
             {
-                try
-                {
-                    var taskmgrPath = Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.System), "taskmgr.exe");
-                    Process.Start(new ProcessStartInfo(taskmgrPath) { UseShellExecute = true });
-                    Log.Info("Overlay double-click: launched taskmgr.exe");
-                }
-                catch (Exception ex)
-                {
-                    Log.Error(ex, "Failed to launch taskmgr.exe via overlay double-click");
-                }
+                LaunchTaskManager();
             }
             else if (string.Equals(action, "settings", StringComparison.OrdinalIgnoreCase))
             {
+                Log.Info("Opened Settings (double-click)");
                 OpenSettings();
             }
         };
 
         _monitor!.SnapshotReady += HandleSnapshotReady;
+    }
+
+    private void LaunchTaskManager()
+    {
+        if (TaskManagerLauncherAction is not null)
+        {
+            TaskManagerLauncherAction("taskmanager");
+            return;
+        }
+
+        try
+        {
+            var taskmgrPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.System), "taskmgr.exe");
+            var psi = new ProcessStartInfo(taskmgrPath) { UseShellExecute = true };
+            if (TaskManagerProcessLauncher is not null)
+            {
+                TaskManagerProcessLauncher(psi);
+            }
+            else
+            {
+                Process.Start(psi);
+            }
+            Log.Info("Launched Task Manager");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to launch taskmgr.exe");
+        }
     }
 
     private void HandleSnapshotReady(TelemetrySnapshot snap)
@@ -324,14 +460,23 @@ public sealed partial class App : WpfApplication
     // Tray action handlers
     private void OpenSettings()
     {
+        if (SuppressSettingsWindowForTesting) return;
+
         if (_settingsShell is null || !_settingsShell.IsLoaded)
         {
-            _settingsShell = new SettingsShell(_cfg, _netLogger!);
-            Log.Info("SettingsShell created");
+            if (SettingsShellFactory is not null)
+            {
+                _settingsShell = SettingsShellFactory(_cfg, _netLogger!);
+            }
+            else
+            {
+                _settingsShell = new SettingsShell(_cfg, _netLogger!);
+            }
+            Log.Debug("SettingsShell created");
             _settingsShell.SettingsApplied += HandleSettingsApplied;
             _settingsShell.Closed += (_, _) =>
             {
-                Log.Info("SettingsShell closed, clearing reference");
+                Log.Debug("SettingsShell closed, clearing reference");
                 _settingsShell = null;
             };
         }
@@ -341,15 +486,26 @@ public sealed partial class App : WpfApplication
     }
 
     private int _lastPollIntervalMs;
+    private bool? _lastRunAtStartup;
 
     private void HandleSettingsApplied()
     {
-        if (_overlay is null) { Log.Error("HandleSettingsApplied: _overlay is null!"); return; }
-        Log.Info($"HandleSettingsApplied: Overlay.Visible={_cfg.Overlay.Visible}");
+        if (_overlay is null) { Log.Error("Cannot apply settings to taskbar overlay (overlay instance is null)"); return; }
+
+        Log.Debug($"Applied settings to overlay (visible: {_cfg.Overlay.Visible})");
+
+        if (_cfg.RunAtStartup != _lastRunAtStartup)
+        {
+            _lastRunAtStartup = _cfg.RunAtStartup;
+            WindowHelpers.SetStartup(_cfg.RunAtStartup);
+        }
+
+        _tray?.SetTrayVisible(_cfg.ShowSystemTrayIcon);
         _tray?.SetOverlayVisible(_cfg.Overlay.Visible);
         if (_cfg.Overlay.Visible)
         {
             _overlay.Show();
+            _overlay.RefreshOverlay();
         }
         else
         {
@@ -372,11 +528,18 @@ public sealed partial class App : WpfApplication
         // Toggle metrics logging (system log is always on)
         bool shouldLog = _cfg.EnableFileLogging;
         ToggleMetricsLogging(shouldLog);
+        Log.SystemLevel = Log.ParseLevel(_cfg.SystemLogLevel);
+
+        if (_cfg.Alerts.Enabled && _cfg.Alerts.ShowToastNotif)
+            EnsureNotifierLaunched();
+        else
+            EnsureNotifierStopped();
     }
 
     /// <summary>Full quit - stops monitor, saves settings, exits process.</summary>
     private void QuitApp()
     {
+        QuitAppAction?.Invoke();
         _settingsShell?.Close();
         Shutdown();
     }
@@ -384,14 +547,28 @@ public sealed partial class App : WpfApplication
     // Notification helper (non-elevated child process)
     private void LaunchNotifier()
     {
+        EnsureNotifierLaunched();
+    }
+
+    internal void EnsureNotifierLaunched()
+    {
+        if (_notifierLaunched) return;
+        if (_cfg != null && (!_cfg.Alerts.Enabled || !_cfg.Alerts.ShowToastNotif)) return;
         try
         {
             string notifierPath = Path.Combine(
                 AppContext.BaseDirectory, "LocalTelemetry.Notifier.exe");
 
+            if (NotifierLauncherAction is not null)
+            {
+                NotifierLauncherAction(AppContext.BaseDirectory);
+                _notifierLaunched = true;
+                return;
+            }
+
             if (!File.Exists(notifierPath))
             {
-                Log.Error($"Notifier not found: {notifierPath}");
+                Log.Error($"Notification helper executable not found at '{notifierPath}'");
                 return;
             }
 
@@ -406,12 +583,60 @@ public sealed partial class App : WpfApplication
                 WindowStyle = ProcessWindowStyle.Hidden,
             };
 
-            Process.Start(psi);
-            Log.Info("Notifier launched");
+            _notifierProcess = Process.Start(psi);
+            _notifierLaunched = true;
+            Log.Debug("Notification helper process launched");
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Notifier launch failed");
+            Log.Error(ex, "Failed to launch notification helper process");
+        }
+    }
+
+    internal void EnsureNotifierStopped()
+    {
+        if (!_notifierLaunched && _notifierProcess is null) return;
+        _notifierLaunched = false;
+        try
+        {
+            if (_notifierProcess is { HasExited: false })
+            {
+                _notifClient?.SendShutdownAsync().ContinueWith(_ => { });
+                try
+                {
+                    if (!_notifierProcess.WaitForExit(800))
+                    {
+                        _notifierProcess.Kill(entireProcessTree: true);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Debug(ex, "Exception while terminating notifier process");
+                }
+                finally
+                {
+                    _notifierProcess.Dispose();
+                    _notifierProcess = null;
+                }
+            }
+            else
+            {
+                _notifierProcess?.Dispose();
+                _notifierProcess = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Exception while stopping notifier process");
+            try
+            {
+                _notifierProcess?.Dispose();
+            }
+            catch (Exception disposeEx)
+            {
+                Log.Debug(disposeEx, "Failed to dispose notifier process during exception handling");
+            }
+            _notifierProcess = null;
         }
     }
 
@@ -420,6 +645,9 @@ public sealed partial class App : WpfApplication
     {
         // Stop the monitor first so no new snapshots arrive during teardown.
         _monitor?.Stop();
+
+        TimeSpan uptime = _startupUtc != default ? DateTime.UtcNow - _startupUtc : TimeSpan.Zero;
+        Log.SessionEnd("Application Quit", uptime);
 
         // Dispose UI elements immediately so the overlay + tray icon vanish.
         _overlay?.Dispose();
@@ -437,7 +665,10 @@ public sealed partial class App : WpfApplication
                 _notifClient.SendShutdownAsync()
                     .Wait(TimeSpan.FromSeconds(2));
             }
-            catch { Log.Error("Shutdown notification to notifier process failed"); }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Shutdown notification to notifier process failed");
+            }
             _notifClient.Dispose();
         }
 

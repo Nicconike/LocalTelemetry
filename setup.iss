@@ -1,5 +1,5 @@
 #ifndef AppVersion
-#define AppVersion "1.0.0-beta"
+#define AppVersion "1.0.0-rc.1"
 #endif
 
 #ifndef AppVersionInfoVersion
@@ -49,7 +49,7 @@ Name: desktopicon; Description: "Create a &Desktop shortcut"; GroupDescription: 
 Name: startup; Description: "Run LocalTelemetry at Windows &startup"; GroupDescription: "System options:"
 
 [Files]
-Source: "publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "Uninstall.bat,*.xml"
 
 [Icons]
 Name: "{group}\LocalTelemetry"; Filename: "{app}\LocalTelemetry.exe"; Tasks: startmenuicon
@@ -66,59 +66,153 @@ const
     StartupTaskName = 'LocalTelemetry Startup';
     CSIDL_LOCAL_APPDATA = $001C;
     ProfileListKey = 'SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList';
-    PawnIoCleanupScript =
-        '$log = $env:ProgramData + ''\LocalTelemetry\pawnio_cleanup.log''' + #13#10 +
-        '''[PawnIO cleanup] started: '' + (Get-Date) | Set-Content $log' + #13#10 +
-        '$repo = ''C:\Windows\System32\DriverStore\FileRepository''' + #13#10 +
-        'if ($env:PROCESSOR_ARCHITECTURE -eq ''x86'' -or $env:PROCESSOR_ARCHITECTURE -eq ''ARM64'') { $pnp = Join-Path $env:windir ''Sysnative\pnputil.exe''; if (-not (Test-Path $pnp)) { $pnp = Join-Path $env:windir ''System32\pnputil.exe'' } } else { $pnp = Join-Path $env:windir ''System32\pnputil.exe'' }' + #13#10 +
-        '''[PawnIO cleanup] pnputil: '' + $pnp + '' exists: '' + (Test-Path $pnp) | Add-Content $log' + #13#10 +
-        'Start-Sleep -Seconds 2' + #13#10 +
-        'for ($attempt = 1; $attempt -le 5; $attempt++) {' + #13#10 +
-        '    $dirs = @(Get-ChildItem $repo -Directory -Filter ''pawnio.inf*'' -ErrorAction SilentlyContinue)' + #13#10 +
-        '    if ($dirs.Count -eq 0) { ''[PawnIO cleanup] no package found'' | Add-Content $log; break }' + #13#10 +
-        '    foreach ($d in $dirs) {' + #13#10 +
-        '        $inf = Join-Path $d.FullName ''pawnio.inf''' + #13#10 +
-        '        ''[PawnIO cleanup] deleting: '' + $inf + '' (attempt '' + $attempt + '')'' | Add-Content $log' + #13#10 +
-        '        & $pnp /delete-driver $inf /uninstall /force *>&1 | Add-Content $log' + #13#10 +
-        '        ''[PawnIO cleanup] pnputil exit code: '' + $LASTEXITCODE | Add-Content $log' + #13#10 +
-        '    }' + #13#10 +
-        '    if (-not (Test-Path (Join-Path $repo ''pawnio.inf*''))) { ''[PawnIO cleanup] package removed'' | Add-Content $log; break }' + #13#10 +
-        '    ''[PawnIO cleanup] retrying...'' | Add-Content $log' + #13#10 +
-        '    Start-Sleep -Seconds 3' + #13#10 +
-        '}' + #13#10 +
-        'exit 0';
+          PawnIoCleanupScript =
+          '$log = $env:TEMP + ''\pawnio_cleanup.log''' + #13#10 +
+          '''[PawnIO cleanup] started: '' + (Get-Date) | Set-Content $log' + #13#10 +
+          'if ($env:PROCESSOR_ARCHITECTURE -eq ''x86'' -or $env:PROCESSOR_ARCHITECTURE -eq ''ARM64'') { $pnp = Join-Path $env:windir ''Sysnative\pnputil.exe''; if (-not (Test-Path $pnp)) { $pnp = Join-Path $env:windir ''System32\pnputil.exe'' } } else { $pnp = Join-Path $env:windir ''System32\pnputil.exe'' }' + #13#10 +
+          '''[PawnIO cleanup] pnputil: '' + $pnp + '' exists: '' + (Test-Path $pnp) | Add-Content $log' + #13#10 +
+          'Start-Sleep -Seconds 2' + #13#10 +
+          '$rebootNeeded = $false' + #13#10 +
+          '$pnpLines = & $pnp /enum-drivers 2>&1' + #13#10 +
+          '$curOem = ''''' + #13#10 +
+          '$pawnioOems = @()' + #13#10 +
+          'foreach ($line in $pnpLines) {' + #13#10 +
+          '    if ($line -match ''Published Name:\s+(oem\d+\.inf)'') { $curOem = $matches[1] }' + #13#10 +
+          '    elseif ($line -match ''Original Name:\s+pawnio\.inf'') { if ($curOem) { $pawnioOems += $curOem } }' + #13#10 +
+          '}' + #13#10 +
+          '''[PawnIO cleanup] found OEM drivers: '' + ($pawnioOems -join '', '') | Add-Content $log' + #13#10 +
+          'foreach ($oem in $pawnioOems) {' + #13#10 +
+          '    ''[PawnIO cleanup] deleting driver package: '' + $oem | Add-Content $log' + #13#10 +
+          '    & $pnp /delete-driver $oem /uninstall /force *>&1 | Add-Content $log' + #13#10 +
+          '    if ($LASTEXITCODE -eq 3010) { $rebootNeeded = $true }' + #13#10 +
+          '}' + #13#10 +
+          '& sc.exe stop PawnIO *>&1 | Add-Content $log' + #13#10 +
+          '& sc.exe delete PawnIO *>&1 | Add-Content $log' + #13#10 +
+          'if ($rebootNeeded) { exit 3010 } else { exit 0 }';
 
 var
-    PendingDataDirs: TStringList;
+    DownloadPage: TDownloadWizardPage;
+    DotNetDownloaded: Boolean;
+    RequiresReboot: Boolean;
 
 function CreateStartupTask: Boolean;
 var
     Scheduler, RootFolder, Task, Trigger, Action: Variant;
 begin
     Result := False;
-    try
-        Scheduler := CreateOleObject('Schedule.Service');
+    try try Scheduler := CreateOleObject('Schedule.Service');
         Scheduler.Connect;
         RootFolder := Scheduler.GetFolder('\');
         Task := Scheduler.NewTask(0);
         Task.RegistrationInfo.Description := 'Starts LocalTelemetry at user logon (silent, highest privileges).';
         Task.Principal.LogonType := 3;  // TASK_LOGON_INTERACTIVE_TOKEN
         Task.Principal.RunLevel := 1;   // TASK_RUNLEVEL_HIGHEST
+        Task.Settings.DisallowStartIfOnBatteries := False;
+        Task.Settings.StopIfGoingOnBatteries := False;
+        Task.Settings.ExecutionTimeLimit := 'PT0S';
+        Task.Settings.StartWhenAvailable := True;
         Trigger := Task.Triggers.Create(9); // TASK_TRIGGER_LOGON
         Trigger.Enabled := True;
         Action := Task.Actions.Create(0); // TASK_ACTION_EXEC
         Action.Path := ExpandConstant('{app}\LocalTelemetry.exe');
         Action.Arguments := '--minimized';
+        Action.WorkingDirectory := ExpandConstant('{app}');
         RootFolder.RegisterTaskDefinition(StartupTaskName, Task, 6, '', '', 3, '');
-        Result := True;
-    except
+        Result := True; finally Scheduler := Unassigned; RootFolder := Unassigned; Task := Unassigned; Trigger := Unassigned; Action := Unassigned; end; except
         Log('CreateStartupTask failed: ' + GetExceptionMessage);
     end;
 end;
 
+function IsDotNet10DesktopInstalled: Boolean;
+var
+  FindRec: TFindRec;
+begin
+  Result := False;
+  if FindFirst(ExpandConstant('{pf64}\dotnet\shared\Microsoft.WindowsDesktop.App\10.*'), FindRec) then
+  begin
+    try
+      repeat
+        if (FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0 then
+        begin
+          Result := True;
+          Break;
+        end;
+      until not FindNext(FindRec);
+    finally
+      FindClose(FindRec);
+    end;
+  end;
+end;
+
+procedure InitializeWizard;
+begin
+    RequiresReboot := False;
+    DownloadPage := CreateDownloadPage(SetupMessage(msgWizardPreparing), 'Downloading .NET 10 Desktop Runtime...', nil);
+    DownloadPage.ShowBaseNameInsteadOfUrl := True;
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): string;
+var
+  ResultCode: Integer;
+  Attempt: Integer;
+  DownloadUrl: string;
+begin
+  Result := '';
+  DotNetDownloaded := False;
+
+  if not IsDotNet10DesktopInstalled then
+  begin
+    for Attempt := 1 to 2 do
+    begin
+      // Attempt 1 uses aka.ms (evergreen redirect); Attempt 2 falls back directly to builds.dotnet.microsoft.com CDN
+      if Attempt = 1 then
+        DownloadUrl := 'https://aka.ms/dotnet/10.0/windowsdesktop-runtime-win-x64.exe'
+      else
+        DownloadUrl := 'https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/10.0.11/windowsdesktop-runtime-10.0.11-win-x64.exe';
+
+      DownloadPage.Clear;
+      DownloadPage.Add(DownloadUrl, 'dotnet_installer.exe', '');
+      DownloadPage.Show;
+      try
+        try
+          DownloadPage.Download;
+          DotNetDownloaded := True;
+          Log('.NET 10 Desktop Runtime downloaded successfully on attempt ' + IntToStr(Attempt) + '.');
+          Break;
+        except
+          Log('.NET 10 Desktop Runtime download failed on attempt ' + IntToStr(Attempt) + ': ' + GetExceptionMessage);
+          if DownloadPage.AbortedByUser then
+          begin
+            Result := 'Installation cancelled by user.';
+            Break;
+          end;
+          if Attempt = 2 then
+          begin
+            Result := 'Failed to download the required .NET 10 Desktop Runtime.' + #13#10 + #13#10 +
+                      'Error: ' + GetExceptionMessage + #13#10 + #13#10 +
+                      'Please ensure you have an active internet connection and run Setup again.';
+          end;
+        end;
+      finally
+        DownloadPage.Hide;
+      end;
+    end;
+
+    if DotNetDownloaded then
+    begin
+      WizardForm.StatusLabel.Caption := 'Installing .NET 10 Desktop Runtime...';
+      if not Exec(ExpandConstant('{tmp}\dotnet_installer.exe'), '/install /quiet /norestart', '', SW_SHOW, ewWaitUntilTerminated, ResultCode) then
+      begin
+        Result := 'Failed to install the .NET 10 Desktop Runtime. Setup cannot continue.';
+      end;
+    end;
+  end;
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
-    MarkerPath: string;
+    MarkerPath, PawnIoExe: string;
+    ResultCode: Integer;
 begin
     if CurStep = ssPostInstall then
     begin
@@ -126,6 +220,88 @@ begin
         // AppSettings.cs checks for this file's existence to route settings to LocalAppData.
         MarkerPath := ExpandConstant('{app}\app.mode');
         SaveStringToFile(MarkerPath, 'standard', False);
+
+        // Install PawnIO sensor driver if downloaded during setup.
+        // This follows the bootstrapper pattern: clean stale state, install, retry, verify.
+        PawnIoExe := ExpandConstant('{app}\PawnIO_setup.exe');
+        if FileExists(PawnIoExe) then
+        begin
+            try
+                WizardForm.StatusLabel.Caption := 'Preparing kernel hardware sensor driver...';
+
+                // Step 1: Clean up any stale PawnIO service from a previous install/uninstall.
+                // Without this, PawnIO_setup.exe fails with 1072 (service marked for deletion).
+                Exec('sc.exe', 'stop PawnIO', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+                Log('Pre-install: sc stop PawnIO exit code: ' + IntToStr(ResultCode));
+                Exec('sc.exe', 'delete PawnIO', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+                Log('Pre-install: sc delete PawnIO exit code: ' + IntToStr(ResultCode));
+
+                // Give Windows SCM time to fully flush the deleted service handle
+                if ResultCode = 0 then
+                begin
+                    Log('Pre-install: Waiting for Windows to flush stale service...');
+                    Sleep(3000);
+                end;
+
+                // Step 2: Install PawnIO
+                WizardForm.StatusLabel.Caption := 'Installing kernel hardware sensor driver...';
+                Log('Installing PawnIO sensor driver from ' + PawnIoExe + '...');
+                if not Exec(PawnIoExe, '-install -silent', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+                begin
+                    Log('Failed to launch PawnIO setup executable');
+                end
+                else
+                begin
+                    Log('PawnIO installer finished with exit code: ' + IntToStr(ResultCode));
+
+                    // If we still get 1072, wait longer and retry once
+                    if ResultCode = 1072 then
+                    begin
+                        Log('PawnIO install returned 1072 (stale service). Waiting 5s and retrying...');
+                        WizardForm.StatusLabel.Caption := 'Waiting for driver cleanup to complete...';
+                        Sleep(5000);
+                        Exec('sc.exe', 'delete PawnIO', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+                        Sleep(2000);
+                        WizardForm.StatusLabel.Caption := 'Retrying driver installation...';
+                        if Exec(PawnIoExe, '-install -silent', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+                            Log('PawnIO retry finished with exit code: ' + IntToStr(ResultCode))
+                        else
+                            Log('PawnIO retry failed to launch');
+                    end;
+
+                    // Evaluate final result
+                    if (ResultCode = 0) or (ResultCode = 183) or (ResultCode = 1056) then
+                    begin
+                        Log('PawnIO installation successful (exit code: ' + IntToStr(ResultCode) + ')');
+                    end
+                    else if ResultCode = 1072 then
+                    begin
+                        Log('PawnIO still returning 1072 after retry. Flagging for restart.');
+                        RequiresReboot := True;
+                    end
+                    else
+                    begin
+                        Log('PawnIO installer returned unexpected exit code: ' + IntToStr(ResultCode));
+                    end;
+                end;
+
+                // Step 3: Start the service immediately so the app can use it on first launch
+                if not RequiresReboot then
+                begin
+                    WizardForm.StatusLabel.Caption := 'Starting hardware sensor driver...';
+                    Sleep(1000);
+                    Exec('sc.exe', 'start PawnIO', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+                    Log('Post-install: sc start PawnIO exit code: ' + IntToStr(ResultCode));
+                    if (ResultCode <> 0) and (ResultCode <> 1056) then
+                    begin
+                        Log('PawnIO service failed to start. Will be started by app at runtime.');
+                    end;
+                end;
+
+            except
+                Log('Exception during PawnIO installation: ' + GetExceptionMessage);
+            end;
+        end;
 
         // Create the "Run at Windows startup" scheduled task if the user selected it.
         // Uses the Task Scheduler COM API because schtasks.exe /Create /SC ONLOGON
@@ -155,6 +331,34 @@ begin
     begin
         Sleep(250);
         Waited := Waited + 1;
+    end;
+end;
+function NeedRestart(): Boolean;
+begin
+    Result := RequiresReboot;
+end;
+
+
+function InitializeSetup: Boolean;
+var
+    ResultCode: Integer;
+begin
+    Result := True;
+    if IsAppRunning('LocalTelemetry.exe') or IsAppRunning('LocalTelemetry.Notifier.exe') then
+    begin
+        if MsgBox('LocalTelemetry is currently running in the background.' + #13#10 + #13#10 +
+                  'Setup needs to close LocalTelemetry before updating or reinstalling.' + #13#10 + #13#10 +
+                  'Do you want Setup to close it automatically and continue?',
+                  mbConfirmation, MB_YESNO) = IDYES then
+        begin
+            Exec('taskkill.exe', '/f /im LocalTelemetry.exe /t', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+            Exec('taskkill.exe', '/f /im LocalTelemetry.Notifier.exe /t', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+            WaitForAppExit;
+        end
+        else
+        begin
+            Result := False; // Cancel installation gracefully
+        end;
     end;
 end;
 
@@ -224,10 +428,13 @@ begin
     end;
 end;
 
+var
+    UninstallDriverNeedsReboot: Boolean;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
-    TempDir, AppDir, PawnIoLog, PawnIoScript, PreservedMsg: string;
-    DataDirs: TStringList;
+    TempDir, AppDir, PawnIoScript, PreservedMsg: string;
+    DataDirs, PendingDataDirs: TStringList;
     Count, I: Integer;
     ResultCode: Integer;
 begin
@@ -240,44 +447,53 @@ begin
         Exec('taskkill.exe', '/f /im LocalTelemetry.exe /t', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
         Exec('taskkill.exe', '/f /im LocalTelemetry.Notifier.exe /t', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
         WaitForAppExit;
+        Sleep(2000); // Give the Windows kernel time to fully close the driver handles
+
+        // If PawnIO uninstaller binary exists, invoke it cleanly first
+        if FileExists(ExpandConstant('{app}\PawnIO_setup.exe')) then
+            Exec(ExpandConstant('{app}\PawnIO_setup.exe'), '-uninstall -silent', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
+        else if FileExists('C:\Program Files\PawnIO\PawnIO_setup.exe') then
+            Exec('C:\Program Files\PawnIO\PawnIO_setup.exe', '-uninstall -silent', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
         // Remove the PawnIO kernel driver service, uninstall registry keys and files
-        // that the app installed at runtime (see PawnIoDevice.TryInstall). The app is
-        // killed above so the driver handle is closed before stopping the service.
         Exec('sc.exe', 'stop PawnIO', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
         Exec('sc.exe', 'delete PawnIO', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
-        // Remove the PawnIO kernel driver package from the Windows DriverStore via pnputil.
-        // The kernel driver ignores the SCM stop control (sc stop returns 1052), so only
-        // pnputil /uninstall can unload it and delete the package. A generated PowerShell
-        // script (with retries) is used because right after the app is force-killed the
-        // driver may still be settling and pnputil may report it as in use. A script file
-        // is used instead of a cmd for /d loop because cmd mangling of the do-clause
-        // breaks quoted pnputil paths.
-        PawnIoLog := ExpandConstant('{commonappdata}\LocalTelemetry\pawnio_cleanup.log');
+        // Remove the PawnIO kernel driver package via script
         PawnIoScript := ExpandConstant('{tmp}\pawnio_cleanup.ps1');
-        ForceDirectories(ExpandConstant('{commonappdata}\LocalTelemetry'));
         SaveStringToFile(PawnIoScript, PawnIoCleanupScript, False);
         Exec('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -File "' + PawnIoScript + '"',
              '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+        // Clean up temporary script and logs
+        DeleteFile(PawnIoScript);
+        DeleteFile(ExpandConstant('{tmp}\pawnio_cleanup.log'));
+        DeleteFile(ExpandConstant('{commonappdata}\LocalTelemetry\pawnio_cleanup.log'));
+        RemoveDir(ExpandConstant('{commonappdata}\LocalTelemetry'));
+
+        if ResultCode = 3010 then
+            UninstallDriverNeedsReboot := True
+        else
+            UninstallDriverNeedsReboot := False;
 
         RegDeleteKeyIncludingSubkeys(HKLM, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO');
         RegDeleteKeyIncludingSubkeys(HKLM, 'SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO');
         if DirExists('C:\Program Files\PawnIO') then
             DelTree('C:\Program Files\PawnIO', True, True, True);
 
-        // Delete all application files (LocalTelemetry.exe, LocalTelemetry.Notifier.exe, DLLs & runtime files) inside {app}
         AppDir := ExpandConstant('{app}');
         if DirExists(AppDir) then
             DelTree(AppDir, True, True, True);
+    end
+    else if CurUninstallStep = usPostUninstall then
+    begin
+        // Driver uninstall status prompt deferred to end of uninstall
+        if UninstallDriverNeedsReboot then
+        begin
+            MsgBox('The PawnIO kernel driver was uninstalled, but Windows requires a system restart to fully release it from memory.' + #13#10 + #13#10 + 'If you plan to reinstall LocalTelemetry immediately, please restart your computer first.', mbInformation, MB_OK);
+        end;
 
-        // Prompt user to remove AppData user settings, logs & traffic history.
-        // Defaults to No (MB_DEFBUTTON2) - nothing is deleted unless the user
-        // explicitly approves. The uninstaller runs elevated
-        // (PrivilegesRequired=admin), so {localappdata} would resolve to the
-        // admin account rather than the user who actually used the app. Instead
-        // of relying on that constant, enumerate every Windows user profile and
-        // collect the LocalTelemetry data folder from each one.
+        // Prompt user to remove AppData user settings deferred to end of uninstall
         PendingDataDirs := TStringList.Create;
         DataDirs := TStringList.Create;
         try
@@ -285,10 +501,10 @@ begin
             if Count > 0 then
             begin
                 if Count > 1 then
-                    PreservedMsg := 'Do you also want to remove all saved settings, traffic logs and local hardware monitoring history for all ' +
-                                    IntToStr(Count) + ' user profiles on this system?'
+                    PreservedMsg := 'Do you also want to remove all saved settings, traffic logs and local hardware monitoring history for all ' + IntToStr(Count) + ' user profiles on this system?'
                 else
                     PreservedMsg := 'Do you also want to remove all saved settings, traffic logs and local hardware monitoring history?';
+
                 if MsgBox(PreservedMsg, mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
                 begin
                     for I := 0 to DataDirs.Count - 1 do
@@ -314,21 +530,24 @@ begin
                     MsgBox(PreservedMsg, mbInformation, MB_OK);
                 end;
             end;
-        finally
-            DataDirs.Free;
-        end;
-    end
-    else if CurUninstallStep = usPostUninstall then
-    begin
-        // Final retry for any user data folders that could not be deleted above
-        // (e.g. files still locked while the app processes were shutting down).
-        if Assigned(PendingDataDirs) then
-        begin
+
+            // Final retry for any user data folders that could not be deleted above
             for I := 0 to PendingDataDirs.Count - 1 do
                 if DirExists(PendingDataDirs[I]) then
                     DeleteUserData(PendingDataDirs[I]);
+        finally
+            DataDirs.Free;
             PendingDataDirs.Free;
             PendingDataDirs := nil;
         end;
     end;
 end;
+
+
+
+
+
+
+
+
+

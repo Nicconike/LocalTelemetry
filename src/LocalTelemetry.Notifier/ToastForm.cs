@@ -14,7 +14,28 @@ internal sealed class ToastForm : Form
     private const int CornerRadius = 8;
 
     private readonly System.Windows.Forms.Timer _closeTimer = new() { Interval = DisplayDurationMs };
-    private int _animOffset;
+
+    internal static bool SkipShowForTesting { get; set; }
+
+    public new void Show()
+    {
+        if (SkipShowForTesting) return;
+        base.Show();
+    }
+
+    protected override bool ShowWithoutActivation => true;
+
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            const int WS_EX_NOACTIVATE = 0x08000000;
+            const int WS_EX_TOOLWINDOW = 0x00000080;
+            CreateParams cp = base.CreateParams;
+            cp.ExStyle |= WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
+            return cp;
+        }
+    }
 
     // Initialization
     internal ToastForm(string title, string body)
@@ -36,15 +57,23 @@ internal sealed class ToastForm : Form
         path.CloseFigure();
         Region = new Region(path);
 
-        BackColor = Color.FromArgb(32, 32, 32);
+        BackColor = Color.FromArgb(28, 28, 28);
+
+        var accentBar = new Panel
+        {
+            BackColor = Color.FromArgb(245, 158, 11), // Amber warning accent stripe
+            Location = new Point(0, 0),
+            Size = new Size(5, FormHeight),
+        };
+        Controls.Add(accentBar);
 
         var titleLabel = new Label
         {
             Text = title,
             Font = new Font("Segoe UI", 10, FontStyle.Bold),
-            ForeColor = Color.White,
-            Location = new Point(12, 10),
-            Size = new Size(FormWidth - 24, 22),
+            ForeColor = Color.FromArgb(251, 191, 36), // Warning gold / amber
+            Location = new Point(14, 10),
+            Size = new Size(FormWidth - 26, 22),
             AutoSize = false,
         };
         Controls.Add(titleLabel);
@@ -53,9 +82,9 @@ internal sealed class ToastForm : Form
         {
             Text = body,
             Font = new Font("Segoe UI", 9),
-            ForeColor = Color.FromArgb(200, 200, 200),
-            Location = new Point(12, 36),
-            Size = new Size(FormWidth - 24, FormHeight - 48),
+            ForeColor = Color.FromArgb(220, 220, 220),
+            Location = new Point(14, 34),
+            Size = new Size(FormWidth - 26, FormHeight - 44),
             AutoSize = false,
         };
         Controls.Add(bodyLabel);
@@ -67,7 +96,7 @@ internal sealed class ToastForm : Form
         };
         _closeTimer.Start();
 
-        SystemSounds.Asterisk.Play();
+        SystemSounds.Exclamation.Play();
         Load += OnLoad;
         Paint += OnPaint;
     }
@@ -84,16 +113,14 @@ internal sealed class ToastForm : Form
     {
         // Animate slide-in from below the screen edge
         var screen = Screen.PrimaryScreen!.WorkingArea;
-        int targetY = screen.Bottom - FormHeight - FormPadding;
-        _animOffset = FormHeight + FormPadding;
 
         var animTimer = new System.Windows.Forms.Timer { Interval = 16 };
         int startTicks = Environment.TickCount;
         animTimer.Tick += (_, _) =>
         {
             int elapsed = Environment.TickCount - startTicks;
-            _animOffset = ComputeAnimOffset(elapsed, FormHeight + FormPadding, AnimationDurationMs);
-            Location = new Point(screen.Right - FormWidth - FormPadding, screen.Bottom - FormHeight - FormPadding + _animOffset);
+            int animOffset = ComputeAnimOffset(elapsed, FormHeight + FormPadding, AnimationDurationMs);
+            Location = new Point(screen.Right - FormWidth - FormPadding, screen.Bottom - FormHeight - FormPadding + animOffset);
             if (elapsed >= AnimationDurationMs)
             {
                 animTimer.Stop();

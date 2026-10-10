@@ -35,6 +35,8 @@ public sealed record TelemetrySnapshot
     public double NetDownBps { get; init; }
     /// <summary>Network upload speed in bytes per second.</summary>
     public double NetUpBps { get; init; }
+    public double NetDownBytesDelta { get; init; }
+    public double NetUpBytesDelta { get; init; }
     /// <summary>Name of the active network interface.</summary>
     public string NetInterfaceName { get; init; } = string.Empty;
     /// <summary>Cumulative total bytes transferred (down+up) since app start.</summary>
@@ -79,3 +81,4 @@ public sealed record DiskSnapshot
     /// <summary>Disk write speed in MB/s.</summary>
     public float WriteMBps { get; init; }
 }
+

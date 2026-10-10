@@ -433,6 +433,7 @@ internet_usage.jsonl
 # VitePress docs build output
 docs/.vitepress/cache
 docs/.vitepress/dist
+docs/v*/
 
 # Bun
 .bun/

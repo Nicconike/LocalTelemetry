@@ -10,5 +10,8 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <!-- Allow dotnet restore on Linux/macOS CI runners for dependency graph submission -->
         <EnableWindowsTargeting>true</EnableWindowsTargeting>
+        <!-- MinVer dynamic Git tag configuration -->
+        <MinVerTagPrefix>v</MinVerTagPrefix>
+        <MinVerDefaultPreReleaseIdentifiers>rc.1</MinVerDefaultPreReleaseIdentifiers>
     </PropertyGroup>
 </Project>

@@ -6,6 +6,11 @@ export default defineConfig({
     test: {
         environment: 'happy-dom',
         globals: true,
+        server: {
+            deps: {
+                inline: [/lucide-svelte/],
+            },
+        },
     },
     resolve: {
         conditions: ['browser'],

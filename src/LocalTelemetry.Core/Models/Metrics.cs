@@ -50,7 +50,7 @@ public static class Metrics
         new(RamUsed,  "RAM",  "RAM Used",          "GB",   "ram"),
         new(GpuPct,   "GPU",  "GPU Usage",         "%",    "gpu"),
         new(GpuTemp,  "GPU",  "GPU Temp",          "°C",   "gpu"),
-        new(GpuVram,  "VRAM", "GPU VRAM Usage",     "MB",   "gpu"),
+        new(GpuVram,  "GPU",  "GPU VRAM Usage",     "MB",   "gpu"),
         new(GpuFreq, "GPU",  "GPU Frequency",     "MHz",  "gpu"),
         new(GpuPower, "GPU",  "GPU Power",         "W",    "gpu"),
         new(NetDown,  "DOWN\u2193", "Download",             "",     "net"),
@@ -61,7 +61,9 @@ public static class Metrics
     ];
 
     /// <summary>Lookup dictionary by metric ID for fast O(1) access in render hot paths.</summary>
+#pragma warning disable S2386, S3887 // AllMetricsById is mutated dynamically by RegisterDisk when physical disks are discovered
     public static readonly Dictionary<string, MetricDescriptor> AllMetricsById = AllMetrics.ToDictionary(m => m.Id);
+#pragma warning restore S2386, S3887
 
     /// <summary>Registers per-disk metric descriptors for a given disk index.</summary>
     /// <param name="id">Disk identifier (e.g. "disk0").</param>
@@ -102,18 +104,23 @@ public static class Metrics
             GpuVram => $"{s.GpuVramUsedMb:F0}MB",
             GpuFreq => s.GpuFreqMHz > 0 ? $"{s.GpuFreqMHz:F0}MHz" : "--",
             GpuPower => s.GpuPowerW > 0 ? $"{s.GpuPowerW:F0}W" : "--",
-            NetDown => Net(s.NetDownBps, useBits),
-            NetUp => Net(s.NetUpBps, useBits),
+            NetDown => string.IsNullOrEmpty(s.NetInterfaceName) && s.NetDownBps == 0 ? "No Internet" : Net(s.NetDownBps, useBits),
+            NetUp => string.IsNullOrEmpty(s.NetInterfaceName) && s.NetUpBps == 0 ? "No Internet" : Net(s.NetUpBps, useBits),
             NetTotal => FormatTotalBytes(s.NetTotalBytes),
             BatteryPct => s.BatteryPct > 0 ? $"{s.BatteryPct:F0}%" : "--",
-            BatteryRate => s.BatteryPct > 0 && s.BatteryChargeRateW != 0
-                ? $"{(s.BatteryChargeRateW > 0 ? "+" : "")}{s.BatteryChargeRateW:F1}W"
-                : s.BatteryPct > 0 ? "Full" : "--",
-            _ => DiskValue(id, s, useFahrenheit),
+            BatteryRate => FormatBatteryRate(s.BatteryPct, s.BatteryChargeRateW),
+            _ => DiskValue(id, s),
         };
 
-    private static string Temp(float c, bool f)
-        => c <= 0 ? "--" : f ? $"{c * 1.8f + 32f:F0}°F" : $"{c:F0}°C";
+    private static string FormatBatteryRate(float pct, float rateW)
+    {
+        if (pct <= 0) return "--";
+        if (rateW == 0) return "Full";
+        string sign = rateW > 0 ? "+" : "";
+        return $"{sign}{rateW:F1}W";
+    }
+
+    private static string Temp(float c, bool f) => TempString(c, f);
 
     private static string Net(double bps, bool bits)
     {
@@ -140,7 +147,7 @@ public static class Metrics
         };
     }
 
-    private static string DiskValue(string id, TelemetrySnapshot s, bool f)
+    private static string DiskValue(string id, TelemetrySnapshot s)
     {
         int last = id.LastIndexOf('_');
         if (last < 0 || last < 5) return "--";
@@ -202,5 +209,8 @@ public static class Metrics
     /// <param name="f">If true, convert to Fahrenheit.</param>
     /// <returns>Formatted string (e.g. "45°C" or "113°F") or "--" if unavailable.</returns>
     public static string TempString(float c, bool f)
-        => c <= 0 ? "--" : f ? $"{c * 1.8f + 32f:F0}°F" : $"{c:F0}°C";
+    {
+        if (c <= 0) return "--";
+        return f ? $"{c * 1.8f + 32f:F0}°F" : $"{c:F0}°C";
+    }
 }

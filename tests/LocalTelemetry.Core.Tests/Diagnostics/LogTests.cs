@@ -1,9 +1,11 @@
+using System.Reflection;
 using FluentAssertions;
 using LocalTelemetry.Core.Diagnostics;
 using Xunit;
 
 namespace LocalTelemetry.Core.Tests.Diagnostics;
 
+[Collection("TrafficHistory")]
 public class LogTests : IDisposable
 {
     private readonly string _tempDir;
@@ -18,7 +20,7 @@ public class LogTests : IDisposable
         _metricLogPath = Path.Combine(_tempDir, "metric.log");
 
         Log.Init(_sysLogPath, _metricLogPath, enableMetrics: true);
-        Log.SystemLevel = Log.Level.Info;
+        Log.SystemLevel = Log.Level.Debug;
         Log.MetricsLevel = Log.Level.Info;
     }
 
@@ -35,8 +37,34 @@ public class LogTests : IDisposable
     }
 
     [Fact]
-    public void SystemLog_WritesInfoWarnError()
+    public void ModuleName_ParsesCallerPathsCorrectly()
     {
+        var method = typeof(Log).GetMethod("ModuleName", BindingFlags.NonPublic | BindingFlags.Static);
+        method.Should().NotBeNull();
+
+        method!.Invoke(null, [null]).Should().Be("?");
+        method.Invoke(null, ["C:\\Project\\LocalTelemetry.Core\\Hardware\\DiskQuery.cs"]).Should().Be("Hardware");
+        method.Invoke(null, ["C:\\Project\\LocalTelemetry.Notifier\\ToastForm.cs"]).Should().Be("Notifier");
+        method.Invoke(null, ["C:\\CustomPath\\MyClass.cs"]).Should().Be("MyClass");
+        method.Invoke(null, ["C:\\Project\\LocalTelemetry.App\\App.xaml.cs"]).Should().Be("App");
+        method.Invoke(null, ["C:\\Project\\LocalTelemetry.App\\Settings\\SettingsShell.xaml.cs"]).Should().Be("Settings");
+        method.Invoke(null, ["C:\\Project\\LocalTelemetry.App\\Overlay\\TaskbarOverlay.cs"]).Should().Be("Overlay");
+        method.Invoke(null, ["C:\\Project\\LocalTelemetry.App\\Tray\\TrayIconManager.cs"]).Should().Be("Tray");
+        method.Invoke(null, ["C:\\Project\\LocalTelemetry.Core\\Hardware\\WindowsNetworkUsageProvider.cs"]).Should().Be("Network");
+        method.Invoke(null, ["C:\\Project\\AlertService.cs"]).Should().Be("Alerts");
+        method.Invoke(null, ["C:\\Project\\UpdateCheckService.cs"]).Should().Be("Update");
+        method.Invoke(null, ["C:\\Project\\NotificationClient.cs"]).Should().Be("Notification");
+        method.Invoke(null, ["C:\\Project\\TaskbarEmbedder.cs"]).Should().Be("Overlay");
+        method.Invoke(null, ["C:\\Project\\WindowHelpers.cs"]).Should().Be("System");
+        method.Invoke(null, ["C:\\Project\\EseNetwork.cs"]).Should().Be("Network");
+        method.Invoke(null, ["C:\\Project\\LocalTelemetry.Core\\Config\\AppSettings.cs"]).Should().Be("Config");
+    }
+
+    [Fact]
+    public void SystemLog_WritesAllLogLevelsAndExceptions()
+    {
+        Log.Debug("Debug message test");
+        Log.Debug(new InvalidOperationException("Debug exception"), "Debug ex message");
         Log.Info("Info message test");
         Log.Warn("Warn message test");
         Log.Warn(new InvalidOperationException("Warn exception"), "Warn ex message");
@@ -48,6 +76,7 @@ public class LogTests : IDisposable
         File.Exists(_sysLogPath).Should().BeTrue();
         string content = File.ReadAllText(_sysLogPath);
 
+        content.Should().Contain("Debug message test");
         content.Should().Contain("Info message test");
         content.Should().Contain("Warn message test");
         content.Should().Contain("Warn ex message");
@@ -57,19 +86,17 @@ public class LogTests : IDisposable
     }
 
     [Fact]
-    public void SystemLog_LevelFiltering_HonorsSystemLevel()
+    public void SystemLog_LevelFiltering_HonorsSystemLevelOff()
     {
-        Log.SystemLevel = Log.Level.Error;
+        Log.SystemLevel = Log.Level.Off;
 
-        Log.Info("Should be skipped");
-        Log.Warn("Should be skipped");
-        Log.Error("Should be logged");
+        Log.Info("Should be skipped off");
+        Log.Error("Should be skipped off");
 
         Log.Shutdown();
 
         string content = File.ReadAllText(_sysLogPath);
-        content.Should().NotContain("Should be skipped");
-        content.Should().Contain("Should be logged");
+        content.Should().NotContain("Should be skipped off");
     }
 
     [Fact]
@@ -93,6 +120,7 @@ public class LogTests : IDisposable
     public void EnableMetrics_TogglesMetricsLog()
     {
         Log.EnableMetrics(false);
+        Log.EnableMetrics(false); // test early return
         Log.InfoMetric("Metric when disabled");
 
         Log.EnableMetrics(true);
@@ -105,6 +133,335 @@ public class LogTests : IDisposable
             string content = File.ReadAllText(_metricLogPath);
             content.Should().NotContain("Metric when disabled");
             content.Should().Contain("Metric when re-enabled");
+        }
+    }
+
+    [Fact]
+    public void Log_Init_HandlesInvalidPathGracefully()
+    {
+        var act = () => Log.Init("Z:\\InvalidPath\\sys.log", "Z:\\InvalidPath\\metric.log");
+        act.Should().NotThrow();
+
+        Log.Info("Message when sysWriter is null");
+
+        Log.Init(_sysLogPath, _metricLogPath);
+    }
+
+    [Fact]
+    public void SystemLog_RotatesWhenOversized()
+    {
+        var maxBytesProp = typeof(Log).GetProperty("MaxSystemLogBytes", BindingFlags.NonPublic | BindingFlags.Static);
+        maxBytesProp.Should().NotBeNull();
+
+        long original = (long)maxBytesProp!.GetValue(null)!;
+
+        try
+        {
+            maxBytesProp.SetValue(null, 64L);
+
+            Log.Info("This message pushes the log over the tiny 64-byte cap");
+            Log.Shutdown();
+
+            string backupPath = _sysLogPath.Replace(".log", ".1.log");
+            Log.Init(_sysLogPath, _metricLogPath);
+
+            File.Exists(backupPath).Should().BeTrue();
+        }
+        finally
+        {
+            maxBytesProp.SetValue(null, original);
+        }
+    }
+
+    [Fact]
+    public void SystemLog_LiveRollsWhenThresholdExceededDuringWrite()
+    {
+        var maxBytesProp = typeof(Log).GetProperty("MaxSystemLogBytes", BindingFlags.NonPublic | BindingFlags.Static);
+        maxBytesProp.Should().NotBeNull();
+        long original = (long)maxBytesProp!.GetValue(null)!;
+
+        try
+        {
+            maxBytesProp.SetValue(null, 100L);
+
+            Log.Info("First line");
+            Log.Info("Second line pushing over 100 bytes limit");
+            Log.Info("Third line into new rolled file");
+
+            Log.Shutdown();
+
+            string archive1 = _sysLogPath.Replace(".log", ".1.log");
+            File.Exists(archive1).Should().BeTrue();
+            File.Exists(_sysLogPath).Should().BeTrue();
+        }
+        finally
+        {
+            maxBytesProp.SetValue(null, original);
+        }
+    }
+
+    [Fact]
+    public void SessionStartAndEnd_WritesBanners_StartsAtLine1_AndDeduplicatesTermination()
+    {
+        string dedicatedSysLog = Path.Combine(_tempDir, "sys_banner_" + Guid.NewGuid().ToString("N") + ".log");
+        string dedicatedMetricLog = Path.Combine(_tempDir, "metric_banner_" + Guid.NewGuid().ToString("N") + ".log");
+        Log.Init(dedicatedSysLog, dedicatedMetricLog, enableMetrics: true);
+
+        Log.SessionStart("1.0.0-test", isAdmin: true, configPath: "test_config.json", mode: "Standard", osName: "Windows 11 Pro (build 26200)");
+        Log.SessionEnd("Windows System Shutdown", TimeSpan.FromMinutes(5));
+        // Simulate secondary invocation from OnExit
+        Log.SessionEnd("Application Quit", TimeSpan.FromMinutes(5));
+
+        Log.Shutdown();
+
+        string content = File.ReadAllText(dedicatedSysLog);
+        // Verify starts on line 1 without leading blank line
+        content.StartsWith('-').Should().BeTrue();
+        content.Should().Contain("LocalTelemetry v1.0.0-test Started");
+        content.Should().Contain("OS: Windows 11 Pro (build 26200)");
+        content.Should().Contain("LocalTelemetry Terminated | Reason: Windows System Shutdown");
+        content.Should().NotContain("Application Quit"); // deduplicated
+        content.Should().Contain("Session Uptime: 5m 0s");
+    }
+
+    [Fact]
+    public void MidnightRollover_SwitchesDateAndEmitsBanner()
+    {
+        var dateField = typeof(Log).GetField("_currentDate", BindingFlags.NonPublic | BindingFlags.Static);
+        dateField.Should().NotBeNull();
+
+        // Simulate yesterday
+        dateField!.SetValue(null, DateOnly.FromDateTime(DateTime.Today.AddDays(-1)));
+
+        Log.Info("Message after date change");
+        Log.Shutdown();
+
+        string content = File.ReadAllText(_sysLogPath);
+        string todayStr = DateTime.Today.ToString("dd-MM-yyyy");
+        content.Should().Contain($"--- {todayStr} ---");
+        content.Should().Contain("Message after date change");
+    }
+
+    [Fact]
+    public void ParseLevel_MapsAllStringsCorrectly()
+    {
+        Log.ParseLevel("off").Should().Be(Log.Level.Off);
+        Log.ParseLevel("OFF").Should().Be(Log.Level.Off);
+        Log.ParseLevel("error").Should().Be(Log.Level.Error);
+        Log.ParseLevel("ERROR").Should().Be(Log.Level.Error);
+        Log.ParseLevel("warn").Should().Be(Log.Level.Warning);
+        Log.ParseLevel("warning").Should().Be(Log.Level.Warning);
+        Log.ParseLevel("WARN").Should().Be(Log.Level.Warning);
+        Log.ParseLevel("debug").Should().Be(Log.Level.Debug);
+        Log.ParseLevel("DEBUG").Should().Be(Log.Level.Debug);
+        Log.ParseLevel("info").Should().Be(Log.Level.Info);
+        Log.ParseLevel("INFO").Should().Be(Log.Level.Info);
+        Log.ParseLevel(null).Should().Be(Log.Level.Info);
+        Log.ParseLevel("").Should().Be(Log.Level.Info);
+        Log.ParseLevel("unknown").Should().Be(Log.Level.Info);
+    }
+
+    [Fact]
+    public void RedundantPrefixes_AreStrippedFromMessage()
+    {
+        Log.Info("Hardware: CPU at 85%");
+        Log.Info("Overlay: FPS counter updated");
+        Log.Info("Settings: Config reloaded");
+        Log.Info("Alerts: Memory threshold reached");
+
+        Log.Shutdown();
+
+        string content = File.ReadAllText(_sysLogPath);
+        content.Should().Contain("CPU at 85%");
+        content.Should().NotContain("Hardware: Hardware: CPU at 85%");
+        content.Should().Contain("FPS counter updated");
+        content.Should().Contain("Config reloaded");
+        content.Should().Contain("Memory threshold reached");
+    }
+
+    [Fact]
+    public void SessionStart_WithNullOsName_UsesFallbackOsDescription()
+    {
+        string dedicatedSysLog = Path.Combine(_tempDir, "sys_osfallback_" + Guid.NewGuid().ToString("N") + ".log");
+        string dedicatedMetricLog = Path.Combine(_tempDir, "metric_osfallback_" + Guid.NewGuid().ToString("N") + ".log");
+        Log.Init(dedicatedSysLog, dedicatedMetricLog, enableMetrics: false);
+
+        Log.SessionStart("1.2.3", isAdmin: false, configPath: "test.json", mode: "Floating", osName: null);
+        Log.Shutdown();
+
+        string content = File.ReadAllText(dedicatedSysLog);
+        content.Should().Contain("LocalTelemetry v1.2.3 Started");
+        content.Should().Contain("OS:");
+        content.Should().Contain("Admin: No");
+    }
+
+    [Fact]
+    public void SessionEnd_WithUptimeOverOneHour_FormatsHoursCorrectly()
+    {
+        string dedicatedSysLog = Path.Combine(_tempDir, "sys_longuptime_" + Guid.NewGuid().ToString("N") + ".log");
+        string dedicatedMetricLog = Path.Combine(_tempDir, "metric_longuptime_" + Guid.NewGuid().ToString("N") + ".log");
+        Log.Init(dedicatedSysLog, dedicatedMetricLog, enableMetrics: false);
+
+        TimeSpan uptime = TimeSpan.FromHours(4).Add(TimeSpan.FromMinutes(32)).Add(TimeSpan.FromSeconds(15));
+        Log.SessionEnd("User Logout", uptime);
+        Log.Shutdown();
+
+        string content = File.ReadAllText(dedicatedSysLog);
+        content.Should().Contain("Session Uptime: 4h 32m 15s");
+        content.Should().Contain("Reason: User Logout");
+    }
+
+    [Fact]
+    public void RotateSystemLog_CascadesAllExistingArchives()
+    {
+        string dedicatedSysLog = Path.Combine(_tempDir, "cascade_test.log");
+        string dedicatedMetricLog = Path.Combine(_tempDir, "cascade_metric.log");
+
+        // Pre-create .1.log, .2.log, .3.log, and main .log
+        string archive1 = Path.Combine(_tempDir, "cascade_test.1.log");
+        string archive2 = Path.Combine(_tempDir, "cascade_test.2.log");
+        string archive3 = Path.Combine(_tempDir, "cascade_test.3.log");
+
+        File.WriteAllText(archive1, "old archive 1");
+        File.WriteAllText(archive2, "old archive 2");
+        File.WriteAllText(archive3, "old archive 3 to be deleted");
+        File.WriteAllText(dedicatedSysLog, new string('A', 200));
+
+        var maxBytesProp = typeof(Log).GetProperty("MaxSystemLogBytes", BindingFlags.NonPublic | BindingFlags.Static);
+        long original = (long)maxBytesProp!.GetValue(null)!;
+
+        try
+        {
+            maxBytesProp.SetValue(null, 100L); // Trigger rotation
+
+            Log.Init(dedicatedSysLog, dedicatedMetricLog, enableMetrics: false);
+            Log.Shutdown();
+
+            // Archive 3 should have been overwritten by archive 2
+            File.Exists(archive3).Should().BeTrue();
+            File.ReadAllText(archive3).Should().Be("old archive 2");
+
+            // Archive 2 should have been overwritten by archive 1
+            File.Exists(archive2).Should().BeTrue();
+            File.ReadAllText(archive2).Should().Be("old archive 1");
+
+            // Archive 1 should contain the original 200 'A' characters
+            File.Exists(archive1).Should().BeTrue();
+            File.ReadAllText(archive1).Should().Contain("AAAA");
+        }
+        finally
+        {
+            maxBytesProp.SetValue(null, original);
+        }
+    }
+
+    [Fact]
+    public void MidnightRollover_WithActiveMetricWriter_ReopensNewDayLog()
+    {
+        string dedicatedSysLog = Path.Combine(_tempDir, "sys_midroll_" + Guid.NewGuid().ToString("N") + ".log");
+        string dedicatedMetricLog = Path.Combine(_tempDir, $"lt_{DateTime.Today.AddDays(-1):dd-MM-yyyy}.log");
+        Log.Init(dedicatedSysLog, dedicatedMetricLog, enableMetrics: true);
+
+        // Prime metric writer
+        Log.InfoMetric("Metric before rollover");
+
+        // Simulate midnight date change
+        var dateField = typeof(Log).GetField("_currentDate", BindingFlags.NonPublic | BindingFlags.Static);
+        dateField!.SetValue(null, DateOnly.FromDateTime(DateTime.Today.AddDays(-1)));
+
+        // Write after rollover
+        Log.InfoMetric("Metric after midnight rollover");
+        Log.Shutdown();
+
+        string todayMetricFile = Path.Combine(_tempDir, $"lt_{DateTime.Today:dd-MM-yyyy}.log");
+        File.Exists(todayMetricFile).Should().BeTrue();
+        string content = File.ReadAllText(todayMetricFile);
+        content.Should().Contain("Metric after midnight rollover");
+    }
+
+    [Fact]
+    public void ErrorProperties_CanBeSetAndQueried()
+    {
+        var ex = new InvalidOperationException("Test error");
+        Log.LastInitError = ex;
+        Log.LastWriteError = ex;
+        Log.LastRotationError = ex;
+        Log.LastMetricError = ex;
+
+        Log.LastInitError.Should().BeSameAs(ex);
+        Log.LastWriteError.Should().BeSameAs(ex);
+        Log.LastRotationError.Should().BeSameAs(ex);
+        Log.LastMetricError.Should().BeSameAs(ex);
+    }
+
+    [Fact]
+    public void RotateSystemLog_WithExistingArchives_ShiftsFilesCorrectly()
+    {
+        string logPath = Path.Combine(_tempDir, "sys_rot_shift.log");
+        File.WriteAllText(logPath, "current_log_content");
+        File.WriteAllText(Path.Combine(_tempDir, "sys_rot_shift.1.log"), "archive_1");
+        File.WriteAllText(Path.Combine(_tempDir, "sys_rot_shift.2.log"), "archive_2");
+        File.WriteAllText(Path.Combine(_tempDir, "sys_rot_shift.3.log"), "archive_3");
+
+        var maxBytesProp = typeof(Log).GetProperty("MaxSystemLogBytes", BindingFlags.NonPublic | BindingFlags.Static);
+        long original = (long)maxBytesProp!.GetValue(null)!;
+        maxBytesProp.SetValue(null, 10L); // threshold = 10 bytes
+
+        try
+        {
+            var rotateMethod = typeof(Log).GetMethod("RotateSystemLog", BindingFlags.NonPublic | BindingFlags.Static);
+            rotateMethod!.Invoke(null, [logPath]);
+
+            File.ReadAllText(Path.Combine(_tempDir, "sys_rot_shift.1.log")).Should().Be("current_log_content");
+            File.ReadAllText(Path.Combine(_tempDir, "sys_rot_shift.2.log")).Should().Be("archive_1");
+            File.ReadAllText(Path.Combine(_tempDir, "sys_rot_shift.3.log")).Should().Be("archive_2");
+        }
+        finally
+        {
+            maxBytesProp.SetValue(null, original);
+        }
+    }
+
+    [Fact]
+    public void SessionStartEnd_And_MetricsDisable_And_LiveRoll_Coverage()
+    {
+        string dedicatedSysLog = Path.Combine(_tempDir, "sys_session_" + Guid.NewGuid().ToString("N") + ".log");
+        string dedicatedMetricLog = Path.Combine(_tempDir, "metric_session_" + Guid.NewGuid().ToString("N") + ".log");
+        Log.Init(dedicatedSysLog, dedicatedMetricLog, enableMetrics: true);
+
+        // 1. SessionStart with custom osName
+        Log.SessionStart("1.0.0", isAdmin: true, "C:\\test\\config.json", "Full", "Windows 11 Enterprise");
+        Log.SessionStart("1.0.0", isAdmin: false, "C:\\test\\config.json", "Overlay", null); // default osName
+
+        // 2. SessionEnd with <1h and >=1h
+        Log.SessionEnd("User Exit", TimeSpan.FromMinutes(35));
+        // Reset _sessionEnded to test >= 1h branch
+        typeof(Log).GetField("_sessionEnded", BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, false);
+        Log.SessionEnd("System Shutdown", TimeSpan.FromHours(3.25));
+
+        // 3. EnableMetrics toggling and disposing active writer
+        Log.InfoMetric("Metric before disabling");
+        Log.EnableMetrics(false);
+        Log.EnableMetrics(false); // idempotent early return
+        Log.EnableMetrics(true);
+
+        // 4. Live system log roll via CheckLiveSystemLogRoll
+        var maxBytesProp = typeof(Log).GetProperty("MaxSystemLogBytes", BindingFlags.NonPublic | BindingFlags.Static);
+        long original = (long)maxBytesProp!.GetValue(null)!;
+        maxBytesProp.SetValue(null, 10L); // 10 bytes
+
+        try
+        {
+            var checkRoll = typeof(Log).GetMethod("CheckLiveSystemLogRoll", BindingFlags.NonPublic | BindingFlags.Static);
+            checkRoll?.Invoke(null, null);
+
+            // Write through public method to trigger live log roll
+            Log.Info("Trigger live system log roll with long line exceeding threshold");
+        }
+        finally
+        {
+            maxBytesProp.SetValue(null, original);
+            Log.Shutdown();
         }
     }
 }

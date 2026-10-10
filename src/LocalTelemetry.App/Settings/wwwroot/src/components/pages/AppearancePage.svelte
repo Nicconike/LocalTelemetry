@@ -350,6 +350,12 @@
                                     <span
                                         class="swatch-dot"
                                         style="background:{t.vars[
+                                            '--color-primary'
+                                        ]}"
+                                    ></span>
+                                    <span
+                                        class="swatch-dot"
+                                        style="background:{t.vars[
                                             '--color-success'
                                         ]}"
                                     ></span>
@@ -403,6 +409,12 @@
                                     ></span>
                                 </div>
                                 <div class="swatch-dots">
+                                    <span
+                                        class="swatch-dot"
+                                        style="background:{t.vars[
+                                            '--color-primary'
+                                        ]}"
+                                    ></span>
                                     <span
                                         class="swatch-dot"
                                         style="background:{t.vars[

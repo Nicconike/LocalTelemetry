@@ -10,6 +10,7 @@
         <IsTestProject>true</IsTestProject>
         <Platforms>x64</Platforms>
         <PlatformTarget>x64</PlatformTarget>
+        <RunSettingsFilePath>$(MSBuildProjectDirectory)\coverlet.runsettings</RunSettingsFilePath>
         <NoWarn>$(NoWarn);CA1707;CA2007;CA1062;CA1515</NoWarn>
     </PropertyGroup>
 

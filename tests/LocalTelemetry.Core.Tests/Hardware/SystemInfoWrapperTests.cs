@@ -29,15 +29,15 @@ public class SystemInfoWrapperTests
         wrapper.GetMotherboardVersion().Should().NotBeNull();
         wrapper.GetMotherboardSerial().Should().NotBeNull();
         wrapper.GetBiosVersion().Should().NotBeNull();
+        wrapper.GetBiosIsUefi().Should().Be(wrapper.GetBiosIsUefi());
+        wrapper.GetSystemManufacturer().Should().NotBeNull();
+        wrapper.GetSystemProductName().Should().NotBeNull();
+        wrapper.GetSystemModel().Should().NotBeNull();
 
-        bool hasBattery = wrapper.HasBattery();
-        if (hasBattery)
-        {
-            wrapper.GetBatteryManufacturer().Should().NotBeNull();
-            wrapper.GetBatteryDeviceName().Should().NotBeNull();
-            wrapper.GetBatteryDesignCapacity().Should().NotBeNull();
-            wrapper.GetBatteryFullChargedCapacity().Should().NotBeNull();
-        }
+        wrapper.GetBatteryManufacturer().Should().NotBeNull();
+        wrapper.GetBatteryDeviceName().Should().NotBeNull();
+        wrapper.GetBatteryDesignCapacity().Should().NotBeNull();
+        wrapper.GetBatteryFullChargedCapacity().Should().NotBeNull();
 
         wrapper.GetPsuName().Should().NotBeNull();
         wrapper.GetPsuMaxCapacity().Should().NotBeNull();

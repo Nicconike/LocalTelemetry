@@ -16,32 +16,30 @@
         { id: "cpu_temp", label: "CPU Temperature" },
         { id: "cpu_freq", label: "CPU Clock" },
         { id: "cpu_power", label: "CPU Power" },
-        { id: "ram_pct", label: "RAM Usage" },
-        { id: "ram_used", label: "RAM Used" },
         { id: "gpu_pct", label: "GPU Usage" },
         { id: "gpu_temp", label: "GPU Temperature" },
         { id: "gpu_vram", label: "GPU VRAM" },
         { id: "gpu_freq", label: "GPU Clock" },
         { id: "gpu_power", label: "GPU Power" },
+        { id: "ram_pct", label: "RAM Usage" },
+        { id: "ram_used", label: "RAM Used" },
         { id: "net_down", label: "Download Speed" },
         { id: "net_up", label: "Upload Speed" },
         { id: "net_total", label: "Total Traffic" },
-        { id: "battery_pct", label: "Battery" },
-        { id: "battery_rate", label: "Charge Rate" },
     ];
 
     function computeDiskMetrics() {
         const disks = $systemInfo.disks || [];
         const typeCount = {};
         for (const d of disks) {
-            const t = busTypeToLabel(d.busType);
+            const t = d.displayType || busTypeToLabel(d.busType);
             typeCount[t] = (typeCount[t] || 0) + 1;
         }
         const typeIdx = {};
         return disks.flatMap((d, i) => {
-            const t = busTypeToLabel(d.busType);
+            const t = d.displayType || busTypeToLabel(d.busType);
             typeIdx[t] = (typeIdx[t] || 0) + 1;
-            const num = typeCount[t] > 1 ? String(typeIdx[t]) : "";
+            const num = typeCount[t] > 1 ? ` ${typeIdx[t]}` : "";
             return [
                 { id: `disk_disk${i}_read`, label: `${t}${num} Read` },
                 { id: `disk_disk${i}_write`, label: `${t}${num} Write` },
@@ -50,12 +48,38 @@
     }
     let diskMetrics = $derived(computeDiskMetrics());
 
-    let allMetrics = $derived([...staticMetrics, ...diskMetrics]);
+    const batteryMetrics = [
+        { id: "battery_pct", label: "Battery" },
+        { id: "battery_rate", label: "Charge Rate" },
+    ];
+
+    let allMetrics = $derived([
+        ...staticMetrics,
+        ...diskMetrics,
+        ...($settings?.monitoring?.hasBattery ? batteryMetrics : []),
+    ]);
+
+    const defaultMetrics = [
+        "cpu_pct",
+        "cpu_temp",
+        "gpu_pct",
+        "gpu_temp",
+        "gpu_vram",
+        "net_total",
+        "ram_pct",
+        "ram_used",
+        "net_down",
+        "net_up",
+    ];
 
     function save(items) {
         const next = deepClone($settings);
         next.overlay.row1 = items.filter((x) => x);
         settings.set(next);
+    }
+
+    function resetLayout() {
+        save([...defaultMetrics]);
     }
 
     function moveUp(idx) {
@@ -223,6 +247,16 @@
             {#if items.length === 0}
                 <p class="empty">No metrics configured. Add one above.</p>
             {/if}
+
+            <div class="footer-actions">
+                <button
+                    class="reset-btn"
+                    onclick={resetLayout}
+                    disabled={items.join(",") === defaultMetrics.join(",")}
+                >
+                    Reset Layout to Defaults
+                </button>
+            </div>
         </SectionCard>
     </div>
 {/if}
@@ -351,5 +385,28 @@
         color: var(--color-text-muted);
         text-align: center;
         padding: var(--space-4);
+    }
+    .footer-actions {
+        margin-top: var(--space-4);
+        padding-top: var(--space-3);
+        border-top: 1px solid var(--color-divider, rgba(255, 255, 255, 0.08));
+    }
+    .reset-btn {
+        padding: var(--space-1) var(--space-3);
+        border-radius: var(--radius-md);
+        font-size: var(--text-sm);
+        color: var(--color-text-muted);
+        border: 1px solid var(--color-border);
+        background: transparent;
+        cursor: pointer;
+        transition: all var(--transition);
+    }
+    .reset-btn:hover {
+        color: var(--color-text);
+        border-color: var(--color-text-muted);
+    }
+    .reset-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
     }
 </style>

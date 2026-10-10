@@ -15,6 +15,17 @@
         <h2>Network</h2>
 
         <SectionCard
+            title="Network Display"
+            description="Configure how network traffic and speeds are displayed."
+        >
+            <Toggle
+                bind:checked={$settings.monitoring.useNetBits}
+                label="Show Speed in Bits/s"
+                description="Display network speed in bits/s instead of bytes/s"
+            />
+        </SectionCard>
+
+        <SectionCard
             title="Network Adapter"
             description="Select which network adapter is used for throughput monitoring and daily traffic logging."
         >
@@ -31,7 +42,7 @@
         >
             <Toggle
                 bind:checked={$settings.netUsage.enabled}
-                label="Enable daily traffic logging"
+                label="Enable Daily Traffic Logging"
             />
         </SectionCard>
     </div>

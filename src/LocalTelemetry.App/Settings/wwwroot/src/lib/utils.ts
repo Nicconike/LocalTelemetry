@@ -28,3 +28,35 @@ export function formatTrafficBytes(bytes: number): string {
 export function deepClone<T>(obj: T): T {
     return structuredClone(obj);
 }
+
+/**
+ * Formats a date string ("DD-MM-YYYY", "YYYY-MM-DD", or ISO timestamp) into "DD-MM-YYYY" format.
+ */
+export function formatDate(dateStr: string | null | undefined): string {
+    if (!dateStr) return "-";
+    const str = dateStr.trim();
+    // DD-MM-YYYY
+    const dmy = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+    if (dmy) {
+        const d = dmy[1].padStart(2, "0");
+        const m = dmy[2].padStart(2, "0");
+        const y = dmy[3];
+        return `${d}-${m}-${y}`;
+    }
+    // YYYY-MM-DD
+    const ymd = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (ymd) {
+        const y = ymd[1];
+        const m = ymd[2].padStart(2, "0");
+        const d = ymd[3].padStart(2, "0");
+        return `${d}-${m}-${y}`;
+    }
+    const parsed = new Date(str);
+    if (!isNaN(parsed.getTime())) {
+        const d = String(parsed.getDate()).padStart(2, "0");
+        const m = String(parsed.getMonth() + 1).padStart(2, "0");
+        const y = parsed.getFullYear();
+        return `${d}-${m}-${y}`;
+    }
+    return str;
+}

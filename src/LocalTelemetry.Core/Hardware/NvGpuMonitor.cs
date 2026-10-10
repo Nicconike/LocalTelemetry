@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 
 namespace LocalTelemetry.Core.Hardware;
@@ -11,7 +11,7 @@ namespace LocalTelemetry.Core.Hardware;
 [SupportedOSPlatform("windows")]
 public sealed class NvGpuMonitor : IDisposable
 {
-    private static void Log(string msg) { Diagnostics.Log.Info(msg); }
+    private static void Log(string msg) { Diagnostics.Log.Debug(msg); }
 
     /// <summary>Gets whether NVML was initialized successfully.</summary>
     public bool IsAvailable { get; private set; }
@@ -25,149 +25,460 @@ public sealed class NvGpuMonitor : IDisposable
     /// <summary>Gets the most recent snapshot of GPU metrics from <see cref="Query"/>.</summary>
     public static NvGpuData? LatestData { get; private set; }
 
+    private readonly INvGpuNative _native;
+    private readonly object _syncLock = new();
     private IntPtr _device = IntPtr.Zero;
     private bool _initialized;
+    private DateTime _lastFailureTime = DateTime.MinValue;
+    private static readonly TimeSpan ReinitCooldown = TimeSpan.FromSeconds(5);
 
     /// <summary>
     /// Initializes a new instance of <see cref="NvGpuMonitor"/> and attempts to connect to NVML.
     /// </summary>
-    public NvGpuMonitor()
+    public NvGpuMonitor() : this(null) { }
+
+    internal NvGpuMonitor(INvGpuNative? native)
     {
+        _native = native ?? NvGpuNativePInvoke.Instance;
         try { Init(); }
-        catch (Exception ex) { Diagnostics.Log.Error($"NvGpuMonitor: Init failed: {ex.Message}"); IsAvailable = false; }
+        catch (Exception ex) { Diagnostics.Log.Error(ex, "Failed to initialize NVIDIA graphics monitor"); IsAvailable = false; }
     }
 
     private void Init()
     {
-        int ret = nvmlInit();
-        if (ret != NVML_SUCCESS)
+        lock (_syncLock)
         {
-            Log($"NVML: nvmlInit returned {ret}");
-            return;
-        }
+            int ret = _native.Init();
+            if (ret != 0)
+            {
+                Diagnostics.Log.Debug($"NVIDIA library initialization failed with status {ret}");
+                _lastFailureTime = DateTime.UtcNow;
+                return;
+            }
 
-        // Get first NVIDIA GPU
-        ret = nvmlDeviceGetHandleByIndex(0, out _device);
-        if (ret != NVML_SUCCESS || _device == IntPtr.Zero)
+            ret = _native.GetDeviceHandleByIndex(0, out _device);
+            if (ret != 0 || _device == IntPtr.Zero)
+            {
+                Diagnostics.Log.Debug($"Failed to get NVIDIA device handle for index 0 (status {ret})");
+                _ = _native.Shutdown();
+                _device = IntPtr.Zero;
+                _lastFailureTime = DateTime.UtcNow;
+                return;
+            }
+
+            if (_native.GetDeviceName(_device, out var name) == 0)
+                GpuName = name ?? string.Empty;
+
+            if (_native.GetDriverVersion(out var ver) == 0 && !string.IsNullOrEmpty(ver))
+                LatestDriverVersion = ver;
+
+            _initialized = true;
+            IsAvailable = true;
+        }
+    }
+
+    /// <summary>
+    /// Resets the NVML session and reacquires device handles.
+    /// Safe to call following display driver updates, TDR resets, or waking from sleep.
+    /// </summary>
+    public void Reset()
+    {
+        lock (_syncLock)
         {
-            Log($"NVML: nvmlDeviceGetHandleByIndex(0) returned {ret}");
-            _ = nvmlShutdown();
-            return;
-        }
+            try
+            {
+                if (_initialized) _ = _native.Shutdown();
+            }
+            catch (Exception ex)
+            {
+                Diagnostics.Log.Debug(ex, "Failed to shutdown NVML during reset");
+            }
+            finally
+            {
+                _initialized = false;
+                _device = IntPtr.Zero;
+                IsAvailable = false;
+            }
 
-        // Get GPU name
-        var nameBuf = new byte[96];
-        ret = nvmlDeviceGetName(_device, nameBuf, nameBuf.Length);
-        if (ret == NVML_SUCCESS)
+            try
+            {
+                Init();
+                if (IsAvailable)
+                    Diagnostics.Log.Debug("NVIDIA GPU monitor successfully re-initialized after reset");
+            }
+            catch (Exception ex)
+            {
+                Diagnostics.Log.Error(ex, "Failed to reset NVIDIA GPU monitor");
+                IsAvailable = false;
+                _lastFailureTime = DateTime.UtcNow;
+            }
+        }
+    }
+
+    private int _consecutiveUnknownFailures;
+
+    private static bool IsDeviceLostError(int ret) =>
+        ret is 1    // NVML_ERROR_UNINITIALIZED
+           or 15   // NVML_ERROR_GPU_IS_LOST
+           or 16;  // NVML_ERROR_RESET_REQUIRED
+
+    private void HandleDeviceLost(int ret)
+    {
+        lock (_syncLock)
         {
-            int len = Array.IndexOf(nameBuf, (byte)0);
-            if (len < 0) len = nameBuf.Length;
-            GpuName = System.Text.Encoding.ASCII.GetString(nameBuf, 0, len);
+            if (!_initialized) return;
+            Diagnostics.Log.Warn($"NVIDIA GPU device lost or driver restarted (NVML status {ret}); pausing telemetry");
+            try { _ = _native.Shutdown(); }
+            catch (Exception ex)
+            {
+                Diagnostics.Log.Debug(ex, "Failed to shutdown NVML during device lost handling");
+            }
+            finally
+            {
+                _initialized = false;
+                _device = IntPtr.Zero;
+                IsAvailable = false;
+                _lastFailureTime = DateTime.UtcNow;
+            }
         }
-
-        // Get driver version
-        var verBuf = new byte[80];
-        if (nvmlSystemGetDriverVersion(verBuf, verBuf.Length) == NVML_SUCCESS)
-        {
-            int len = Array.IndexOf(verBuf, (byte)0);
-            if (len > 0) LatestDriverVersion = System.Text.Encoding.ASCII.GetString(verBuf, 0, len);
-        }
-
-        _initialized = true;
-        IsAvailable = true;
-        Log($"NVML initialized: '{GpuName}' (device=0x{_device:X})");
     }
 
     /// <summary>Query current GPU metrics.</summary>
     public NvGpuData? Query()
     {
-        if (!_initialized || _device == IntPtr.Zero) return null;
-
-        try
+        lock (_syncLock)
         {
-            var data = new NvGpuData();
-
-            // Temperature (NVML_TEMPERATURE_GPU = 0)
-            uint temp = 0;
-            if (nvmlDeviceGetTemperature(_device, 0, ref temp) == NVML_SUCCESS)
-                data.TempC = temp;
-
-            // Utilization (GPU + Memory)
-            var util = new nvmlUtilization();
-            if (nvmlDeviceGetUtilizationRates(_device, ref util) == NVML_SUCCESS)
-                data.UsagePct = util.gpu;
-
-            // Memory
-            var mem = new nvmlMemory();
-            if (nvmlDeviceGetMemoryInfo(_device, ref mem) == NVML_SUCCESS && mem.total > 0)
+            if (!_initialized || _device == IntPtr.Zero)
             {
-                data.VramTotalMb = mem.total / (1024f * 1024f);
-                data.VramUsedMb = mem.used / (1024f * 1024f);
+                if (DateTime.UtcNow - _lastFailureTime >= ReinitCooldown)
+                {
+                    Init();
+                    if (!_initialized || _device == IntPtr.Zero) return null;
+                    Diagnostics.Log.Info("NVIDIA GPU monitor successfully re-initialized");
+                }
+                else
+                {
+                    return null;
+                }
             }
 
-            // Core clock (NVML_CLOCK_GRAPHICS = 0)
-            uint clock = 0;
-            if (nvmlDeviceGetClockInfo(_device, 0, ref clock) == NVML_SUCCESS)
-                data.CoreClockMHz = clock;
+            try
+            {
+                var data = new NvGpuData();
+                int metricsRead = 0;
 
-            // Power draw (milliwatts)
-            uint powerMw = 0;
-            if (nvmlDeviceGetPowerUsage(_device, ref powerMw) == NVML_SUCCESS)
-                data.PowerDrawW = powerMw / 1000f;
+                int ret = _native.GetTemperature(_device, 0, out uint temp);
+                if (ret == 0)
+                {
+                    data.TempC = temp;
+                    metricsRead++;
+                }
+                else if (IsDeviceLostError(ret))
+                {
+                    HandleDeviceLost(ret);
+                    return null;
+                }
 
-            // TDP / power limit (milliwatts)
-            uint powerLimitMw = 0;
-            if (nvmlDeviceGetPowerManagementLimit(_device, ref powerLimitMw) == NVML_SUCCESS)
-                data.TdpW = powerLimitMw / 1000f;
+                ret = _native.GetUtilizationRates(_device, out uint gpuUtil, out _);
+                if (ret == 0)
+                {
+                    data.UsagePct = gpuUtil;
+                    metricsRead++;
+                }
+                else if (IsDeviceLostError(ret))
+                {
+                    HandleDeviceLost(ret);
+                    return null;
+                }
 
-            LatestData = data;
-            return data;
-        }
-        catch (Exception ex)
-        {
-            Diagnostics.Log.Error($"NvGpuMonitor: Query failed: {ex.Message}");
-            return null;
+                ret = _native.GetMemoryInfo(_device, out ulong total, out _, out ulong used);
+                if (ret == 0 && total > 0)
+                {
+                    data.VramTotalMb = total / (1024f * 1024f);
+                    data.VramUsedMb = used / (1024f * 1024f);
+                    metricsRead++;
+                }
+                else if (IsDeviceLostError(ret))
+                {
+                    HandleDeviceLost(ret);
+                    return null;
+                }
+
+                ret = _native.GetClockInfo(_device, 0, out uint clock);
+                if (ret == 0)
+                {
+                    data.CoreClockMHz = clock;
+                    metricsRead++;
+                }
+                else if (IsDeviceLostError(ret))
+                {
+                    HandleDeviceLost(ret);
+                    return null;
+                }
+
+                ret = _native.GetPowerUsage(_device, out uint powerMw);
+                if (ret == 0)
+                {
+                    data.PowerDrawW = powerMw / 1000f;
+                    metricsRead++;
+                }
+                else if (IsDeviceLostError(ret))
+                {
+                    HandleDeviceLost(ret);
+                    return null;
+                }
+
+                ret = _native.GetPowerManagementLimit(_device, out uint powerLimitMw);
+                if (ret == 0)
+                {
+                    data.TdpW = powerLimitMw / 1000f;
+                    metricsRead++;
+                }
+                else if (IsDeviceLostError(ret))
+                {
+                    HandleDeviceLost(ret);
+                    return null;
+                }
+
+                if (metricsRead == 0)
+                {
+                    _consecutiveUnknownFailures++;
+                    if (_consecutiveUnknownFailures >= 3)
+                    {
+                        _consecutiveUnknownFailures = 0;
+                        HandleDeviceLost(999);
+                    }
+                    return null;
+                }
+
+                _consecutiveUnknownFailures = 0;
+                LatestData = data;
+                return data;
+            }
+            catch (Exception ex)
+            {
+                Diagnostics.Log.Error(ex, "Failed to query NVIDIA GPU telemetry metrics");
+                return null;
+            }
         }
     }
 
     /// <summary>Releases NVML resources and resets availability.</summary>
     public void Dispose()
     {
-        if (_initialized) _ = nvmlShutdown();
-        _initialized = false;
-        IsAvailable = false;
+        lock (_syncLock)
+        {
+            if (_initialized) _ = _native.Shutdown();
+            _initialized = false;
+            _device = IntPtr.Zero;
+            IsAvailable = false;
+        }
     }
 
-    // Data record
     /// <summary>
-    /// Contains a snapshot of all queried GPU metrics from <see cref="NvGpuMonitor.Query"/>.
+    /// Contains a snapshot of all queried GPU metrics from <see cref="Query"/>.
     /// </summary>
     public struct NvGpuData
     {
-        /// <summary>GPU temperature in degrees Celsius.</summary>
         public float TempC { get; set; }
-
-        /// <summary>GPU core utilization as a percentage (0-100).</summary>
         public float UsagePct { get; set; }
-
-        /// <summary>Total VRAM in megabytes.</summary>
         public float VramTotalMb { get; set; }
-
-        /// <summary>Used VRAM in megabytes.</summary>
         public float VramUsedMb { get; set; }
-
-        /// <summary>Current GPU core clock frequency in MHz.</summary>
         public float CoreClockMHz { get; set; }
-
-        /// <summary>Current GPU power draw in watts.</summary>
         public float PowerDrawW { get; set; }
-
-        /// <summary>GPU power limit (TDP) in watts.</summary>
         public float TdpW { get; set; }
     }
+}
 
-    // NVML P/Invoke
+internal interface INvGpuNative
+{
+    int Init();
+    int Shutdown();
+    int GetDeviceHandleByIndex(int index, out IntPtr device);
+    int GetDeviceName(IntPtr device, out string name);
+    int GetDriverVersion(out string version);
+    int GetTemperature(IntPtr device, int sensorType, out uint temp);
+    int GetUtilizationRates(IntPtr device, out uint gpuUtil, out uint memUtil);
+    int GetMemoryInfo(IntPtr device, out ulong total, out ulong free, out ulong used);
+    int GetClockInfo(IntPtr device, int clockType, out uint clock);
+    int GetPowerUsage(IntPtr device, out uint powerMw);
+    int GetPowerManagementLimit(IntPtr device, out uint powerLimitMw);
+}
+
+internal sealed class NvGpuNativePInvoke : INvGpuNative
+{
+    public static readonly NvGpuNativePInvoke Instance = new();
+
     private const int NVML_SUCCESS = 0;
+
+    public int Init()
+    {
+        try { return nvmlInit(); }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Debug(ex, "Failed to initialize NVIDIA management library (nvmlInit)");
+            return -1;
+        }
+    }
+
+    public int Shutdown()
+    {
+        try { return nvmlShutdown(); }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Debug(ex, "Failed to shutdown NVIDIA management library (nvmlShutdown)");
+            return -1;
+        }
+    }
+
+    public int GetDeviceHandleByIndex(int index, out IntPtr device)
+    {
+        device = IntPtr.Zero;
+        try { return nvmlDeviceGetHandleByIndex(index, out device); }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Debug(ex, "Failed to get NVIDIA device handle by index");
+            return -1;
+        }
+    }
+
+    public int GetDeviceName(IntPtr device, out string name)
+    {
+        name = string.Empty;
+        if (device == IntPtr.Zero) return -1;
+        try
+        {
+            var nameBuf = new byte[96];
+            int ret = nvmlDeviceGetName(device, nameBuf, nameBuf.Length);
+            if (ret == NVML_SUCCESS)
+            {
+                int len = Array.IndexOf(nameBuf, (byte)0);
+                if (len < 0) len = nameBuf.Length;
+                name = System.Text.Encoding.ASCII.GetString(nameBuf, 0, len);
+            }
+            return ret;
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Debug(ex, "Failed to get NVIDIA device name");
+            return -1;
+        }
+    }
+
+    public int GetDriverVersion(out string version)
+    {
+        version = string.Empty;
+        try
+        {
+            var verBuf = new byte[80];
+            int ret = nvmlSystemGetDriverVersion(verBuf, verBuf.Length);
+            if (ret == NVML_SUCCESS)
+            {
+                int len = Array.IndexOf(verBuf, (byte)0);
+                if (len > 0) version = System.Text.Encoding.ASCII.GetString(verBuf, 0, len);
+            }
+            return ret;
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Debug(ex, "Failed to get NVIDIA driver version");
+            return -1;
+        }
+    }
+
+    public int GetTemperature(IntPtr device, int sensorType, out uint temp)
+    {
+        temp = 0;
+        if (device == IntPtr.Zero) return -1;
+        try { return nvmlDeviceGetTemperature(device, sensorType, ref temp); }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Debug(ex, "Failed to get NVIDIA device temperature");
+            return -1;
+        }
+    }
+
+    public int GetUtilizationRates(IntPtr device, out uint gpuUtil, out uint memUtil)
+    {
+        gpuUtil = 0;
+        memUtil = 0;
+        if (device == IntPtr.Zero) return -1;
+        try
+        {
+            var util = new NvmlUtilization();
+            int ret = nvmlDeviceGetUtilizationRates(device, ref util);
+            if (ret == NVML_SUCCESS)
+            {
+                gpuUtil = util.gpu;
+                memUtil = util.memory;
+            }
+            return ret;
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Debug(ex, "Failed to get NVIDIA device utilization rates");
+            return -1;
+        }
+    }
+
+    public int GetMemoryInfo(IntPtr device, out ulong total, out ulong free, out ulong used)
+    {
+        total = 0; free = 0; used = 0;
+        if (device == IntPtr.Zero) return -1;
+        try
+        {
+            var mem = new NvmlMemory();
+            int ret = nvmlDeviceGetMemoryInfo(device, ref mem);
+            if (ret == NVML_SUCCESS)
+            {
+                total = mem.total;
+                free = mem.free;
+                used = mem.used;
+            }
+            return ret;
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Debug(ex, "Failed to get NVIDIA memory information");
+            return -1;
+        }
+    }
+
+    public int GetClockInfo(IntPtr device, int clockType, out uint clock)
+    {
+        clock = 0;
+        if (device == IntPtr.Zero) return -1;
+        try { return nvmlDeviceGetClockInfo(device, clockType, ref clock); }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Debug(ex, "Failed to get NVIDIA clock information");
+            return -1;
+        }
+    }
+
+    public int GetPowerUsage(IntPtr device, out uint powerMw)
+    {
+        powerMw = 0;
+        if (device == IntPtr.Zero) return -1;
+        try { return nvmlDeviceGetPowerUsage(device, ref powerMw); }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Debug(ex, "Failed to get NVIDIA power usage");
+            return -1;
+        }
+    }
+
+    public int GetPowerManagementLimit(IntPtr device, out uint powerLimitMw)
+    {
+        powerLimitMw = 0;
+        if (device == IntPtr.Zero) return -1;
+        try { return nvmlDeviceGetPowerManagementLimit(device, ref powerLimitMw); }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Debug(ex, "Failed to get NVIDIA power management limit");
+            return -1;
+        }
+    }
 
     [DllImport("nvml.dll", CallingConvention = CallingConvention.Cdecl)]
     private static extern int nvmlInit();
@@ -185,10 +496,10 @@ public sealed class NvGpuMonitor : IDisposable
     private static extern int nvmlDeviceGetTemperature(IntPtr device, int sensorType, ref uint temp);
 
     [DllImport("nvml.dll", CallingConvention = CallingConvention.Cdecl)]
-    private static extern int nvmlDeviceGetUtilizationRates(IntPtr device, ref nvmlUtilization util);
+    private static extern int nvmlDeviceGetUtilizationRates(IntPtr device, ref NvmlUtilization util);
 
     [DllImport("nvml.dll", CallingConvention = CallingConvention.Cdecl)]
-    private static extern int nvmlDeviceGetMemoryInfo(IntPtr device, ref nvmlMemory mem);
+    private static extern int nvmlDeviceGetMemoryInfo(IntPtr device, ref NvmlMemory mem);
 
     [DllImport("nvml.dll", CallingConvention = CallingConvention.Cdecl)]
     private static extern int nvmlDeviceGetClockInfo(IntPtr device, int clockType, ref uint clock);
@@ -203,14 +514,14 @@ public sealed class NvGpuMonitor : IDisposable
     private static extern int nvmlDeviceGetPowerManagementLimit(IntPtr device, ref uint powerLimit);
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct nvmlUtilization
+    private struct NvmlUtilization
     {
         public uint gpu;
         public uint memory;
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct nvmlMemory
+    private struct NvmlMemory
     {
         public ulong total;
         public ulong free;

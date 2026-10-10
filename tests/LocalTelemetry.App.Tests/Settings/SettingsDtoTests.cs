@@ -13,8 +13,7 @@ public class SettingsDtoTests
         var src = new AppSettings
         {
             RunAtStartup = true,
-            StartMinimized = true,
-            MinimizeToTrayOnClose = true,
+            ShowSystemTrayIcon = true,
             EnableFileLogging = false,
             WindowTheme = "dark",
             Monitoring = new MonitoringConfig
@@ -61,8 +60,7 @@ public class SettingsDtoTests
         var dto = SettingsDtoMapping.ToDto(src);
 
         dto.RunAtStartup.Should().BeTrue();
-        dto.StartMinimized.Should().BeTrue();
-        dto.MinimizeToTray.Should().BeTrue();
+        dto.ShowSystemTrayIcon.Should().BeTrue();
         dto.EnableFileLogging.Should().BeFalse();
         dto.WindowTheme.Should().Be("dark");
 
@@ -138,8 +136,7 @@ public class SettingsDtoTests
         var dto = new SettingsDto
         {
             RunAtStartup = true,
-            StartMinimized = true,
-            MinimizeToTray = true,
+            ShowSystemTrayIcon = true,
             EnableFileLogging = true,
             WindowTheme = "custom",
             Monitoring = new MonitoringDto
@@ -184,8 +181,7 @@ public class SettingsDtoTests
         SettingsDtoMapping.ApplyTo(target, dto);
 
         target.RunAtStartup.Should().BeTrue();
-        target.StartMinimized.Should().BeTrue();
-        target.MinimizeToTrayOnClose.Should().BeTrue();
+        target.ShowSystemTrayIcon.Should().BeTrue();
         target.WindowTheme.Should().Be("custom");
 
         target.Monitoring.PollIntervalMs.Should().Be(2000);
@@ -201,5 +197,35 @@ public class SettingsDtoTests
         target.Alerts.Enabled.Should().BeTrue();
         target.Alerts.AlertRamUsage.Should().BeTrue();
         target.Alerts.RamUsageMaxPct.Should().Be(88f);
+    }
+
+    [Fact]
+    public void ApplyTo_WhenBothTrayAndOverlayDisabled_EnforcesTrayEnabledGuardrail()
+    {
+        var target = new AppSettings();
+        var dto = new SettingsDto
+        {
+            ShowSystemTrayIcon = false,
+            Overlay = new OverlayDto { Visible = false }
+        };
+
+        SettingsDtoMapping.ApplyTo(target, dto);
+
+        target.ShowSystemTrayIcon.Should().BeTrue("at least one entry point must remain enabled to prevent lockout");
+        target.Overlay.Visible.Should().BeFalse();
+    }
+
+    [Fact]
+    public void SettingsDtoMapping_PlacementMapping_CenterAndCustom_MapsCorrectly()
+    {
+        var src1 = new AppSettings();
+        src1.Overlay.Placement = "center";
+        var dto1 = SettingsDtoMapping.ToDto(src1);
+        dto1.Overlay.Position.Should().Be("left");
+
+        var src2 = new AppSettings();
+        src2.Overlay.Placement = "unknown";
+        var dto2 = SettingsDtoMapping.ToDto(src2);
+        dto2.Overlay.Position.Should().Be("right");
     }
 }

@@ -1,13 +1,14 @@
 // ── DTO types mirroring C# SettingsDto.cs
 export interface SettingsDto {
     runAtStartup: boolean;
-    startMinimized: boolean;
-    minimizeToTray: boolean;
+    showSystemTrayIcon: boolean;
     enableFileLogging: boolean;
+    systemLogLevel: 'Off' | 'Error' | 'Warning' | 'Info' | 'Debug';
     monitoring: MonitoringDto;
     overlay: OverlayDto;
     alerts: AlertsDto;
     netUsage: NetUsageDto;
+    updates: UpdateConfigDto;
     windowTheme: string;
 }
 
@@ -66,6 +67,8 @@ export interface AlertsDto {
     alertCpuPower: boolean;
     alertGpuFreq: boolean;
     alertGpuPower: boolean;
+    alertNetDaily: boolean;
+    alertNetMonthly: boolean;
     cpuUsageMaxPct: number;
     ramUsageMaxPct: number;
     gpuUsageMaxPct: number;
@@ -77,6 +80,8 @@ export interface AlertsDto {
     cpuPowerMaxW: number;
     gpuFreqMinMhz: number;
     gpuPowerMaxW: number;
+    netDailyMaxGb: number;
+    netMonthlyMaxGb: number;
     showToastNotif: boolean;
     flashOverlay: boolean;
     cooldownSecs: number;
@@ -85,6 +90,22 @@ export interface AlertsDto {
 
 export interface NetUsageDto {
     enabled: boolean;
+}
+
+export interface UpdateConfigDto {
+    checkFrequency: string;
+    includePrereleases: boolean;
+}
+
+export interface UpdateCheckResultDto {
+    isUpdateAvailable: boolean;
+    isPrerelease: boolean;
+    currentVersion: string;
+    latestVersion: string;
+    releaseUrl: string;
+    releaseNotes: string;
+    publishedAt: string;
+    errorMessage?: string | null;
 }
 
 // ── SystemInfo ────────────────────────────────────────────
@@ -138,6 +159,12 @@ export interface SystemInfo {
     ramType: string;
     nics: string[];
     systemType: string;
+    deploymentMode?: string;
+    targetRuntime?: string;
+    exeDir?: string;
+    dataDir?: string;
+    logsDir?: string;
+    isStandardMode?: boolean;
     batteryManufacturer?: string;
     batteryDeviceName?: string;
     batteryDesignCapacity?: string;
@@ -171,6 +198,14 @@ export interface DatImportResult {
     error?: string;
 }
 
+export interface WindowsUsageImportResultPayload {
+    success: boolean;
+    daysImported: number;
+    downBytes: number;
+    upBytes: number;
+    message?: string;
+}
+
 // ── Theme types ───────────────────────────────────────────
 export interface Theme {
     value: string;
@@ -189,6 +224,9 @@ export type BridgeMessageType =
     | "getHistoryData"
     | "getHistoryMonths"
     | "importDat"
+    | "importWindowsUsage"
+    | "checkForUpdates"
+    | "openFolder"
     | "openUrl";
 
 export type BridgeEventType =
@@ -200,7 +238,9 @@ export type BridgeEventType =
     | "trafficHistory"
     | "trafficMonths"
     | "trafficToday"
-    | "importDatResult";
+    | "importDatResult"
+    | "windowsUsageImportResult"
+    | "updateCheckResult";
 
 export interface BridgeMessage<T = unknown> {
     type: BridgeMessageType;

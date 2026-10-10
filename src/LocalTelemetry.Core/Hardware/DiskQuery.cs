@@ -1,6 +1,8 @@
-﻿using System.Management;
+using System.IO;
+using System.Management;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Microsoft.Win32.SafeHandles;
 
 namespace LocalTelemetry.Core.Hardware;
 
@@ -13,12 +15,18 @@ public record DiskInfo
     public string Vendor { get; init; } = string.Empty;
     /// <summary>Bus type label ("NVMe", "SATA", "SSD", "HDD", "USB", etc.).</summary>
     public string BusType { get; init; } = "DISK";
+    /// <summary>Media type label ("SSD", "HDD", etc.).</summary>
+    public string MediaType { get; init; } = string.Empty;
+    /// <summary>Display-friendly type string combining bus and media (e.g. "NVMe SSD", "SATA HDD").</summary>
+    public string DisplayType { get; init; } = string.Empty;
     /// <summary>Total capacity in bytes or null if unavailable.</summary>
     public long? SizeBytes { get; init; }
     /// <summary>Physical drive index (0-based).</summary>
     public int DiskIndex { get; init; }
     /// <summary>Whether this drive contains the boot/system partition.</summary>
     public bool IsBootDrive { get; init; }
+    /// <summary>Display-ready commercial capacity string (e.g. "1 TB", "512 GB").</summary>
+    public string FormattedSize => SizeBytes.HasValue ? DiskQuery.FormatCommercialCapacity(SizeBytes.Value) : string.Empty;
 }
 
 /// <summary>Queries physical disk information via WMI and IOCTL.</summary>
@@ -58,6 +66,67 @@ public static class DiskQuery
         return QueryAllDrives().FirstOrDefault();
     }
 
+    /// <summary>
+    /// Formats raw byte count into standard commercial drive capacity notation
+    /// (e.g. 500107862016 bytes -> "500 GB", 1000204886016 bytes -> "1 TB").
+    /// </summary>
+    public static string FormatCommercialCapacity(long bytes)
+    {
+        if (bytes <= 0) return string.Empty;
+
+        double gb = bytes / 1_000_000_000.0;
+
+        // Check common commercial GB stepping by closest distance.
+        // IDEMA drive capacities are within 0.1% of nominal rating; 2.5% tolerance safely
+        // distinguishes close steps (e.g. 120 vs 128, 240 vs 250 vs 256, 480 vs 500 vs 512).
+        int[] commonSteps = [16, 32, 64, 120, 128, 240, 250, 256, 480, 500, 512, 960];
+        var bestStep = commonSteps
+            .Select(step => (Step: step, Diff: Math.Abs(gb - step)))
+            .Where(x => x.Diff <= x.Step * 0.025)
+            .OrderBy(x => x.Diff)
+            .Select(x => (int?)x.Step)
+            .FirstOrDefault();
+
+        if (bestStep.HasValue)
+        {
+            return $"{bestStep.Value} GB";
+        }
+
+        if (gb >= 980.0)
+        {
+            double tb = gb / 1000.0;
+
+            // Common consumer, NAS/enterprise HDD & SSD stepping in TB
+            double[] commonTbSteps =
+            [
+                1.0, 1.5, 1.92, 2.0, 3.0, 3.84, 4.0, 5.0, 6.0, 7.68, 8.0, 10.0,
+                12.0, 14.0, 15.36, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0, 30.0, 30.72, 32.0, 61.44
+            ];
+
+            var bestTbStep = commonTbSteps
+                .Select(step => (Step: step, Diff: Math.Abs(tb - step)))
+                .Where(x => x.Diff <= x.Step * 0.02)
+                .OrderBy(x => x.Diff)
+                .Select(x => (double?)x.Step)
+                .FirstOrDefault();
+
+            if (bestTbStep.HasValue)
+            {
+                double stepVal = bestTbStep.Value;
+                if (Math.Abs(stepVal - Math.Round(stepVal)) < 0.001)
+                    return $"{Math.Round(stepVal):F0} TB";
+                return $"{stepVal} TB";
+            }
+
+            double roundedTb = Math.Round(tb);
+            if (Math.Abs(tb - roundedTb) < 0.05)
+                return $"{roundedTb:F0} TB";
+            return $"{tb:F1} TB";
+        }
+
+        return $"{Math.Round(gb):F0} GB";
+    }
+
     /// <summary>Queries bus type via IOCTL_STORAGE_QUERY_PROPERTY (authoritative).</summary>
     private static string QueryBusTypeIoctl(int diskIndex)
     {
@@ -94,7 +163,7 @@ public static class DiskQuery
             }
             catch (Exception ex)
             {
-                Diagnostics.Log.Error($"DiskQuery: BytesToStruct failed for disk {diskIndex}: {ex.Message}");
+                Diagnostics.Log.Error(ex, $"Failed to parse storage adapter descriptor for disk {diskIndex}");
                 return cache[diskIndex] = string.Empty;
             }
 
@@ -145,6 +214,8 @@ public static class DiskQuery
         return "";
     }
 
+    private const string SkHynixVendor = "SK Hynix";
+
     private static readonly (string Keyword, string Vendor)[] VendorPatterns =
     [
         ("Samsung", "Samsung"),
@@ -168,9 +239,9 @@ public static class DiskQuery
         ("Intel", "Intel"),
         ("PNY", "PNY"),
         ("Corsair", "Corsair"),
-        ("SK Hynix", "SK Hynix"),
-        ("SKHynix", "SK Hynix"),
-        ("HFS", "SK Hynix"),
+        ("SK Hynix", SkHynixVendor),
+        ("SKHynix", SkHynixVendor),
+        ("HFS", SkHynixVendor),
     ];
 
     /// <summary>Extracts vendor name from a disk model string by matching known patterns.</summary>
@@ -189,11 +260,12 @@ public static class DiskQuery
     {
         var results = new List<DiskInfo>();
         int? bootIdx = GetBootDriveIndex();
+        var msftMediaTypes = QueryMsftMediaTypes();
 
         try
         {
             using var searcher = new ManagementObjectSearcher(
-                "SELECT Index, Model, InterfaceType, PNPDeviceID, Size FROM Win32_DiskDrive");
+                "SELECT Index, Model, InterfaceType, PNPDeviceID, Size, MediaType FROM Win32_DiskDrive");
             using var coll = searcher.Get();
 
             foreach (ManagementBaseObject mo in coll)
@@ -202,26 +274,14 @@ public static class DiskQuery
                 string model = mo["Model"]?.ToString()?.Trim() ?? "";
                 string iface = mo["InterfaceType"]?.ToString()?.Trim() ?? "";
                 string pnpId = mo["PNPDeviceID"]?.ToString() ?? "";
+                string win32Media = mo["MediaType"]?.ToString() ?? "";
                 ulong? size = mo["Size"] as ulong?;
 
-                // 1) Authoritative IOCTL
-                string busType = QueryBusTypeIoctl(idx);
+                if (IsExcludedDrive(iface, pnpId, win32Media, idx, out string busType))
+                    continue;
 
-                // 2) PNPDeviceID keyword match
-                if (string.IsNullOrEmpty(busType))
-                    busType = BusTypeFromPnpId(pnpId);
-
-                // 3) WMI InterfaceType (least reliable)
-                if (string.IsNullOrEmpty(busType))
-                {
-                    busType = iface switch
-                    {
-                        "SCSI" => "SSD",
-                        "IDE" => "SATA",
-                        _ => iface.Length > 0 ? iface : "DISK",
-                    };
-                }
-
+                string mediaType = DetermineMediaType(msftMediaTypes, idx, busType, model);
+                string displayType = DetermineDisplayType(busType, mediaType);
                 bool isBoot = bootIdx.HasValue && bootIdx.Value == idx;
                 string vendor = ExtractVendorFromModel(model);
 
@@ -231,15 +291,121 @@ public static class DiskQuery
                     Model = model,
                     Vendor = vendor,
                     BusType = busType,
+                    MediaType = mediaType,
+                    DisplayType = displayType,
                     SizeBytes = (long?)size,
                     IsBootDrive = isBoot,
                 });
             }
         }
-        catch (Exception ex) { Diagnostics.Log.Error($"DiskQuery: WMI Win32_DiskDrive failed: {ex.Message}"); }
+        catch (Exception ex) { Diagnostics.Log.Error(ex, "Failed to query physical drives"); }
 
         return results.OrderBy(d => d.DiskIndex).ToList();
     }
+
+    private static Dictionary<string, string> QueryMsftMediaTypes()
+    {
+        var msftMediaTypes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            using var searcher = new ManagementObjectSearcher(
+                @"root\Microsoft\Windows\Storage",
+                "SELECT DeviceId, MediaType, FriendlyName FROM MSFT_PhysicalDisk");
+            using var coll = searcher.Get();
+            foreach (ManagementBaseObject mo in coll)
+            {
+                string devId = mo["DeviceId"]?.ToString() ?? "";
+                int mt = mo["MediaType"] switch
+                {
+                    int i => i,
+                    ushort u => (int)u,
+                    _ => 0
+                };
+                string mType = mt switch
+                {
+                    3 => "HDD",
+                    4 => "SSD",
+                    5 => "SCM",
+                    _ => ""
+                };
+                if (!string.IsNullOrEmpty(devId) && !string.IsNullOrEmpty(mType))
+                    msftMediaTypes[devId] = mType;
+            }
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Debug(ex, "WMI query for MSFT_PhysicalDisk failed; falling back to heuristic detection");
+        }
+        return msftMediaTypes;
+    }
+
+    private static bool IsExcludedDrive(string iface, string pnpId, string win32Media, int idx, out string resolvedBusType)
+    {
+        resolvedBusType = "";
+        if (iface.Equals("USB", StringComparison.OrdinalIgnoreCase) ||
+            pnpId.Contains("USBSTOR", StringComparison.OrdinalIgnoreCase) ||
+            pnpId.Contains("UASP", StringComparison.OrdinalIgnoreCase) ||
+            win32Media.Contains("Removable", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        resolvedBusType = QueryBusTypeIoctl(idx);
+        if (resolvedBusType.Equals("USB", StringComparison.OrdinalIgnoreCase) ||
+            resolvedBusType.Equals("Virtual", StringComparison.OrdinalIgnoreCase) ||
+            resolvedBusType.Equals("SD", StringComparison.OrdinalIgnoreCase) ||
+            resolvedBusType.Equals("MMC", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (string.IsNullOrEmpty(resolvedBusType))
+            resolvedBusType = BusTypeFromPnpId(pnpId);
+
+        if (string.IsNullOrEmpty(resolvedBusType))
+        {
+            resolvedBusType = iface switch
+            {
+                "SCSI" => "SSD",
+                "IDE" => "SATA",
+                _ => iface.Length > 0 ? iface : "DISK",
+            };
+        }
+
+        return false;
+    }
+
+    private static string DetermineMediaType(Dictionary<string, string> msftMediaTypes, int idx, string busType, string model)
+    {
+        if (msftMediaTypes.TryGetValue(idx.ToString(), out string? knownMedia))
+            return knownMedia;
+
+        if (busType.Equals("NVMe", StringComparison.OrdinalIgnoreCase) ||
+            model.Contains("SSD", StringComparison.OrdinalIgnoreCase) ||
+            model.Contains("NVMe", StringComparison.OrdinalIgnoreCase))
+        {
+            return "SSD";
+        }
+
+        if (model.Contains("HDD", StringComparison.OrdinalIgnoreCase) ||
+            model.Contains("Harddisk", StringComparison.OrdinalIgnoreCase) ||
+            (model.StartsWith("ST", StringComparison.OrdinalIgnoreCase) && model.Length > 4 && char.IsDigit(model[2])))
+        {
+            return "HDD";
+        }
+
+        return "SSD";
+    }
+
+    private static string DetermineDisplayType(string busType, string mediaType) => busType switch
+    {
+        "NVMe" => "NVMe SSD",
+        "SATA" when mediaType == "HDD" => "SATA HDD",
+        "SATA" when mediaType == "SSD" => "SATA SSD",
+        _ when mediaType == "HDD" => "HDD",
+        _ when mediaType == "SSD" => "SSD",
+        _ => busType
+    };
 
     // Marshal helpers
     private static byte[] StructToBytes<T>(T obj) where T : struct
@@ -309,7 +475,7 @@ public static class DiskQuery
                 IntPtr.Zero, NativeMethods.OPEN_EXISTING, 0, IntPtr.Zero);
             if (hVolume is null || hVolume.IsInvalid)
             {
-                Diagnostics.Log.Error("GetBootDriveIndex CreateFile failed");
+                Diagnostics.Log.Error("Could not open system volume to determine boot drive index");
                 return null;
             }
 
@@ -322,10 +488,10 @@ public static class DiskQuery
             }
             else
             {
-                Diagnostics.Log.Error("GetBootDriveIndex IOCTL failed");
+                Diagnostics.Log.Error("Failed to query volume disk extents via IOCTL");
             }
         }
-        catch (Exception ex) { Diagnostics.Log.Error($"GetBootDriveIndex exception: {ex.Message}"); }
+        catch (Exception ex) { Diagnostics.Log.Error(ex, "Failed to determine boot drive index via volume extents"); }
 
         try
         {
@@ -338,7 +504,7 @@ public static class DiskQuery
                 if (di is int idx) return idx;
             }
         }
-        catch (Exception ex) { Diagnostics.Log.Error($"DiskQuery: GetBootDriveIndex WMI exception: {ex.Message}"); }
+        catch (Exception ex) { Diagnostics.Log.Error(ex, "Failed to determine boot drive index via WMI disk partition"); }
         return null;
     }
 }
