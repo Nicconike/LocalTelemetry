@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [1.0.0-rc.1] - 11-10-2026
+
+### Features
+
+- implement hardware telemetry engine, taskbar overlay, settings UI, and packaging (app) ([08c0d05](https://github.com/Nicconike/LocalTelemetry/commit/08c0d05f73416599159b935b062b92a84783d419))
+
+### Bug Fixes
+
+- harden release pipeline, sonarlint alerts, and project automation (ci) ([54125e0](https://github.com/Nicconike/LocalTelemetry/commit/54125e0973920aa96e3abc4586a1ea1a4009473e))
+- display dashes for offline network speeds and resolve CI workflows (core) ([313daec](https://github.com/Nicconike/LocalTelemetry/commit/313daec3df5c3e3519d404dedd7d7f1da52d76da))
+- resolve scorecard alerts, codeql false positives, and workflow failures ([2e8288b](https://github.com/Nicconike/LocalTelemetry/commit/2e8288b9d8a984f78ef4d9cf41aed72ac909ce05))
+- harden release pipeline, unblock CI dependencies, and fix docs favicon ([85011b1](https://github.com/Nicconike/LocalTelemetry/commit/85011b131faa88756318adb07624ac1dae85b3b3))
+
+### Build Systems
+
+- bump the actions-deps group across 1 directory with 4 updates (#5) (ci) ([34f1486](https://github.com/Nicconike/LocalTelemetry/commit/34f1486216f18b463f3dc88de5dff9257b8fedbf))
+
 ## [1.0.0-beta.4] - 08-08-2026
 
 ### Bug Fixes
@@ -63,6 +80,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - bump happy-dom from 18.0.1 to 20.11.1 in /tests/LocalTelemetry.App.Tests/Settings/wwwroot in the npm_and_yarn group across 1 directory (#2) (deps-dev) ([7fb2104](https://github.com/Nicconike/LocalTelemetry/commit/7fb2104cf3f662d8de4539ca1bc54dacedadabd4))
 
+[1.0.0-rc.1]: https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0-beta.4...v1.0.0-rc.1
 [1.0.0-beta.4]: https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0-beta.3...v1.0.0-beta.4
 [1.0.0-beta.3]: https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0-beta.2...v1.0.0-beta.3
 [1.0.0-beta.2]: https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0-beta.1...v1.0.0-beta.2
