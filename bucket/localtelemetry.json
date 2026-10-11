@@ -1,29 +1,29 @@
 {
-    "version": "1.0.0-beta.4",
-    "description": "Real-time hardware telemetry displayed on the Windows taskbar.",
-    "homepage": "https://github.com/Nicconike/LocalTelemetry",
-    "license": "GPL-3.0-or-later",
-    "architecture": {
-        "64bit": {
-            "url": "https://github.com/Nicconike/LocalTelemetry/releases/download/v1.0.0-beta.4/LocalTelemetry-win-x64.zip",
-            "hash": "920f7da7849d36f28f1d59ee8f36e371818ef932a37377758e6eb5a24ef40fcb"
-        }
-    },
-    "bin": "LocalTelemetry.exe",
-    "shortcuts": [
-        [
-            "LocalTelemetry.exe",
-            "LocalTelemetry"
-        ]
-    ],
-    "checkver": {
-        "github": "https://github.com/Nicconike/LocalTelemetry"
-    },
-    "autoupdate": {
-        "architecture": {
-            "64bit": {
-                "url": "https://github.com/Nicconike/LocalTelemetry/releases/download/v$version/LocalTelemetry-win-x64.zip"
-            }
-        }
+  "version": "1.0.0-rc.1",
+  "description": "Real-time hardware telemetry displayed on the Windows taskbar.",
+  "homepage": "https://github.com/Nicconike/LocalTelemetry",
+  "license": "GPL-3.0-or-later",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/Nicconike/LocalTelemetry/releases/download/v1.0.0-rc.1/LocalTelemetry-win-x64.zip",
+      "hash": "70f10e1f250863db7c214b1660df556420fe84107e7a792b363422ba92c12d52"
     }
+  },
+  "bin": "LocalTelemetry.exe",
+  "shortcuts": [
+    [
+      "LocalTelemetry.exe",
+      "LocalTelemetry"
+    ]
+  ],
+  "checkver": {
+    "github": "https://github.com/Nicconike/LocalTelemetry"
+  },
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/Nicconike/LocalTelemetry/releases/download/v$version/LocalTelemetry-win-x64.zip"
+      }
+    }
+  }
 }
