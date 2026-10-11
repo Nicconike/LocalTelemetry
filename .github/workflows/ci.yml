@@ -11,7 +11,7 @@ permissions:
 
 jobs:
     commitlint:
-        name: Validate Commit Messages
+        name: Commit Lint
         runs-on: ubuntu-latest
         steps:
             - name: Checkout Repository
@@ -19,26 +19,26 @@ jobs:
               with:
                   fetch-depth: 0
 
-            - name: Install Commitlint Dependencies
+            - name: Install Dependencies
               run: npm install --no-save --no-package-lock --ignore-scripts commitlint-plugin-function-rules@4.0.1 @commitlint/config-conventional@19.8.0
 
-            - name: Verify Conventional Commits
+            - name: Verify Commits
               uses: wagoid/commitlint-github-action@b948419dd99f3fd78a6548d48f94e3df7f6bf3ed # v6.2.1
               with:
                   configFile: commitlint.config.mjs
 
     test-frontend:
-        name: Frontend Unit Tests
+        name: Frontend Tests
         needs: [commitlint]
         runs-on: ubuntu-latest
         steps:
             - name: Checkout Repository
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-            - name: Setup Bun Runtime
+            - name: Setup Bun
               uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
 
-            - name: Execute Vitest Suite
+            - name: Run Vitest
               run: |
                   bun install --frozen-lockfile --ignore-scripts
                   bun run test --reporter=default --reporter=junit --outputFile=test-report.junit.xml
@@ -53,7 +53,7 @@ jobs:
                   retention-days: 14
 
     test-windows:
-        name: Build & Test .NET Solution
+        name: .NET Tests
         needs: [commitlint]
         runs-on: windows-latest
         env:
@@ -65,43 +65,43 @@ jobs:
               with:
                   fetch-depth: 0
 
-            - name: Setup Bun Runtime
+            - name: Setup Bun
               uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
 
-            - name: Build Svelte Frontend Assets
+            - name: Build Frontend
               run: |
                   bun install --frozen-lockfile --ignore-scripts
                   bun run build
               working-directory: src/LocalTelemetry.App/Settings/wwwroot
 
-            - name: Cache NuGet Packages
+            - name: Cache NuGet
               uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
               with:
                   path: ~/.nuget/packages
                   key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
                   restore-keys: ${{ runner.os }}-nuget-
 
-            - name: Setup .NET 10 SDK
+            - name: Setup .NET
               uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
               with:
                   dotnet-version: 10.0.x
 
-            - name: Verify C# Code Formatting
+            - name: Format Check
               run: dotnet format --verify-no-changes
 
-            - name: Build .NET Solution
+            - name: Build Solution
               run: dotnet build --configuration Debug
 
-            - name: Run Core Unit Tests with Coverage
+            - name: Test Core
               run: dotnet test tests/LocalTelemetry.Core.Tests/LocalTelemetry.Core.Tests.csproj --configuration Debug --no-build --verbosity minimal --collect:"XPlat Code Coverage" --logger "junit;LogFileName=junit.xml" --results-directory TestResults/core -p:Platform=x64
 
-            - name: Run Notifier Unit Tests with Coverage
+            - name: Test Notifier
               run: dotnet test tests/LocalTelemetry.Notifier.Tests/LocalTelemetry.Notifier.Tests.csproj --configuration Debug --no-build --verbosity minimal --collect:"XPlat Code Coverage" --logger "junit;LogFileName=junit.xml" --results-directory TestResults/notifier -p:Platform=x64
 
-            - name: Run App Unit Tests with Coverage
+            - name: Test App
               run: dotnet test tests/LocalTelemetry.App.Tests/LocalTelemetry.App.Tests.csproj --configuration Debug --no-build --verbosity minimal --collect:"XPlat Code Coverage" --logger "junit;LogFileName=junit.xml" --results-directory TestResults/app -p:Platform=x64
 
-            - name: Upload Core Coverage to Codecov
+            - name: Upload Core Coverage
               uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
               with:
                   token: ${{ secrets.CODECOV_TOKEN }}
@@ -110,7 +110,7 @@ jobs:
                   flags: core
                   disable_search: true
 
-            - name: Upload Notifier Coverage to Codecov
+            - name: Upload Notifier Coverage
               uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
               with:
                   token: ${{ secrets.CODECOV_TOKEN }}
@@ -119,7 +119,7 @@ jobs:
                   flags: notifier
                   disable_search: true
 
-            - name: Upload App Coverage to Codecov
+            - name: Upload App Coverage
               uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
               with:
                   token: ${{ secrets.CODECOV_TOKEN }}
@@ -128,7 +128,7 @@ jobs:
                   flags: app
                   disable_search: true
 
-            - name: Upload Test Results to Codecov
+            - name: Upload Test Results
               if: ${{ !cancelled() }}
               uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
               with:
@@ -140,7 +140,7 @@ jobs:
                       TestResults/notifier/junit.xml
                       TestResults/app/junit.xml
 
-            - name: Upload Test Results & Coverage Artifacts
+            - name: Upload Artifacts
               if: always()
               uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:

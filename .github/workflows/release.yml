@@ -15,7 +15,7 @@ permissions:
 
 jobs:
     release:
-        name: Build, Package & Publish Release
+        name: Release
         runs-on: windows-latest
         permissions:
             contents: write
@@ -25,7 +25,7 @@ jobs:
             DOTNET_CLI_TELEMETRY_OPTOUT: "1"
             DOTNET_NOLOGO: "true"
         steps:
-            - name: Generate GitHub App Token
+            - name: Generate App Token
               id: app_token
               uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
               with:
@@ -41,7 +41,7 @@ jobs:
             - name: Fetch All Tags
               run: git fetch --tags --force
 
-            - name: Resolve Next Release Tag
+            - name: Resolve Tag
               id: resolve_tag
               shell: bash
               run: |
@@ -58,31 +58,31 @@ jobs:
                   echo "new_version=$VER" >> "$GITHUB_OUTPUT"
                   echo "Resolved release tag: $TAG ($VER)"
 
-            - name: Setup Bun Runtime
+            - name: Setup Bun
               uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
 
-            - name: Build Svelte Frontend Assets
+            - name: Build Frontend
               run: |
                   bun install --frozen-lockfile --ignore-scripts
                   bun run build
               working-directory: src/LocalTelemetry.App/Settings/wwwroot
 
-            - name: Setup .NET 10 SDK
+            - name: Setup .NET
               uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
               with:
                   dotnet-version: 10.0.x
 
-            - name: Build .NET Executable
+            - name: Build App
               run: dotnet publish src/LocalTelemetry.App/LocalTelemetry.App.csproj -c Release -r win-x64 --no-self-contained -p:PublishSingleFile=true -p:MinVerVersionOverride=${{ steps.resolve_tag.outputs.new_version }} -o ./publish
 
-            - name: Download PawnIO Driver Installer
+            - name: Download PawnIO
               shell: pwsh
               run: |
                   $url = "https://github.com/namazso/PawnIO.Setup/releases/latest/download/PawnIO_setup.exe"
                   Invoke-WebRequest -Uri $url -OutFile "./publish/PawnIO_setup.exe"
                   Write-Host "Downloaded PawnIO_setup.exe into publish directory."
 
-            - name: Compile Inno Setup Windows Installer
+            - name: Build Installer
               shell: pwsh
               run: |
                   $possiblePaths = @(
@@ -117,7 +117,7 @@ jobs:
                   if ($numVer.Split('.').Count -eq 3) { $numVer = "$numVer.0" }
                   & $iscc /DAppVersion=$ver /DAppVersionInfoVersion=$numVer setup.iss
 
-            - name: Package Portable Archive & SHA-256 Checksums
+            - name: Package Archive & Checksums
               shell: pwsh
               run: |
                   Compress-Archive -Path ./publish/* -DestinationPath ./LocalTelemetry-win-x64.zip
@@ -128,7 +128,7 @@ jobs:
                   "SETUP_HASH=$setupHash" | Out-File -FilePath $env:GITHUB_ENV -Append
                   "ZIP_HASH=$zipHash" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-            - name: Generate Build Artifact Attestations
+            - name: Generate Attestations
               uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
               with:
                   subject-path: |
@@ -141,12 +141,7 @@ jobs:
               with:
                   tool: git-cliff
 
-            - name: Generate Release Notes
-              env:
-                  GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
-              run: git-cliff --config cliff.toml --latest --strip header -o release-body.md
-
-            - name: Import GPG Private Key
+            - name: Import GPG Key
               id: import_gpg
               uses: crazy-max/ghaction-import-gpg@2dc316deee8e90f13e1a351ab510b4d5bc0c82cd # v7.0.0
               with:
@@ -156,7 +151,7 @@ jobs:
                   git_tag_gpgsign: true
                   trust_level: 5
 
-            - name: Create & Push GPG-Signed Release Tag
+            - name: Create Signed Tag
               shell: pwsh
               env:
                   GH_TOKEN: ${{ steps.app_token.outputs.token }}
@@ -173,12 +168,17 @@ jobs:
                       Write-Host "Tag $tag already exists on origin; skipping creation"
                   }
 
-            - name: Update & Commit CHANGELOG
+            - name: Generate Release Notes
+              env:
+                  GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
+              run: git-cliff --config cliff.toml --tag "${{ steps.resolve_tag.outputs.new_tag }}" --latest --strip header -o release-body.md
+
+            - name: Commit Changelog
               shell: pwsh
               env:
                   GH_TOKEN: ${{ steps.app_token.outputs.token }}
               run: |
-                  git-cliff --config cliff.toml -o CHANGELOG.md
+                  git-cliff --config cliff.toml --tag "${{ steps.resolve_tag.outputs.new_tag }}" -o CHANGELOG.md
                   $changedFiles = git diff --name-only -- CHANGELOG.md
                   if ($changedFiles) {
                       $content = [Convert]::ToBase64String([IO.File]::ReadAllBytes("$pwd/CHANGELOG.md"))
@@ -189,7 +189,7 @@ jobs:
                           sha = $sha
                           branch = "master"
                       } | ConvertTo-Json
-                      $body | gh api --method PUT "repos/${{ github.repository }}/contents/CHANGELOG.md" --input -
+                      $body | ConvertTo-Json | gh api --method PUT "repos/${{ github.repository }}/contents/CHANGELOG.md" --input - | Out-Null
                       if ($LASTEXITCODE -ne 0) { throw "Failed to commit CHANGELOG.md via GitHub API." }
                       Write-Host "CHANGELOG successfully updated and committed"
                   } else {
@@ -209,7 +209,7 @@ jobs:
                       ./LocalTelemetry-win-x64.zip
                       ./checksums.txt
 
-            - name: Update & Commit Scoop Manifest
+            - name: Commit Scoop Manifest
               shell: pwsh
               env:
                   GH_TOKEN: ${{ steps.app_token.outputs.token }}
@@ -238,11 +238,11 @@ jobs:
                       sha = $sha
                       branch = "master"
                   }
-                  $body | ConvertTo-Json | gh api --method PUT "repos/${{ github.repository }}/contents/$manifestFile" --input -
+                  $body | ConvertTo-Json | gh api --method PUT "repos/${{ github.repository }}/contents/$manifestFile" --input - | Out-Null
                   if ($LASTEXITCODE -ne 0) { throw "Failed to commit Scoop manifest via GitHub API." }
                   Write-Host "Scoop manifest successfully updated and committed"
 
-            - name: Build & Publish Chocolatey Package
+            - name: Publish Chocolatey Package
               shell: pwsh
               env:
                   CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
@@ -273,7 +273,7 @@ jobs:
                       $nupkg = Get-ChildItem -Path "packaging/chocolatey/*.nupkg" | Select-Object -First 1
                       $pushed = $false
                       for ($attempt = 1; $attempt -le 3; $attempt++) {
-                          Write-Host "Attempt $attempt: Pushing $nupkg to Chocolatey..."
+                          Write-Host "Attempt ${attempt}: Pushing $nupkg to Chocolatey..."
                           $output = & choco push $nupkg.FullName --api-key $env:CHOCOLATEY_API_KEY --source https://push.chocolatey.org/ --execution-timeout 600 2>&1
                           $output | ForEach-Object { Write-Host $_ }
                           if ($LASTEXITCODE -eq 0 -or ($output -match "Successfully published Chocolatey package") -or ($output -match "already exists")) {

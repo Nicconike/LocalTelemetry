@@ -2,4 +2,5 @@
 // Each entry maps a dropdown label to the site path for that docs version.
 export const versions = [
     { text: 'Latest', link: '/' },
+    { text: 'v1.0.0-rc.1', link: '/v1.0.0-rc.1/' },
 ];

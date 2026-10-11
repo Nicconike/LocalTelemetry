@@ -16,7 +16,7 @@ permissions:
 jobs:
     # Build the VitePress doc site
     build:
-        name: Build VitePress Site
+        name: Build Docs
         runs-on: ubuntu-latest
         permissions:
             contents: read
@@ -30,14 +30,14 @@ jobs:
               id: pages
               uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
 
-            - name: Setup Bun Runtime
+            - name: Setup Bun
               uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
 
-            - name: Install Doc Dependencies
+            - name: Install Dependencies
               run: bun install --frozen-lockfile --ignore-scripts
               working-directory: docs
 
-            - name: Build VitePress Documentation
+            - name: Build Docs
               run: bun run docs:build
               working-directory: docs
               env:
@@ -50,7 +50,7 @@ jobs:
                   path: docs/.vitepress/dist
 
     deploy:
-        name: Deploy to GitHub Pages
+        name: Deploy Pages
         runs-on: ubuntu-latest
         needs: build
         permissions:
@@ -60,6 +60,6 @@ jobs:
             name: github-pages
             url: ${{ steps.deployment.outputs.page_url }}
         steps:
-            - name: Deploy to GitHub Pages
+            - name: Deploy Pages
               id: deployment
               uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0

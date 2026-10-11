@@ -307,11 +307,7 @@ public class WindowHelpersTests
     public void IsStartupEnabled_WhenHkcuRunKeySet_ReturnsTrue()
     {
         WindowHelpers.StartupQueryExitCode = () => 1; // Task missing
-        const string runKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
-        using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(runKeyPath, writable: true))
-        {
-            key?.SetValue("LocalTelemetry", "test_path.exe");
-        }
+        WindowHelpers.RunKeyQuery = app => app == "LocalTelemetry";
 
         try
         {
@@ -320,8 +316,7 @@ public class WindowHelpersTests
         finally
         {
             WindowHelpers.StartupQueryExitCode = null;
-            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(runKeyPath, writable: true);
-            key?.DeleteValue("LocalTelemetry", throwOnMissingValue: false);
+            WindowHelpers.RunKeyQuery = null;
         }
     }
 }
