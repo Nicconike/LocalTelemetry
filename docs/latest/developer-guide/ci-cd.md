@@ -54,7 +54,7 @@ flowchart TD
         subgraph Stage1["Stage 1: prepare-release"]
             direction TB
             TagGen{{"Semantic Version Resolution<br/>Calculates SemVer & Pre-release Tags"}}
-            ChangelogGen{{"Git-Cliff Changelog Engine<br/>Updates CHANGELOG.md via REST API"}}
+            ChangelogGen{{"Semantic Release Engine<br/>Updates CHANGELOG.md & creates tag"}}
         end
 
         subgraph Stage2["Stage 2: build-release"]
@@ -123,8 +123,8 @@ The release pipeline is defined in [`.github/workflows/release.yml`](https://git
 
 1. Evaluates Git tags and commit messages to resolve the next semantic version.
 2. Identifies pre-release channels dynamically: if the version string contains `rc`, `beta`, or `alpha`, the release is flagged as a pre-release.
-3. Generates release notes with **git-cliff** (`cliff.toml`).
-4. Updates `CHANGELOG.md` and commits the changes using the GitHub REST API (`gh api`) with a `[skip ci]` token.
+3. Generates release notes and updates `CHANGELOG.md` with **semantic-release**.
+4. Creates the annotated Git release tag.
 
 ### Stage 2: `build-release`
 

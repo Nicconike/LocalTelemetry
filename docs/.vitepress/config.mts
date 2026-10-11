@@ -203,8 +203,16 @@ export default withMermaid(
 
             nav: [
                 { text: 'Home', link: '/' },
-                { text: 'User Guide', link: '/user-guide/' },
-                { text: 'Developer Guide', link: '/developer-guide/' },
+                {
+                    text: 'User Guide',
+                    link: '/user-guide/',
+                    activeMatch: '^/(?:v\\d[^/]+/)?user-guide'
+                },
+                {
+                    text: 'Developer Guide',
+                    link: '/developer-guide/',
+                    activeMatch: '^/(?:v\\d[^/]+/)?developer-guide'
+                },
                 {
                     text: 'Latest',
                     items: [

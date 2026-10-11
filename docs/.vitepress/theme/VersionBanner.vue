@@ -15,7 +15,7 @@
             </div>
             <div class="version-banner-actions">
                 <a :href="latestUrl" class="version-banner-btn">
-                    Switch to Latest Documentation
+                    Switch to Latest Docs
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M5 12h14" />
@@ -38,6 +38,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useRoute, withBase } from 'vitepress';
+import { latestReleaseTag } from '../versions.mjs';
 
 const route = useRoute();
 const isDismissed = ref(false);
@@ -45,7 +46,7 @@ const isDismissed = ref(false);
 const versionInfo = computed(() => {
     const path = route.path || '';
     // Match e.g. /v1.0.0/... or /LocalTelemetry/v1.0.0/...
-    const match = path.match(/(?:^|\/)v([0-9][\w.-]*)(?:\/(.*))?$/);
+    const match = path.match(/(?:^|\/)v(\d[\w.-]*)(?:\/(.*))?$/);
     if (!match) return null;
 
     const version = match[1];
@@ -60,7 +61,12 @@ const versionInfo = computed(() => {
     };
 });
 
-const isOutdated = computed(() => Boolean(versionInfo.value));
+// A release is only outdated if a newer release tag exists
+const isOutdated = computed(() => {
+    if (!versionInfo.value) return false;
+    if (!latestReleaseTag) return false;
+    return versionInfo.value.tag !== latestReleaseTag;
+});
 const versionTag = computed(() => versionInfo.value?.tag || '');
 
 const latestUrl = computed(() => {
@@ -158,7 +164,7 @@ function dismiss() {
 }
 
 .version-banner-btn:hover {
-    background-color: #d97706;
+    background-color: #9a3412;
     color: #ffffff !important;
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);

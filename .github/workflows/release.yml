@@ -4,6 +4,7 @@ on:
     push:
         branches: [master]
         paths:
+            - ".github/release/**"
             - ".github/workflows/release.yml"
             - "setup.iss"
             - "src/LocalTelemetry.App/**"
@@ -41,105 +42,17 @@ jobs:
             - name: Fetch All Tags
               run: git fetch --tags --force
 
-            - name: Resolve Tag
-              id: resolve_tag
-              shell: bash
-              run: |
-                  LATEST_RC=$(git tag -l "v1.0.0-rc.*" | sort -V | tail -n 1)
-                  if [ -n "$LATEST_RC" ]; then
-                      RC_NUM=$(echo "$LATEST_RC" | sed -E 's/.*-rc\.([0-9]+)/\1/')
-                      NEXT_RC=$((RC_NUM + 1))
-                  else
-                      NEXT_RC=1
-                  fi
-                  VER="1.0.0-rc.${NEXT_RC}"
-                  TAG="v${VER}"
-                  echo "new_tag=$TAG" >> "$GITHUB_OUTPUT"
-                  echo "new_version=$VER" >> "$GITHUB_OUTPUT"
-                  echo "Resolved release tag: $TAG ($VER)"
-
             - name: Setup Bun
               uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-
-            - name: Build Frontend
-              run: |
-                  bun install --frozen-lockfile --ignore-scripts
-                  bun run build
-              working-directory: src/LocalTelemetry.App/Settings/wwwroot
 
             - name: Setup .NET
               uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
               with:
                   dotnet-version: 10.0.x
 
-            - name: Build App
-              run: dotnet publish src/LocalTelemetry.App/LocalTelemetry.App.csproj -c Release -r win-x64 --no-self-contained -p:PublishSingleFile=true -p:MinVerVersionOverride=${{ steps.resolve_tag.outputs.new_version }} -o ./publish
-
-            - name: Download PawnIO
-              shell: pwsh
-              run: |
-                  $url = "https://github.com/namazso/PawnIO.Setup/releases/latest/download/PawnIO_setup.exe"
-                  Invoke-WebRequest -Uri $url -OutFile "./publish/PawnIO_setup.exe"
-                  Write-Host "Downloaded PawnIO_setup.exe into publish directory."
-
-            - name: Build Installer
-              shell: pwsh
-              run: |
-                  $possiblePaths = @(
-                      "C:\Program Files\Inno Setup 7\ISCC.exe",
-                      "C:\Program Files (x86)\Inno Setup 7\ISCC.exe"
-                  )
-                  $iscc = "iscc"
-                  foreach ($path in $possiblePaths) {
-                      if (Test-Path $path) {
-                          $iscc = $path
-                          break
-                      }
-                  }
-                  if ($iscc -eq "iscc" -and -not (Get-Command iscc -ErrorAction SilentlyContinue)) {
-                      winget install --id JRSoftware.InnoSetup.7 --exact --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
-                      foreach ($path in $possiblePaths) {
-                          if (Test-Path $path) {
-                              $iscc = $path
-                              break
-                          }
-                      }
-                      if ($iscc -eq "iscc") {
-                          $found = Get-ChildItem -Path "C:\Program Files*" -Filter "ISCC.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-                          if ($found) { $iscc = $found.FullName }
-                      }
-                  }
-                  if (-not (Test-Path $iscc) -and -not (Get-Command $iscc -ErrorAction SilentlyContinue)) {
-                      throw "ISCC.exe not found after winget install"
-                  }
-                  $ver = "${{ steps.resolve_tag.outputs.new_version }}"
-                  $numVer = ($ver -split '-')[0]
-                  if ($numVer.Split('.').Count -eq 3) { $numVer = "$numVer.0" }
-                  & $iscc /DAppVersion=$ver /DAppVersionInfoVersion=$numVer setup.iss
-
-            - name: Package Archive & Checksums
-              shell: pwsh
-              run: |
-                  Compress-Archive -Path ./publish/* -DestinationPath ./LocalTelemetry-win-x64.zip
-                  $hashes = Get-FileHash -Path ./LocalTelemetrySetup.exe, ./LocalTelemetry-win-x64.zip -Algorithm SHA256
-                  $hashes | ForEach-Object { "{0}  {1}" -f $_.Hash, (Split-Path $_.Path -Leaf) } | Set-Content ./checksums.txt
-                  $setupHash = ($hashes | Where-Object { $_.Path -like "*LocalTelemetrySetup.exe" }).Hash
-                  $zipHash = ($hashes | Where-Object { $_.Path -like "*LocalTelemetry-win-x64.zip" }).Hash
-                  "SETUP_HASH=$setupHash" | Out-File -FilePath $env:GITHUB_ENV -Append
-                  "ZIP_HASH=$zipHash" | Out-File -FilePath $env:GITHUB_ENV -Append
-
-            - name: Generate Attestations
-              uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
-              with:
-                  subject-path: |
-                      ${{ github.workspace }}/LocalTelemetrySetup.exe
-                      ${{ github.workspace }}/LocalTelemetry-win-x64.zip
-                  show-summary: true
-
-            - name: Install git-cliff
-              uses: taiki-e/install-action@cb33e69fad06166ca28a42b2575e4dadabf62ee8 # v2
-              with:
-                  tool: git-cliff
+            - name: Install Release Dependencies
+              run: bun install --frozen-lockfile
+              working-directory: .github/release
 
             - name: Import GPG Key
               id: import_gpg
@@ -151,142 +64,22 @@ jobs:
                   git_tag_gpgsign: true
                   trust_level: 5
 
-            - name: Create Signed Tag
+            - name: Run Semantic Release
               shell: pwsh
-              env:
-                  GH_TOKEN: ${{ steps.app_token.outputs.token }}
-              run: |
-                  $tag = "${{ steps.resolve_tag.outputs.new_tag }}"
-                  $exists = git ls-remote --tags origin "refs/tags/$tag"
-                  if (-not $exists) {
-                      git config user.name "${{ steps.import_gpg.outputs.name }}"
-                      git config user.email "${{ steps.import_gpg.outputs.email }}"
-                      git tag -s -m "Release $tag" "$tag"
-                      $repo = "${{ github.repository }}"
-                      git push "https://x-access-token:${{ steps.app_token.outputs.token }}@github.com/$repo.git" "refs/tags/$tag"
-                  } else {
-                      Write-Host "Tag $tag already exists on origin; skipping creation"
-                  }
-
-            - name: Generate Release Notes
               env:
                   GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
-              run: git-cliff --config cliff.toml --tag "${{ steps.resolve_tag.outputs.new_tag }}" --latest --strip header -o release-body.md
-
-            - name: Commit Changelog
-              shell: pwsh
-              env:
                   GH_TOKEN: ${{ steps.app_token.outputs.token }}
-              run: |
-                  git-cliff --config cliff.toml --tag "${{ steps.resolve_tag.outputs.new_tag }}" -o CHANGELOG.md
-                  $changedFiles = git diff --name-only -- CHANGELOG.md
-                  if ($changedFiles) {
-                      $content = [Convert]::ToBase64String([IO.File]::ReadAllBytes("$pwd/CHANGELOG.md"))
-                      $sha = (gh api "repos/${{ github.repository }}/contents/CHANGELOG.md" --jq .sha).Trim()
-                      $body = @{
-                          message = "chore: Update Changelog for ${{ steps.resolve_tag.outputs.new_tag }} [skip ci]"
-                          content = $content
-                          sha = $sha
-                          branch = "master"
-                      } | ConvertTo-Json
-                      $body | ConvertTo-Json | gh api --method PUT "repos/${{ github.repository }}/contents/CHANGELOG.md" --input - | Out-Null
-                      if ($LASTEXITCODE -ne 0) { throw "Failed to commit CHANGELOG.md via GitHub API." }
-                      Write-Host "CHANGELOG successfully updated and committed"
-                  } else {
-                      Write-Host "No changes in CHANGELOG to commit"
-                  }
-
-            - name: Publish GitHub Release
-              uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
-              with:
-                  token: ${{ steps.app_token.outputs.token }}
-                  tag_name: ${{ steps.resolve_tag.outputs.new_tag }}
-                  name: ${{ steps.resolve_tag.outputs.new_tag }}
-                  body_path: release-body.md
-                  prerelease: ${{ contains(steps.resolve_tag.outputs.new_version, 'rc') || contains(steps.resolve_tag.outputs.new_version, 'beta') || contains(steps.resolve_tag.outputs.new_version, 'alpha') }}
-                  files: |
-                      ./LocalTelemetrySetup.exe
-                      ./LocalTelemetry-win-x64.zip
-                      ./checksums.txt
-
-            - name: Commit Scoop Manifest
-              shell: pwsh
-              env:
-                  GH_TOKEN: ${{ steps.app_token.outputs.token }}
-              run: |
-                  $ver = "${{ steps.resolve_tag.outputs.new_version }}"
-                  $tag = "${{ steps.resolve_tag.outputs.new_tag }}"
-                  $zipHash = $env:ZIP_HASH.ToLowerInvariant()
-                  $zipUrl = "https://github.com/${{ github.repository }}/releases/download/$tag/LocalTelemetry-win-x64.zip"
-
-                  $manifestFile = "bucket/localtelemetry.json"
-                  $manifest = Get-Content $manifestFile -Raw | ConvertFrom-Json
-                  $manifest.version = $ver
-                  $manifest.architecture.'64bit'.url = $zipUrl
-                  $manifest.architecture.'64bit'.hash = $zipHash
-                  $manifest | ConvertTo-Json -Depth 10 | Set-Content $manifestFile
-
-                  $manifestContent = [Convert]::ToBase64String([IO.File]::ReadAllBytes("$pwd/$manifestFile"))
-                  $sha = (gh api "repos/${{ github.repository }}/contents/$manifestFile" --jq .sha).Trim()
-                  if (-not $sha) {
-                      throw "Failed to retrieve SHA for $manifestFile from GitHub API."
-                  }
-
-                  $body = @{
-                      message = "chore: Update Scoop manifest for $tag [skip ci]"
-                      content = $manifestContent
-                      sha = $sha
-                      branch = "master"
-                  }
-                  $body | ConvertTo-Json | gh api --method PUT "repos/${{ github.repository }}/contents/$manifestFile" --input - | Out-Null
-                  if ($LASTEXITCODE -ne 0) { throw "Failed to commit Scoop manifest via GitHub API." }
-                  Write-Host "Scoop manifest successfully updated and committed"
-
-            - name: Publish Chocolatey Package
-              shell: pwsh
-              env:
                   CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
               run: |
-                  $ver = "${{ steps.resolve_tag.outputs.new_version }}"
-                  $tag = "${{ steps.resolve_tag.outputs.new_tag }}"
-                  $setupHash = $env:SETUP_HASH
-                  $setupUrl = "https://github.com/${{ github.repository }}/releases/download/$tag/LocalTelemetrySetup.exe"
+                  git config user.name "${{ steps.import_gpg.outputs.name }}"
+                  git config user.email "${{ steps.import_gpg.outputs.email }}"
+                  bun run --cwd .github/release release
 
-                  $nuspec = "packaging/chocolatey/localtelemetry.nuspec"
-                  (Get-Content $nuspec -Raw) -replace '<version>.*</version>', "<version>$ver</version>" | Set-Content $nuspec
-
-                  $installScript = "packaging/chocolatey/tools/chocolateyinstall.ps1"
-                  (Get-Content $installScript -Raw) `
-                      -replace '__URL__', $setupUrl `
-                      -replace '__CHECKSUM__', $setupHash | Set-Content $installScript
-
-                  $verificationFile = "packaging/chocolatey/tools/VERIFICATION.txt"
-                  if (Test-Path $verificationFile) {
-                      (Get-Content $verificationFile -Raw) `
-                          -replace '__VERSION__', $ver `
-                          -replace '__URL__', $setupUrl `
-                          -replace '__CHECKSUM__', $setupHash | Set-Content $verificationFile
-                  }
-
-                  choco pack $nuspec --version $ver --outputdirectory packaging/chocolatey
-                  if ($env:CHOCOLATEY_API_KEY) {
-                      $nupkg = Get-ChildItem -Path "packaging/chocolatey/*.nupkg" | Select-Object -First 1
-                      $pushed = $false
-                      for ($attempt = 1; $attempt -le 3; $attempt++) {
-                          Write-Host "Attempt ${attempt}: Pushing $nupkg to Chocolatey..."
-                          $output = & choco push $nupkg.FullName --api-key $env:CHOCOLATEY_API_KEY --source https://push.chocolatey.org/ --execution-timeout 600 2>&1
-                          $output | ForEach-Object { Write-Host $_ }
-                          if ($LASTEXITCODE -eq 0 -or ($output -match "Successfully published Chocolatey package") -or ($output -match "already exists")) {
-                              $pushed = $true
-                              Write-Host "Successfully published Chocolatey package $nupkg"
-                              break
-                          }
-                          Write-Warning "Chocolatey push failed (exit code $LASTEXITCODE). Retrying in 15 seconds..."
-                          Start-Sleep -Seconds 15
-                      }
-                      if (-not $pushed) {
-                          throw "Failed to push Chocolatey package after 3 attempts."
-                      }
-                  } else {
-                      Write-Warning "CHOCOLATEY_API_KEY secret not found; skipping Chocolatey publish."
-                  }
+            - name: Generate Attestations
+              if: always() && hashFiles('./LocalTelemetrySetup.exe') != ''
+              uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+              with:
+                  subject-path: |
+                      ${{ github.workspace }}/LocalTelemetrySetup.exe
+                      ${{ github.workspace }}/LocalTelemetry-win-x64.zip
+                  show-summary: true

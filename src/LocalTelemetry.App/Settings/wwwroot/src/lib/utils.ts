@@ -36,7 +36,7 @@ export function formatDate(dateStr: string | null | undefined): string {
     if (!dateStr) return "-";
     const str = dateStr.trim();
     // DD-MM-YYYY
-    const dmy = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+    const dmy = /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/.exec(str);
     if (dmy) {
         const d = dmy[1].padStart(2, "0");
         const m = dmy[2].padStart(2, "0");
@@ -44,7 +44,7 @@ export function formatDate(dateStr: string | null | undefined): string {
         return `${d}-${m}-${y}`;
     }
     // YYYY-MM-DD
-    const ymd = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    const ymd = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/.exec(str);
     if (ymd) {
         const y = ymd[1];
         const m = ymd[2].padStart(2, "0");
@@ -52,7 +52,7 @@ export function formatDate(dateStr: string | null | undefined): string {
         return `${d}-${m}-${y}`;
     }
     const parsed = new Date(str);
-    if (!isNaN(parsed.getTime())) {
+    if (!Number.isNaN(parsed.getTime())) {
         const d = String(parsed.getDate()).padStart(2, "0");
         const m = String(parsed.getMonth() + 1).padStart(2, "0");
         const y = parsed.getFullYear();
