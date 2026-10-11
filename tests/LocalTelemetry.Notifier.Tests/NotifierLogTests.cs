@@ -88,7 +88,7 @@ public class NotifierLogTests
         public override bool CanSeek => false;
         public override bool CanWrite => true;
         public override long Length => 0;
-        public override long Position { get => 0; set { } }
+        public override long Position { get => 0; set => throw new NotSupportedException(); }
         public override void Flush() => throw new IOException("Flush failure");
         public override int Read(byte[] buffer, int offset, int count) => 0;
         public override long Seek(long offset, SeekOrigin origin) => 0;
@@ -122,4 +122,41 @@ public class NotifierLogTests
             if (File.Exists(tempPath)) File.Delete(tempPath);
         }
     }
+
+    private sealed class ThrowOnWriteOnlyStream : Stream
+    {
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => 0;
+        public override long Position { get => 0; set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count) => 0;
+        public override long Seek(long offset, SeekOrigin origin) => 0;
+        public override void SetLength(long value) { }
+        public override void Write(byte[] buffer, int offset, int count) => throw new IOException("Write failure");
+    }
+
+    [Fact]
+    public void NotifierLog_Write_WhenWriteLineThrows_CapturesLastError()
+    {
+        var field = typeof(NotifierLog).GetField("_writer", BindingFlags.NonPublic | BindingFlags.Static);
+        field.Should().NotBeNull();
+
+        var throwingStream = new ThrowOnWriteOnlyStream();
+        var sw = new StreamWriter(throwingStream) { AutoFlush = true };
+        field!.SetValue(null, sw);
+
+        try
+        {
+            NotifierLog.Info("Should trigger write error");
+            NotifierLog.LastError.Should().NotBeNull();
+            NotifierLog.LastError.Should().BeOfType<IOException>();
+        }
+        finally
+        {
+            NotifierLog.Shutdown();
+        }
+    }
 }
+

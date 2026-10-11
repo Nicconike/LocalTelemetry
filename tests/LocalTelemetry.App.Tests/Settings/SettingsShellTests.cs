@@ -1403,4 +1403,99 @@ public class SettingsShellTests
             if (File.Exists(TempPath)) File.Delete(TempPath);
         }
     }
+
+    [Fact]
+    public void SettingsShell_SafeGetGateways_NullInterface_TriggersCatch()
+    {
+        var method = typeof(SettingsShell).GetMethod("SafeGetGateways", BindingFlags.NonPublic | BindingFlags.Static);
+        method.Should().NotBeNull();
+        var res = method!.Invoke(null, [null]);
+        res.Should().NotBeNull();
+        ((List<System.Net.IPAddress>)res!).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void SettingsShell_CapitalizeGroupName_AllBranches_Coverage()
+    {
+        var method = typeof(SettingsShell).GetMethod("CapitalizeGroupName", BindingFlags.NonPublic | BindingFlags.Static);
+        method.Should().NotBeNull();
+
+        ((string)method!.Invoke(null, ["cpu"])!).Should().Be("CPU");
+        ((string)method.Invoke(null, ["gpu"])!).Should().Be("GPU");
+        ((string)method.Invoke(null, ["ram"])!).Should().Be("RAM");
+        ((string)method.Invoke(null, ["net"])!).Should().Be("Network");
+        ((string)method.Invoke(null, ["disk"])!).Should().Be("Disk");
+        ((string)method.Invoke(null, ["battery"])!).Should().Be("Battery");
+        ((string)method.Invoke(null, ["sensors"])!).Should().Be("Sensors");
+    }
+
+    [Fact]
+    public void SettingsShell_FormatAlertsSummary_AllEdgeCases_Coverage()
+    {
+        var method = typeof(SettingsShell).GetMethod("ConsolidateAlertsDiff", BindingFlags.NonPublic | BindingFlags.Static);
+        method.Should().NotBeNull();
+
+        // 1. Alert enabled: toggle only (lines 999, 1004)
+        var changes1 = new List<(string Path, string OldVal, string NewVal)>
+        {
+            ("alerts.enabled", "false", "true"),
+            ("alerts.alertcpufreq", "false", "true")
+        };
+        string s1 = (string)method!.Invoke(null, [changes1])!;
+        s1.Should().Contain("CPU throttle enabled");
+
+        // 2. Alert enabled: empty summaries (line 1006)
+        var changes2 = new List<(string Path, string OldVal, string NewVal)>
+        {
+            ("alerts.enabled", "false", "true")
+        };
+        string s2 = (string)method.Invoke(null, [changes2])!;
+        s2.Should().Be("Alerts enabled");
+
+        // 3. Toggle only with true/false (lines 1032-1035)
+        var changes3 = new List<(string Path, string OldVal, string NewVal)>
+        {
+            ("alerts.alertgpufreq", "false", "false")
+        };
+        string s3 = (string)method.Invoke(null, [changes3])!;
+        s3.Should().Contain("GPU throttle alert disabled");
+
+        // 4. Threshold only without toggle (lines 1039-1041)
+        var changes4 = new List<(string Path, string OldVal, string NewVal)>
+        {
+            ("alerts.cpufreqminmhz", "800", "900")
+        };
+        string s4 = (string)method.Invoke(null, [changes4])!;
+        s4.Should().Contain("CPU throttle threshold set to");
+
+        // 5. Unhandled non-metric alert change (line 1056-1057)
+        var changes5 = new List<(string Path, string OldVal, string NewVal)>
+        {
+            ("alerts.other_unknown_key", "old", "new")
+        };
+        string s5 = (string)method.Invoke(null, [changes5])!;
+        s5.Should().Be("Alerts configuration updated");
+    }
+
+    [Fact]
+    public void SettingsShell_FormatGpuTdpW_Coverage()
+    {
+        var method = typeof(SettingsShell).GetMethod("FormatGpuTdpW", BindingFlags.NonPublic | BindingFlags.Static);
+        method.Should().NotBeNull();
+
+        // AMD with valid TDP (lines 873-874)
+        var amdGpu = (Name: "AMD Radeon RX 7900 XTX", Vendor: "AMD", IsDedicated: true, VramBytes: (long?)16000000000L, DriverVersion: "24.1.1");
+        string? resAmd = (string?)method!.Invoke(null, [amdGpu, 300f]);
+        resAmd.Should().Be("300 W");
+
+        // AMD without TDP
+        string? resAmdNull = (string?)method.Invoke(null, [amdGpu, null]);
+        resAmdNull.Should().BeNull();
+
+        // Non-AMD non-Nvidia
+        var intelGpu = (Name: "Intel Arc A770", Vendor: "Intel", IsDedicated: true, VramBytes: (long?)16000000000L, DriverVersion: "31.0.101");
+        string? resIntel = (string?)method.Invoke(null, [intelGpu, 225f]);
+        resIntel.Should().BeNull();
+    }
 }
+

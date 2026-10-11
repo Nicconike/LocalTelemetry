@@ -77,15 +77,14 @@ public class ProgramTests
     [Fact]
     public async Task RunPipeServerAsync_DispatchesToastAndStopsOnShutdown()
     {
-        string payload = string.Join("\n", [
+        string payload = string.Join("\n",
             JsonSerializer.Serialize(new { Action = "ShowToast", Title = "CPU Warning", Body = "Usage at 98%" }),
-            JsonSerializer.Serialize(new { Action = "Shutdown" })
-        ]);
+            JsonSerializer.Serialize(new { Action = "Shutdown" }));
 
         using var stream = new MemoryStream();
         using (var writer = new StreamWriter(stream, Encoding.UTF8, leaveOpen: true) { AutoFlush = true })
         {
-            writer.Write(payload);
+            await writer.WriteAsync(payload);
         }
         stream.Position = 0;
 
@@ -332,7 +331,7 @@ public class ProgramTests
             }
         }
 
-        var pathPortable = (string)resolveLogPath!.Invoke(null, null)!;
+        var pathPortable = (string)resolveLogPath.Invoke(null, null)!;
         pathPortable.Should().EndWith("lt_notifier.log");
     }
 
@@ -411,7 +410,182 @@ public class ProgramTests
         }
         finally
         {
-            try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true); } catch { }
+            try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true); } catch (Exception) { /* Best-effort cleanup */ }
+        }
+    }
+
+    [Fact]
+    public async Task ProcessMessageStreamAsync_WhitespaceAndNullAndMalformedJson_HandledGracefully()
+    {
+        string input = string.Join("\n",
+            "",
+            "   ",
+            "null",
+            "{ invalid json }",
+            JsonSerializer.Serialize(new { Action = "UnknownCustomAction" }),
+            JsonSerializer.Serialize(new { Action = "Shutdown" }));
+
+        using var reader = new StringReader(input);
+        using var cts = new CancellationTokenSource();
+
+        await Program.ProcessMessageStreamAsync(reader, cts, (_, _) => { });
+
+        cts.IsCancellationRequested.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RunPipeServerAsync_ExceptionAndOperationCanceled_Coverage()
+    {
+        int originalDelay = Program.ReconnectDelayMs;
+        Program.ReconnectDelayMs = 1;
+
+        try
+        {
+            int attempts = 0;
+            var fakeServer = Substitute.For<Program.INotifierPipeServer>();
+            fakeServer.WaitForConnectionAsync(Arg.Any<CancellationToken>()).Returns(_ =>
+            {
+                attempts++;
+                if (attempts == 1)
+                    throw new IOException("Simulated network/pipe failure");
+
+                return Task.FromException(new OperationCanceledException());
+            });
+
+            Func<Program.INotifierPipeServer>? originalFactory = Program.PipeServerFactory;
+            Program.PipeServerFactory = () => fakeServer;
+
+            try
+            {
+                using var cts = new CancellationTokenSource();
+                var runTask = Program.RunPipeServerAsync(cts, (_, _) => { });
+                var act = async () => await runTask;
+                await act.Should().ThrowAsync<OperationCanceledException>();
+                attempts.Should().BeGreaterThanOrEqualTo(2);
+            }
+            finally
+            {
+                Program.PipeServerFactory = originalFactory;
+            }
+        }
+        finally
+        {
+            Program.ReconnectDelayMs = originalDelay;
+        }
+    }
+
+    [Fact]
+    public async Task NamedPipeServerStreamWrapper_WaitForConnectionAsync_Coverage()
+    {
+        var wrapperType = typeof(Program).Assembly.GetType("LocalTelemetry.Notifier.Program+NamedPipeServerStreamWrapper");
+        wrapperType.Should().NotBeNull();
+
+        using var pipeServer = new NamedPipeServerStream(
+            "TestPipe_" + Guid.NewGuid().ToString("N"),
+            PipeDirection.In,
+            1,
+            PipeTransmissionMode.Message,
+            PipeOptions.Asynchronous);
+
+        var wrapper = (Program.INotifierPipeServer)Activator.CreateInstance(wrapperType!, pipeServer)!;
+        using (wrapper)
+        {
+            wrapper.Stream.Should().NotBeNull();
+            using var cts = new CancellationTokenSource();
+            await cts.CancelAsync();
+
+            var act = async () => await wrapper.WaitForConnectionAsync(cts.Token);
+            await act.Should().ThrowAsync<OperationCanceledException>();
+        }
+    }
+
+    [Fact]
+    public async Task MonitorParentProcessAsync_ArgumentException_LogsWarning()
+    {
+        using var cts = new CancellationTokenSource();
+        await Program.MonitorParentProcessAsync(() => throw new ArgumentException("Parent PID missing"), cts);
+        cts.IsCancellationRequested.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SetupParentMonitoring_NonExistentPid_Coverage()
+    {
+        var method = typeof(Program).GetMethod("SetupParentMonitoring", BindingFlags.NonPublic | BindingFlags.Static);
+        method.Should().NotBeNull();
+
+        using var cts = new CancellationTokenSource();
+        method!.Invoke(null, [99999999, cts]);
+
+        using var waitToken = new CancellationTokenSource(2000);
+        while (!cts.IsCancellationRequested && !waitToken.IsCancellationRequested)
+        {
+            await Task.Delay(10);
+        }
+
+        cts.IsCancellationRequested.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Program_UnhandledExceptionHandler_Coverage()
+    {
+        var cType = typeof(Program).GetNestedType("<>c", BindingFlags.NonPublic);
+        cType.Should().NotBeNull();
+        var method = cType!.GetMethod("<Main>b__16_0", BindingFlags.NonPublic | BindingFlags.Instance);
+        method.Should().NotBeNull();
+
+        var singletonField = cType.GetField("<>9", BindingFlags.NonPublic | BindingFlags.Static);
+        var instance = singletonField?.GetValue(null) ?? Activator.CreateInstance(cType, nonPublic: true);
+
+        var actEx = () => method!.Invoke(instance, [null, new UnhandledExceptionEventArgs(new InvalidOperationException("Test crash"), false)]);
+        actEx.Should().NotThrow();
+
+        var actNonEx = () => method!.Invoke(instance, [null, new UnhandledExceptionEventArgs("Not an exception", false)]);
+        actNonEx.Should().NotThrow();
+    }
+
+    [WpfFact]
+    public void Program_Main_WithLockedLogFile_ExecutesErrorBranch()
+    {
+        Func<Program.INotifierPipeServer>? originalFactory = Program.PipeServerFactory;
+        using var stream = new MemoryStream();
+        using (var writer = new StreamWriter(stream, Encoding.UTF8, leaveOpen: true) { AutoFlush = true })
+        {
+            writer.Write(JsonSerializer.Serialize(new { Action = "Shutdown" }));
+        }
+        stream.Position = 0;
+
+        var mockServer = Substitute.For<Program.INotifierPipeServer>();
+        mockServer.Stream.Returns(stream);
+        mockServer.WaitForConnectionAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+
+        var resolveLogMethod = typeof(Program).GetMethod("ResolveLogPath", BindingFlags.NonPublic | BindingFlags.Static);
+        resolveLogMethod.Should().NotBeNull();
+        string logPath = (string)resolveLogMethod!.Invoke(null, null)!;
+        string? dir = Path.GetDirectoryName(logPath);
+        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+
+        FileStream? lockStream = null;
+        try
+        {
+            lockStream = new FileStream(logPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            Program.PipeServerFactory = () => mockServer;
+
+            var mainMethod = typeof(Program).GetMethod("Main", BindingFlags.NonPublic | BindingFlags.Static);
+            mainMethod.Should().NotBeNull();
+
+            var mainThread = new Thread(() => mainMethod!.Invoke(null, [Array.Empty<string>()]));
+            mainThread.SetApartmentState(ApartmentState.STA);
+            mainThread.Start();
+
+            bool finished = mainThread.Join(3000);
+            finished.Should().BeTrue();
+        }
+        finally
+        {
+            Program.PipeServerFactory = originalFactory;
+            lockStream?.Dispose();
+            NotifierLog.Shutdown();
         }
     }
 }
+

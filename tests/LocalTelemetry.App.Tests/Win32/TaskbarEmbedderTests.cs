@@ -684,4 +684,113 @@ public class TaskbarEmbedderTests
 
         form.Close();
     }
+
+    [Fact]
+    public void TaskbarEmbedder_PositionFloat_ClampingAndEdgeCases_Coverage()
+    {
+        var cfg = new AppSettings();
+        var embedder = new TaskbarEmbedder(cfg);
+
+        var posFloatMethod = typeof(TaskbarEmbedder).GetMethod("PositionFloat", BindingFlags.NonPublic | BindingFlags.Instance);
+        posFloatMethod.Should().NotBeNull();
+
+        var rectField = typeof(TaskbarEmbedder).GetField("_taskbarRect", BindingFlags.NonPublic | BindingFlags.Instance);
+        var edgeField = typeof(TaskbarEmbedder).GetField("_taskbarEdge", BindingFlags.NonPublic | BindingFlags.Instance);
+
+        // 1. Invalid taskbar bounds (lines 705-710)
+        rectField!.SetValue(embedder, Rectangle.Empty);
+        bool failRes = (bool)posFloatMethod!.Invoke(embedder, [IntPtr.Zero, new Size(200, 30)])!;
+        failRes.Should().BeFalse();
+        embedder.State.Should().Be(OverlayDeploymentState.Failed);
+
+        // 2. Horizontal clamping: left overflow (lines 724-727)
+        rectField.SetValue(embedder, new Rectangle(0, 1000, 1920, 48));
+        edgeField!.SetValue(embedder, NativeMethods.ABE_BOTTOM);
+        cfg.Overlay.Placement = "left";
+        cfg.Overlay.PlacementOffset = -500;
+        bool clampLeft = (bool)posFloatMethod.Invoke(embedder, [IntPtr.Zero, new Size(200, 30)])!;
+        clampLeft.Should().BeFalse(); // IntPtr.Zero HWND returns false on SetWindowPos but executes calculation
+        embedder.LastComputedFloatX.Should().Be(0);
+
+        // 3. Horizontal clamping: right overflow (lines 724-727)
+        cfg.Overlay.Placement = "left";
+        cfg.Overlay.PlacementOffset = 5000;
+        posFloatMethod.Invoke(embedder, [IntPtr.Zero, new Size(200, 30)]);
+        embedder.LastComputedFloatX.Should().Be(1920 - 200);
+
+        // 4. Vertical taskbar placement (line 720)
+        edgeField.SetValue(embedder, NativeMethods.ABE_LEFT);
+        posFloatMethod.Invoke(embedder, [IntPtr.Zero, new Size(200, 30)]);
+        embedder.LastComputedFloatX.Should().Be(4);
+
+        edgeField.SetValue(embedder, NativeMethods.ABE_RIGHT);
+        posFloatMethod.Invoke(embedder, [IntPtr.Zero, new Size(200, 30)]);
+        embedder.LastComputedFloatX.Should().Be(4);
+    }
+
+    [Fact]
+    public void TaskbarEmbedder_ComputeBandX_And_PositionInBand_Overflow_Coverage()
+    {
+        var cfg = new AppSettings();
+        var embedder = new TaskbarEmbedder(cfg);
+
+        var computeBandX = typeof(TaskbarEmbedder).GetMethod("ComputeBandX", BindingFlags.NonPublic | BindingFlags.Instance);
+        computeBandX.Should().NotBeNull();
+
+        var isWin11Field = typeof(TaskbarEmbedder).GetField("_isWin11", BindingFlags.NonPublic | BindingFlags.Instance);
+        var trayEdgeField = typeof(TaskbarEmbedder).GetField("_trayLeftEdge", BindingFlags.NonPublic | BindingFlags.Instance);
+
+        // Win11 with left-aligned placement fallback (line 663)
+        isWin11Field!.SetValue(embedder, true);
+        trayEdgeField!.SetValue(embedder, -1);
+        cfg.Overlay.Placement = "right";
+        cfg.Overlay.PlacementOffset = 10;
+
+        var parentRect = new NativeMethods.RECT { Left = 0, Top = 0, Right = 1920, Bottom = 48 };
+        int x = (int)computeBandX!.Invoke(embedder, [parentRect, new Size(200, 30)])!;
+        x.Should().BeGreaterThan(0);
+
+        // Win11 with placement = "left" (lines 649-652)
+        cfg.Overlay.Placement = "left";
+        cfg.Overlay.PlacementOffset = 25;
+        int xLeft = (int)computeBandX.Invoke(embedder, [parentRect, new Size(200, 30)])!;
+        xLeft.Should().Be(25);
+
+        // Win10 without taskband (lines 663)
+        isWin11Field.SetValue(embedder, false);
+        cfg.Overlay.Placement = "right";
+        int xWin10 = (int)computeBandX.Invoke(embedder, [parentRect, new Size(200, 30)])!;
+        xWin10.Should().BeGreaterThan(0);
+    }
+
+    [Fact]
+    public void TaskbarEmbedder_TrySetParent_And_ResolveParent_FailureBranches()
+    {
+        var cfg = new AppSettings();
+        var embedder = new TaskbarEmbedder(cfg);
+
+        var resolveMethod = typeof(TaskbarEmbedder).GetMethod("ResolveParentAndTaskBand", BindingFlags.NonPublic | BindingFlags.Instance);
+        resolveMethod.Should().NotBeNull();
+
+        var isWin11Field = typeof(TaskbarEmbedder).GetField("_isWin11", BindingFlags.NonPublic | BindingFlags.Instance);
+
+        // Legacy Win10 mode with invalid tray HWND (lines 471-473)
+        isWin11Field!.SetValue(embedder, false);
+        bool res = (bool)resolveMethod!.Invoke(embedder, [IntPtr.Zero])!;
+        res.Should().BeFalse();
+
+        // TrySetParent with invalid tray (lines 428-432)
+        var trySetParentMethod = typeof(TaskbarEmbedder).GetMethod("TrySetParent", BindingFlags.NonPublic | BindingFlags.Instance);
+        TaskbarEmbedder.ExplorerTrayWndOverride = () => IntPtr.Zero;
+        try
+        {
+            bool tryRes = (bool)trySetParentMethod!.Invoke(embedder, [IntPtr.Zero, new Size(200, 30)])!;
+            tryRes.Should().BeFalse();
+        }
+        finally
+        {
+            TaskbarEmbedder.ExplorerTrayWndOverride = null;
+        }
+    }
 }
+

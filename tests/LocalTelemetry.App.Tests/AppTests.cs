@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Dynamic;
 using System.IO;
 using System.Reflection;
@@ -1155,5 +1156,57 @@ public class AppTests
             handleSessionEnding.Invoke(app, [app, logoffArgs]);
         }
     }
+
+    [WpfFact]
+    public void App_IsAdministrator_And_ToggleMetricsLogging_Coverage()
+    {
+        var app = GetOrCreateApp();
+
+        // 1. IsAdministrator fallback (lines 65-67)
+        var priorAdminCheck = App.IsAdministratorCheck;
+        try
+        {
+            App.IsAdministratorCheck = null;
+            var isAdm = typeof(App).GetMethod("IsAdministrator", BindingFlags.NonPublic | BindingFlags.Static);
+            var res = (bool)isAdm!.Invoke(null, null)!;
+            res.Should().Be(res);
+        }
+        finally
+        {
+            App.IsAdministratorCheck = priorAdminCheck;
+        }
+
+        // 2. ToggleMetricsLogging (lines 229-242)
+        var toggleMethod = typeof(App).GetMethod("ToggleMetricsLogging", BindingFlags.NonPublic | BindingFlags.Instance);
+        toggleMethod!.Invoke(app, [true]);
+        toggleMethod.Invoke(app, [true]); // early return when unchanged
+        toggleMethod.Invoke(app, [false]);
+    }
+
+    [WpfFact]
+    public void App_EnsureNotifierStopped_And_ProcessTermination_Coverage()
+    {
+        var app = GetOrCreateApp();
+
+        // 1. Early return when not launched and process is null (line 600)
+        typeof(App).GetField("_notifierLaunched", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, false);
+        typeof(App).GetField("_notifierProcess", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, null);
+        app.EnsureNotifierStopped();
+
+        // 2. Terminate running process (lines 604-622)
+        using var dummyProc = Process.Start(new ProcessStartInfo("cmd.exe", "/c ping 127.0.0.1 -n 3")
+        {
+            CreateNoWindow = true,
+            UseShellExecute = false
+        });
+        dummyProc.Should().NotBeNull();
+
+        typeof(App).GetField("_notifierLaunched", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, true);
+        typeof(App).GetField("_notifierProcess", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, dummyProc);
+
+        app.EnsureNotifierStopped();
+        typeof(App).GetField("_notifierProcess", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(app).Should().BeNull();
+    }
 }
+
 

@@ -32,7 +32,7 @@ jobs:
                   client-id: ${{ secrets.APP_CLIENT_ID }}
                   private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
-            - name: Checkout Repo
+            - name: Checkout Repository
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   token: ${{ steps.app_token.outputs.token }}
@@ -41,23 +41,22 @@ jobs:
             - name: Fetch All Tags
               run: git fetch --tags --force
 
-            - name: Determine Next Release Tag
+            - name: Resolve Next Release Tag
               id: resolve_tag
               shell: bash
               run: |
-                  git fetch --tags --force
                   LATEST_RC=$(git tag -l "v1.0.0-rc.*" | sort -V | tail -n 1)
                   if [ -n "$LATEST_RC" ]; then
                       RC_NUM=$(echo "$LATEST_RC" | sed -E 's/.*-rc\.([0-9]+)/\1/')
                       NEXT_RC=$((RC_NUM + 1))
                   else
-                      NEXT_RC=0
+                      NEXT_RC=1
                   fi
                   VER="1.0.0-rc.${NEXT_RC}"
                   TAG="v${VER}"
                   echo "new_tag=$TAG" >> "$GITHUB_OUTPUT"
                   echo "new_version=$VER" >> "$GITHUB_OUTPUT"
-                  echo "Resolved new tag: $TAG ($VER)"
+                  echo "Resolved release tag: $TAG ($VER)"
 
             - name: Setup Bun Runtime
               uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
@@ -73,10 +72,7 @@ jobs:
               with:
                   dotnet-version: 10.0.x
 
-            - name: Fetch Release Tag
-              run: git fetch --tags --force
-
-            - name: Publish Single-File Executable
+            - name: Build .NET Executable
               run: dotnet publish src/LocalTelemetry.App/LocalTelemetry.App.csproj -c Release -r win-x64 --no-self-contained -p:PublishSingleFile=true -p:MinVerVersionOverride=${{ steps.resolve_tag.outputs.new_version }} -o ./publish
 
             - name: Download PawnIO Driver Installer
@@ -151,6 +147,7 @@ jobs:
               run: git-cliff --config cliff.toml --latest --strip header -o release-body.md
 
             - name: Import GPG Private Key
+              id: import_gpg
               uses: crazy-max/ghaction-import-gpg@2dc316deee8e90f13e1a351ab510b4d5bc0c82cd # v7.0.0
               with:
                   gpg_private_key: ${{ secrets.PGP_PRIVATE_KEY }}
@@ -167,13 +164,36 @@ jobs:
                   $tag = "${{ steps.resolve_tag.outputs.new_tag }}"
                   $exists = git ls-remote --tags origin "refs/tags/$tag"
                   if (-not $exists) {
-                      git config user.name "protected-auto-commits[bot]"
-                      git config user.email "236486036+protected-auto-commits[bot]@users.noreply.github.com"
+                      git config user.name "${{ steps.import_gpg.outputs.name }}"
+                      git config user.email "${{ steps.import_gpg.outputs.email }}"
                       git tag -s -m "Release $tag" "$tag"
                       $repo = "${{ github.repository }}"
                       git push "https://x-access-token:${{ steps.app_token.outputs.token }}@github.com/$repo.git" "refs/tags/$tag"
                   } else {
                       Write-Host "Tag $tag already exists on origin; skipping creation"
+                  }
+
+            - name: Update & Commit CHANGELOG
+              shell: pwsh
+              env:
+                  GH_TOKEN: ${{ steps.app_token.outputs.token }}
+              run: |
+                  git-cliff --config cliff.toml -o CHANGELOG.md
+                  $changedFiles = git diff --name-only -- CHANGELOG.md
+                  if ($changedFiles) {
+                      $content = [Convert]::ToBase64String([IO.File]::ReadAllBytes("$pwd/CHANGELOG.md"))
+                      $sha = (gh api "repos/${{ github.repository }}/contents/CHANGELOG.md" --jq .sha).Trim()
+                      $body = @{
+                          message = "chore: Update Changelog for ${{ steps.resolve_tag.outputs.new_tag }} [skip ci]"
+                          content = $content
+                          sha = $sha
+                          branch = "master"
+                      } | ConvertTo-Json
+                      $body | gh api --method PUT "repos/${{ github.repository }}/contents/CHANGELOG.md" --input -
+                      if ($LASTEXITCODE -ne 0) { throw "Failed to commit CHANGELOG.md via GitHub API." }
+                      Write-Host "CHANGELOG successfully updated and committed"
+                  } else {
+                      Write-Host "No changes in CHANGELOG to commit"
                   }
 
             - name: Publish GitHub Release
@@ -188,6 +208,39 @@ jobs:
                       ./LocalTelemetrySetup.exe
                       ./LocalTelemetry-win-x64.zip
                       ./checksums.txt
+
+            - name: Update & Commit Scoop Manifest
+              shell: pwsh
+              env:
+                  GH_TOKEN: ${{ steps.app_token.outputs.token }}
+              run: |
+                  $ver = "${{ steps.resolve_tag.outputs.new_version }}"
+                  $tag = "${{ steps.resolve_tag.outputs.new_tag }}"
+                  $zipHash = $env:ZIP_HASH.ToLowerInvariant()
+                  $zipUrl = "https://github.com/${{ github.repository }}/releases/download/$tag/LocalTelemetry-win-x64.zip"
+
+                  $manifestFile = "bucket/localtelemetry.json"
+                  $manifest = Get-Content $manifestFile -Raw | ConvertFrom-Json
+                  $manifest.version = $ver
+                  $manifest.architecture.'64bit'.url = $zipUrl
+                  $manifest.architecture.'64bit'.hash = $zipHash
+                  $manifest | ConvertTo-Json -Depth 10 | Set-Content $manifestFile
+
+                  $manifestContent = [Convert]::ToBase64String([IO.File]::ReadAllBytes("$pwd/$manifestFile"))
+                  $sha = (gh api "repos/${{ github.repository }}/contents/$manifestFile" --jq .sha).Trim()
+                  if (-not $sha) {
+                      throw "Failed to retrieve SHA for $manifestFile from GitHub API."
+                  }
+
+                  $body = @{
+                      message = "chore: Update Scoop manifest for $tag [skip ci]"
+                      content = $manifestContent
+                      sha = $sha
+                      branch = "master"
+                  }
+                  $body | ConvertTo-Json | gh api --method PUT "repos/${{ github.repository }}/contents/$manifestFile" --input -
+                  if ($LASTEXITCODE -ne 0) { throw "Failed to commit Scoop manifest via GitHub API." }
+                  Write-Host "Scoop manifest successfully updated and committed"
 
             - name: Build & Publish Chocolatey Package
               shell: pwsh
@@ -218,62 +271,22 @@ jobs:
                   choco pack $nuspec --version $ver --outputdirectory packaging/chocolatey
                   if ($env:CHOCOLATEY_API_KEY) {
                       $nupkg = Get-ChildItem -Path "packaging/chocolatey/*.nupkg" | Select-Object -First 1
-                      choco push $nupkg.FullName --api-key $env:CHOCOLATEY_API_KEY --source https://push.chocolatey.org/
-                      Write-Host "Successfully published Chocolatey package $nupkg"
+                      $pushed = $false
+                      for ($attempt = 1; $attempt -le 3; $attempt++) {
+                          Write-Host "Attempt $attempt: Pushing $nupkg to Chocolatey..."
+                          $output = & choco push $nupkg.FullName --api-key $env:CHOCOLATEY_API_KEY --source https://push.chocolatey.org/ --execution-timeout 600 2>&1
+                          $output | ForEach-Object { Write-Host $_ }
+                          if ($LASTEXITCODE -eq 0 -or ($output -match "Successfully published Chocolatey package") -or ($output -match "already exists")) {
+                              $pushed = $true
+                              Write-Host "Successfully published Chocolatey package $nupkg"
+                              break
+                          }
+                          Write-Warning "Chocolatey push failed (exit code $LASTEXITCODE). Retrying in 15 seconds..."
+                          Start-Sleep -Seconds 15
+                      }
+                      if (-not $pushed) {
+                          throw "Failed to push Chocolatey package after 3 attempts."
+                      }
                   } else {
                       Write-Warning "CHOCOLATEY_API_KEY secret not found; skipping Chocolatey publish."
-                  }
-
-            - name: Update & Commit Scoop Manifest
-              shell: pwsh
-              env:
-                  GH_TOKEN: ${{ steps.app_token.outputs.token }}
-              run: |
-                  $ver = "${{ steps.resolve_tag.outputs.new_version }}"
-                  $tag = "${{ steps.resolve_tag.outputs.new_tag }}"
-                  $zipHash = $env:ZIP_HASH
-                  $zipUrl = "https://github.com/${{ github.repository }}/releases/download/$tag/LocalTelemetry-win-x64.zip"
-
-                  $manifestFile = "bucket/localtelemetry.json"
-                  $manifest = Get-Content $manifestFile -Raw | ConvertFrom-Json
-                  $manifest.version = $ver
-                  $manifest.architecture.'64bit'.url = $zipUrl
-                  $manifest.architecture.'64bit'.hash = $zipHash
-                  $manifest | ConvertTo-Json -Depth 10 | Set-Content $manifestFile
-
-                  $manifestContent = [Convert]::ToBase64String([IO.File]::ReadAllBytes("$pwd/$manifestFile"))
-                  $sha = $null
-                  try {
-                      $sha = gh api "repos/${{ github.repository }}/contents/$manifestFile" --jq .sha 2>$null
-                  } catch { }
-
-                  $body = @{
-                      message = "chore: Update Scoop manifest for $tag [skip ci]"
-                      content = $manifestContent
-                      branch = "master"
-                  }
-                  if ($sha) { $body.sha = $sha }
-                  $body | ConvertTo-Json | gh api --method PUT "repos/${{ github.repository }}/contents/$manifestFile" --input - --silent
-                  Write-Host "Scoop manifest successfully updated and committed"
-
-            - name: Update & Commit CHANGELOG
-              shell: pwsh
-              env:
-                  GH_TOKEN: ${{ steps.app_token.outputs.token }}
-              run: |
-                  git-cliff --config cliff.toml -o CHANGELOG.md
-                  $changedFiles = git diff --name-only -- CHANGELOG.md
-                  if ($changedFiles) {
-                      $content = [Convert]::ToBase64String([IO.File]::ReadAllBytes("$pwd/CHANGELOG.md"))
-                      $sha = gh api "repos/${{ github.repository }}/contents/CHANGELOG.md" --jq .sha
-                      $body = @{
-                          message = "chore: Update Changelog for ${{ steps.resolve_tag.outputs.new_tag }} [skip ci]"
-                          content = $content
-                          sha = $sha
-                          branch = "master"
-                      } | ConvertTo-Json
-                      $body | gh api --method PUT "repos/${{ github.repository }}/contents/CHANGELOG.md" --input - --silent
-                      Write-Host "CHANGELOG successfully updated and committed"
-                  } else {
-                      Write-Host "No changes in CHANGELOG to commit"
                   }

@@ -5,6 +5,7 @@ using Xunit;
 
 namespace LocalTelemetry.Core.Tests.Config;
 
+[Collection("TrafficHistory")]
 public sealed class AppSettingsTests : IDisposable
 {
     private readonly string _tempDir;

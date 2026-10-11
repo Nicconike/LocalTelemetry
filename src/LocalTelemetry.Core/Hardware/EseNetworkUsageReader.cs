@@ -265,7 +265,7 @@ public static class EseNetworkUsageReader
         dbid = JET_DBID.Nil;
         tableid = JET_TABLEID.Nil;
 
-        Api.JetCreateInstance(out instance, "srum-reader");
+        Api.JetCreateInstance(out instance, $"srum-reader-{Guid.NewGuid():N}");
         Api.JetSetSystemParameter(instance, JET_SESID.Nil, JET_param.Recovery, 0, "Off");
         Api.JetSetSystemParameter(instance, JET_SESID.Nil, JET_param.CircularLog, 0, null);
 

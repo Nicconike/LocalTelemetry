@@ -6,6 +6,7 @@ using Xunit;
 
 namespace LocalTelemetry.Core.Tests.Hardware;
 
+[Collection("TrafficHistory")]
 public class EseNetworkUsageReaderTests
 {
     private static readonly object SyncLock = new();
