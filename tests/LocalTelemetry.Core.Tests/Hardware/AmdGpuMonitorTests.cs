@@ -11,13 +11,17 @@ public class AmdGpuMonitorTests
     public void AmdAdlNativePInvoke_Instance_ExecutesSafely()
     {
         var native = AmdAdlNativePInvoke.Instance;
-        native.Create();
-        native.GetAdapterInfo(out _, out _);
-        native.GetTemperature(0, out _);
-        native.GetActivity(0, out _, out _);
-        native.GetMemoryInfo(0, out _, out _);
-        native.GetPowerLimit(0, out _, out _);
-        native.Destroy();
+        var act = () =>
+        {
+            native.Create();
+            native.GetAdapterInfo(out _, out _);
+            native.GetTemperature(0, out _);
+            native.GetActivity(0, out _, out _);
+            native.GetMemoryInfo(0, out _, out _);
+            native.GetPowerLimit(0, out _, out _);
+            native.Destroy();
+        };
+        act.Should().NotThrow();
     }
 
     [Fact]

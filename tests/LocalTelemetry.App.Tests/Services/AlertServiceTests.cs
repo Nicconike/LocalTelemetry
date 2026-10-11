@@ -38,7 +38,8 @@ public class AlertServiceTests
         var (service, _, _) = CreateService(cfg);
 
         var snap = new TelemetrySnapshot { CpuTempPackageC = 100f };
-        service.Evaluate(snap);
+        var act = () => service.Evaluate(snap);
+        act.Should().NotThrow();
     }
 
     [WpfFact]
@@ -56,7 +57,8 @@ public class AlertServiceTests
         // Do NOT bypass startup grace period
 
         var snap = new TelemetrySnapshot { CpuTempPackageC = 100f };
-        service.Evaluate(snap); // Should be skipped due to grace period
+        var act = () => service.Evaluate(snap); // Should be skipped due to grace period
+        act.Should().NotThrow();
     }
 
     [WpfFact]
@@ -72,7 +74,8 @@ public class AlertServiceTests
         var (service, _, _) = CreateService(cfg);
 
         var snap = new TelemetrySnapshot { CpuTempPackageC = 85f };
-        service.Evaluate(snap);
+        var act = () => service.Evaluate(snap);
+        act.Should().NotThrow();
     }
 
     [WpfFact]
@@ -88,7 +91,8 @@ public class AlertServiceTests
         var (service, _, _) = CreateService(cfg);
 
         var snap = new TelemetrySnapshot { CpuTempPackageC = 0f };
-        service.Evaluate(snap);
+        var act = () => service.Evaluate(snap);
+        act.Should().NotThrow();
     }
 
     [WpfFact]
@@ -104,7 +108,8 @@ public class AlertServiceTests
         var (service, _, _) = CreateService(cfg);
 
         var snap = new TelemetrySnapshot { CpuTempPackageC = 70f };
-        service.Evaluate(snap);
+        var act = () => service.Evaluate(snap);
+        act.Should().NotThrow();
     }
 
     [WpfFact]
@@ -157,7 +162,8 @@ public class AlertServiceTests
             BatteryIsCharging = false
         };
 
-        service.Evaluate(snap);
+        var act = () => service.Evaluate(snap);
+        act.Should().NotThrow();
     }
 
     [WpfFact]
@@ -175,8 +181,12 @@ public class AlertServiceTests
 
         var snap = new TelemetrySnapshot { CpuTempPackageC = 85f };
 
-        service.Evaluate(snap);
-        service.Evaluate(snap);
+        var act = () =>
+        {
+            service.Evaluate(snap);
+            service.Evaluate(snap);
+        };
+        act.Should().NotThrow();
     }
 
     [WpfFact]
@@ -195,8 +205,12 @@ public class AlertServiceTests
 
         var snap = new TelemetrySnapshot { CpuTempPackageC = 85f };
 
-        service.Evaluate(snap);
-        service.Evaluate(snap);
+        var act = () =>
+        {
+            service.Evaluate(snap);
+            service.Evaluate(snap);
+        };
+        act.Should().NotThrow();
     }
 
     [WpfFact]
@@ -212,7 +226,8 @@ public class AlertServiceTests
         var (service, _, _) = CreateService(cfg);
 
         var snap = new TelemetrySnapshot { CpuFreqGhz = 3.0f };
-        service.Evaluate(snap);
+        var act = () => service.Evaluate(snap);
+        act.Should().NotThrow();
     }
 
     [WpfFact]
@@ -228,7 +243,8 @@ public class AlertServiceTests
         var (service, _, _) = CreateService(cfg);
 
         var snap = new TelemetrySnapshot { BatteryPct = 10f, BatteryIsCharging = true };
-        service.Evaluate(snap);
+        var act = () => service.Evaluate(snap);
+        act.Should().NotThrow();
     }
 
     [WpfFact]
@@ -244,7 +260,8 @@ public class AlertServiceTests
         var (service, _, _) = CreateService(cfg);
 
         var snap = new TelemetrySnapshot { BatteryPct = 0f, BatteryIsCharging = false };
-        service.Evaluate(snap);
+        var act = () => service.Evaluate(snap);
+        act.Should().NotThrow();
     }
 
     [WpfFact]
@@ -262,8 +279,12 @@ public class AlertServiceTests
 
         var snap = new TelemetrySnapshot { BatteryPct = 15f, BatteryIsCharging = false };
 
-        service.Evaluate(snap);
-        service.Evaluate(snap);
+        var act = () =>
+        {
+            service.Evaluate(snap);
+            service.Evaluate(snap);
+        };
+        act.Should().NotThrow();
     }
 
     [WpfFact]
@@ -282,8 +303,12 @@ public class AlertServiceTests
 
         var snap = new TelemetrySnapshot { BatteryPct = 15f, BatteryIsCharging = false };
 
-        service.Evaluate(snap);
-        service.Evaluate(snap);
+        var act = () =>
+        {
+            service.Evaluate(snap);
+            service.Evaluate(snap);
+        };
+        act.Should().NotThrow();
     }
 
     [WpfFact]
@@ -299,7 +324,8 @@ public class AlertServiceTests
         var (service, _, _) = CreateService(cfg);
 
         var snap = new TelemetrySnapshot { CpuTempPackageC = 85f };
-        service.Evaluate(snap);
+        var act = () => service.Evaluate(snap);
+        act.Should().NotThrow();
     }
 
     [WpfFact]
@@ -419,22 +445,22 @@ public class AlertServiceTests
 
         // 1. Initial breach at 91°C: should fire
         service.Evaluate(new TelemetrySnapshot { CpuTempPackageC = 91f });
-        notifClient.Received(1).SendToastAsync(Arg.Is<string>(s => s.Contains("CPU Temperature High")), Arg.Any<string>());
+        _ = notifClient.Received(1).SendToastAsync(Arg.Is<string>(s => s.Contains("CPU Temperature High")), Arg.Any<string>());
 
         // 2. Fluctuations typical of laptop gaming (92°C, 88°C, 91°C, 85°C): should NOT fire again
         service.Evaluate(new TelemetrySnapshot { CpuTempPackageC = 92f });
         service.Evaluate(new TelemetrySnapshot { CpuTempPackageC = 88f });
         service.Evaluate(new TelemetrySnapshot { CpuTempPackageC = 91f });
         service.Evaluate(new TelemetrySnapshot { CpuTempPackageC = 85f });
-        notifClient.Received(1).SendToastAsync(Arg.Any<string>(), Arg.Any<string>());
+        _ = notifClient.Received(1).SendToastAsync(Arg.Any<string>(), Arg.Any<string>());
 
         // 3. Cools down below 90 - 6 = 84°C (e.g. 83°C): recovers/normalizes
         service.Evaluate(new TelemetrySnapshot { CpuTempPackageC = 83f });
-        notifClient.Received(1).SendToastAsync(Arg.Any<string>(), Arg.Any<string>());
+        _ = notifClient.Received(1).SendToastAsync(Arg.Any<string>(), Arg.Any<string>());
 
         // 4. Climbs back to 91°C: should fire again as a new breach
         service.Evaluate(new TelemetrySnapshot { CpuTempPackageC = 91f });
-        notifClient.Received(2).SendToastAsync(Arg.Is<string>(s => s.Contains("CPU Temperature High")), Arg.Any<string>());
+        _ = notifClient.Received(2).SendToastAsync(Arg.Is<string>(s => s.Contains("CPU Temperature High")), Arg.Any<string>());
     }
 
     [WpfFact]
@@ -451,14 +477,14 @@ public class AlertServiceTests
 
         // 1. Initial breach at 90°C
         service.Evaluate(new TelemetrySnapshot { CpuTempPackageC = 90f });
-        notifClient.Received(1).SendToastAsync(Arg.Is<string>(s => s.Contains("CPU Temperature High")), Arg.Any<string>());
+        _ = notifClient.Received(1).SendToastAsync(Arg.Is<string>(s => s.Contains("CPU Temperature High")), Arg.Any<string>());
 
         // 2. Minor fluctuation to 92°C (+2°C < 5°C escalationDelta): does not fire
         service.Evaluate(new TelemetrySnapshot { CpuTempPackageC = 92f });
-        notifClient.Received(1).SendToastAsync(Arg.Any<string>(), Arg.Any<string>());
+        _ = notifClient.Received(1).SendToastAsync(Arg.Any<string>(), Arg.Any<string>());
 
         // 3. Surge to 96°C (+6°C from initial 90°C >= 5°C escalationDelta): triggers escalation alert
         service.Evaluate(new TelemetrySnapshot { CpuTempPackageC = 96f });
-        notifClient.Received(1).SendToastAsync(Arg.Is<string>(s => s.Contains("CPU Temperature Critical")), Arg.Any<string>());
+        _ = notifClient.Received(1).SendToastAsync(Arg.Is<string>(s => s.Contains("CPU Temperature Critical")), Arg.Any<string>());
     }
 }

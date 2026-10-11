@@ -135,11 +135,13 @@ public class WindowsNetworkUsageProviderTests
         try
         {
             var historyFile = new TrafficHistoryFile(tempPath);
-            await WindowsNetworkUsageProvider.RefreshTodayUsageAsync(historyFile);
+            var act = async () => await WindowsNetworkUsageProvider.RefreshTodayUsageAsync(historyFile);
+            await act.Should().NotThrowAsync();
 
             using var cts = new CancellationTokenSource();
             cts.Cancel();
-            await WindowsNetworkUsageProvider.RefreshTodayUsageAsync(historyFile, cts.Token);
+            var actCanceled = async () => await WindowsNetworkUsageProvider.RefreshTodayUsageAsync(historyFile, cts.Token);
+            await actCanceled.Should().NotThrowAsync();
         }
         finally
         {

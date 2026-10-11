@@ -290,8 +290,12 @@ public class TrayIconManagerTests
         {
             TrayIconManager.SkipUiForTesting = false;
             using var tray = new TrayIconManager();
-            tray.SetTrayVisible(true);
-            tray.SetTrayVisible(false);
+            var act = () =>
+            {
+                tray.SetTrayVisible(true);
+                tray.SetTrayVisible(false);
+            };
+            act.Should().NotThrow();
         }
         finally
         {
@@ -359,11 +363,13 @@ public class TrayIconManagerTests
 
         // Trigger Opened event
         var onOpened = typeof(ToolStripDropDown).GetMethod("OnOpened", BindingFlags.Instance | BindingFlags.NonPublic);
-        onOpened?.Invoke(menu, [EventArgs.Empty]);
+        var actOpen = () => onOpened?.Invoke(menu, [EventArgs.Empty]);
+        actOpen.Should().NotThrow();
 
         // Trigger Closed event
         var onClosed = typeof(ToolStripDropDown).GetMethod("OnClosed", BindingFlags.Instance | BindingFlags.NonPublic);
-        onClosed?.Invoke(menu, [new ToolStripDropDownClosedEventArgs(ToolStripDropDownCloseReason.AppClicked)]);
+        var actClose = () => onClosed?.Invoke(menu, [new ToolStripDropDownClosedEventArgs(ToolStripDropDownCloseReason.AppClicked)]);
+        actClose.Should().NotThrow();
     }
 }
 

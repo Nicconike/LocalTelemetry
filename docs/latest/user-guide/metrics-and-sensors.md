@@ -84,8 +84,8 @@ Network telemetry monitors real-time transfer rates across your primary network 
 
 | Metric (Settings Name) | Overlay Label | Typical Display | What It Measures |
 | :--------------------- | :------------ | :-------------- | :----------------------------------------------------------------------------------- |
-| **Download**           | `DOWN↓`       | `1.2 MB/s` (or `9.6 Mb/s`) | Current incoming network throughput (displays `No Internet` when disconnected) |
-| **Upload**             | `UP↑`         | `350 KB/s` (or `2.8 Mb/s`) | Current outgoing network throughput (displays `No Internet` when disconnected) |
+| **Download**           | `DOWN↓`       | `1.2 MB/s` (or `9.6 Mb/s`) | Current incoming network throughput (displays `--` when disconnected) |
+| **Upload**             | `UP↑`         | `350 KB/s` (or `2.8 Mb/s`) | Current outgoing network throughput (displays `--` when disconnected) |
 | **Total Transferred**  | `Total`       | `14.25 GB`      | Cumulative data transferred (download + upload) during the current session (scales from `B` up to `TB`) |
 
 ### :network: Network Options (Settings -> Network)

@@ -216,8 +216,8 @@ public sealed class AlertService(
                 };
 
                 string body = lowAlert
-                    ? $"{metricName} at {displayValue} (limit: {displayThreshold})"
-                    : $"{metricName} at {displayValue} (limit: {displayThreshold})";
+                    ? $"{metricName} low at {displayValue} (limit: {displayThreshold})"
+                    : $"{metricName} high at {displayValue} (limit: {displayThreshold})";
 
                 DispatchAlert(metricId, title, body, $"{metricName} reached {displayValue} (limit: {displayThreshold})");
                 return;
@@ -256,7 +256,7 @@ public sealed class AlertService(
         if (_cfg.Alerts.FlashOverlay) actions.Add("Overlay Flash");
         string actionStr = actions.Count > 0 ? string.Join(", ", actions) : "None (Muted)";
 
-        Log.Warn($"Alert triggered for {logSummary} [Actions: {actionStr}]");
+        Log.Warn($"Alert [{metricId}] triggered for {logSummary} [Actions: {actionStr}]");
 
         if (_cfg.Alerts.FlashOverlay)
             _overlay.Flash(TimeSpan.FromMilliseconds(800));

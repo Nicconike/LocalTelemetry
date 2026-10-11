@@ -1261,6 +1261,9 @@ public sealed class HardwareMonitor : IDisposable
 
     private static (NetworkInterface? selected, bool hasGateway) SelectActiveNic(string pref)
     {
+        if (!NetworkInterface.GetIsNetworkAvailable())
+            return (null, false);
+
         var allNics = NetworkInterface.GetAllNetworkInterfaces()
             .Where(n => n.OperationalStatus == OperationalStatus.Up
                      && (n.NetworkInterfaceType == NetworkInterfaceType.Ethernet

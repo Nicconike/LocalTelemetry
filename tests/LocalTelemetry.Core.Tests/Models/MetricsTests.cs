@@ -107,8 +107,8 @@ public class MetricsTests
         Metrics.Format(Metrics.NetTotal, sBTot, false, false).Should().Be("800B");
 
         var sOffline = new TelemetrySnapshot { NetDownBps = 0, NetUpBps = 0, NetInterfaceName = "" };
-        Metrics.Format(Metrics.NetDown, sOffline, false, false).Should().Be("No Internet");
-        Metrics.Format(Metrics.NetUp, sOffline, false, false).Should().Be("No Internet");
+        Metrics.Format(Metrics.NetDown, sOffline, false, false).Should().Be("--");
+        Metrics.Format(Metrics.NetUp, sOffline, false, false).Should().Be("--");
 
         var sConnectedIdle = new TelemetrySnapshot { NetDownBps = 0, NetUpBps = 0, NetInterfaceName = "Ethernet" };
         Metrics.Format(Metrics.NetDown, sConnectedIdle, false, false).Should().Be("0B/s");

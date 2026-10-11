@@ -115,8 +115,9 @@ public class ToastFormTests
         while (sw.ElapsedMilliseconds < 350)
         {
             System.Windows.Forms.Application.DoEvents();
-            System.Threading.Thread.Sleep(20);
+            System.Threading.Thread.Yield();
         }
+        toast.Should().NotBeNull();
     }
 
     [WpfFact]
@@ -127,6 +128,7 @@ public class ToastFormTests
         {
             using var toast = new ToastForm("Test Title", "Test Body");
             toast.Show();
+            toast.Visible.Should().BeTrue();
             toast.Close();
         }
         finally

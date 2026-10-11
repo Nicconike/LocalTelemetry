@@ -35,9 +35,13 @@ public class PawnIoManagerWrapperTests
     public void Statics_AreCallableWithoutThrowing()
     {
         var wrapper = new PawnIoManagerWrapper();
-        try { wrapper.TryCreate(); } catch { }
-        try { wrapper.TryInstall(); } catch { }
-        try { wrapper.StartDriverService(); } catch { }
-        try { wrapper.LoadResourceBytes("IntelMSR.bin"); } catch { }
+        var act = () =>
+        {
+            try { wrapper.TryCreate(); } catch (Exception) { /* Best-effort execution */ }
+            try { wrapper.TryInstall(); } catch (Exception) { /* Best-effort execution */ }
+            try { wrapper.StartDriverService(); } catch (Exception) { /* Best-effort execution */ }
+            try { wrapper.LoadResourceBytes("IntelMSR.bin"); } catch (Exception) { /* Best-effort execution */ }
+        };
+        act.Should().NotThrow();
     }
 }

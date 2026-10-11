@@ -119,7 +119,7 @@ public sealed class HardwareLifecycleManager : IHardwareLifecycleManager
         }
     }
 
-    private void OnSessionEnding(object? sender, SessionEndingEventArgs e)
+    private static void OnSessionEnding(object? sender, SessionEndingEventArgs e)
     {
         try
         {
@@ -137,7 +137,7 @@ public sealed class HardwareLifecycleManager : IHardwareLifecycleManager
         }
     }
 
-    private void OnSessionSwitch(object? sender, SessionSwitchEventArgs e)
+    private static void OnSessionSwitch(object? sender, SessionSwitchEventArgs e)
     {
         try
         {

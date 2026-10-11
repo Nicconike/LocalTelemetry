@@ -37,8 +37,6 @@ public sealed class AmdMsrReader : IDisposable
         var result = _device.Execute("ioctl_resolve_pm_table", null, 2);
         if (result.Length < 2)
             return 0f;
-        uint pmVersion = (uint)(result[0] & 0xFFFFFFFF);
-        ulong pmBase = result[1];
 
         if (_device.Execute("ioctl_update_pm_table", null, 0).Length == 0)
             return 0f;

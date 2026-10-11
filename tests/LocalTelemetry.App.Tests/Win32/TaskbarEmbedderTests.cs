@@ -95,10 +95,10 @@ public class TaskbarEmbedderTests
 
         typeof(TaskbarEmbedder).GetField("_trayLeftEdge", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, -1);
         typeof(TaskbarEmbedder).GetField("_isWin11", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, true);
-        var x11 = (int)compRight.Invoke(embedder, [150])!;
+        _ = (int)compRight.Invoke(embedder, [150])!;
 
         typeof(TaskbarEmbedder).GetField("_isWin11", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, false);
-        var x10 = (int)compRight.Invoke(embedder, [150])!;
+        _ = (int)compRight.Invoke(embedder, [150])!;
     }
 
     [Fact]
@@ -192,6 +192,7 @@ public class TaskbarEmbedderTests
         using var overlayForm = new Form();
 
         bool embedResult = embedder.Embed(overlayForm.Handle, new Size(200, 30));
+        embedResult.Should().BeTrue();
         embedder.UpdateLayeredSettings(overlayForm.Handle);
         embedder.Reposition(overlayForm.Handle, new Size(220, 30));
         embedder.Detach(overlayForm.Handle);
@@ -218,12 +219,14 @@ public class TaskbarEmbedderTests
             cls == "TrayClockWClass" ? fakeClock.Handle : IntPtr.Zero;
 
         var getTrayLeft = typeof(TaskbarEmbedder).GetMethod("GetTrayLeftEdge", BindingFlags.NonPublic | BindingFlags.Static);
-        getTrayLeft!.Invoke(null, null);
+        var act1 = () => getTrayLeft!.Invoke(null, null);
+        act1.Should().NotThrow();
 
         TaskbarEmbedder.FindWindowExOverride = (parent, after, cls, name) =>
             cls == "Windows.UI.Composition.DesktopWindowContentBridge" ? fakeBridge.Handle : IntPtr.Zero;
 
-        getTrayLeft.Invoke(null, null);
+        var act2 = () => getTrayLeft!.Invoke(null, null);
+        act2.Should().NotThrow();
 
         TaskbarEmbedder.ExplorerTrayWndOverride = null;
         TaskbarEmbedder.FindWindowExOverride = null;
@@ -247,12 +250,15 @@ public class TaskbarEmbedderTests
         using var overlayForm = new Form();
 
         bool embedResult = embedder.Embed(overlayForm.Handle, new Size(200, 30));
+        embedResult.Should().BeTrue();
 
         var refreshInfo = typeof(TaskbarEmbedder).GetMethod("RefreshTaskbarInfo", BindingFlags.NonPublic | BindingFlags.Instance);
-        refreshInfo!.Invoke(embedder, null);
+        var actRefresh = () => refreshInfo!.Invoke(embedder, null);
+        actRefresh.Should().NotThrow();
 
         var logStructure = typeof(TaskbarEmbedder).GetMethod("LogTrayStructure", BindingFlags.NonPublic | BindingFlags.Static);
-        logStructure!.Invoke(null, null);
+        var actLog = () => logStructure!.Invoke(null, null);
+        actLog.Should().NotThrow();
 
         TaskbarEmbedder.ExplorerTrayWndOverride = null;
         TaskbarEmbedder.FindWindowExOverride = null;
@@ -371,10 +377,12 @@ public class TaskbarEmbedderTests
 
         var shrink = typeof(TaskbarEmbedder).GetMethod("ShrinkTaskBand", BindingFlags.NonPublic | BindingFlags.Instance);
         cfg.Overlay.Placement = "left";
-        shrink!.Invoke(embedder, [new Size(150, 30)]);
+        var actShrinkLeft = () => shrink!.Invoke(embedder, [new Size(150, 30)]);
+        actShrinkLeft.Should().NotThrow();
 
         cfg.Overlay.Placement = "right";
-        shrink.Invoke(embedder, [new Size(150, 30)]);
+        var actShrinkRight = () => shrink!.Invoke(embedder, [new Size(150, 30)]);
+        actShrinkRight.Should().NotThrow();
 
         fakeBand.Close();
     }
@@ -396,12 +404,14 @@ public class TaskbarEmbedderTests
         // Horizontal
         typeof(TaskbarEmbedder).GetField("_taskbarEdge", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, NativeMethods.ABE_BOTTOM);
         typeof(TaskbarEmbedder).GetField("_taskBandSaved", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, true);
-        restore!.Invoke(embedder, null);
+        var actRestoreH = () => restore!.Invoke(embedder, null);
+        actRestoreH.Should().NotThrow();
 
         // Vertical
         typeof(TaskbarEmbedder).GetField("_taskbarEdge", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, 0u);
         typeof(TaskbarEmbedder).GetField("_taskBandSaved", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, true);
-        restore.Invoke(embedder, null);
+        var actRestoreV = () => restore!.Invoke(embedder, null);
+        actRestoreV.Should().NotThrow();
 
         fakeBand.Close();
     }

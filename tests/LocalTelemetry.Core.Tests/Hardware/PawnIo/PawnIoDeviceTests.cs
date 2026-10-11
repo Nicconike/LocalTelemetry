@@ -307,4 +307,29 @@ public class PawnIoDeviceTests
             PawnIoDevice.ProcessRunner = null;
         }
     }
+
+    [Fact]
+    public void PawnIoDevice_LoadModule_Execute_Disposal_Coverage()
+    {
+        var invalidHandle = new SafeFileHandle(new IntPtr(-1), ownsHandle: false);
+        var device = new PawnIoDevice(invalidHandle);
+
+        // 1. LoadModule edge cases
+        device.LoadModule(null!).Should().BeFalse();
+        device.LoadModule([]).Should().BeFalse();
+        device.LoadModule(new byte[16]).Should().BeFalse();
+
+        // 2. Execute with invalid handle
+        device.Execute(null!, null, 0).Should().BeEmpty();
+        device.Execute("test_fn", [10, 20], 1).Should().BeEmpty();
+
+        // 3. Dispose is safe and idempotent
+        var disposeAct = () => device.Dispose();
+        disposeAct.Should().NotThrow();
+        disposeAct.Should().NotThrow();
+
+        // Post-disposal guards
+        device.LoadModule(new byte[16]).Should().BeFalse();
+        device.Execute("test_fn", null, 1).Should().BeEmpty();
+    }
 }

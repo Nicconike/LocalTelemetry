@@ -249,8 +249,7 @@ public class DiskQueryTests
 
         // Public API calls
         DiskQuery.RefreshDiskCache();
-        var drive0 = DiskQuery.QueryPhysicalDrive0();
-        // May be null or not depending on host, but call executes cleanly
+        _ = DiskQuery.QueryPhysicalDrive0();
     }
 
     [Fact]
@@ -319,12 +318,7 @@ public class DiskQueryTests
     [Fact]
     public void DiskQuery_IsExcludedDrive_And_DetermineMediaType_FullBranchCoverage()
     {
-        // 1. Private Log method
-        var logMethod = typeof(DiskQuery).GetMethod("Log", BindingFlags.NonPublic | BindingFlags.Static);
-        logMethod.Should().NotBeNull();
-        logMethod!.Invoke(null, ["DiskQuery unit test log message"]);
-
-        // 2. FormatCommercialCapacity edge cases
+        // 1. FormatCommercialCapacity edge cases
         DiskQuery.FormatCommercialCapacity(0).Should().BeEmpty();
         DiskQuery.FormatCommercialCapacity(-100).Should().BeEmpty();
 

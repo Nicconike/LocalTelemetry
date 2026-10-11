@@ -6,7 +6,7 @@ using Xunit;
 namespace LocalTelemetry.Core.Tests.Diagnostics;
 
 [Collection("TrafficHistory")]
-public class LogTests : IDisposable
+public sealed class LogTests : IDisposable
 {
     private readonly string _tempDir;
     private readonly string _sysLogPath;
@@ -32,8 +32,7 @@ public class LogTests : IDisposable
             if (Directory.Exists(_tempDir))
                 Directory.Delete(_tempDir, true);
         }
-        catch { }
-        GC.SuppressFinalize(this);
+        catch (Exception) { /* Best-effort cleanup */ }
     }
 
     [Fact]
@@ -463,5 +462,7 @@ public class LogTests : IDisposable
             maxBytesProp.SetValue(null, original);
             Log.Shutdown();
         }
+
+        File.Exists(dedicatedSysLog).Should().BeTrue();
     }
 }

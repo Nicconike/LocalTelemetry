@@ -14,12 +14,16 @@ permissions:
     contents: read
 
 jobs:
-    prepare-release:
-        name: Prepare Semantic Release Tag
-        runs-on: ubuntu-latest
-        outputs:
-            new_tag: ${{ steps.resolve_tag.outputs.new_tag }}
-            new_version: ${{ steps.resolve_tag.outputs.new_version }}
+    release:
+        name: Build, Package & Publish Release
+        runs-on: windows-latest
+        permissions:
+            contents: write
+            id-token: write
+            attestations: write
+        env:
+            DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+            DOTNET_NOLOGO: "true"
         steps:
             - name: Generate GitHub App Token
               id: app_token
@@ -37,58 +41,23 @@ jobs:
             - name: Fetch All Tags
               run: git fetch --tags --force
 
-            - name: Generate Semantic Version Tag
-              id: tag_version
-              uses: mathieudutour/github-tag-action@a22cf08638b34d5badda920f9daf6e72c477b07b # v6.2
-              with:
-                  github_token: ${{ steps.app_token.outputs.token }}
-                  tag_prefix: v
-                  release_branches: main
-                  pre_release_branches: master
-                  default_prerelease_bump: prerelease
-                  custom_release_rules: feat:prerelease,fix:prerelease,perf:prerelease
-                  append_to_pre_release_tag: rc
-                  fetch_all_tags: true
-                  initial_version: 1.0.0
-                  dry_run: true
-
-            - name: Ensure RC tag starts at 1
+            - name: Determine Next Release Tag
               id: resolve_tag
+              shell: bash
               run: |
-                  TAG="${{ steps.tag_version.outputs.new_tag }}"
-                  VER="${{ steps.tag_version.outputs.new_version }}"
-                  if [[ "$VER" =~ -rc\.0$ ]]; then
-                      VER="${VER%-rc.0}-rc.1"
-                      TAG="v$VER"
+                  git fetch --tags --force
+                  LATEST_RC=$(git tag -l "v1.0.0-rc.*" | sort -V | tail -n 1)
+                  if [ -n "$LATEST_RC" ]; then
+                      RC_NUM=$(echo "$LATEST_RC" | sed -E 's/.*-rc\.([0-9]+)/\1/')
+                      NEXT_RC=$((RC_NUM + 1))
+                  else
+                      NEXT_RC=0
                   fi
+                  VER="1.0.0-rc.${NEXT_RC}"
+                  TAG="v${VER}"
                   echo "new_tag=$TAG" >> "$GITHUB_OUTPUT"
                   echo "new_version=$VER" >> "$GITHUB_OUTPUT"
-
-    publish-release:
-        name: Build, Package & Publish Release
-        needs: [prepare-release]
-        if: ${{ needs.prepare-release.outputs.new_tag != '' }}
-        runs-on: windows-latest
-        permissions:
-            contents: write
-            id-token: write
-            attestations: write
-        env:
-            DOTNET_CLI_TELEMETRY_OPTOUT: "1"
-            DOTNET_NOLOGO: "true"
-        steps:
-            - name: Generate GitHub App Token
-              id: app_token
-              uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-              with:
-                  client-id: ${{ secrets.APP_CLIENT_ID }}
-                  private-key: ${{ secrets.APP_PRIVATE_KEY }}
-
-            - name: Checkout Repository
-              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-              with:
-                  token: ${{ steps.app_token.outputs.token }}
-                  fetch-depth: 0
+                  echo "Resolved new tag: $TAG ($VER)"
 
             - name: Setup Bun Runtime
               uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
@@ -108,7 +77,7 @@ jobs:
               run: git fetch --tags --force
 
             - name: Publish Single-File Executable
-              run: dotnet publish src/LocalTelemetry.App/LocalTelemetry.App.csproj -c Release -r win-x64 --no-self-contained -p:PublishSingleFile=true -p:MinVerVersionOverride=${{ needs.prepare-release.outputs.new_version }} -o ./publish
+              run: dotnet publish src/LocalTelemetry.App/LocalTelemetry.App.csproj -c Release -r win-x64 --no-self-contained -p:PublishSingleFile=true -p:MinVerVersionOverride=${{ steps.resolve_tag.outputs.new_version }} -o ./publish
 
             - name: Download PawnIO Driver Installer
               shell: pwsh
@@ -147,7 +116,7 @@ jobs:
                   if (-not (Test-Path $iscc) -and -not (Get-Command $iscc -ErrorAction SilentlyContinue)) {
                       throw "ISCC.exe not found after winget install"
                   }
-                  $ver = "${{ needs.prepare-release.outputs.new_version }}"
+                  $ver = "${{ steps.resolve_tag.outputs.new_version }}"
                   $numVer = ($ver -split '-')[0]
                   if ($numVer.Split('.').Count -eq 3) { $numVer = "$numVer.0" }
                   & $iscc /DAppVersion=$ver /DAppVersionInfoVersion=$numVer setup.iss
@@ -195,13 +164,14 @@ jobs:
               env:
                   GH_TOKEN: ${{ steps.app_token.outputs.token }}
               run: |
-                  $tag = "${{ needs.prepare-release.outputs.new_tag }}"
+                  $tag = "${{ steps.resolve_tag.outputs.new_tag }}"
                   $exists = git ls-remote --tags origin "refs/tags/$tag"
                   if (-not $exists) {
                       git config user.name "protected-auto-commits[bot]"
                       git config user.email "236486036+protected-auto-commits[bot]@users.noreply.github.com"
                       git tag -s -m "Release $tag" "$tag"
-                      git push origin "refs/tags/$tag"
+                      $repo = "${{ github.repository }}"
+                      git push "https://x-access-token:${{ steps.app_token.outputs.token }}@github.com/$repo.git" "refs/tags/$tag"
                   } else {
                       Write-Host "Tag $tag already exists on origin; skipping creation"
                   }
@@ -210,10 +180,10 @@ jobs:
               uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
               with:
                   token: ${{ steps.app_token.outputs.token }}
-                  tag_name: ${{ needs.prepare-release.outputs.new_tag }}
-                  name: ${{ needs.prepare-release.outputs.new_tag }}
+                  tag_name: ${{ steps.resolve_tag.outputs.new_tag }}
+                  name: ${{ steps.resolve_tag.outputs.new_tag }}
                   body_path: release-body.md
-                  prerelease: ${{ contains(needs.prepare-release.outputs.new_version, 'rc') || contains(needs.prepare-release.outputs.new_version, 'beta') || contains(needs.prepare-release.outputs.new_version, 'alpha') }}
+                  prerelease: ${{ contains(steps.resolve_tag.outputs.new_version, 'rc') || contains(steps.resolve_tag.outputs.new_version, 'beta') || contains(steps.resolve_tag.outputs.new_version, 'alpha') }}
                   files: |
                       ./LocalTelemetrySetup.exe
                       ./LocalTelemetry-win-x64.zip
@@ -224,8 +194,8 @@ jobs:
               env:
                   CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
               run: |
-                  $ver = "${{ needs.prepare-release.outputs.new_version }}"
-                  $tag = "${{ needs.prepare-release.outputs.new_tag }}"
+                  $ver = "${{ steps.resolve_tag.outputs.new_version }}"
+                  $tag = "${{ steps.resolve_tag.outputs.new_tag }}"
                   $setupHash = $env:SETUP_HASH
                   $setupUrl = "https://github.com/${{ github.repository }}/releases/download/$tag/LocalTelemetrySetup.exe"
 
@@ -259,8 +229,8 @@ jobs:
               env:
                   GH_TOKEN: ${{ steps.app_token.outputs.token }}
               run: |
-                  $ver = "${{ needs.prepare-release.outputs.new_version }}"
-                  $tag = "${{ needs.prepare-release.outputs.new_tag }}"
+                  $ver = "${{ steps.resolve_tag.outputs.new_version }}"
+                  $tag = "${{ steps.resolve_tag.outputs.new_tag }}"
                   $zipHash = $env:ZIP_HASH
                   $zipUrl = "https://github.com/${{ github.repository }}/releases/download/$tag/LocalTelemetry-win-x64.zip"
 
@@ -297,7 +267,7 @@ jobs:
                       $content = [Convert]::ToBase64String([IO.File]::ReadAllBytes("$pwd/CHANGELOG.md"))
                       $sha = gh api "repos/${{ github.repository }}/contents/CHANGELOG.md" --jq .sha
                       $body = @{
-                          message = "chore: Update Changelog for ${{ needs.prepare-release.outputs.new_tag }} [skip ci]"
+                          message = "chore: Update Changelog for ${{ steps.resolve_tag.outputs.new_tag }} [skip ci]"
                           content = $content
                           sha = $sha
                           branch = "master"

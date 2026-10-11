@@ -203,8 +203,11 @@ public class SettingsShellTests
         var posted = new List<string>();
         SettingsShell.PostJsonActionOverride = posted.Add;
 
-        ctx.Shell.HandleWebMessageJson("""{"type":"checkForUpdates","payload":{"force":true}}""");
-        ctx.Shell.HandleWebMessageJson("""{"type":"checkForUpdates","payload":{"force":false}}""");
+        var act1 = () => ctx.Shell.HandleWebMessageJson("""{"type":"checkForUpdates","payload":{"force":true}}""");
+        act1.Should().NotThrow();
+
+        var act2 = () => ctx.Shell.HandleWebMessageJson("""{"type":"checkForUpdates","payload":{"force":false}}""");
+        act2.Should().NotThrow();
     }
 
     [WpfFact]
@@ -707,8 +710,8 @@ public class SettingsShellTests
         formatTdp.Should().NotBeNull();
 
         var gpuTuple = ("RTX 4090", "NVIDIA", true, (long?)(16L * 1024 * 1024 * 1024), "550.00");
-        var resVram = (string?)formatVram!.Invoke(null, [gpuTuple]);
-        var resTdp = (string?)formatTdp!.Invoke(null, [gpuTuple, (float?)250f]);
+        _ = (string?)formatVram!.Invoke(null, [gpuTuple]);
+        _ = (string?)formatTdp!.Invoke(null, [gpuTuple, (float?)250f]);
 
         var amdTuple = ("RX 7900", "AMD", true, (long?)(24L * 1024 * 1024 * 1024), "24.0.0");
         var resAmdVram = (string?)formatVram.Invoke(null, [amdTuple]);

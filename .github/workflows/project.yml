@@ -104,13 +104,13 @@ jobs:
                           // Add Item to Project #7
                           const addItemMutation = `
                               mutation($projectId: ID!, $contentId: ID!) {
-                                  addProjectV2ItemByCodeId(input: {projectId: $projectId, contentId: $contentId}) {
+                                  addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) {
                                       item { id }
                                   }
                               }
                           `;
                           const addItemRes = await graphqlWithPat(addItemMutation, { projectId, contentId });
-                          itemId = addItemRes.addProjectV2ItemByCodeId.item.id;
+                          itemId = addItemRes.addProjectV2ItemById.item.id;
                       } catch (err) {
                           core.setFailed(`Project fetch/addition failed: ${err.message}`);
                           return;

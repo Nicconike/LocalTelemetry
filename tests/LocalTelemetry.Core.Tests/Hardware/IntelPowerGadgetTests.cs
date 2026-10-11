@@ -11,11 +11,15 @@ public class IntelPowerGadgetTests
     public void IntelPowerGadgetNativePInvoke_Instance_ExecutesSafely()
     {
         var native = IntelPowerGadgetNativePInvoke.Instance;
-        native.TryLoadLibrary();
-        native.Initialize();
-        native.GetNumNodes(out _);
-        native.GetIAFrequency(0, out _);
-        native.Shutdown();
+        var act = () =>
+        {
+            native.TryLoadLibrary();
+            native.Initialize();
+            native.GetNumNodes(out _);
+            native.GetIAFrequency(0, out _);
+            native.Shutdown();
+        };
+        act.Should().NotThrow();
     }
 
     [Fact]

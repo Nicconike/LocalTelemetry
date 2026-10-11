@@ -33,11 +33,6 @@ public record DiskInfo
 [SupportedOSPlatform("windows")]
 public static class DiskQuery
 {
-    private static void Log(string msg)
-    {
-        Diagnostics.Log.Info(msg);
-    }
-
     private const uint IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS = 0x00560000;
     private const uint IOCTL_STORAGE_QUERY_PROPERTY = 0x002D1400;
 
@@ -150,7 +145,7 @@ public static class DiskQuery
         };
         byte[] queryBytes = StructToBytes(query);
 
-        var desc = new STORAGE_ADAPTER_DESCRIPTOR();
+        STORAGE_ADAPTER_DESCRIPTOR desc;
         byte[] descBytes = new byte[Marshal.SizeOf<STORAGE_ADAPTER_DESCRIPTOR>()];
 
         if (NativeMethods.DeviceIoControl(handle, IOCTL_STORAGE_QUERY_PROPERTY,

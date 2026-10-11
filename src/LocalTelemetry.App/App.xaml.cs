@@ -353,33 +353,35 @@ public sealed partial class App : WpfApplication
     // Event wiring
     private void WireEvents()
     {
-        _tray!.OpenSettingsRequested += () => OpenSettings();
-        _tray!.QuitRequested += () => QuitApp();
-        _tray!.ToggleOverlayRequested += () =>
+        if (_tray is null || _overlay is null || _monitor is null) return;
+
+        _tray.OpenSettingsRequested += () => OpenSettings();
+        _tray.QuitRequested += () => QuitApp();
+        _tray.ToggleOverlayRequested += () =>
         {
             _cfg.Overlay.Visible = !_cfg.Overlay.Visible;
             Log.Info($"User toggled overlay visibility via system tray to {(_cfg.Overlay.Visible ? "visible" : "hidden")}");
             _cfg.Save();
             HandleSettingsApplied();
         };
-        _tray!.TaskManagerRequested += () =>
+        _tray.TaskManagerRequested += () =>
         {
             LaunchTaskManager();
         };
-        _tray!.TaskbarCreated += () =>
+        _tray.TaskbarCreated += () =>
         {
             if (_cfg.Overlay.Visible)
             {
-                _overlay!.RecoverTaskbar("TaskbarCreated notification from explorer");
+                _overlay.RecoverTaskbar("TaskbarCreated notification from explorer");
             }
         };
 
-        _overlay!.ShowContextMenuAction = pt =>
+        _overlay.ShowContextMenuAction = pt =>
         {
             try
             {
                 Log.Debug($"Forwarding right-click context menu display to TrayIconManager at ({pt.X}, {pt.Y})");
-                _tray!.ShowOverlayContextMenu(pt);
+                _tray.ShowOverlayContextMenu(pt);
             }
             catch (Exception ex)
             {
@@ -387,21 +389,21 @@ public sealed partial class App : WpfApplication
             }
         };
 
-        _overlay!.IsContextMenuOpen = () => _tray?.IsOverlayContextMenuOpen == true;
-        _overlay!.GetContextMenuBounds = () => _tray?.OverlayContextMenuBounds ?? System.Drawing.Rectangle.Empty;
-        _overlay!.CloseContextMenuAction = () => _tray?.CloseOverlayContextMenu();
+        _overlay.IsContextMenuOpen = () => _tray.IsOverlayContextMenuOpen;
+        _overlay.GetContextMenuBounds = () => _tray.OverlayContextMenuBounds;
+        _overlay.CloseContextMenuAction = () => _tray.CloseOverlayContextMenu();
 
-        _overlay!.OnOpenSettingsRequested = () => OpenSettings();
-        _overlay!.OnToggleOverlayRequested = () =>
+        _overlay.OnOpenSettingsRequested = () => OpenSettings();
+        _overlay.OnToggleOverlayRequested = () =>
         {
             _cfg.Overlay.Visible = !_cfg.Overlay.Visible;
             Log.Info($"User toggled overlay visibility via overlay menu to {(_cfg.Overlay.Visible ? "visible" : "hidden")}");
             _cfg.Save();
             HandleSettingsApplied();
         };
-        _overlay!.OnExitRequested = () => QuitApp();
+        _overlay.OnExitRequested = () => QuitApp();
 
-        _overlay!.OnDoubleClick += (action) =>
+        _overlay.OnDoubleClick += (action) =>
         {
             if (string.Equals(action, "taskmanager", StringComparison.OrdinalIgnoreCase))
             {
@@ -414,7 +416,7 @@ public sealed partial class App : WpfApplication
             }
         };
 
-        _monitor!.SnapshotReady += HandleSnapshotReady;
+        _monitor.SnapshotReady += HandleSnapshotReady;
     }
 
     private void LaunchTaskManager()

@@ -300,7 +300,7 @@ function getDocsEmbed() {
                 fields: [
                     { name: 'Documentation Website', value: '[nicconike.github.io/LocalTelemetry](https://nicconike.github.io/LocalTelemetry/)' },
                     { name: 'GitHub Repository', value: `[github.com/${GITHUB_REPO}](https://github.com/${GITHUB_REPO})` },
-                    { name: 'Contributing Guide', value: `[CONTRIBUTING.md](https://github.com/${GITHUB_REPO}/blob/master/CONTRIBUTING.md)` }
+                    { name: 'Contributing Guide', value: `[CONTRIBUTING.md](https://github.com/${GITHUB_REPO}/blob/master/.github/CONTRIBUTING.md)` }
                 ]
             }
         ]

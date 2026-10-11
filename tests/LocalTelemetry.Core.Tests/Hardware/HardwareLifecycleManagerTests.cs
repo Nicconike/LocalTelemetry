@@ -92,7 +92,7 @@ public class HardwareLifecycleManagerTests
     public void HardwareLifecycleManager_OnSessionEnding_LogsKnownAndUnknownReasons()
     {
         using var manager = new HardwareLifecycleManager();
-        var method = typeof(HardwareLifecycleManager).GetMethod("OnSessionEnding", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var method = typeof(HardwareLifecycleManager).GetMethod("OnSessionEnding", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static);
         method.Should().NotBeNull();
 
         var shutdownArgs = new Microsoft.Win32.SessionEndingEventArgs(Microsoft.Win32.SessionEndReasons.SystemShutdown);
@@ -112,7 +112,7 @@ public class HardwareLifecycleManagerTests
     public void HardwareLifecycleManager_OnSessionSwitch_LogsKnownAndUnknownReasons()
     {
         using var manager = new HardwareLifecycleManager();
-        var method = typeof(HardwareLifecycleManager).GetMethod("OnSessionSwitch", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var method = typeof(HardwareLifecycleManager).GetMethod("OnSessionSwitch", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static);
         method.Should().NotBeNull();
 
         foreach (var reason in new[]

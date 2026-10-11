@@ -11,8 +11,6 @@ namespace LocalTelemetry.Core.Hardware;
 [SupportedOSPlatform("windows")]
 public sealed class NvGpuMonitor : IDisposable
 {
-    private static void Log(string msg) { Diagnostics.Log.Debug(msg); }
-
     /// <summary>Gets whether NVML was initialized successfully.</summary>
     public bool IsAvailable { get; private set; }
 

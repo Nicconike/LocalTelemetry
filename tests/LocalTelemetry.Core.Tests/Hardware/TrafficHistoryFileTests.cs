@@ -130,7 +130,8 @@ public class TrafficHistoryFileTests
         {
             var history = new TrafficHistoryFile(dir);
             history.SetDay(2026, 8, 1, 1, 2, "Ethernet", "Test");
-            history.Save();
+            var act = () => history.Save();
+            act.Should().NotThrow();
         }
         finally
         {

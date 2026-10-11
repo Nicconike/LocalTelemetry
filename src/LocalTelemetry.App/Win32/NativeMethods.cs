@@ -21,9 +21,6 @@ internal static class NativeMethods
     public const int WS_EX_TOPMOST = 0x00000008;
 
     // Layered Window Blending
-    public const byte AC_SRC_OVER = 0x00;
-    public const byte AC_SRC_ALPHA = 0x01;
-    public const int ULW_ALPHA = 0x02;
     public const uint LWA_COLORKEY = 0x01;
     public const uint LWA_ALPHA = 0x02;
 
@@ -65,7 +62,6 @@ internal static class NativeMethods
     public const int WM_DISPLAYCHANGE = 0x007E;
     public const int WM_DEVICECHANGE = 0x0219;
     public const int HTCLIENT = 1;
-    public const int HTTRANSPARENT = -1;
 
     // AppBar & Taskbar Position
     public const uint ABM_GETTASKBARPOS = 0x05;
@@ -74,7 +70,6 @@ internal static class NativeMethods
     public const uint ABE_RIGHT = 2;
     public const uint ABE_BOTTOM = 3;
     public const int SM_CXSMICON = 49;
-    public const uint GA_PARENT = 1;
 
     // Device Change Notifications (WM_DEVICECHANGE wParam)
     public const int DBT_DEVICEARRIVAL = 0x8000;
@@ -123,13 +118,6 @@ internal static class NativeMethods
         public int Left, Top, Right, Bottom;
         public int Width => Right - Left;
         public int Height => Bottom - Top;
-    }
-
-    /// <summary>Specifies alpha-blending parameters for <see cref="UpdateLayeredWindow"/>.</summary>
-    [StructLayout(LayoutKind.Sequential)]
-    public struct BLENDFUNCTION
-    {
-        public byte BlendOp, BlendFlags, SourceConstantAlpha, AlphaFormat;
     }
 
     /// <summary>Contains taskbar AppBar message information.</summary>
@@ -192,14 +180,6 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     public static extern bool GetClientRect(IntPtr hWnd, out RECT r);
 
-    /// <summary>Retrieves a handle to the parent of a window.</summary>
-    [DllImport("user32.dll")]
-    public static extern IntPtr GetParent(IntPtr hWnd);
-
-    /// <summary>Retrieves the handle to the ancestor of the specified window.</summary>
-    [DllImport("user32.dll")]
-    public static extern IntPtr GetAncestor(IntPtr hWnd, uint gaFlags);
-
     /// <summary>Retrieves a window style long value.</summary>
     [DllImport("user32.dll")]
     public static extern int GetWindowLong(IntPtr hWnd, int idx);
@@ -239,42 +219,10 @@ internal static class NativeMethods
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
 
-    /// <summary>Updates position, size and alpha blending of a layered window.</summary>
-    [DllImport("user32.dll")]
-    public static extern bool UpdateLayeredWindow(
-        IntPtr hWnd, IntPtr hdcDst,
-        ref POINT pptDst, ref SIZE psize,
-        IntPtr hdcSrc, ref POINT pptSrc,
-        int crKey, ref BLENDFUNCTION pblend, int dwFlags);
-
-    /// <summary>Retrieves a device context for a window.</summary>
-    [DllImport("user32.dll")]
-    public static extern IntPtr GetDC(IntPtr hWnd);
-
-    /// <summary>Releases a device context.</summary>
-    [DllImport("user32.dll")]
-    public static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
-
     /// <summary>Sets the specified window show state.</summary>
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-
-    /// <summary>Creates a compatible memory device context.</summary>
-    [DllImport("gdi32.dll")]
-    public static extern IntPtr CreateCompatibleDC(IntPtr hDC);
-
-    /// <summary>Deletes a memory device context.</summary>
-    [DllImport("gdi32.dll")]
-    public static extern bool DeleteDC(IntPtr hDC);
-
-    /// <summary>Selects an object into a device context.</summary>
-    [DllImport("gdi32.dll")]
-    public static extern IntPtr SelectObject(IntPtr hDC, IntPtr obj);
-
-    /// <summary>Deletes a GDI object.</summary>
-    [DllImport("gdi32.dll")]
-    public static extern bool DeleteObject(IntPtr obj);
 
     /// <summary>Sends an AppBar message to Windows Explorer.</summary>
     [DllImport("shell32.dll")]
@@ -345,7 +293,6 @@ internal static class NativeMethods
     // Mouse Hook & Cursor Constants & Declarations
     public const int WM_SETCURSOR = 0x0020;
     public const int WM_MOUSEMOVE = 0x0200;
-    public const int WH_MOUSE_LL = 14;
     public const int IDC_ARROW = 32512;
 
 #pragma warning disable S101 // Win32 SDK P/Invoke struct naming convention matches Windows API definitions
@@ -359,15 +306,6 @@ internal static class NativeMethods
         public IntPtr dwExtraInfo;
     }
 #pragma warning restore S101
-
-    public delegate IntPtr HookProc(int nCode, IntPtr wParam, IntPtr lParam);
-
-    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-    public static extern IntPtr SetWindowsHookEx(int idHook, HookProc lpfn, IntPtr hMod, uint dwThreadId);
-
-    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static extern bool UnhookWindowsHookEx(IntPtr hhk);
 
     [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
     public static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);

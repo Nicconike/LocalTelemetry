@@ -1489,11 +1489,10 @@ public static class SystemInfo
                 string devId = (mo["DeviceID"] as string ?? "").Trim();
                 if (devId.Length == 0) continue;
 
-                foreach (var brand in BrandColorDefaults.BatteryColors.Keys)
-                {
-                    if (devId.Contains(brand, StringComparison.OrdinalIgnoreCase))
-                        return brand;
-                }
+                var matchedBrand = BrandColorDefaults.BatteryColors.Keys
+                    .FirstOrDefault(brand => devId.Contains(brand, StringComparison.OrdinalIgnoreCase));
+                if (matchedBrand != null)
+                    return matchedBrand;
             }
         }
         catch (ManagementException ex) { Diagnostics.Log.Debug($"Failed to query battery manufacturer from Win32_Battery: {ex.Message}"); }

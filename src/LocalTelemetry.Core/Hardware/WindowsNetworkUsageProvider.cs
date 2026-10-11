@@ -230,7 +230,7 @@ public static class WindowsNetworkUsageProvider
             DateTime todayDate = DateTime.Today;
             DateTime yesterday = todayDate.AddDays(-1);
 
-            bool hasHistorical = historyFile.GetAllRecords().Any(r => new DateTime(r.Year, r.Month, r.Day) < todayDate);
+            bool hasHistorical = historyFile.GetAllRecords().Any(r => new DateTime(r.Year, r.Month, r.Day, 0, 0, 0, DateTimeKind.Unspecified) < todayDate);
             int historicalAdded = 0;
 
             if (!hasHistorical)

@@ -81,13 +81,13 @@
 
 ## Key Features
 
-- 📊 **Modern Windows 11 Taskbar Integration**: Direct Win32 taskbar embedding into `Shell_TrayWnd` with PerMonitorV2 high-DPI scaling, sub-pixel text rendering, and automatic Explorer restart recovery.
-- 🌐 **Gapless Network Intelligence**: Combines live 1-second packet tracking with Windows SRUM/ESE historical backfill, capturing background bandwidth even when the application was closed.
-- 🌡️ **Deep Multi-Hardware Telemetry**: Direct vendor SDK integration with NVIDIA NVML, AMD ADL, Intel IGCL, WDDM 3.x GPU engines, PawnIO MSR processor registers (RAPL wattage, APERF clocks), multi-disk NVMe/SATA I/O, and battery rates.
-- 🎨 **Intelligent OEM Brand Color Schemes**: Automatically detects installed hardware vendors (Intel, AMD, NVIDIA, Samsung, Corsair, Kingston, G.Skill, Realtek, etc.) and styles metrics with authentic manufacturer brand colors.
-- 🔔 **Anti-Focus-Stealing Alerts**: Decoupled out-of-process notification daemon (`LocalTelemetry.Notifier.exe`) communicating via IPC Named Pipes ensures desktop toast alerts never minimize full-screen games or steal keyboard focus.
-- 💾 **Append-Safe JSON Lines Data Logging**: Fast, corruption-resistant `internet_usage.jsonl` storage with zero external dependencies and 100% offline privacy.
-- 🛡️ **Zero Antivirus False Positives**: Clean native binaries with SLSA build provenance attestations that integrate cleanly with Windows Defender and SmartScreen.
+- 🪟 **Live Taskbar Overlay**: Embeds real-time system telemetry directly into the Windows 11 taskbar with sharp DPI scaling and zero desktop clutter.
+- ⚡ **Deep Hardware Telemetry**: Monitors CPU clocks, wattage, and thermals via kernel MSR registers alongside GPU, RAM, NVMe/SATA disks, and battery rates.
+- 🌐 **Continuous Bandwidth Tracking**: Measures live download and upload speeds, backfilling offline data via Windows SRUM so no usage is missed.
+- 🎨 **Adaptive OEM Brand Themes**: Detects installed hardware vendors (Intel, AMD, NVIDIA, Samsung, Corsair) and applies authentic manufacturer color palettes.
+- 🔔 **Game-Safe Alerts**: Delivers custom threshold warnings via background toasts that never steal keyboard focus or minimize full-screen games.
+- 🔒 **Private & Offline Logging**: Stores bandwidth history locally in lightweight JSON Lines (`internet_usage.jsonl`) with 100% offline privacy and zero telemetry.
+- 🛡️ **Verified Supply-Chain Security**: Ships with cryptographic SLSA provenance attestations, clean Windows Defender scans, and zero adware.
 
 ---
 

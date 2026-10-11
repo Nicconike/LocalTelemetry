@@ -11,16 +11,20 @@ public class IntelGpuMonitorTests
     public void IntelGpuNativePInvoke_Instance_ExecutesSafely()
     {
         var native = IntelGpuNativePInvoke.Instance;
-        native.Init(out var handle);
-        native.EnumerateDevices(handle, out _);
-        native.GetDeviceName(handle, out _);
-        native.GetTempSensor(handle, out _);
-        native.GetTempC(handle, out _);
-        native.GetFreqDomain(handle, out _);
-        native.GetClockMHz(handle, out _);
-        native.GetMemModule(handle, out _);
-        native.GetVram(handle, out _, out _);
-        native.Close(handle);
+        var act = () =>
+        {
+            native.Init(out var handle);
+            native.EnumerateDevices(handle, out _);
+            native.GetDeviceName(handle, out _);
+            native.GetTempSensor(handle, out _);
+            native.GetTempC(handle, out _);
+            native.GetFreqDomain(handle, out _);
+            native.GetClockMHz(handle, out _);
+            native.GetMemModule(handle, out _);
+            native.GetVram(handle, out _, out _);
+            native.Close(handle);
+        };
+        act.Should().NotThrow();
     }
 
     [Fact]

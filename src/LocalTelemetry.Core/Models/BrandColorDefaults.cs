@@ -9,11 +9,19 @@ namespace LocalTelemetry.Core.Models;
 [SupportedOSPlatform("windows")]
 public static class BrandColorDefaults
 {
+    private const string IntelBrand = "Intel";
+    private const string SamsungBrand = "Samsung";
+    private const string SkHynixBrand = "SK Hynix";
+    private const string WesternDigitalBrand = "Western Digital";
+    private const string GSkillBrand = "G Skill";
+    private const string CyanDefaultColor = "#00E5FF";
+    private const string LightBlueDefaultColor = "#88CCFF";
+
     // Brand color dictionary
     private static readonly Dictionary<string, string> _brand = new(StringComparer.OrdinalIgnoreCase)
     {
         // Processors & Major Silicon
-        ["Intel"] = "#0068B5",            // Intel Blue (2020 Rebrand)
+        [IntelBrand] = "#0068B5",            // Intel Blue (2020 Rebrand)
         ["AMD"] = "#ED1C24",              // AMD Red
         ["NVIDIA"] = "#76B900",           // NVIDIA Green
         ["Qualcomm"] = "#3253DC",         // Qualcomm Blue
@@ -27,19 +35,19 @@ public static class BrandColorDefaults
         ["ASIX"] = "#0066A1",             // ASIX Blue
 
         // Memory & Storage
-        ["Samsung"] = "#1428A0",          // Samsung Blue
+        [SamsungBrand] = "#1428A0",          // Samsung Blue
         ["Micron"] = "#0033A0",           // Micron Corporate Blue
         ["Crucial"] = "#0068FF",          // Crucial Blue Ribbon
         ["Ballistix"] = "#E31937",        // Historical Ballistix Red
-        ["SK Hynix"] = "#EA002C",         // SK Group Red
-        ["Western Digital"] = "#005195",  // WD Blue
+        [SkHynixBrand] = "#EA002C",         // SK Group Red
+        [WesternDigitalBrand] = "#005195",  // WD Blue
         ["SanDisk"] = "#E10600",          // SanDisk Red
         ["HGST"] = "#0072CE",             // WD/HGST Blue
         ["Seagate"] = "#6EBE49",          // Seagate Green
         ["Toshiba"] = "#FF0000",          // Toshiba Red
         ["Kioxia"] = "#00A4E4",           // Kioxia Cyan
         ["Corsair"] = "#FFE500",          // Corsair Gaming Yellow
-        ["G Skill"] = "#ED1C23",          // Torch Red
+        [GSkillBrand] = "#ED1C23",          // Torch Red
         ["Kingston"] = "#ED1A3B",         // Kingston Rex Red
         ["Patriot"] = "#DA291C",          // Patriot Red
         ["PNY"] = "#003087",              // PNY Blue
@@ -80,34 +88,34 @@ public static class BrandColorDefaults
     // detection code does a first-match scroll (RAM, Disk, NIC, SystemOEM).
     private static readonly Dictionary<string, string[]> _category = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["cpu"] = ["Intel", "AMD"],
-        ["gpu"] = ["NVIDIA", "AMD", "Intel"],
+        ["cpu"] = [IntelBrand, "AMD"],
+        ["gpu"] = ["NVIDIA", "AMD", IntelBrand],
         ["ram"] =
         [
-            "Samsung", "Corsair", "G Skill", "G.Skill", "GSkill",
+            SamsungBrand, "Corsair", GSkillBrand, "G.Skill", "GSkill",
             "Patriot", "PNY", "Ballistix", "Kingston", "Crucial",
-            "Micron", "SK Hynix", "SKHYNIX", "Hynix",
+            "Micron", SkHynixBrand, "SKHYNIX", "Hynix",
             "ADATA", "Team", "Team Group", "Nanya", "Elpida",
             "Ramaxel",
         ],
         ["disk"] =
         [
-            "Samsung", "Western Digital", "WD", "WDC", "HGST",
+            SamsungBrand, WesternDigitalBrand, "WD", "WDC", "HGST",
             "Seagate", "Crucial", "Kingston", "ADATA",
             "Kioxia", "Toshiba", "LITEON", "SanDisk", "PNY",
-            "Micron", "Intel", "Corsair",
-            "SK Hynix", "SKHYNIX",
+            "Micron", IntelBrand, "Corsair",
+            SkHynixBrand, "SKHYNIX",
         ],
         ["nic"] =
         [
-            "Intel", "Realtek", "Qualcomm", "Atheros", "Broadcom",
+            IntelBrand, "Realtek", "Qualcomm", "Atheros", "Broadcom",
             "Mellanox", "MediaTek", "Ralink", "TP-Link",
             "ASIX", "Marvell", "Killer",
         ],
         ["oem"] =
         [
             "Lenovo", "Dell", "HP", "Hewlett", "MSI", "ASUS", "Acer",
-            "Microsoft", "Gigabyte", "Samsung", "HUAWEI",
+            "Microsoft", "Gigabyte", SamsungBrand, "HUAWEI",
             "Toshiba", "Razer", "Fujitsu", "Sony", "Apple",
         ],
         ["battery"] =
@@ -264,17 +272,17 @@ public static class BrandColorDefaults
 
         var result = new Dictionary<string, string>
         {
-            [Metrics.CpuPct] = cpuColor.Length > 0 ? cpuColor : "#00E5FF",
-            [Metrics.CpuTemp] = cpuColor.Length > 0 ? cpuColor : "#00E5FF",
-            [Metrics.CpuFreq] = cpuColor.Length > 0 ? cpuColor : "#00E5FF",
-            [Metrics.CpuPower] = cpuColor.Length > 0 ? cpuColor : "#00E5FF",
+            [Metrics.CpuPct] = cpuColor.Length > 0 ? cpuColor : CyanDefaultColor,
+            [Metrics.CpuTemp] = cpuColor.Length > 0 ? cpuColor : CyanDefaultColor,
+            [Metrics.CpuFreq] = cpuColor.Length > 0 ? cpuColor : CyanDefaultColor,
+            [Metrics.CpuPower] = cpuColor.Length > 0 ? cpuColor : CyanDefaultColor,
             [Metrics.RamPct] = ramColor.Length > 0 ? ramColor : "#A78BFA",
             [Metrics.RamUsed] = ramColor.Length > 0 ? ramColor : "#A78BFA",
-            [Metrics.GpuPct] = gpuColor.Length > 0 ? gpuColor : "#88CCFF",
-            [Metrics.GpuTemp] = gpuColor.Length > 0 ? gpuColor : "#88CCFF",
-            [Metrics.GpuVram] = gpuColor.Length > 0 ? gpuColor : "#88CCFF",
-            [Metrics.GpuFreq] = gpuColor.Length > 0 ? gpuColor : "#88CCFF",
-            [Metrics.GpuPower] = gpuColor.Length > 0 ? gpuColor : "#88CCFF",
+            [Metrics.GpuPct] = gpuColor.Length > 0 ? gpuColor : LightBlueDefaultColor,
+            [Metrics.GpuTemp] = gpuColor.Length > 0 ? gpuColor : LightBlueDefaultColor,
+            [Metrics.GpuVram] = gpuColor.Length > 0 ? gpuColor : LightBlueDefaultColor,
+            [Metrics.GpuFreq] = gpuColor.Length > 0 ? gpuColor : LightBlueDefaultColor,
+            [Metrics.GpuPower] = gpuColor.Length > 0 ? gpuColor : LightBlueDefaultColor,
             [Metrics.NetDown] = nicColor.Length > 0 ? nicColor : "#38BDF8",
             [Metrics.NetUp] = nicColor.Length > 0 ? nicColor : "#4ADE80",
             [Metrics.NetTotal] = nicColor.Length > 0 ? nicColor : "#FBBF24",

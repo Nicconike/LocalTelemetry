@@ -376,9 +376,6 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
         base.WndProc(ref m);
     }
 
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
-
     /// <summary>Fired to display the overlay context menu at the specified point.</summary>
     public Action<Point>? ShowContextMenuAction { get; set; }
 
@@ -874,16 +871,6 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
         return dpi > 0 ? dpi / 96f : 1f;
     }
 
-    private Rectangle Bounds
-    {
-        get
-        {
-            if (Handle == IntPtr.Zero) return Rectangle.Empty;
-            NativeMethods.GetWindowRect(Handle, out var r);
-            return Rectangle.FromLTRB(r.Left, r.Top, r.Right, r.Bottom);
-        }
-    }
-
     private void PosTick()
     {
         if (SkipTimersForTesting) return;
@@ -1035,10 +1022,12 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
 
     private void StartMouseHook()
     {
+        // Global mouse hook is intentionally replaced by embedded window message handling.
     }
 
     private void StopMouseHook()
     {
+        // Global mouse hook cleanup is intentionally a no-op when inactive.
     }
 
     private Rectangle GetScreenBounds()

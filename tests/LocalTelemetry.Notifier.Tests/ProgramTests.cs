@@ -373,6 +373,8 @@ public class ProgramTests
         {
             await Program.ProcessMessageStreamAsync(reader, cts, (_, _) => { });
         }
+
+        cts.IsCancellationRequested.Should().BeFalse();
     }
 
     [WpfFact]

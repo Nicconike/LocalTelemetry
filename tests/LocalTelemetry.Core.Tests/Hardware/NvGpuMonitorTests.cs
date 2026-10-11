@@ -11,17 +11,21 @@ public class NvGpuMonitorTests
     public void NvGpuNativePInvoke_Instance_ExecutesSafely()
     {
         var native = NvGpuNativePInvoke.Instance;
-        native.Init();
-        native.GetDeviceHandleByIndex(0, out var dev);
-        native.GetDeviceName(dev, out _);
-        native.GetDriverVersion(out _);
-        native.GetTemperature(dev, 0, out _);
-        native.GetUtilizationRates(dev, out _, out _);
-        native.GetMemoryInfo(dev, out _, out _, out _);
-        native.GetClockInfo(dev, 0, out _);
-        native.GetPowerUsage(dev, out _);
-        native.GetPowerManagementLimit(dev, out _);
-        native.Shutdown();
+        var act = () =>
+        {
+            native.Init();
+            native.GetDeviceHandleByIndex(0, out var dev);
+            native.GetDeviceName(dev, out _);
+            native.GetDriverVersion(out _);
+            native.GetTemperature(dev, 0, out _);
+            native.GetUtilizationRates(dev, out _, out _);
+            native.GetMemoryInfo(dev, out _, out _, out _);
+            native.GetClockInfo(dev, 0, out _);
+            native.GetPowerUsage(dev, out _);
+            native.GetPowerManagementLimit(dev, out _);
+            native.Shutdown();
+        };
+        act.Should().NotThrow();
     }
 
     [Fact]

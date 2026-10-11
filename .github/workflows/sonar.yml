@@ -11,7 +11,7 @@ permissions:
 
 jobs:
     analyze:
-        name: SonarCloud Quality Gate
+        name: SonarCloud Analysis
         runs-on: windows-latest
         env:
             DOTNET_CLI_TELEMETRY_OPTOUT: "1"

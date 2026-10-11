@@ -111,11 +111,13 @@ public class TaskbarOverlayTests
         using var g = Graphics.FromImage(bmp);
 
         var drawContent = typeof(TaskbarOverlay).GetMethod("DrawContent", BindingFlags.NonPublic | BindingFlags.Instance);
-        drawContent!.Invoke(overlay, [g]);
+        var actDraw1 = () => drawContent!.Invoke(overlay, [g]);
+        actDraw1.Should().NotThrow();
 
         // Toggle flash off
         typeof(TaskbarOverlay).GetField("_flash", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(overlay, false);
-        drawContent.Invoke(overlay, [g]);
+        var actDraw2 = () => drawContent!.Invoke(overlay, [g]);
+        actDraw2.Should().NotThrow();
     }
 
     [Fact]
@@ -282,12 +284,11 @@ public class TaskbarOverlayTests
         var getDpi = typeof(TaskbarOverlay).GetMethod("GetDpi", BindingFlags.NonPublic | BindingFlags.Instance);
         ((float)getDpi!.Invoke(overlay, null)!).Should().BeGreaterThan(0f);
 
-        var bounds = typeof(TaskbarOverlay).GetProperty("Bounds", BindingFlags.NonPublic | BindingFlags.Instance);
-        ((Rectangle)bounds!.GetValue(overlay)!).Should().NotBeNull();
+        var screenBounds = typeof(TaskbarOverlay).GetMethod("GetScreenBounds", BindingFlags.NonPublic | BindingFlags.Instance);
+        ((Rectangle)screenBounds!.Invoke(overlay, null)!).Should().NotBeNull();
 
         overlay.Hide();
         overlay.Visible.Should().BeFalse();
-        overlay.Dispose();
     }
 
     [WpfFact]
@@ -391,11 +392,13 @@ public class TaskbarOverlayTests
         using var g = Graphics.FromImage(bmp);
 
         var drawContent = typeof(TaskbarOverlay).GetMethod("DrawContent", BindingFlags.NonPublic | BindingFlags.Instance);
-        drawContent!.Invoke(overlay, [g]);
+        var actDrawSingle = () => drawContent!.Invoke(overlay, [g]);
+        actDrawSingle.Should().NotThrow();
 
         // Empty row
         cfg.Overlay.Row1 = [];
-        drawContent.Invoke(overlay, [g]);
+        var actDrawEmpty = () => drawContent!.Invoke(overlay, [g]);
+        actDrawEmpty.Should().NotThrow();
     }
 
     [WpfFact]
@@ -443,7 +446,7 @@ public class TaskbarOverlayTests
         var cfg = new AppSettings();
         cfg.Overlay.Visible = true;
         var embedder = new TaskbarEmbedder(cfg);
-        using var overlay = new TaskbarOverlay(cfg, embedder);
+        var overlay = new TaskbarOverlay(cfg, embedder);
 
         overlay.Show();
         overlay.Visible.Should().BeTrue();
@@ -458,9 +461,10 @@ public class TaskbarOverlayTests
         overlay.Show();
         overlay.Visible.Should().BeTrue();
 
-        // Dispose twice is safe
-        overlay.Dispose();
-        overlay.Dispose();
+        // Dispose twice is idempotent and safe
+        var disposeAction = () => overlay.Dispose();
+        disposeAction.Should().NotThrow();
+        disposeAction.Should().NotThrow();
     }
 
     [WpfFact]
@@ -494,12 +498,14 @@ public class TaskbarOverlayTests
         // Exercise PosTick when IsChildMode is true and DPI changes
         typeof(TaskbarOverlay).GetField("_dpi", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(overlay, 0.5f);
         var posTick = typeof(TaskbarOverlay).GetMethod("PosTick", BindingFlags.NonPublic | BindingFlags.Instance);
-        posTick!.Invoke(overlay, null);
+        var actPos = () => posTick!.Invoke(overlay, null);
+        actPos.Should().NotThrow();
 
         // Exercise WatchTick when _lastTrayHwnd differs
         typeof(TaskbarOverlay).GetField("_lastTrayHwnd", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(overlay, (IntPtr)12345);
         var watchTick = typeof(TaskbarOverlay).GetMethod("WatchTick", BindingFlags.NonPublic | BindingFlags.Instance);
-        watchTick!.Invoke(overlay, null);
+        var actWatch = () => watchTick!.Invoke(overlay, null);
+        actWatch.Should().NotThrow();
 
         // Exercise WndProc DPI changed messages
         var wndProc = typeof(TaskbarOverlay).GetMethod("WndProc", BindingFlags.NonPublic | BindingFlags.Instance);
@@ -552,7 +558,8 @@ public class TaskbarOverlayTests
         try
         {
             // 1. RecoverTaskbar with embed and show enabled
-            overlay.RecoverTaskbar("unit test recovery");
+            var actRecover = () => overlay.RecoverTaskbar("unit test recovery");
+            actRecover.Should().NotThrow();
 
             // 2. PosTick with DPI mismatch and dimension change
             typeof(TaskbarEmbedder).GetProperty("IsEmbedded", BindingFlags.Public | BindingFlags.Instance)!.GetSetMethod(true)!.Invoke(embedder, [true]);
@@ -581,7 +588,8 @@ public class TaskbarOverlayTests
 
             // 5. ApplyOverlayDimensions directly
             var applyDimensions = typeof(TaskbarOverlay).GetMethod("ApplyOverlayDimensions", BindingFlags.NonPublic | BindingFlags.Instance);
-            applyDimensions!.Invoke(overlay, [new Size(999, 999)]);
+            var actDimensions = () => applyDimensions!.Invoke(overlay, [new Size(999, 999)]);
+            actDimensions.Should().NotThrow();
 
             // Pump message loop to execute posted delegates
             System.Windows.Forms.Application.DoEvents();

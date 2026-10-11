@@ -23,7 +23,8 @@ public class NotificationClientTests
         // Pass 1ms connect timeout so attempt 0 and 1 retries execute in ~2ms total
         using var client = new NotificationClient("NonExistentPipe_" + Guid.NewGuid().ToString("N"), 1);
 
-        await client.SendToastAsync("Test Title", "Test Body", "Tag1");
+        var act = async () => await client.SendToastAsync("Test Title", "Test Body", "Tag1");
+        await act.Should().NotThrowAsync();
     }
 
     [Fact]
@@ -31,7 +32,8 @@ public class NotificationClientTests
     {
         using var client = new NotificationClient("NonExistentPipe_" + Guid.NewGuid().ToString("N"), 1);
 
-        await client.SendShutdownAsync();
+        var act = async () => await client.SendShutdownAsync();
+        await act.Should().NotThrowAsync();
     }
 
     [Fact]
@@ -40,7 +42,8 @@ public class NotificationClientTests
         using var client = new NotificationClient("NonExistentPipe_" + Guid.NewGuid().ToString("N"), 1000);
         using var cts = new CancellationTokenSource(1); // Cancel immediately
 
-        await client.SendToastAsync("Title", "Body", null, cts.Token);
+        var act = async () => await client.SendToastAsync("Title", "Body", null, cts.Token);
+        await act.Should().NotThrowAsync();
     }
 
     [Fact]

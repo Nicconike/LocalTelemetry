@@ -77,6 +77,7 @@ public class NetUsageLoggerTests
 
             logger.Record(snap);
             logger.FlushFinal();
+            historyFile.GetAllRecords().Should().BeEmpty();
         }
         finally
         {

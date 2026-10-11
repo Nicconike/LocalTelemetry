@@ -26,7 +26,8 @@ public class NotifierLogTests
     [Fact]
     public void NotifierLog_Info_LogsWithoutExceptions()
     {
-        NotifierLog.Info("Test info message");
+        var act = () => NotifierLog.Info("Test info message");
+        act.Should().NotThrow();
     }
 
     [Fact]

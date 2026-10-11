@@ -5,7 +5,7 @@ using Xunit;
 
 namespace LocalTelemetry.Core.Tests.Config;
 
-public class AppSettingsTests : IDisposable
+public sealed class AppSettingsTests : IDisposable
 {
     private readonly string _tempDir;
 
@@ -23,8 +23,9 @@ public class AppSettingsTests : IDisposable
             if (Directory.Exists(_tempDir))
                 Directory.Delete(_tempDir, true);
         }
-        catch { }
-        GC.SuppressFinalize(this);
+        catch (Exception) { /* Best-effort cleanup */ }
+
+        AppSettings.InitPaths(Path.GetTempPath());
     }
 
     [Fact]

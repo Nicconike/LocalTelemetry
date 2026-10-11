@@ -25,7 +25,6 @@ namespace LocalTelemetry.App.Tests;
 
 public class AppTests
 {
-    private static readonly string[] ElevatedMinimizedArgs = ["--elevated", "--minimized"];
     private static readonly string[] NonElevatedArgs = ["--minimized"];
 
     private static IPawnIoManager CreateMockPawnIoManager()
@@ -36,7 +35,11 @@ public class AppTests
         return manager;
     }
 
-    [ModuleInitializer]
+    static AppTests()
+    {
+        InstallSafetyNet();
+    }
+
     internal static void InstallSafetyNet()
     {
         if (System.Windows.Application.ResourceAssembly is null)
@@ -187,9 +190,12 @@ public class AppTests
     {
         var app = GetOrCreateApp();
         var toggleMetrics = typeof(App).GetMethod("ToggleMetricsLogging", BindingFlags.NonPublic | BindingFlags.Instance);
-        toggleMetrics!.Invoke(app, [true]);
-        toggleMetrics.Invoke(app, [true]); // duplicate
-        toggleMetrics.Invoke(app, [false]);
+        var act1 = () => toggleMetrics!.Invoke(app, [true]);
+        act1.Should().NotThrow();
+        var act2 = () => toggleMetrics!.Invoke(app, [true]); // duplicate
+        act2.Should().NotThrow();
+        var act3 = () => toggleMetrics!.Invoke(app, [false]);
+        act3.Should().NotThrow();
     }
 
     [WpfFact]
@@ -231,7 +237,8 @@ public class AppTests
             var startupArgs = (StartupEventArgs)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(StartupEventArgs));
             typeof(StartupEventArgs).GetField("_args", BindingFlags.NonPublic | BindingFlags.Instance)?.SetValue(startupArgs, ElevatedArgs);
 
-            onStartup!.Invoke(app, [startupArgs]);
+            var act = () => onStartup!.Invoke(app, [startupArgs]);
+            act.Should().NotThrow();
         }
         finally
         {
@@ -239,8 +246,8 @@ public class AppTests
             var monitorField = typeof(App).GetField("_monitor", BindingFlags.NonPublic | BindingFlags.Instance);
             if (monitorField?.GetValue(app) is HardwareMonitor monitor)
             {
-                try { monitor.Stop(); } catch { }
-                try { monitor.Dispose(); } catch { }
+                try { monitor.Stop(); } catch (Exception) { /* Best-effort cleanup */ }
+                try { monitor.Dispose(); } catch (Exception) { /* Best-effort cleanup */ }
             }
 
             (typeof(App).GetField("_overlay", BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(app) as TaskbarOverlay)?.Dispose();
@@ -274,15 +281,16 @@ public class AppTests
             var startupArgs = (StartupEventArgs)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(StartupEventArgs));
             typeof(StartupEventArgs).GetField("_args", BindingFlags.NonPublic | BindingFlags.Instance)?.SetValue(startupArgs, MinimizedArgs);
 
-            onStartup!.Invoke(app, [startupArgs]);
+            var act = () => onStartup!.Invoke(app, [startupArgs]);
+            act.Should().NotThrow();
         }
         finally
         {
             var monitorField = typeof(App).GetField("_monitor", BindingFlags.NonPublic | BindingFlags.Instance);
             if (monitorField?.GetValue(app) is HardwareMonitor monitor)
             {
-                try { monitor.Stop(); } catch { }
-                try { monitor.Dispose(); } catch { }
+                try { monitor.Stop(); } catch (Exception) { /* Best-effort cleanup */ }
+                try { monitor.Dispose(); } catch (Exception) { /* Best-effort cleanup */ }
             }
 
             (typeof(App).GetField("_overlay", BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(app) as TaskbarOverlay)?.Dispose();
@@ -347,14 +355,17 @@ public class AppTests
 
             var snap = new TelemetrySnapshot { CpuUsagePct = 50f };
             var handleSnapshot = typeof(App).GetMethod("HandleSnapshotReady", BindingFlags.NonPublic | BindingFlags.Instance);
-            handleSnapshot!.Invoke(app, [snap]);
+            var actSnap = () => handleSnapshot!.Invoke(app, [snap]);
+            actSnap.Should().NotThrow();
 
             var handleSettings = typeof(App).GetMethod("HandleSettingsApplied", BindingFlags.NonPublic | BindingFlags.Instance);
             cfg.Overlay.Visible = true;
-            handleSettings!.Invoke(app, null);
+            var actSettings1 = () => handleSettings!.Invoke(app, null);
+            actSettings1.Should().NotThrow();
 
             cfg.Overlay.Visible = false;
-            handleSettings.Invoke(app, null);
+            var actSettings2 = () => handleSettings!.Invoke(app, null);
+            actSettings2.Should().NotThrow();
         }
         finally
         {
@@ -672,12 +683,14 @@ public class AppTests
         // 1. Neither launched nor process
         appFields.GetField("_notifierLaunched", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, false);
         appFields.GetField("_notifierProcess", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, null);
-        app.EnsureNotifierStopped();
+        var act1 = () => app.EnsureNotifierStopped();
+        act1.Should().NotThrow();
 
         // 2. Launched true but process null
         appFields.GetField("_notifierLaunched", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, true);
         appFields.GetField("_notifierProcess", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, null);
-        app.EnsureNotifierStopped();
+        var act2 = () => app.EnsureNotifierStopped();
+        act2.Should().NotThrow();
     }
 
     [WpfFact]
@@ -700,19 +713,28 @@ public class AppTests
         var method = typeof(App).GetMethod("ToggleMetricsLogging", BindingFlags.NonPublic | BindingFlags.Instance);
 
         // Call true then false
-        method!.Invoke(app, [true]);
-        method.Invoke(app, [false]);
+        var act = () =>
+        {
+            method!.Invoke(app, [true]);
+            method.Invoke(app, [false]);
+        };
+        act.Should().NotThrow();
     }
 
     [WpfFact]
     public void App_ExceptionHandlers_HandleSafelyWithoutCrashing()
     {
         var unhandledMethod = typeof(App).GetMethod("HandleUnhandledException", BindingFlags.NonPublic | BindingFlags.Static);
-        unhandledMethod!.Invoke(null, [new object(), new UnhandledExceptionEventArgs(new InvalidOperationException("Test unhandled"), false)]);
+        var actUnhandled = () => unhandledMethod!.Invoke(null, [new object(), new UnhandledExceptionEventArgs(new InvalidOperationException("Test unhandled"), false)]);
+        actUnhandled.Should().NotThrow();
 
         var unobservedMethod = typeof(App).GetMethod("HandleUnobservedTaskException", BindingFlags.NonPublic | BindingFlags.Static);
-        unobservedMethod!.Invoke(null, [null, new UnobservedTaskExceptionEventArgs(new AggregateException(new InvalidOperationException("Test unobserved")))]);
-        unobservedMethod.Invoke(null, [null, new UnobservedTaskExceptionEventArgs(null!)]);
+        var actUnobserved = () =>
+        {
+            unobservedMethod!.Invoke(null, [null, new UnobservedTaskExceptionEventArgs(new AggregateException(new InvalidOperationException("Test unobserved")))]);
+            unobservedMethod.Invoke(null, [null, new UnobservedTaskExceptionEventArgs(null!)]);
+        };
+        actUnobserved.Should().NotThrow();
 
         var dispatcherMethod = typeof(App).GetMethod("HandleDispatcherUnhandledException", BindingFlags.NonPublic | BindingFlags.Static);
         var dispArgs = (System.Windows.Threading.DispatcherUnhandledExceptionEventArgs)
@@ -720,7 +742,8 @@ public class AppTests
         typeof(System.Windows.Threading.DispatcherUnhandledExceptionEventArgs)
             .GetField("_exception", BindingFlags.NonPublic | BindingFlags.Instance)?
             .SetValue(dispArgs, new InvalidOperationException("Test dispatcher ex"));
-        dispatcherMethod!.Invoke(null, [new object(), dispArgs]);
+        var actDisp = () => dispatcherMethod!.Invoke(null, [new object(), dispArgs]);
+        actDisp.Should().NotThrow();
     }
 
     [WpfFact]
@@ -776,9 +799,11 @@ public class AppTests
         // Call again to exercise already loaded branch
         openSettingsMethod.Invoke(app, null);
 
+        shells.Should().NotBeEmpty();
+
         foreach (var s in shells)
         {
-            try { s.Close(); } catch { }
+            try { s.Close(); } catch (Exception) { /* Best-effort cleanup */ }
         }
         System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
         logger.Dispose();
@@ -823,8 +848,12 @@ public class AppTests
         var method = typeof(App).GetMethod("ToggleMetricsLogging", BindingFlags.NonPublic | BindingFlags.Instance);
 
         // Invoke with true, then invoke with true again to hit early return (enable == _metricsWasEnabled)
-        method!.Invoke(app, [true]);
-        method.Invoke(app, [true]);
+        var act = () =>
+        {
+            method!.Invoke(app, [true]);
+            method.Invoke(app, [true]);
+        };
+        act.Should().NotThrow();
     }
 
     [WpfFact]
@@ -926,7 +955,8 @@ public class AppTests
 
         // Branch 3: Overlay is null
         appFields.GetField("_overlay", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, null);
-        handleApplied.Invoke(app, null);
+        var act = () => handleApplied.Invoke(app, null);
+        act.Should().NotThrow();
     }
 
     [WpfFact]
@@ -1081,7 +1111,8 @@ public class AppTests
         // Exercise HandleSnapshotReady
         var snap = new TelemetrySnapshot { CpuUsagePct = 40f, RamUsagePct = 50f };
         var handleSnap = appFields.GetMethod("HandleSnapshotReady", BindingFlags.NonPublic | BindingFlags.Instance);
-        handleSnap!.Invoke(app, [snap]);
+        var actSnap = () => handleSnap!.Invoke(app, [snap]);
+        actSnap.Should().NotThrow();
 
         if (File.Exists(tempPath)) File.Delete(tempPath);
     }

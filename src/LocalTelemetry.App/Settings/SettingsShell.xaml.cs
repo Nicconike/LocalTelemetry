@@ -304,7 +304,7 @@ public sealed partial class SettingsShell : Window
                 case "openFolder": HandleOpenFolder(root); break;
                 case "getTrafficHistoryAll": SendAllTrafficHistory(); break;
                 case "importDat": HandleImportJson(json); break;
-                case "importWindowsUsage": HandleImportWindowsUsage(root); break;
+                case "importWindowsUsage": _ = HandleImportWindowsUsage(root); break;
                 case "checkForUpdates": HandleCheckForUpdatesMsg(root); break;
                 default: break;
             }
@@ -604,7 +604,7 @@ public sealed partial class SettingsShell : Window
         PostJson(JsonSerializer.Serialize(envelope, JsonOut));
     }
 
-    private async void HandleImportWindowsUsage(JsonElement root)
+    private async Task HandleImportWindowsUsage(JsonElement root)
     {
         try
         {
@@ -621,14 +621,14 @@ public sealed partial class SettingsShell : Window
 
             string[] dateFormats = ["dd-MM-yyyy", "yyyy-MM-dd", "d-M-yyyy", "dd/MM/yyyy"];
             if (!DateTime.TryParseExact(startStr, dateFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime start) &&
-                !DateTime.TryParse(startStr, out start))
+                !DateTime.TryParse(startStr, CultureInfo.InvariantCulture, DateTimeStyles.None, out start))
             {
                 PostWindowsImportResult(false, 0, 0, 0, "Invalid start date format (expected DD-MM-YYYY).");
                 return;
             }
 
             if (!DateTime.TryParseExact(endStr, dateFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime end) &&
-                !DateTime.TryParse(endStr, out end))
+                !DateTime.TryParse(endStr, CultureInfo.InvariantCulture, DateTimeStyles.None, out end))
             {
                 PostWindowsImportResult(false, 0, 0, 0, "Invalid end date format (expected DD-MM-YYYY).");
                 return;
@@ -931,14 +931,17 @@ public sealed partial class SettingsShell : Window
             return [];
         }
 
+        const string groupColorsPrefix = "overlay.groupcolors.";
+        const string metricColorsPrefix = "overlay.metriccolors.";
+
         var alertChanges = rawChanges.Where(c => c.Path.StartsWith("alerts.", StringComparison.OrdinalIgnoreCase)).ToList();
-        var colorChanges = rawChanges.Where(c => c.Path.StartsWith("overlay.groupcolors.", StringComparison.OrdinalIgnoreCase)
-                                              || c.Path.StartsWith("overlay.metriccolors.", StringComparison.OrdinalIgnoreCase)).ToList();
+        var colorChanges = rawChanges.Where(c => c.Path.StartsWith(groupColorsPrefix, StringComparison.OrdinalIgnoreCase)
+                                              || c.Path.StartsWith(metricColorsPrefix, StringComparison.OrdinalIgnoreCase)).ToList();
 
         var result = rawChanges
             .Where(c => !c.Path.StartsWith("alerts.", StringComparison.OrdinalIgnoreCase)
-                     && !c.Path.StartsWith("overlay.groupcolors.", StringComparison.OrdinalIgnoreCase)
-                     && !c.Path.StartsWith("overlay.metriccolors.", StringComparison.OrdinalIgnoreCase))
+                     && !c.Path.StartsWith(groupColorsPrefix, StringComparison.OrdinalIgnoreCase)
+                     && !c.Path.StartsWith(metricColorsPrefix, StringComparison.OrdinalIgnoreCase))
             .Select(c => FormatHumanReadableChange(c.Path, c.OldVal, c.NewVal))
             .Where(s => !string.IsNullOrWhiteSpace(s))
             .ToList();
@@ -1414,7 +1417,7 @@ public sealed partial class SettingsShell : Window
             return $"Removed {metricPlural} from overlay ({string.Join(", ", removed)})";
         }
 
-        if (added.Count > 0 && removed.Count > 0)
+        if (added.Count > 0)
         {
             return $"Metrics layout updated (Added {string.Join(", ", added)}, Removed {string.Join(", ", removed)})";
         }
