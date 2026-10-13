@@ -28,7 +28,7 @@ Welcome to the **LocalTelemetry** support hub! This document provides complete g
 ### Hardware Sensors & Driver Elevation
 
 * **Q: Why does LocalTelemetry prompt for Administrator (UAC) privileges?**
-  * **A:** Admin privileges are required exclusively to load the kernel-level **PawnIo** hardware driver for direct Model-Specific Register (MSR) access on CPUs. On the first launch after a fresh install you will see a single UAC prompt. LocalTelemetry then downloads and installs the PawnIo driver silently in the background - no further UAC prompts appear, so the tray icon and overlay may take a few seconds to appear. Later launches start instantly without prompting if start with windows is enabled.
+  * **A:** Admin privileges are required to load the kernel-level **PawnIo** hardware driver for direct Model-Specific Register (MSR) access on CPUs. On first launch, Windows presents a standard UAC prompt. LocalTelemetry verifies the bundled driver and registers it silently in the background. Subsequent boots start silently without UAC prompts if **Start with Windows** is enabled.
 * **Q: Why is my GPU usage or temperature showing 0% or N/A?**
   * **A:** LocalTelemetry includes both generic Windows WDDM counters and vendor-specific hardware monitors (NVIDIA NVML, AMD ADL, Intel IGCL). If vendor libraries are unavailable or uninitialized:
     1. Navigate to **Settings > Monitoring**.
@@ -50,9 +50,9 @@ Welcome to the **LocalTelemetry** support hub! This document provides complete g
 ### Application Lifecycle & Startup
 
 * **Q: How do I configure LocalTelemetry to launch automatically at Windows startup?**
-  * **A:** Toggle the auto-start option under **Settings > General**. LocalTelemetry manages startup via `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` registry entries.
+  * **A:** Toggle the auto-start option under **Settings > General**. LocalTelemetry manages startup via an elevated Windows Task Scheduler task (`LocalTelemetry Startup`), ensuring the app starts silently at logon without prompting for UAC.
 * **Q: How do I completely close or exit the application?**
-  * **A:** Closing the Settings window minimizes the app to the Windows System Tray. To fully terminate the application, right-click the **LocalTelemetry tray icon** and select **"Exit"**.
+  * **A:** Closing the Settings window minimizes the app to the Windows System Tray. To fully terminate the application, right-click the **LocalTelemetry tray icon** and select **"Quit"**.
 
 ---
 

@@ -1,0 +1,71 @@
+name: Sync PRs
+
+on:
+    push:
+        branches: [master]
+    pull_request_target:
+        types: [opened, synchronize, reopened]
+
+permissions:
+    contents: read
+    pull-requests: write
+
+jobs:
+    sync:
+        name: Sync & Merge
+        runs-on: ubuntu-latest
+        steps:
+            - name: Generate App Token
+              id: app_token
+              uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+              with:
+                  client-id: ${{ secrets.APP_CLIENT_ID }}
+                  private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+            - name: Sync Open PRs on Push
+              if: github.event_name == 'push'
+              env:
+                  GH_TOKEN: ${{ steps.app_token.outputs.token }}
+                  REPO: ${{ github.repository }}
+              run: |
+                  prs=$(gh pr list --repo "$REPO" --state open --json number,headRefName,author --jq '.[]')
+                  if [ -z "$prs" ]; then
+                      echo "No open pull requests found."
+                      exit 0
+                  fi
+
+                  echo "$prs" | jq -c '.' | while read -r pr; do
+                      pr_num=$(echo "$pr" | jq -r '.number')
+                      pr_author=$(echo "$pr" | jq -r '.author.login')
+                      pr_branch=$(echo "$pr" | jq -r '.headRefName')
+
+                      echo "Processing PR #$pr_num (branch: $pr_branch, author: $pr_author)..."
+
+                      if [ "$pr_author" = "app/dependabot" ] || [ "$pr_author" = "dependabot" ]; then
+                          echo "Triggering Dependabot rebase for PR #$pr_num..."
+                          gh pr comment "$pr_num" --repo "$REPO" --body "@dependabot rebase" || true
+                      else
+                          echo "Updating branch for PR #$pr_num..."
+                          gh api --method PUT "repos/$REPO/pulls/$pr_num/update-branch" --silent || true
+                      fi
+
+                      gh pr merge "$pr_num" --repo "$REPO" --auto --squash || true
+                  done
+
+            - name: Configure Auto-Merge on PR Event
+              if: github.event_name == 'pull_request_target'
+              env:
+                  GH_TOKEN: ${{ steps.app_token.outputs.token }}
+                  REPO: ${{ github.repository }}
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+                  PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+              run: |
+                  echo "Configuring auto-merge for PR #$PR_NUMBER (author: $PR_AUTHOR)..."
+
+                  if [ "$PR_AUTHOR" = "app/dependabot" ] || [ "$PR_AUTHOR" = "dependabot" ]; then
+                      echo "Approving Dependabot PR #$PR_NUMBER..."
+                      gh pr review "$PR_NUMBER" --repo "$REPO" --approve --body "Auto-approved Dependabot PR" || true
+                  fi
+
+                  echo "Enabling auto-merge for PR #$PR_NUMBER..."
+                  gh pr merge "$PR_NUMBER" --repo "$REPO" --auto --squash || true

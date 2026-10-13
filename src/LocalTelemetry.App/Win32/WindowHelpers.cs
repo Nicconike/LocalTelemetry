@@ -30,6 +30,7 @@ internal static class WindowHelpers
     private const string TaskDescription = "Starts LocalTelemetry at user logon (silent, highest privileges).";
 
     internal static Action<bool>? SetStartupAction { get; set; }
+    internal static Func<string, bool>? RunKeyQuery { get; set; }
 
     /// <summary>
     /// Adds or removes the "LocalTelemetry Startup" scheduled task.
@@ -179,11 +180,20 @@ internal static class WindowHelpers
                 if (p?.ExitCode == 0) return true;
             }
 
-            using RegistryKey? hkcuKey = Registry.CurrentUser.OpenSubKey(RunKey);
-            if (hkcuKey?.GetValue(AppName) is not null) return true;
+            if (RunKeyQuery is not null)
+            {
+                if (RunKeyQuery(AppName)) return true;
+            }
+            else
+            {
+                using RegistryKey? hkcuKey = Registry.CurrentUser.OpenSubKey(RunKey);
+                if (hkcuKey?.GetValue(AppName) is not null) return true;
 
-            using RegistryKey? hklmKey = Registry.LocalMachine.OpenSubKey(RunKey);
-            return hklmKey?.GetValue(AppName) is not null;
+                using RegistryKey? hklmKey = Registry.LocalMachine.OpenSubKey(RunKey);
+                if (hklmKey?.GetValue(AppName) is not null) return true;
+            }
+
+            return false;
         }
         catch (Exception ex)
         {

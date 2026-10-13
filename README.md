@@ -27,12 +27,6 @@
     <a href="https://github.com/Nicconike/LocalTelemetry/releases">
         <img src="https://img.shields.io/github/downloads/nicconike/LocalTelemetry/total?logo=github&logoColor=white&color=0DBCBF&labelColor=101318&label=Downloads" alt="GitHub Downloads" />
     </a>
-    <a href="https://discord.gg/M2QevSgW3S">
-        <img src="https://img.shields.io/badge/Chat_on-Discord-0DBCBF?logo=discord&logoColor=5865F2&labelColor=101318" alt="Discord" />
-    </a>
-    <a href="https://github.com/Nicconike/LocalTelemetry">
-        <img src="https://img.shields.io/github/license/nicconike/localtelemetry?logo=github&logoColor=white&color=0DBCBF&labelColor=101318" alt="GitHub License" />
-    </a>
 </p>
 
 <p align="center">
@@ -45,9 +39,6 @@
     <a href="https://svelte.dev/">
         <img src="https://img.shields.io/badge/Frontend-Svelte%205-0DBCBF?logo=svelte&logoColor=FF3E00&labelColor=101318" alt="Svelte 5" />
     </a>
-    <a href="https://bun.sh/">
-        <img src="https://img.shields.io/badge/Runtime-Bun-0DBCBF?logo=bun&logoColor=FBF0DF&labelColor=101318" alt="Bun" />
-    </a>
 </p>
 
 <p align="center">
@@ -56,6 +47,15 @@
     </a>
     <a href="https://scorecard.dev/viewer/?uri=github.com/Nicconike/LocalTelemetry">
         <img src="https://img.shields.io/ossf-scorecard/github.com/Nicconike/LocalTelemetry?labelColor=101318&label=Scorecard" alt="OpenSSF Scorecard" />
+    </a>
+</p>
+
+<p align="center">
+    <a href="https://discord.gg/M2QevSgW3S">
+        <img src="https://img.shields.io/badge/Chat_on-Discord-0DBCBF?logo=discord&logoColor=5865F2&labelColor=101318" alt="Discord" />
+    </a>
+    <a href="https://github.com/Nicconike/LocalTelemetry">
+        <img src="https://img.shields.io/github/license/nicconike/localtelemetry?logo=github&logoColor=white&color=0DBCBF&labelColor=101318" alt="GitHub License" />
     </a>
     <a href="https://wakatime.com/badge/user/018e538b-3f55-4e8e-95fa-6c3225418eed/project/4a017698-b6e1-4859-a4f2-b5379b9a36ef">
         <img src="https://wakatime.com/badge/user/018e538b-3f55-4e8e-95fa-6c3225418eed/project/4a017698-b6e1-4859-a4f2-b5379b9a36ef.svg?color=0DBCBF&label_color=101318" alt="wakatime" />
@@ -81,28 +81,28 @@
 
 ## Key Features
 
-- 🪟 **Live Taskbar Overlay**: Embeds real-time system telemetry directly into the Windows 11 taskbar with sharp DPI scaling and zero desktop clutter.
+- 🪟 **Live Taskbar Overlay**: Embeds real-time system telemetry directly into the Windows taskbar with sharp DPI scaling and zero desktop clutter.
 - ⚡ **Deep Hardware Telemetry**: Monitors CPU clocks, wattage, and thermals via kernel MSR registers alongside GPU, RAM, NVMe/SATA disks, and battery rates.
-- 🌐 **Continuous Bandwidth Tracking**: Measures live download and upload speeds, backfilling offline data via Windows SRUM so no usage is missed.
+- 🌐 **Continuous Bandwidth Tracking**: Measures real-time network speeds and imports past data from Windows SRUM records.
 - 🎨 **Adaptive OEM Brand Themes**: Detects installed hardware vendors (Intel, AMD, NVIDIA, Samsung, Corsair) and applies authentic manufacturer color palettes.
 - 🔔 **Game-Safe Alerts**: Delivers custom threshold warnings via background toasts that never steal keyboard focus or minimize full-screen games.
-- 🔒 **Private & Offline Logging**: Stores bandwidth history locally in lightweight JSON Lines (`internet_usage.jsonl`) with 100% offline privacy and zero telemetry.
+- 🔒 **Private & Offline Logging**: Stores bandwidth history locally in lightweight JSON Lines (`internet_usage.jsonl`) with complete offline privacy and zero analytics.
 - 🛡️ **Verified Supply-Chain Security**: Ships with cryptographic SLSA provenance attestations, clean Windows Defender scans, and zero adware.
 
 ---
 
 ## System Requirements
 
-| Requirement          | Minimum Specification                                   | Recommended Specification                        |
-| :------------------- | :------------------------------------------------------ | :----------------------------------------------- |
-| **Operating System** | **Windows 10** (64-bit, v2004+ / build 19041)           | **Windows 11** (64-bit, v22H2+)                  |
-| **Architecture**     | **x86-64 / AMD64** (Intel / AMD)                        | **x86-64 / AMD64**                               |
-| **Permissions**      | **Administrator (UAC)** *(For hardware sensor drivers)* | **Administrator (UAC)**                          |
-| **RAM**              | **2 GB**                                                | **4 GB or higher**                               |
-| **Disk Space**       | **200 MB** free space                                   | **200 MB**                                       |
-| **Runtime**          | **WebView2 Runtime**                                    | **WebView2 Runtime** *(Pre-installed on Win 11)* |
+| Requirement          | Minimum Specification                                                | Recommended Specification                                            |
+| :------------------- | :------------------------------------------------------------------- | :------------------------------------------------------------------- |
+| **Operating System** | **Windows 10** (64-bit, v2004+ / build 19041)                        | **Windows 11** (64-bit, v22H2+)                                      |
+| **Architecture**     | **x86-64 / AMD64** (Intel / AMD)                                     | **x86-64 / AMD64**                                                   |
+| **Permissions**      | **Administrator (UAC)** *(For hardware sensor drivers)*              | **Administrator (UAC)**                                              |
+| **RAM**              | **2 GB**                                                             | **4 GB or higher**                                                   |
+| **Disk Space**       | **200 MB** free space                                                | **200 MB**                                                           |
+| **Runtimes**         | **.NET 10 Desktop Runtime** & **WebView2 Runtime**                   | **.NET 10 Desktop Runtime** & **WebView2 Runtime** *(Pre-installed on Win 11)* |
 
-*Note: 32-bit (x86) Windows versions and ARM processors are currently not supported.*
+*Note: 32-bit (x86) Windows editions and ARM processors are not supported.*
 
 ---
 
@@ -111,13 +111,13 @@
 ### Option 1: Standard Installer (Recommended)
 
 1. Download the latest `LocalTelemetrySetup.exe` from [**GitHub Releases**](https://github.com/Nicconike/LocalTelemetry/releases).
-2. Run the installer and follow the quick setup wizard.
-3. LocalTelemetry will launch automatically after installation.
+2. Run the installer and follow the setup wizard instructions.
+3. LocalTelemetry starts automatically after installation.
 
 > [!IMPORTANT]
-> **Internet Connection for First-Time Setup**: The installer automatically checks for the **.NET 10 Desktop Runtime**. If absent, Setup downloads and installs Microsoft's official runtime package (~55 MB) with a progress bar. The bundled **PawnIO** kernel sensor driver (~3.4 MB) installs silently offline without external downloads. Subsequent application launches run 100% offline.
+> **First-Time Setup Runtime Check**: The installer verifies the presence of the **Microsoft .NET 10 Desktop Runtime (x64)**. If missing, Setup downloads and installs it automatically (~55 MB). The installer includes the **PawnIO** kernel sensor driver (~3.4 MB) and installs it offline. All subsequent application operations run completely offline.
 >
-> **Administrator Permissions Note:** LocalTelemetry requires Administrator privileges to read low-level hardware sensors (PawnIO driver for CPU MSR/SMU registers and disk IOCTLs). Manual launches will show a standard Windows UAC prompt. Enabling **Start with Windows** runs the app via a Windows Task Scheduler task with elevated privileges, allowing it to start silently at boot without prompting. For portable installations, `Uninstall.bat` provides a complete administrative driver and registry cleanup.
+> **Administrator Privileges**: LocalTelemetry requires Administrator privileges to read low-level hardware sensors (PawnIO driver for CPU MSR/SMU registers and disk IOCTLs). Manual launches show a standard Windows UAC prompt. Enabling **Start with Windows** creates an elevated Windows Task Scheduler task that starts the application at boot without prompts.
 
 ### Option 2: Chocolatey
 
@@ -127,7 +127,7 @@ Install via [Chocolatey](https://community.chocolatey.org/packages/localtelemetr
 choco install localtelemetry
 ```
 
-For pre-release versions (RC/Beta):
+For pre-release versions (Release Candidates and Beta builds):
 
 ```powershell
 choco install localtelemetry --pre
@@ -138,10 +138,10 @@ choco install localtelemetry --pre
 Install via [Scoop](https://scoop.sh/):
 
 ```powershell
-# Standard install (if the official extras bucket is already enabled)
+# Standard install (if the official extras bucket is enabled)
 scoop install localtelemetry
 
-# First-time Scoop GUI install (if extras is not yet added)
+# First-time Scoop install (if extras is not yet added)
 scoop bucket add extras
 scoop install localtelemetry
 
@@ -152,24 +152,27 @@ scoop install localtelemetry
 
 ### Option 4: Portable ZIP
 
-1. Download `LocalTelemetry-win-x64.zip` from [**GitHub Releases**](https://github.com/Nicconike/LocalTelemetry/releases).
-2. Extract the folder to any location on your PC.
-3. Run `LocalTelemetry.exe`.
+1. Ensure the required runtimes are installed:
+   - [**Microsoft .NET 10 Desktop Runtime (x64)**](https://aka.ms/dotnet/10.0/windowsdesktop-runtime-win-x64.exe)
+   - [**Microsoft Edge WebView2 Runtime (x64)**](https://go.microsoft.com/fwlink/p/?LinkId=2124703)
+2. Download `LocalTelemetry-win-x64.zip` from [**GitHub Releases**](https://github.com/Nicconike/LocalTelemetry/releases).
+3. Extract the archive contents to a local folder.
+4. Run `LocalTelemetry.exe` as Administrator.
 
 ### Verifying Your Download
 
-Every release ships with a `checksums.txt` and [SLSA](https://slsa.dev/) build attestations. You can verify your download before running it:
+Every release ships with cryptographic hashes in `checksums.txt` and [SLSA](https://slsa.dev/) build attestations:
 
 ```pwsh
 # 1. Compare the SHA-256 hashes against checksums.txt
 Get-FileHash .\LocalTelemetrySetup.exe, .\LocalTelemetry-win-x64.zip -Algorithm SHA256
 
-# 2. Verify the SLSA attestation (proves the file was built by the release workflow)
+# 2. Verify the SLSA build provenance attestations
 gh attestation verify .\LocalTelemetrySetup.exe --repo Nicconike/LocalTelemetry
 gh attestation verify .\LocalTelemetry-win-x64.zip --repo Nicconike/LocalTelemetry
 ```
 
-The attestation confirms the binary was produced by the official [**Release workflow**](https://github.com/Nicconike/LocalTelemetry/actions/workflows/release.yml) and has not been tampered with.
+The attestation verifies that the official [**Release workflow**](https://github.com/Nicconike/LocalTelemetry/actions/workflows/release.yml) generated the binaries without tampering.
 
 ---
 
@@ -177,43 +180,43 @@ The attestation confirms the binary was produced by the official [**Release work
 
 ### 1. Taskbar Overlay
 
-After launch, LocalTelemetry displays a live hardware telemetry overlay on the Windows taskbar:
+LocalTelemetry displays a real-time hardware telemetry overlay directly on the Windows taskbar:
 
 <img src="docs/public/images/overlay.png" alt="LocalTelemetry taskbar overlay showing live hardware metrics" style="border-radius: 8px;" />
 
 ### 2. System Tray Controls
 
-Right-click the **LocalTelemetry icon** in the system tray (near the clock) to control the app:
+Right-click the **LocalTelemetry** icon in the system tray to access application controls:
 
 <img src="docs/public/images/tray-menu.png" alt="System tray context menu" style="border-radius: 8px;" />
 
-- **Show / Hide Taskbar Overlay**: Toggle the overlay visibility
-- **Open Settings**: Launch the settings panel
-- **Quit**: Exit LocalTelemetry
+- **Show / Hide Taskbar Overlay**: Toggle the taskbar overlay visibility.
+- **Open Settings**: Launch the settings configuration panel.
+- **Quit**: Exit LocalTelemetry.
 
 ### 3. Settings & Customization
 
-Double-click the tray icon to open the dark-mode settings panel:
+Double-click the system tray icon to open the settings interface:
 
-**General** - autostart with Windows, launch minimized, polling interval and temperature units:
+**General Settings** - Configure Windows autostart, minimized startup, polling intervals, and temperature units:
 
 <img src="docs/public/images/general-settings.png" alt="General settings page" style="border-radius: 8px;" />
 
-**Taskbar Layout** - reorder metrics by drag-and-drop to control exactly what appears in the overlay:
+**Taskbar Layout** - Reorder metrics by drag-and-drop to customize the overlay display:
 
 <img src="docs/public/images/layout-settings.png" alt="Taskbar layout settings page" style="border-radius: 8px;" />
 
-**Monitoring** - toggle individual hardware components and enable metrics logging:
+**Hardware Monitoring** - Enable or disable hardware sensors and toggle debug logging:
 
 <img src="docs/public/images/monitoring-settings.png" alt="Monitoring settings page" style="border-radius: 8px;" />
 
-**Traffic & Network History** - daily bandwidth calendar with per-interface breakdown:
+**Traffic & Network History** - View daily bandwidth consumption per network interface:
 
 <img src="docs/public/images/traffic-settings.png" alt="Traffic history calendar settings page" style="border-radius: 8px;" />
 
 ### 4. Threshold Alerts
 
-Set per-metric warning limits - e.g. CPU at 90°C or GPU at 88°C. When a threshold is crossed, the metric flashes on the overlay and a desktop toast notification pops up without stealing focus:
+Set warning limits for hardware metrics (for example, CPU at 90°C). When values exceed limits, the overlay flashes and a desktop notification appears without stealing keyboard focus:
 
 <img src="docs/public/images/toast-alert.png" alt="Threshold alert toast notification" style="border-radius: 8px;" />
 
@@ -221,16 +224,16 @@ Set per-metric warning limits - e.g. CPU at 90°C or GPU at 88°C. When a thresh
 
 ## Getting Help & Support
 
-Need help, found a bug or have a feature suggestion?
-
-- 📖 **Documentation**: Browse the full [**User & Developer Guides**](https://nicconike.github.io/LocalTelemetry/).
-- 💬 **Discord Server**: Join the [**Discord Community**](https://discord.gg/M2QevSgW3S) to chat live with the developer and get real-time support.
-- 💡 **Community Discussions**: Ask questions or share ideas on [**GitHub Discussions**](https://github.com/Nicconike/LocalTelemetry/discussions).
-- 🐛 **Report an Issue**: Open a bug report via the [**Issue Tracker**](https://github.com/Nicconike/LocalTelemetry/issues).
-- 🛠️ **Developers & Contributors**: See [**CONTRIBUTING.md**](.github/CONTRIBUTING.md) for build instructions and code guidelines.
+- 📖 **Documentation**: Read the [**User & Developer Guides**](https://nicconike.github.io/LocalTelemetry/).
+- 💬 **Discord Community**: Join our [**Discord Server**](https://discord.gg/M2QevSgW3S) for direct discussions and support.
+- 💡 **Discussions**: Start a discussion on [**GitHub Discussions**](https://github.com/Nicconike/LocalTelemetry/discussions).
+- 🐛 **Issue Tracker**: Report bugs and request features through [**GitHub Issues**](https://github.com/Nicconike/LocalTelemetry/issues).
+- 🆘 **Support Guidelines**: Review [**SUPPORT.md**](.github/SUPPORT.md) for troubleshooting steps.
+- 🔒 **Security Policy**: Report security vulnerabilities through [**SECURITY.md**](.github/SECURITY.md).
+- 🛠️ **Contributing**: Read [**CONTRIBUTING.md**](.github/CONTRIBUTING.md) for coding and pull request guidelines.
 
 ---
 
 ## License
 
-LocalTelemetry is free and open-source software licensed under the **GNU General Public License v3.0**. See [`LICENSE`](LICENSE) for details.
+LocalTelemetry is free and open-source software licensed under the **GNU General Public License v3.0**. See [`LICENSE`](LICENSE) for full license terms.

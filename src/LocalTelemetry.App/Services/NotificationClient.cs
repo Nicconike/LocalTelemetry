@@ -59,7 +59,15 @@ public class NotificationClient : IDisposable
     // Pipe Communication
     private async Task SendAsync(NotificationMessage msg, int? timeoutMs = null, int maxRetries = MaxRetries, CancellationToken cancellationToken = default)
     {
-        await _lock.WaitAsync(cancellationToken);
+        try
+        {
+            await _lock.WaitAsync(cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
         int timeout = timeoutMs ?? _connectTimeoutMs;
         try
         {

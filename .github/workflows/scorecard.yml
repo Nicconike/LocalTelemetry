@@ -1,4 +1,4 @@
-name: OpenSSF Scorecard Analysis
+name: Scorecard
 
 on:
     # For Branch Protection checks, Scorecard needs master pushes & PRs
@@ -11,7 +11,7 @@ permissions:
 
 jobs:
     scorecard:
-        name: Scorecard Analysis
+        name: Scorecard Scan
         runs-on: ubuntu-latest
         permissions:
             security-events: write # Required for upload-sarif
@@ -25,21 +25,21 @@ jobs:
               with:
                   persist-credentials: false
 
-            - name: Run OpenSSF Scorecard Analysis
+            - name: Run Scorecard
               uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
               with:
                   results_file: results.sarif
                   results_format: sarif
                   publish_results: true
 
-            - name: Upload Scorecard Artifacts
+            - name: Upload Artifacts
               uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:
                   name: SARIF results
                   path: results.sarif
                   retention-days: 7
 
-            - name: Upload to GitHub Security Code Scanning
+            - name: Upload SARIF
               uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
               with:
                   sarif_file: results.sarif

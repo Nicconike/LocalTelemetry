@@ -437,3 +437,7 @@ docs/v*/
 
 # Bun
 .bun/
+
+# Semantic Release configuration in .github/release
+!.github/release/
+.github/release/node_modules/

@@ -10,7 +10,7 @@
         "docs:snapshot": "node scripts/snapshot-docs.mjs"
     },
     "devDependencies": {
-        "@iconify-json/lucide": "^1.2.142",
+        "@iconify-json/lucide": "^1.2.143",
         "@types/node": "^26.6.5",
         "dayjs": "^1.11.23",
         "debug": "^4.4.3",
@@ -30,7 +30,11 @@
         "cookie": "^0.7.0",
         "send": "^0.19.0",
         "express": "^4.20.0",
-        "@vue/server-renderer": "^3.5.42",
+        "vue": "3.5.44",
+        "@vue/server-renderer": "3.5.44",
+        "@vue/runtime-core": "3.5.44",
+        "@vue/runtime-dom": "3.5.44",
+        "@vue/shared": "3.5.44",
         "katex": "^0.18.2",
         "source-map-js": "^1.2.2",
         "vite": "^6.4.3"

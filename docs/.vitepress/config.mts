@@ -203,19 +203,18 @@ export default withMermaid(
 
             nav: [
                 { text: 'Home', link: '/' },
-                { text: 'User Guide', link: '/user-guide/' },
-                { text: 'Developer Guide', link: '/developer-guide/' },
                 {
-                    text: 'Latest',
-                    items: [
-                        ...versions.map((v) => ({ text: v.text, link: v.link })),
-                        {
-                            items: [
-                                { text: 'Changelog', link: 'https://github.com/Nicconike/LocalTelemetry/blob/master/CHANGELOG.md' },
-                                { text: 'App Releases', link: 'https://github.com/Nicconike/LocalTelemetry/releases' }
-                            ]
-                        }
-                    ]
+                    text: 'User Guide',
+                    link: '/user-guide/',
+                    activeMatch: String.raw`^/(?:v\d[^/]+/)?user-guide`
+                },
+                {
+                    text: 'Developer Guide',
+                    link: '/developer-guide/',
+                    activeMatch: String.raw`^/(?:v\d[^/]+/)?developer-guide`
+                },
+                {
+                    component: 'VersionNavDropdown'
                 }
             ],
 

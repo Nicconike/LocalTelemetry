@@ -11,15 +11,15 @@ permissions:
     contents: read
 
 jobs:
-    auto-project-setup:
-        name: Auto Project Setup
+    setup:
+        name: Project Setup
         runs-on: ubuntu-latest
         permissions:
             issues: write
             pull-requests: write
 
         steps:
-            - name: Auto-Assign Sprint, Priority, Effort, Labels, Scope & Project
+            - name: Configure Item
               uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
               env:
                   PROJECTS: ${{ secrets.PROJECTS }}
