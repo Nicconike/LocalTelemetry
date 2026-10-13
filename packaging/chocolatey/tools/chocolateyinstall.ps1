@@ -13,3 +13,4 @@ $packageArgs = @{
     validExitCodes = @(0)
 }
 Install-ChocolateyPackage @packageArgs
+
