@@ -147,3 +147,19 @@ jobs:
                   name: dotnet-test-results
                   path: TestResults/
                   retention-days: 14
+
+    ci:
+        name: CI
+        needs: [commitlint, test-frontend, test-windows]
+        if: always()
+        runs-on: ubuntu-latest
+        steps:
+            - name: Check Status
+              run: |
+                  if [ "${{ needs.commitlint.result }}" != "success" ] || \
+                     [ "${{ needs.test-frontend.result }}" != "success" ] || \
+                     [ "${{ needs.test-windows.result }}" != "success" ]; then
+                      echo "One or more CI jobs failed."
+                      exit 1
+                  fi
+                  echo "All CI jobs completed successfully."

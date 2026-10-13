@@ -47,6 +47,17 @@ public class NotificationClientTests
     }
 
     [Fact]
+    public async Task NotificationClient_SendToastAsync_HandlesLockAcquisitionCancellation()
+    {
+        using var client = new NotificationClient("NonExistentPipe_" + Guid.NewGuid().ToString("N"), 1000);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel(); // Already canceled token before entering wait
+
+        var act = async () => await client.SendToastAsync("Title", "Body", null, cts.Token);
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
     public async Task NotificationClient_SendToastAsync_SuccessfulPipeCommunication()
     {
         string pipeName = "TestPipe_" + Guid.NewGuid().ToString("N");

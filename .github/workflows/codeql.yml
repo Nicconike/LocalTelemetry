@@ -11,7 +11,7 @@ permissions:
 
 jobs:
     analyze:
-        name: CodeQL Scan
+        name: CodeQL Analysis
         runs-on: windows-latest
         permissions:
             security-events: write

@@ -4,15 +4,15 @@ on:
     issues:
         types: [opened, closed]
     pull_request_target:
-        types: [opened, closed]
+        types: [opened, synchronize, reopened, closed]
     workflow_dispatch:
 
 permissions:
     contents: read
 
 jobs:
-    setup:
-        name: Project Setup
+    auto-project-setup:
+        name: Auto Project Setup
         runs-on: ubuntu-latest
         permissions:
             issues: write
@@ -20,12 +20,11 @@ jobs:
 
         steps:
             - name: Configure Item
-              uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+              uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
               env:
                   PROJECTS: ${{ secrets.PROJECTS }}
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               with:
-                  github-token: ${{ secrets.GITHUB_TOKEN }}
+                  github-token: ${{ secrets.PROJECTS || secrets.GITHUB_TOKEN }}
                   script: |
                       const action = context.payload.action;
                       const isIssue = !!context.payload.issue;
@@ -42,12 +41,7 @@ jobs:
 
                       const owner = context.repo.owner;
                       const projectNumber = 7;
-                      const patToken = process.env.PROJECTS || process.env.GITHUB_TOKEN;
-                      const graphqlWithPat = github.graphql.defaults({
-                          headers: {
-                              authorization: `token ${patToken}`
-                          }
-                      });
+                      const graphqlWithPat = github.graphql;
 
                       // 2. Add to User Project #7 & Fetch Field Schema
                       const projectQuery = `

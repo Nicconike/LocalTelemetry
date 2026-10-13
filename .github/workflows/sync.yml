@@ -41,7 +41,7 @@ jobs:
 
                       echo "Processing PR #$pr_num (branch: $pr_branch, author: $pr_author)..."
 
-                      if [ "$pr_author" = "app/dependabot" ] || [ "$pr_author" = "dependabot" ]; then
+                      if [ "$pr_author" = "app/dependabot" ] || [ "$pr_author" = "dependabot" ] || [ "$pr_author" = "dependabot[bot]" ]; then
                           echo "Triggering Dependabot rebase for PR #$pr_num..."
                           gh pr comment "$pr_num" --repo "$REPO" --body "@dependabot rebase" || true
                       else
@@ -62,7 +62,7 @@ jobs:
               run: |
                   echo "Configuring auto-merge for PR #$PR_NUMBER (author: $PR_AUTHOR)..."
 
-                  if [ "$PR_AUTHOR" = "app/dependabot" ] || [ "$PR_AUTHOR" = "dependabot" ]; then
+                  if [ "$PR_AUTHOR" = "app/dependabot" ] || [ "$PR_AUTHOR" = "dependabot" ] || [ "$PR_AUTHOR" = "dependabot[bot]" ]; then
                       echo "Approving Dependabot PR #$PR_NUMBER..."
                       gh pr review "$PR_NUMBER" --repo "$REPO" --approve --body "Auto-approved Dependabot PR" || true
                   fi

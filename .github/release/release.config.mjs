@@ -7,6 +7,7 @@ export default {
         {
             name: 'master',
             prerelease: 'rc',
+            channel: false,
         },
     ],
     tagFormat: 'v${version}',
@@ -46,23 +47,22 @@ export default {
                         { type: 'test', section: 'Tests' },
                         { type: 'build', section: 'Build System' },
                         { type: 'ci', section: 'Continuous Integration' },
-                        { type: 'chore', section: 'Chores' },
                         { type: 'revert', section: 'Reverts' },
+                        { type: 'chore', hidden: true },
                     ],
                 },
                 writerOpts: {
                     commitGroupsSort: (a, b) => {
                         const rank = {
-                            'Features': 11,
-                            'Bug Fixes': 10,
-                            'Performance Improvements': 9,
-                            'Code Refactoring': 8,
-                            'Documentation': 7,
-                            'Styles': 6,
-                            'Tests': 5,
-                            'Build System': 4,
-                            'Continuous Integration': 3,
-                            'Chores': 2,
+                            'Features': 10,
+                            'Bug Fixes': 9,
+                            'Performance Improvements': 8,
+                            'Code Refactoring': 7,
+                            'Documentation': 6,
+                            'Styles': 5,
+                            'Tests': 4,
+                            'Build System': 3,
+                            'Continuous Integration': 2,
                             'Reverts': 1,
                         };
                         return (rank[b.title] ?? 0) - (rank[a.title] ?? 0);

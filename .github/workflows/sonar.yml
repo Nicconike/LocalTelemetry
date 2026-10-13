@@ -1,4 +1,4 @@
-name: SonarCloud Analysis
+name: SonarQube Analysis
 
 on:
     push:
@@ -11,7 +11,7 @@ permissions:
 
 jobs:
     analyze:
-        name: SonarCloud
+        name: SonarQube Analysis
         runs-on: windows-latest
         env:
             DOTNET_CLI_TELEMETRY_OPTOUT: "1"
