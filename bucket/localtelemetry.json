@@ -1,12 +1,12 @@
 {
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0-rc.2",
   "description": "Real-time hardware telemetry displayed on the Windows taskbar.",
   "homepage": "https://github.com/Nicconike/LocalTelemetry",
   "license": "GPL-3.0-or-later",
   "architecture": {
     "64bit": {
-      "url": "https://github.com/Nicconike/LocalTelemetry/releases/download/v1.0.0-rc.1/LocalTelemetry-win-x64.zip",
-      "hash": "c11c2059dea06c28f703b5271a55571d595711df6349beedd24e028f3c8295fb"
+      "url": "https://github.com/Nicconike/LocalTelemetry/releases/download/v1.0.0-rc.2/LocalTelemetry-win-x64.zip",
+      "hash": "8f0fc80a41c56ba9af965531ba93673916f28fd523fa3b2768bb1a1ece91d449"
     }
   },
   "bin": "LocalTelemetry.exe",

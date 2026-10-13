@@ -1,3 +1,15 @@
+## [1.0.0-rc.2](https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0-rc.1...v1.0.0-rc.2) (2026-10-13)
+
+### Bug Fixes
+
+* **ci:** restore required status check names, project automation, and release configuration ([a547306](https://github.com/Nicconike/LocalTelemetry/commit/a547306141c556d0b247b74f236d1eb4bb551f14))
+
+### Continuous Integration
+
+* **workflows:** simplify workflow naming, add PR auto-sync and fix release pipeline ([f4d8533](https://github.com/Nicconike/LocalTelemetry/commit/f4d85338f08983e1e324c93196517dc87f541726))
+* **release:** sequence manifest updates in prepare step and support single branch rc ([3b01ec6](https://github.com/Nicconike/LocalTelemetry/commit/3b01ec6474426c9b2f41a1b3c129d7798f270959))
+* **release:** migrate release pipeline to semantic-release ([529130a](https://github.com/Nicconike/LocalTelemetry/commit/529130a93fa591d81c7b41ca0fb6281826b972e6))
+
 ## 1.0.0-rc.1 (2026-10-13)
 
 ### Features

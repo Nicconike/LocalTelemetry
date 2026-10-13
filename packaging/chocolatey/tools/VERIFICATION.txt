@@ -2,10 +2,10 @@ VERIFICATION
 Verification is intended to assist the Chocolatey moderators and community in verifying that this package's contents are trustworthy.
 
 The installer has been downloaded from the official GitHub Release:
-https://github.com/Nicconike/LocalTelemetry/releases/download/v1.0.0-rc.1/LocalTelemetrySetup.exe
+https://github.com/Nicconike/LocalTelemetry/releases/download/v1.0.0-rc.2/LocalTelemetrySetup.exe
 
 It can also be verified by comparing against the official release checksums:
-https://github.com/Nicconike/LocalTelemetry/releases/download/v1.0.0-rc.1/checksums.txt
+https://github.com/Nicconike/LocalTelemetry/releases/download/v1.0.0-rc.2/checksums.txt
 
 $11F79F895A81E188061A27B03A270CDB5D08B33B6B4F0644342BFB9236F370386
 
@@ -14,4 +14,5 @@ To verify the checksum of the downloaded file manually:
 2. Run in PowerShell:
    Get-FileHash -Path LocalTelemetrySetup.exe -Algorithm SHA256
 3. Compare the output hash with the checksum provided above.
+
 
