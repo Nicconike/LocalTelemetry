@@ -37,10 +37,11 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { useRoute, withBase } from 'vitepress';
+import { useRoute, useData } from 'vitepress';
 import { latestReleaseTag } from '../versions.mjs';
 
 const route = useRoute();
+const { site } = useData();
 const isDismissed = ref(false);
 
 const versionInfo = computed(() => {
@@ -70,9 +71,11 @@ const isOutdated = computed(() => {
 const versionTag = computed(() => versionInfo.value?.tag || '');
 
 const latestUrl = computed(() => {
-    if (!versionInfo.value) return withBase('/');
-    const sub = versionInfo.value.subPath;
-    return withBase(sub ? `/${sub}` : '/');
+    const baseUrl = site.value?.base || '/';
+    const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+    if (!versionInfo.value) return normalizedBase;
+    const sub = versionInfo.value.subPath.replace(/^\//, '');
+    return sub ? `${normalizedBase}${sub}` : normalizedBase;
 });
 
 // Sync dismissal state with sessionStorage

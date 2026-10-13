@@ -73,7 +73,7 @@ jobs:
               run: |
                   git config user.name "${{ steps.import_gpg.outputs.name }}"
                   git config user.email "${{ steps.import_gpg.outputs.email }}"
-                  bun run --cwd .github/release release
+                  bun run ./.github/release/run.ts --extends ./.github/release/release.config.mjs
 
             - name: Generate Attestations
               if: always() && hashFiles('./LocalTelemetrySetup.exe') != ''

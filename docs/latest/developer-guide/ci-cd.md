@@ -11,8 +11,9 @@ All workflow definition files are located in `.github/workflows/`:
 ```cmd
 .github/workflows/
 ├── ci.yml          # Continuous Integration build, format check & unit test pipeline
-├── release.yml     # Two-stage Automated Semantic Release, Inno Setup & SLSA Attestation
+├── release.yml     # Automated Semantic Release, Inno Setup & SLSA Attestation
 ├── docs.yml        # GitHub Pages documentation build & deployment
+├── sync.yml        # Pull Request branch auto-sync and Dependabot rebase automation
 ├── project.yml     # GitHub Projects v2 automation, triage, sprint & effort assignment
 ├── codeql.yml      # CodeQL static security analysis
 ├── scorecard.yml   # OpenSSF Scorecard supply-chain security audit
@@ -24,7 +25,7 @@ All workflow definition files are located in `.github/workflows/`:
 flowchart TD
     subgraph Triggers["GitHub Event Triggers"]
         PushPR(["Push / Pull Request to master"])
-        ReleaseTag(["Git Tag Push (v*.*.*)"])
+        PushMaster(["Push to master (release paths)"])
     end
 
     subgraph CI["Continuous Integration Pipeline (ci.yml)"]
@@ -41,46 +42,36 @@ flowchart TD
         DotNetTest --> Coverage
     end
 
-    subgraph QualitySec["Static Analysis & Security Workflows"]
+    subgraph QualitySec["Static Analysis & Project Automation Workflows"]
         direction TB
         CodeQL{{"CodeQL Security Scan<br/>codeql.yml"}}
         Scorecard{{"OpenSSF Scorecard<br/>scorecard.yml"}}
         Sonar{{"SonarCloud Quality Gate<br/>sonar.yml"}}
+        SyncPR{{"PR Auto-Sync & Rebase<br/>sync.yml"}}
         ProjectTriage{{"GitHub Projects v2 Triage<br/>project.yml"}}
     end
 
-    subgraph Release["Two-Stage Release Pipeline (release.yml)"]
+    subgraph Release["Automated Release Pipeline (release.yml)"]
         direction TB
-        subgraph Stage1["Stage 1: prepare-release"]
-            direction TB
-            TagGen{{"Semantic Version Resolution<br/>Calculates SemVer & Pre-release Tags"}}
-            ChangelogGen{{"Semantic Release Engine<br/>Updates CHANGELOG.md & creates tag"}}
-        end
+        SemRelRunner{{"semantic-release Runner (run.ts)<br/>Conventional Commits Analysis & Tagging"}}
+        BuildScript[["build.ps1<br/>dotnet publish, Inno Setup & Manifest Updates"]]
+        PublishScript[["publish.ps1<br/>Chocolatey Push"]]
+        Attestation{{"actions/attest<br/>SLSA Level 3 Provenance"}}
+        GitHubRelease(["GitHub Release Publication<br/>Installers, Portable ZIP & Checksums"])
 
-        subgraph Stage2["Stage 2: build-release"]
-            direction TB
-            DotNetPublish[["dotnet publish -c Release<br/>Single-File x64 Output"]]
-            InnoSetup[["Inno Setup Compiler (ISCC)<br/>Executable & Portable Packages"]]
-            Checksums{{"SHA-256 Hashes<br/>Cryptographic Checksums"}}
-            Slsa{{"SLSA Level 3<br/>Provenance Attestations"}}
-            GitHubRelease(["GitHub Release Publication<br/>Binaries, Installers & Notes"])
-        end
-
-        TagGen --> ChangelogGen
-        ChangelogGen --> DotNetPublish
-        DotNetPublish --> InnoSetup
-        InnoSetup --> Checksums
-        Checksums --> Slsa
-        Slsa --> GitHubRelease
+        SemRelRunner --> BuildScript
+        BuildScript --> PublishScript
+        PublishScript --> Attestation
+        Attestation --> GitHubRelease
     end
 
     PushPR --> CI
     PushPR --> QualitySec
-    ReleaseTag --> Release
+    PushMaster --> Release
 
-    class PushPR,ReleaseTag,GitHubRelease triggerNode
-    class Commitlint,FrontendTest,CodeQL,Scorecard,Sonar,ProjectTriage,TagGen,ChangelogGen,Checksums,Slsa toolNode
-    class DotNetBuild,DotNetTest,DotNetPublish,InnoSetup buildNode
+    class PushPR,PushMaster,GitHubRelease triggerNode
+    class Commitlint,FrontendTest,CodeQL,Scorecard,Sonar,SyncPR,ProjectTriage,SemRelRunner,PublishScript,Attestation toolNode
+    class DotNetBuild,DotNetTest,BuildScript buildNode
     class Coverage dataNode
 
     classDef triggerNode fill:#0b1329,stroke:#38bdf8,stroke-width:1.5px,color:#e0f2fe
@@ -115,30 +106,38 @@ Validates commit messages against Conventional Commits rules defined in `commitl
 
 ---
 
-## :rocket: Two-Stage Automated Release Pipeline
+## :rocket: Automated Release Pipeline
 
-The release pipeline is defined in [`.github/workflows/release.yml`](https://github.com/Nicconike/LocalTelemetry/blob/master/.github/workflows/release.yml) and uses a two-stage architecture:
+The release pipeline is defined in [`.github/workflows/release.yml`](https://github.com/Nicconike/LocalTelemetry/blob/master/.github/workflows/release.yml). It triggers automatically on every push to the `master` branch that modifies release paths or source code:
 
-### Stage 1: `prepare-release`
+### Pipeline Execution Flow
 
-1. Evaluates Git tags and commit messages to resolve the next semantic version.
-2. Identifies pre-release channels dynamically: if the version string contains `rc`, `beta`, or `alpha`, the release is flagged as a pre-release.
-3. Generates release notes and updates `CHANGELOG.md` with **semantic-release**.
-4. Creates the annotated Git release tag.
+1. **GitHub App Authentication**: Generates a GitHub App token with write permissions to manage releases, tags, and commits.
+2. **Environment Setup**: Restores Git tags (`git fetch --tags --force`), sets up Bun and the .NET 10 SDK, and installs release dependencies in `.github/release/`.
+3. **Cryptographic Tag Signing**: Imports the maintainer PGP key via `crazy-max/ghaction-import-gpg` to configure signed Git tags and commits.
+4. **Unified `semantic-release` Runner**:
+   - Executes `bun run ./.github/release/run.ts --extends ./.github/release/release.config.mjs`.
+   - **Commit Analysis (`@semantic-release/commit-analyzer`)**: Parses Conventional Commits to calculate the next semantic version (`patch`, `minor`, `major`).
+   - **Changelog Generation (`@semantic-release/release-notes-generator` & `@semantic-release/changelog`)**: Groups commits into categorized sections (Features, Bug Fixes, Performance) and updates `CHANGELOG.md`.
+   - **Binary Compilation & Packaging (`@semantic-release/exec`)**:
+     - Executes `pwsh -File ./.github/release/build.ps1 -Version "${nextRelease.version}" -Tag "${nextRelease.gitTag}"`.
+     - Compiles single-file Windows x64 binaries:
 
-### Stage 2: `build-release`
+       ```cmd
+       dotnet publish src/LocalTelemetry.App/LocalTelemetry.App.csproj -c Release -r win-x64 --no-self-contained -p:PublishSingleFile=true
+       ```
 
-1. Compiles self-contained, single-file Windows x64 binaries:
-
-   ```cmd
-   dotnet publish src/LocalTelemetry.App/LocalTelemetry.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
-   ```
-
-2. Compiles `LocalTelemetrySetup.exe` via Inno Setup 7 (`ISCC.exe`).
-3. Generates the portable zip package `LocalTelemetry-win-x64.zip`.
-4. Computes SHA-256 hashes into `checksums.txt`.
-5. Emits cryptographic SLSA Level 3 build provenance attestations via `actions/attest`.
-6. Publishes the release to GitHub Releases with all binaries and checksums attached.
+     - Compiles `LocalTelemetrySetup.exe` via Inno Setup 7 (`ISCC.exe`).
+     - Packages the portable archive `LocalTelemetry-win-x64.zip`.
+     - Generates SHA-256 cryptographic hashes in `checksums.txt`.
+     - Updates the Scoop manifest (`bucket/localtelemetry.json`) and Chocolatey specification files (`packaging/chocolatey/**`).
+   - **Repository State Commit (`@semantic-release/git`)**: Commits the updated `CHANGELOG.md`, `bucket/localtelemetry.json`, and Chocolatey manifests back to `master` with `[skip ci]`.
+   - **Release Publication (`@semantic-release/github`)**: Publishes the release to GitHub Releases with `LocalTelemetrySetup.exe`, `LocalTelemetry-win-x64.zip`, and `checksums.txt` attached.
+   - **Third-Party Package Publication (`@semantic-release/exec`)**:
+     - Executes `pwsh -File ./.github/release/publish.ps1 -Version "${nextRelease.version}" -Tag "${nextRelease.gitTag}"`.
+     - Packs the `.nupkg` and pushes the Chocolatey package to the Chocolatey Community repository.
+5. **Cryptographic Provenance Attestations**:
+   - Generates SLSA Level 3 build provenance attestations for `LocalTelemetrySetup.exe` and `LocalTelemetry-win-x64.zip` via `actions/attest`.
 
 ---
 

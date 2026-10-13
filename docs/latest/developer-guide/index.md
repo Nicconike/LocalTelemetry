@@ -90,7 +90,7 @@ flowchart TD
 
 ### :package: Build System, Inno Setup & CI/CD
 
-- **Responsibility**: Automated MSBuild packaging, Inno Setup 7 bootstrapper installer (`setup.iss`), portable cleanup tools (`Uninstall.bat`), and 7 GitHub Actions workflows adhering to OpenSSF Scorecard standards.
+- **Responsibility**: Automated MSBuild packaging, Inno Setup 7 bootstrapper installer (`setup.iss`), portable cleanup tools (`Uninstall.bat`), and 8 GitHub Actions workflows adhering to OpenSSF Scorecard standards.
 
 ## :wrench: Subsystem Directory Reference
 
@@ -141,5 +141,5 @@ flowchart TD
 - [**IPC Protocols & WebMessage Specifications**](./reference/ipc-protocol.md): Complete message schemas for WebView2 RPC and Named Pipe notifications
 - [**settings.json Configuration Schema**](./reference/settings-schema.md): Exhaustive JSON schema definition for application configuration
 - [**Building & Packaging**](./building-and-packaging.md): Compiling single-file executables, Inno Setup 7 installer scripts, and portable ZIPs
-- [**CI/CD Pipelines & GitHub Workflows**](./ci-cd.md): Breakdown of all 7 GitHub Actions workflows, OpenSSF 40-character SHA pinning, and SLSA attestations
+- [**CI/CD Pipelines & GitHub Workflows**](./ci-cd.md): Breakdown of all 8 GitHub Actions workflows, OpenSSF 40-character SHA pinning, and SLSA attestations
 - [**Contributing & Coding Standards**](./contributing.md): C# 13 standards, conventional commits, PR guidelines, and brand color additions

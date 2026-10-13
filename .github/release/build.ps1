@@ -1,13 +1,20 @@
 param(
     [Parameter(Mandatory = $true)]
-    [string]$Version
+    [string]$Version,
+
+    [Parameter(Mandatory = $false)]
+    [string]$Tag
 )
 
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $true
 
+$actualTag = if ($Tag) { $Tag } else { "v$Version" }
+$repo = $env:GITHUB_REPOSITORY
+if (-not $repo) { $repo = "Nicconike/LocalTelemetry" }
+
 Write-Host "=========================================="
-Write-Host "Building LocalTelemetry Release: $Version"
+Write-Host "Building LocalTelemetry Release: $Version ($actualTag)"
 Write-Host "=========================================="
 
 # 1. Build Frontend
@@ -80,12 +87,56 @@ Compress-Archive -Path ./publish/* -DestinationPath ./LocalTelemetry-win-x64.zip
 $hashes = Get-FileHash -Path ./LocalTelemetrySetup.exe, ./LocalTelemetry-win-x64.zip -Algorithm SHA256
 $hashes | ForEach-Object { "{0}  {1}" -f $_.Hash, (Split-Path $_.Path -Leaf) } | Set-Content -Path ./checksums.txt -Encoding utf8
 
-$setupHash = ($hashes | Where-Object { $_.Path -like "*LocalTelemetrySetup.exe" }).Hash
-$zipHash = ($hashes | Where-Object { $_.Path -like "*LocalTelemetry-win-x64.zip" }).Hash
+$setupHash = ($hashes | Where-Object { $_.Path -like "*LocalTelemetrySetup.exe" }).Hash.ToUpperInvariant()
+$zipHash = ($hashes | Where-Object { $_.Path -like "*LocalTelemetry-win-x64.zip" }).Hash.ToLowerInvariant()
 
 if ($env:GITHUB_ENV) {
     "SETUP_HASH=$setupHash" | Out-File -FilePath $env:GITHUB_ENV -Append
     "ZIP_HASH=$zipHash" | Out-File -FilePath $env:GITHUB_ENV -Append
+}
+
+# 6. Update Scoop Bucket Manifest
+Write-Host "Updating Scoop bucket manifest..."
+$manifestFile = "bucket/localtelemetry.json"
+if (Test-Path $manifestFile) {
+    $zipUrl = "https://github.com/$repo/releases/download/$actualTag/LocalTelemetry-win-x64.zip"
+    $manifest = Get-Content $manifestFile -Raw | ConvertFrom-Json
+    $manifest.version = $Version
+    $manifest.architecture.'64bit'.url = $zipUrl
+    $manifest.architecture.'64bit'.hash = $zipHash
+    $manifest | ConvertTo-Json -Depth 10 | Set-Content $manifestFile -Encoding utf8
+    Write-Host "Updated $manifestFile with version $Version."
+}
+else {
+    Write-Warning "Manifest file $manifestFile not found."
+}
+
+# 7. Update Chocolatey Package Specifications and Pack
+Write-Host "Updating Chocolatey package specifications..."
+$nuspec = "packaging/chocolatey/localtelemetry.nuspec"
+if (Test-Path $nuspec) {
+    $setupUrl = "https://github.com/$repo/releases/download/$actualTag/LocalTelemetrySetup.exe"
+    (Get-Content $nuspec -Raw) -replace '<version>.*</version>', "<version>$Version</version>" | Set-Content $nuspec -Encoding utf8
+
+    $installScript = "packaging/chocolatey/tools/chocolateyinstall.ps1"
+    if (Test-Path $installScript) {
+        (Get-Content $installScript -Raw) `
+            -replace "(?m)^\$url\s*=\s*'.*'", "`$url = '$setupUrl'" `
+            -replace "(?m)^\$checksum\s*=\s*'.*'", "`$checksum = '$setupHash'" |
+        Set-Content $installScript -Encoding utf8
+    }
+
+    $verificationFile = "packaging/chocolatey/tools/VERIFICATION.txt"
+    if (Test-Path $verificationFile) {
+        (Get-Content $verificationFile -Raw) `
+            -replace "(?m)(^The installer has been downloaded from the official GitHub Release:\r?\n).*(\r?\n)", "`$1$setupUrl`$2" `
+            -replace "releases/download/[^/]+/checksums\.txt", "releases/download/$actualTag/checksums.txt" `
+            -replace "(?m)(^Checksum \(SHA256\):\r?\n).*(\r?\n)", "`$1$setupHash`$2" |
+        Set-Content $verificationFile -Encoding utf8
+    }
+}
+else {
+    Write-Warning "Nuspec file $nuspec not found."
 }
 
 Write-Host "Build and packaging complete for version $Version."

@@ -206,24 +206,15 @@ export default withMermaid(
                 {
                     text: 'User Guide',
                     link: '/user-guide/',
-                    activeMatch: '^/(?:v\\d[^/]+/)?user-guide'
+                    activeMatch: String.raw`^/(?:v\d[^/]+/)?user-guide`
                 },
                 {
                     text: 'Developer Guide',
                     link: '/developer-guide/',
-                    activeMatch: '^/(?:v\\d[^/]+/)?developer-guide'
+                    activeMatch: String.raw`^/(?:v\d[^/]+/)?developer-guide`
                 },
                 {
-                    text: 'Latest',
-                    items: [
-                        ...versions.map((v) => ({ text: v.text, link: v.link })),
-                        {
-                            items: [
-                                { text: 'Changelog', link: 'https://github.com/Nicconike/LocalTelemetry/blob/master/CHANGELOG.md' },
-                                { text: 'App Releases', link: 'https://github.com/Nicconike/LocalTelemetry/releases' }
-                            ]
-                        }
-                    ]
+                    component: 'VersionNavDropdown'
                 }
             ],
 

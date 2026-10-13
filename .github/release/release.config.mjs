@@ -4,10 +4,9 @@
  */
 export default {
     branches: [
-        'master',
         {
-            name: 'rc',
-            prerelease: true,
+            name: 'master',
+            prerelease: 'rc',
         },
     ],
     tagFormat: 'v${version}',
@@ -41,7 +40,6 @@ export default {
                         { type: 'feat', section: 'Features' },
                         { type: 'fix', section: 'Bug Fixes' },
                         { type: 'perf', section: 'Performance Improvements' },
-                        { type: 'revert', section: 'Reverts' },
                         { type: 'refactor', section: 'Code Refactoring' },
                         { type: 'docs', section: 'Documentation' },
                         { type: 'style', section: 'Styles' },
@@ -49,6 +47,7 @@ export default {
                         { type: 'build', section: 'Build System' },
                         { type: 'ci', section: 'Continuous Integration' },
                         { type: 'chore', section: 'Chores' },
+                        { type: 'revert', section: 'Reverts' },
                     ],
                 },
                 writerOpts: {
@@ -57,18 +56,22 @@ export default {
                             'Features': 11,
                             'Bug Fixes': 10,
                             'Performance Improvements': 9,
-                            'Reverts': 8,
-                            'Code Refactoring': 7,
-                            'Documentation': 6,
-                            'Styles': 5,
-                            'Tests': 4,
-                            'Build System': 3,
-                            'Continuous Integration': 2,
-                            'Chores': 1,
+                            'Code Refactoring': 8,
+                            'Documentation': 7,
+                            'Styles': 6,
+                            'Tests': 5,
+                            'Build System': 4,
+                            'Continuous Integration': 3,
+                            'Chores': 2,
+                            'Reverts': 1,
                         };
                         return (rank[b.title] ?? 0) - (rank[a.title] ?? 0);
                     },
-                    commitsSort: ['-scope', '-subject'],
+                    commitsSort: (a, b) => {
+                        const scopeCompare = (b.scope ?? '').localeCompare(a.scope ?? '');
+                        if (scopeCompare !== 0) return scopeCompare;
+                        return (b.subject ?? '').localeCompare(a.subject ?? '');
+                    },
                 },
             },
         ],
@@ -81,7 +84,7 @@ export default {
         [
             '@semantic-release/exec',
             {
-                prepareCmd: 'pwsh -File ./.github/release/build.ps1 -Version "${nextRelease.version}"',
+                prepareCmd: 'pwsh -File ./.github/release/build.ps1 -Version "${nextRelease.version}" -Tag "${nextRelease.gitTag}"',
                 publishCmd: 'pwsh -File ./.github/release/publish.ps1 -Version "${nextRelease.version}" -Tag "${nextRelease.gitTag}"',
             },
         ],
@@ -98,7 +101,12 @@ export default {
         [
             '@semantic-release/git',
             {
-                assets: ['CHANGELOG.md', 'bucket/localtelemetry.json', 'packaging/chocolatey/**'],
+                assets: [
+                    'CHANGELOG.md',
+                    'bucket/localtelemetry.json',
+                    'packaging/chocolatey/localtelemetry.nuspec',
+                    'packaging/chocolatey/tools/**',
+                ],
                 message: 'chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}',
             },
         ],

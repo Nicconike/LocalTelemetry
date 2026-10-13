@@ -53,7 +53,38 @@ In accordance with official [Microsoft Windows 11 Specifications](https://www.mi
 > [!IMPORTANT]
 > **Internet Connection for First-Time Setup**: Because most users will not have the .NET 10 Desktop Runtime installed, an active internet connection is required during initial setup so the installer can fetch the runtime package. Once installed, all subsequent launches, driver initialization, and telemetry operations run completely offline.
 
-### :package: Method 2: Portable ZIP (Zero Installation)
+### :package: Method 2: Chocolatey
+
+Install via [Chocolatey](https://community.chocolatey.org/packages/localtelemetry):
+
+```powershell
+choco install localtelemetry
+```
+
+For pre-release versions (Release Candidates & Beta builds):
+
+```powershell
+choco install localtelemetry --pre
+```
+
+### :inbox-tray: Method 3: Scoop
+
+Install via [Scoop](https://scoop.sh/):
+
+```powershell
+# Standard install (if the official extras bucket is enabled)
+scoop install localtelemetry
+
+# First-time Scoop GUI install (if extras is not yet added)
+scoop bucket add extras
+scoop install localtelemetry
+
+# Direct install from the project-hosted repository bucket
+scoop bucket add localtelemetry https://github.com/Nicconike/LocalTelemetry
+scoop install localtelemetry
+```
+
+### :folder-archive: Method 4: Portable ZIP (Zero Installation)
 
 1. **Install Prerequisites**: Because portable mode does not include an installation wizard to auto-fetch runtimes, ensure you have installed:
     - [**Microsoft .NET 10 Desktop Runtime (x64)**](https://aka.ms/dotnet/10.0/windowsdesktop-runtime-win-x64.exe)

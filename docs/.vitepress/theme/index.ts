@@ -5,6 +5,7 @@ import PageFeedback from './PageFeedback.vue';
 import BackToTop from './BackToTop.vue';
 import VersionBanner from './VersionBanner.vue';
 import MermaidViewer from './MermaidViewer.vue';
+import VersionNavDropdown from './VersionNavDropdown.vue';
 import './custom.css';
 
 export default {
@@ -16,7 +17,9 @@ export default {
             'layout-bottom': () => [h(BackToTop), h(MermaidViewer)]
         });
     },
-    enhanceApp({ router }: EnhanceAppContext) {
+    enhanceApp({ app, router }: EnhanceAppContext) {
+        app.component('VersionNavDropdown', VersionNavDropdown);
+
         if (inBrowser) {
             // Track page views on client-side route changes via Google Analytics (GA4)
             router.onAfterRouteChange = (to: string) => {
