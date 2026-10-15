@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { useRoute } from 'vitepress';
+import { useRoute, useData } from 'vitepress';
 import VPFlyout from 'vitepress/dist/client/theme-default/components/VPFlyout.vue';
 import VPNavScreenMenuGroup from 'vitepress/dist/client/theme-default/components/VPNavScreenMenuGroup.vue';
 import { versions } from '../versions.mjs';
@@ -10,11 +10,17 @@ defineProps<{
 }>();
 
 const route = useRoute();
+const { site } = useData();
 
 const parsedVersion = computed(() => {
-    const path = route.path || '/';
-    // Match version prefix like /v1.0.0-rc.1/... or /LocalTelemetry/v1.0.0-rc.1/...
-    const match = path.match(/(?:^|\/)v(\d[\w.-]*)(?:\/(.*))?$/);
+    let path = route.path || '/';
+    const baseUrl = site.value?.base || '/';
+    if (baseUrl !== '/' && path.startsWith(baseUrl)) {
+        path = '/' + path.slice(baseUrl.length);
+    }
+
+    // Match version prefix like /v1.0.0-rc.1/...
+    const match = path.match(/^\/v(\d[\w.-]*)(?:\/(.*))?$/);
     if (match) {
         let sub = match[2] || '';
         sub = sub.replace(/\/index\.html$/, '/').replace(/\.html$/, '');
@@ -37,6 +43,8 @@ const isNonLatest = computed(() => parsedVersion.value.tag !== 'Latest');
 
 const menuItems = computed(() => {
     const sub = parsedVersion.value.subPath;
+    const baseUrl = site.value?.base || '/';
+    const basePrefix = baseUrl !== '/' ? baseUrl.replace(/^\/|\/$/g, '') + '/' : '';
 
     const versionLinks = versions.map((v) => {
         const isLatest = v.text === 'Latest';
@@ -46,12 +54,12 @@ const menuItems = computed(() => {
         if (isLatest) {
             targetLink = sub ? `/${sub}` : '/';
             // Matches any route that does not have a version prefix (e.g. /user-guide/... or /)
-            activeMatch = String.raw`^/(?!v\d)`;
+            activeMatch = String.raw`^(?:/${basePrefix})?(?!v\d)`;
         } else {
             const tag = v.text;
             targetLink = sub ? `/${tag}/${sub}` : `/${tag}/`;
             const escapedTag = tag.replaceAll('.', String.raw`\.`);
-            activeMatch = `^/${escapedTag}(?:/|$)`;
+            activeMatch = `(?:^|/)${escapedTag}(?:/|$)`;
         }
 
         return {

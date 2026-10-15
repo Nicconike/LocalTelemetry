@@ -55,14 +55,16 @@ flowchart TD
         direction TB
         SemRelRunner{{"semantic-release Runner (run.ts)<br/>Conventional Commits Analysis & Tagging"}}
         BuildScript[["build.ps1<br/>dotnet publish, Inno Setup & Manifest Updates"]]
+        CommitPlugin{{"github-commit-plugin<br/>GitHub REST API Signed Commits"}}
+        GitHubRelease(["GitHub Release Publication<br/>Installers, Portable ZIP & Checksums"])
         PublishScript[["publish.ps1<br/>Chocolatey Push"]]
         Attestation{{"actions/attest<br/>SLSA Level 3 Provenance"}}
-        GitHubRelease(["GitHub Release Publication<br/>Installers, Portable ZIP & Checksums"])
 
         SemRelRunner --> BuildScript
-        BuildScript --> PublishScript
+        BuildScript --> CommitPlugin
+        CommitPlugin --> GitHubRelease
+        GitHubRelease --> PublishScript
         PublishScript --> Attestation
-        Attestation --> GitHubRelease
     end
 
     PushPR --> CI
@@ -70,7 +72,7 @@ flowchart TD
     PushMaster --> Release
 
     class PushPR,PushMaster,GitHubRelease triggerNode
-    class Commitlint,FrontendTest,CodeQL,Scorecard,Sonar,SyncPR,ProjectTriage,SemRelRunner,PublishScript,Attestation toolNode
+    class Commitlint,FrontendTest,CodeQL,Scorecard,Sonar,SyncPR,ProjectTriage,SemRelRunner,CommitPlugin,PublishScript,Attestation toolNode
     class DotNetBuild,DotNetTest,BuildScript buildNode
     class Coverage dataNode
 
@@ -112,13 +114,12 @@ The release pipeline is defined in [`.github/workflows/release.yml`](https://git
 
 ### Pipeline Execution Flow
 
-1. **GitHub App Authentication**: Generates a GitHub App token with write permissions to manage releases, tags, and commits.
-2. **Environment Setup**: Restores Git tags (`git fetch --tags --force`), sets up Bun and the .NET 10 SDK, and installs release dependencies in `.github/release/`.
-3. **Cryptographic Tag Signing**: Imports the maintainer PGP key via `crazy-max/ghaction-import-gpg` to configure signed Git tags and commits.
-4. **Unified `semantic-release` Runner**:
+1. **GitHub App Authentication**: Generates a GitHub App installation token. The token possesses write permissions for releases, tags, and commits.
+2. **Environment Setup**: Fetches all Git tags (`git fetch --tags --force`), sets up Bun and the .NET 10 SDK, and installs release dependencies.
+3. **Unified `semantic-release` Runner**:
    - Executes `bun run ./.github/release/run.ts --extends ./.github/release/release.config.mjs`.
-   - **Commit Analysis (`@semantic-release/commit-analyzer`)**: Parses Conventional Commits to calculate the next semantic version (`patch`, `minor`, `major`).
-   - **Changelog Generation (`@semantic-release/release-notes-generator` & `@semantic-release/changelog`)**: Groups commits into categorized sections (Features, Bug Fixes, Performance) and updates `CHANGELOG.md`.
+   - **Commit Analysis (`@semantic-release/commit-analyzer`)**: Parses Conventional Commits to calculate the next semantic release version (`patch`, `minor`, `major`).
+   - **Changelog Generation (`@semantic-release/release-notes-generator` & `@semantic-release/changelog`)**: Groups commits into categorized sections and prepends release notes to `CHANGELOG.md`.
    - **Binary Compilation & Packaging (`@semantic-release/exec`)**:
      - Executes `pwsh -File ./.github/release/build.ps1 -Version "${nextRelease.version}" -Tag "${nextRelease.gitTag}"`.
      - Compiles single-file Windows x64 binaries:
@@ -127,16 +128,16 @@ The release pipeline is defined in [`.github/workflows/release.yml`](https://git
        dotnet publish src/LocalTelemetry.App/LocalTelemetry.App.csproj -c Release -r win-x64 --no-self-contained -p:PublishSingleFile=true
        ```
 
-     - Compiles `LocalTelemetrySetup.exe` via Inno Setup 7 (`ISCC.exe`).
+     - Compiles `LocalTelemetrySetup.exe` with Inno Setup 7 (`ISCC.exe`).
      - Packages the portable archive `LocalTelemetry-win-x64.zip`.
      - Generates SHA-256 cryptographic hashes in `checksums.txt`.
-     - Updates the Scoop manifest (`bucket/localtelemetry.json`) and Chocolatey specification files (`packaging/chocolatey/**`).
-   - **Repository State Commit (`@semantic-release/git`)**: Commits the updated `CHANGELOG.md`, `bucket/localtelemetry.json`, and Chocolatey manifests back to `master` with `[skip ci]`.
-   - **Release Publication (`@semantic-release/github`)**: Publishes the release to GitHub Releases with `LocalTelemetrySetup.exe`, `LocalTelemetry-win-x64.zip`, and `checksums.txt` attached.
+     - Injects updated version and checksum values into `bucket/localtelemetry.json` and `packaging/chocolatey/**`.
+   - **Repository State Commit (`github-commit-plugin.ts`)**: Uploads file blobs and creates a signed commit via the GitHub REST API. This step updates `master` with web-flow signing and bypasses branch protections cleanly.
+   - **Release Publication (`@semantic-release/github`)**: Creates the GitHub Release tag pointing to the new commit. Attaches `LocalTelemetrySetup.exe`, `LocalTelemetry-win-x64.zip`, and `checksums.txt`.
    - **Third-Party Package Publication (`@semantic-release/exec`)**:
      - Executes `pwsh -File ./.github/release/publish.ps1 -Version "${nextRelease.version}" -Tag "${nextRelease.gitTag}"`.
-     - Packs the `.nupkg` and pushes the Chocolatey package to the Chocolatey Community repository.
-5. **Cryptographic Provenance Attestations**:
+     - Packs the `.nupkg` and pushes the package to the Chocolatey Community repository.
+4. **Cryptographic Provenance Attestations**:
    - Generates SLSA Level 3 build provenance attestations for `LocalTelemetrySetup.exe` and `LocalTelemetry-win-x64.zip` via `actions/attest`.
 
 ---

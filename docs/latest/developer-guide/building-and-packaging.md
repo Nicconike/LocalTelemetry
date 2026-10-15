@@ -20,10 +20,10 @@ cd ../../../..
 `LocalTelemetry.App.csproj` includes automated MSBuild targets (`CopyNotifier` and `CopyWwwroot`) alongside `PreserveNewest` deployment of `PawnIO_setup.exe` and `Uninstall.bat`:
 
 ```powershell
-# Framework-dependent build (.NET 10 Desktop Runtime required on target PC)
-dotnet publish src/LocalTelemetry.App/LocalTelemetry.App.csproj -c Release -r win-x64 -o ./publish/
+# Framework-dependent build (.NET 10 Desktop Runtime required, used in release pipeline)
+dotnet publish src/LocalTelemetry.App/LocalTelemetry.App.csproj -c Release -r win-x64 --no-self-contained -p:PublishSingleFile=true -o ./publish/
 
-# Or self-contained build (bundles entire .NET 10 runtime, used in GitHub Actions release pipeline)
+# Optional: self-contained build (bundles the entire .NET 10 runtime)
 dotnet publish src/LocalTelemetry.App/LocalTelemetry.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o ./publish/
 ```
 

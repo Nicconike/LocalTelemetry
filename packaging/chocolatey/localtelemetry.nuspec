@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
     <metadata>
         <id>localtelemetry</id>
-        <version>1.0.0-rc.2</version>
+        <version>1.0.0-rc.1</version>
         <packageSourceUrl>
             https://github.com/Nicconike/LocalTelemetry/tree/master/packaging/chocolatey</packageSourceUrl>
         <owners>Nicconike</owners>
@@ -27,5 +27,3 @@
         <file src="tools\**" target="tools" />
     </files>
 </package>
-
-

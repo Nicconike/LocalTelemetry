@@ -121,18 +121,18 @@ if (Test-Path $nuspec) {
     $installScript = "packaging/chocolatey/tools/chocolateyinstall.ps1"
     if (Test-Path $installScript) {
         (Get-Content $installScript -Raw) `
-            -replace "(?m)^\$url\s*=\s*'.*'", "`$url = '$setupUrl'" `
-            -replace "(?m)^\$checksum\s*=\s*'.*'", "`$checksum = '$setupHash'" |
-        Set-Content $installScript -Encoding utf8
+            -replace '(?m)^\$url\s*=.*$', "`$url = '$setupUrl'" `
+            -replace '(?m)^\$checksum\s*=.*$', "`$checksum = '$setupHash'" |
+            Set-Content $installScript -Encoding utf8
     }
 
     $verificationFile = "packaging/chocolatey/tools/VERIFICATION.txt"
     if (Test-Path $verificationFile) {
         (Get-Content $verificationFile -Raw) `
-            -replace "(?m)(^The installer has been downloaded from the official GitHub Release:\r?\n).*(\r?\n)", "`$1$setupUrl`$2" `
-            -replace "releases/download/[^/]+/checksums\.txt", "releases/download/$actualTag/checksums.txt" `
-            -replace "(?m)(^Checksum \(SHA256\):\r?\n).*(\r?\n)", "`$1$setupHash`$2" |
-        Set-Content $verificationFile -Encoding utf8
+            -replace '(?m)(^The installer has been downloaded from the official GitHub Release:\r?\n).*$', "`${1}$setupUrl" `
+            -replace 'releases/download/[^/]+/checksums\.txt', "releases/download/$actualTag/checksums.txt" `
+            -replace '(?m)(^Checksum \(SHA256\):\r?\n).*$', "`${1}$setupHash" |
+            Set-Content $verificationFile -Encoding utf8
     }
 }
 else {

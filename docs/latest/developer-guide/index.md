@@ -1,7 +1,5 @@
 # :code-xml: Developer Guide & Architecture
 
-Welcome to the **LocalTelemetry Developer & Contributor Guide**!
-
 Welcome to the **LocalTelemetry Developer Guide**. This documentation covers system architecture, hardware sensor drivers, Win32 taskbar integration, IPC protocols, and automated build pipelines.
 
 ## :layers: High-Level System Architecture

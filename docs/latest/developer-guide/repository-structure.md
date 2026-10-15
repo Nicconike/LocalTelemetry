@@ -7,7 +7,7 @@ An overview of the folder structure and codebase organization of **LocalTelemetr
 ```bash
 LocalTelemetry/
 ├── .github/                     # GitHub Actions workflows, issue templates & security policies
-│   ├── release/                 # Automated release scripts (run.ts, build.ps1, publish.ps1)
+│   ├── release/                 # Release configuration & pipeline scripts (run.ts, build.ps1, publish.ps1, github-commit-plugin.ts)
 │   ├── workflows/               # CI/CD (ci.yml, release.yml, docs.yml, sync.yml, project.yml, codeql.yml, sonar.yml, scorecard.yml)
 │   ├── ISSUE_TEMPLATE/          # Bug report and feature request templates
 │   ├── CODEOWNERS               # Repository code ownership declarations

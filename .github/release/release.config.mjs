@@ -2,6 +2,12 @@
  * semantic-release configuration for LocalTelemetry
  * https://semantic-release.gitbook.io/semantic-release/
  */
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const commitPluginPath = resolve(__dirname, 'github-commit-plugin.ts');
+
 export default {
     branches: [
         {
@@ -79,15 +85,17 @@ export default {
             '@semantic-release/changelog',
             {
                 changelogFile: 'CHANGELOG.md',
+                changelogTitle:
+                    '# Changelog\n\nAll notable changes to this project will be documented in this file.\n\nThe format is based on [Keep a Changelog](https://keepa.changelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org) & [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).',
             },
         ],
         [
             '@semantic-release/exec',
             {
                 prepareCmd: 'pwsh -File ./.github/release/build.ps1 -Version "${nextRelease.version}" -Tag "${nextRelease.gitTag}"',
-                publishCmd: 'pwsh -File ./.github/release/publish.ps1 -Version "${nextRelease.version}" -Tag "${nextRelease.gitTag}"',
             },
         ],
+        commitPluginPath,
         [
             '@semantic-release/github',
             {
@@ -99,15 +107,9 @@ export default {
             },
         ],
         [
-            '@semantic-release/git',
+            '@semantic-release/exec',
             {
-                assets: [
-                    'CHANGELOG.md',
-                    'bucket/localtelemetry.json',
-                    'packaging/chocolatey/localtelemetry.nuspec',
-                    'packaging/chocolatey/tools/**',
-                ],
-                message: 'chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}',
+                publishCmd: 'pwsh -File ./.github/release/publish.ps1 -Version "${nextRelease.version}" -Tag "${nextRelease.gitTag}"',
             },
         ],
     ],

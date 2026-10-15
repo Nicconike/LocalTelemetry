@@ -104,6 +104,6 @@ Open your browser to `http://localhost:5173` to preview documentation changes in
 
 ## :bug: Common Troubleshooting & Environment Fixes
 
-- **Missing PawnIO Driver on First Launch**: If low-level CPU registers fail to initialize when launching from Visual Studio or CLI, ensure `PawnIO_setup.exe` was copied to the output folder. Running `dotnet build LocalTelemetry.sln` automatically executes the `PreserveNewest` file copy target.
+- **Missing PawnIO Driver on First Launch**: If CPU registers fail to initialize in local development, ensure the PawnIO driver is installed. The application automatically downloads and installs the driver on elevated launch when internet access is available.
 - **Node vs Bun Path Conflicts**: Ensure Bun is added to your user `PATH` environment variable (`%USERPROFILE%\.bun\bin`).
 - **WebView2 Runtime Missing**: On Windows 10 development machines lacking WebView2, install the Microsoft Edge WebView2 Evergreen Runtime. Windows 11 includes it natively.

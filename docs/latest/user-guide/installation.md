@@ -46,7 +46,7 @@ In accordance with official [Microsoft Windows 11 Specifications](https://www.mi
     - **Run LocalTelemetry at Windows startup** (registers a Windows Task Scheduler job with elevated rights)
 6. Click **Install**:
     - Application binaries and the uninstaller are installed to `C:\Program Files\LocalTelemetry` (**~37 MB** total, as reported in Windows *Installed apps*).
-    - The pre-bundled **PawnIO** kernel driver (`PawnIO_setup.exe`, ~3.4 MB) is registered and started silently offline without external downloads.
+    - The bundled **PawnIO** kernel sensor driver (~3.4 MB) is registered and started silently offline without external downloads.
     - An `app.mode` marker file (`standard`) is created in the installation folder. LocalTelemetry detects this file and routes configuration (`settings.json`), traffic history (`internet_usage.jsonl`), diagnostic logs, and WebView2 runtime cache (`webview2_data/`, **~30 MB**) to `%LOCALAPPDATA%\LocalTelemetry`.
     - Upon completion, LocalTelemetry launches automatically, opening the Settings dashboard and placing an icon in your System Tray.
 
@@ -94,7 +94,7 @@ scoop install localtelemetry
 4. Run `LocalTelemetry.exe` as Administrator.
 
 > [!NOTE]
-> In portable mode (when no `app.mode` file exists in the executable folder), all configuration (`settings.json`), network usage history (`internet_usage.jsonl`), diagnostic logs, and the WebView2 runtime cache (`webview2_data/`, **~30 MB**) are stored directly inside the extracted folder alongside `LocalTelemetry.exe` (**~65 MB** total once launched). The bundled `PawnIO_setup.exe` driver installer is executed silently on first elevated launch.
+> In portable mode (when no `app.mode` file exists in the executable folder), all configuration (`settings.json`), network usage history (`internet_usage.jsonl`), diagnostic logs, and the WebView2 runtime cache (`webview2_data/`, **~30 MB**) are stored directly inside the extracted folder alongside `LocalTelemetry.exe` (**~65 MB** total once launched). The bundled PawnIO kernel sensor driver initializes silently on first elevated launch.
 
 ## :user-shield: Administrator Rights & UAC Explained
 

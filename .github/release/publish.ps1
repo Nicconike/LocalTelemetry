@@ -25,7 +25,14 @@ if ($env:CHOCOLATEY_API_KEY) {
     $pushed = $false
     for ($attempt = 1; $attempt -le 3; $attempt++) {
         Write-Host "Attempt ${attempt}: Pushing $nupkg to Chocolatey..."
-        $output = & choco push $nupkg.FullName --api-key $env:CHOCOLATEY_API_KEY --source https://push.chocolatey.org/ --execution-timeout 600 2>&1
+        $prevPref = $PSNativeCommandUseErrorActionPreference
+        $PSNativeCommandUseErrorActionPreference = $false
+        try {
+            $output = & choco push $nupkg.FullName --api-key $env:CHOCOLATEY_API_KEY --source https://push.chocolatey.org/ --execution-timeout 600 2>&1
+        }
+        finally {
+            $PSNativeCommandUseErrorActionPreference = $prevPref
+        }
         $output | ForEach-Object { Write-Host $_ }
         if ($LASTEXITCODE -eq 0 -or ($output -match "Successfully published Chocolatey package") -or ($output -match "already exists")) {
             $pushed = $true
