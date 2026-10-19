@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Runtime.Versioning;
 
 namespace LocalTelemetry.Core.Hardware;

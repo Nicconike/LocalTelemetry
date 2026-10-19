@@ -97,6 +97,11 @@ internal static class NotifierLog
         }
     }
 
+    internal static void Debug(string message, [CallerFilePath] string? callerPath = null)
+    {
+        Write("DEBUG", message, callerPath, null);
+    }
+
     internal static void Info(string message, [CallerFilePath] string? callerPath = null)
     {
         Write("INFO", message, callerPath, null);

@@ -1,6 +1,7 @@
 /* Design tokens */
 :root,
 [data-theme="dark"] {
+    color-scheme: dark;
     --color-bg: #171614;
     --color-surface: #1c1b19;
     --color-surface-2: #201f1d;

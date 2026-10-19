@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Reflection;
 using FluentAssertions;
 using LocalTelemetry.Core.Hardware;
@@ -34,7 +35,7 @@ public class DiskQueryTests
         var method = typeof(DiskQuery).GetMethod("BusTypeFromPnpId", BindingFlags.NonPublic | BindingFlags.Static);
         method.Should().NotBeNull();
 
-        method!.Invoke(null, ["SCSI\\DISK&VEN_NVME&PROD_SAMSUNG_SSD_980_PRO"]).Should().Be("NVMe");
+        method.Invoke(null, ["SCSI\\DISK&VEN_NVME&PROD_SAMSUNG_SSD_980_PRO"]).Should().Be("NVMe");
         method.Invoke(null, ["IDE\\DISKSAMSUNG_SSD_870_EVO\\SATA"]).Should().Be("SATA");
         method.Invoke(null, ["USBSTOR\\DISK&VEN_SANDISK&PROD_CRUZER"]).Should().Be("USB");
         method.Invoke(null, ["SCSI\\DISK&VEN_HP&PROD_SAS_DRIVE"]).Should().Be("SAS");
@@ -47,7 +48,7 @@ public class DiskQueryTests
         var method = typeof(DiskQuery).GetMethod("ExtractVendorFromModel", BindingFlags.NonPublic | BindingFlags.Static);
         method.Should().NotBeNull();
 
-        method!.Invoke(null, ["Samsung SSD 980 PRO 1TB"]).Should().Be("Samsung");
+        method.Invoke(null, ["Samsung SSD 980 PRO 1TB"]).Should().Be("Samsung");
         method.Invoke(null, ["WDC WD10EZEX-00BN5A0"]).Should().Be("WDC");
         method.Invoke(null, ["Western Digital WD_BLACK 1TB"]).Should().Be("Western Digital");
         method.Invoke(null, ["WD Blue 1TB"]).Should().Be("WD");
@@ -81,7 +82,7 @@ public class DiskQueryTests
         var method = typeof(DiskQuery).GetMethod("QueryMsftMediaTypes", BindingFlags.NonPublic | BindingFlags.Static);
         method.Should().NotBeNull();
 
-        var result = (Dictionary<string, string>?)method!.Invoke(null, null);
+        var result = (Dictionary<string, string>?)method.Invoke(null, null);
         result.Should().NotBeNull();
     }
 
@@ -91,7 +92,7 @@ public class DiskQueryTests
         var method = typeof(DiskQuery).GetMethod("QueryBusTypeIoctl", BindingFlags.NonPublic | BindingFlags.Static);
         method.Should().NotBeNull();
 
-        method!.Invoke(null, [999999]).Should().Be("");
+        method.Invoke(null, [999999]).Should().Be("");
         method.Invoke(null, [999999]).Should().Be("");
     }
 
@@ -155,7 +156,7 @@ public class DiskQueryTests
         excludedMethod.Should().NotBeNull();
 
         // DetermineDisplayType branches
-        ((string)displayMethod!.Invoke(null, ["NVMe", "SSD"])!).Should().Be("NVMe SSD");
+        ((string)displayMethod.Invoke(null, ["NVMe", "SSD"])!).Should().Be("NVMe SSD");
         ((string)displayMethod.Invoke(null, ["SATA", "HDD"])!).Should().Be("SATA HDD");
         ((string)displayMethod.Invoke(null, ["SATA", "SSD"])!).Should().Be("SATA SSD");
         ((string)displayMethod.Invoke(null, ["SCSI", "HDD"])!).Should().Be("HDD");
@@ -164,7 +165,7 @@ public class DiskQueryTests
 
         // DetermineMediaType branches
         var msftDict = new Dictionary<string, string> { ["0"] = "HDD" };
-        ((string)mediaMethod!.Invoke(null, [msftDict, 0, "SATA", "Model"])!).Should().Be("HDD");
+        ((string)mediaMethod.Invoke(null, [msftDict, 0, "SATA", "Model"])!).Should().Be("HDD");
         ((string)mediaMethod.Invoke(null, [msftDict, 1, "NVMe", "Model"])!).Should().Be("SSD");
         ((string)mediaMethod.Invoke(null, [msftDict, 1, "SATA", "Samsung SSD 870"])!).Should().Be("SSD");
         ((string)mediaMethod.Invoke(null, [msftDict, 1, "SATA", "WDC WD10EZEX HDD"])!).Should().Be("HDD");
@@ -174,7 +175,7 @@ public class DiskQueryTests
 
         // IsExcludedDrive branches
         object[] argsUsb = ["USB", "", "", 0, ""];
-        ((bool)excludedMethod!.Invoke(null, argsUsb)!).Should().BeTrue();
+        ((bool)excludedMethod.Invoke(null, argsUsb)!).Should().BeTrue();
 
         object[] argsUsbStor = ["SCSI", "USBSTOR\\DISK", "", 0, ""];
         ((bool)excludedMethod.Invoke(null, argsUsbStor)!).Should().BeTrue();
@@ -208,13 +209,13 @@ public class DiskQueryTests
 
         var cacheField = typeof(DiskQuery).GetField("_busTypeIoctlCache", BindingFlags.NonPublic | BindingFlags.Static);
         cacheField.Should().NotBeNull();
-        var cache = (Lazy<Dictionary<int, string>>)cacheField!.GetValue(null)!;
+        var cache = (Lazy<ConcurrentDictionary<int, string>>)cacheField.GetValue(null)!;
         var dict = cache.Value;
 
         // Virtual, SD, MMC, USB in ioctl cache
         dict[101] = "Virtual";
         object[] argsVirtual = ["", "PCI\\VEN_1234", "", 101, ""];
-        ((bool)excludedMethod!.Invoke(null, argsVirtual)!).Should().BeTrue();
+        ((bool)excludedMethod.Invoke(null, argsVirtual)!).Should().BeTrue();
         argsVirtual[4].Should().Be("Virtual");
 
         dict[102] = "SD";
@@ -258,7 +259,7 @@ public class DiskQueryTests
         var method = typeof(DiskQuery).GetMethod("BusTypeFromPnpId", BindingFlags.NonPublic | BindingFlags.Static);
         method.Should().NotBeNull();
 
-        ((string)method!.Invoke(null, ["SCSI\\DISK&VEN_NVME_EX"])!).Should().Be("NVMe");
+        ((string)method.Invoke(null, ["SCSI\\DISK&VEN_NVME_EX"])!).Should().Be("NVMe");
         ((string)method.Invoke(null, ["PCI\\VEN_1234_SATA_DRIVE"])!).Should().Be("SATA");
         ((string)method.Invoke(null, ["PCI\\VEN_1234_ATA_DRIVE"])!).Should().Be("SATA");
         ((string)method.Invoke(null, ["PCI\\VEN_1234_AHCI_DRIVE"])!).Should().Be("SATA");
@@ -274,7 +275,7 @@ public class DiskQueryTests
         var method = typeof(DiskQuery).GetMethod("DetermineDisplayType", BindingFlags.NonPublic | BindingFlags.Static);
         method.Should().NotBeNull();
 
-        ((string)method!.Invoke(null, ["NVMe", "SSD"])!).Should().Be("NVMe SSD");
+        ((string)method.Invoke(null, ["NVMe", "SSD"])!).Should().Be("NVMe SSD");
         ((string)method.Invoke(null, ["SATA", "SSD"])!).Should().Be("SATA SSD");
         ((string)method.Invoke(null, ["SATA", "HDD"])!).Should().Be("SATA HDD");
         ((string)method.Invoke(null, ["", "SSD"])!).Should().Be("SSD");
@@ -290,7 +291,7 @@ public class DiskQueryTests
         var method = typeof(DiskQuery).GetMethod("GetBootDriveIndex", BindingFlags.NonPublic | BindingFlags.Static);
         method.Should().NotBeNull();
 
-        var bootIndex = (int?)method!.Invoke(null, null);
+        var bootIndex = (int?)method.Invoke(null, null);
         // On Windows host with admin or standard rights, either succeeds (returning disk index >= 0) or returns fallback/null gracefully
         if (bootIndex.HasValue)
         {
@@ -304,13 +305,13 @@ public class DiskQueryTests
         // 1. QueryBusTypeIoctl for Drive 0 (physical drive 0)
         var ioctlMethod = typeof(DiskQuery).GetMethod("QueryBusTypeIoctl", BindingFlags.NonPublic | BindingFlags.Static);
         ioctlMethod.Should().NotBeNull();
-        var busType = (string?)ioctlMethod!.Invoke(null, [0]);
+        var busType = (string?)ioctlMethod.Invoke(null, [0]);
         busType.Should().NotBeNull();
 
         // 2. BytesToStruct with invalid buffer length triggers exception
         var bytesMethod = typeof(DiskQuery).GetMethod("BytesToStruct", BindingFlags.NonPublic | BindingFlags.Static);
         bytesMethod.Should().NotBeNull();
-        var genericMethod = bytesMethod!.MakeGenericMethod(typeof(Guid));
+        var genericMethod = bytesMethod.MakeGenericMethod(typeof(Guid));
         Action act = () => genericMethod.Invoke(null, [new byte[2]]);
         act.Should().Throw<TargetInvocationException>();
     }
@@ -327,7 +328,7 @@ public class DiskQueryTests
         isExcluded.Should().NotBeNull();
 
         object?[] argsUsb = ["USB", "", "", 0, ""];
-        ((bool)isExcluded!.Invoke(null, argsUsb)!).Should().BeTrue();
+        ((bool)isExcluded.Invoke(null, argsUsb)!).Should().BeTrue();
 
         object?[] argsUsbStor = ["SCSI", "USBSTOR_DEV", "", 0, ""];
         ((bool)isExcluded.Invoke(null, argsUsbStor)!).Should().BeTrue();
@@ -359,7 +360,7 @@ public class DiskQueryTests
         detMedia.Should().NotBeNull();
 
         var dict = new Dictionary<string, string> { ["0"] = "SSD" };
-        ((string)detMedia!.Invoke(null, [dict, 0, "SATA", "Drive"])!).Should().Be("SSD");
+        ((string)detMedia.Invoke(null, [dict, 0, "SATA", "Drive"])!).Should().Be("SSD");
         ((string)detMedia.Invoke(null, [dict, 1, "NVMe", "Drive"])!).Should().Be("SSD");
         ((string)detMedia.Invoke(null, [dict, 1, "SATA", "Samsung SSD 870"])!).Should().Be("SSD");
         ((string)detMedia.Invoke(null, [dict, 1, "SATA", "Samsung NVMe 980"])!).Should().Be("SSD");
@@ -367,6 +368,32 @@ public class DiskQueryTests
         ((string)detMedia.Invoke(null, [dict, 1, "SATA", "Toshiba Harddisk"])!).Should().Be("HDD");
         ((string)detMedia.Invoke(null, [dict, 1, "SATA", "ST2000DM008"])!).Should().Be("HDD");
         ((string)detMedia.Invoke(null, [dict, 1, "SATA", "Generic Flash"])!).Should().Be("SSD");
+    }
+
+    [Fact]
+    public void DiskQuery_BusType_And_MediaType_EdgeCases()
+    {
+        // 1. StorageAdapterDescriptor bus types
+        var descType = typeof(DiskQuery).Assembly.GetType("LocalTelemetry.Core.Hardware.DiskQuery+StorageAdapterDescriptor");
+        descType.Should().NotBeNull();
+
+        // 2. QueryBusTypeIoctl with out of range index
+        var queryBusMethod = typeof(DiskQuery).GetMethod("QueryBusTypeIoctl", BindingFlags.NonPublic | BindingFlags.Static);
+        queryBusMethod.Should().NotBeNull();
+        ((string)queryBusMethod.Invoke(null, [9999])!).Should().BeEmpty();
+
+        // 3. DetermineDisplayType mapping
+        var detDisplay = typeof(DiskQuery).GetMethod("DetermineDisplayType", BindingFlags.NonPublic | BindingFlags.Static);
+        detDisplay.Should().NotBeNull();
+
+        ((string)detDisplay.Invoke(null, ["NVMe", "SSD"])!).Should().Be("NVMe SSD");
+        ((string)detDisplay.Invoke(null, ["SATA", "SSD"])!).Should().Be("SATA SSD");
+        ((string)detDisplay.Invoke(null, ["SATA", "HDD"])!).Should().Be("SATA HDD");
+        ((string)detDisplay.Invoke(null, ["Virtual", "SSD"])!).Should().Be("SSD");
+        ((string)detDisplay.Invoke(null, ["Virtual", "HDD"])!).Should().Be("HDD");
+        ((string)detDisplay.Invoke(null, ["Virtual", ""])!).Should().Be("Virtual");
+        ((string)detDisplay.Invoke(null, ["RAID", ""])!).Should().Be("RAID");
+        ((string)detDisplay.Invoke(null, ["", ""])!).Should().BeEmpty();
     }
 }
 

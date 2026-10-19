@@ -133,7 +133,7 @@ public sealed class HardwareLifecycleManager : IHardwareLifecycleManager
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[HardwareLifecycleManager] Error logging session ending: {ex}");
+            System.Diagnostics.Trace.WriteLine($"[HardwareLifecycleManager] Error logging session ending: {ex.Message}");
         }
     }
 
@@ -155,7 +155,7 @@ public sealed class HardwareLifecycleManager : IHardwareLifecycleManager
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[HardwareLifecycleManager] Error logging session switch: {ex}");
+            System.Diagnostics.Trace.WriteLine($"[HardwareLifecycleManager] Error logging session switch: {ex.Message}");
         }
     }
 

@@ -222,73 +222,21 @@ public static class BrandColorDefaults
         return match.Value ?? string.Empty;
     }
 
-    // Build default metric colors
-    /// <summary>Builds a full dictionary of metric ID → detected brand color, with fallbacks.</summary>
-    [SupportedOSPlatform("windows")]
-    public static Dictionary<string, string> BuildDefaultMetricColors()
+    private static string LogAndResolveColor(string hardwareName, string vendor, string detectedColor, string fallbackColor)
     {
-        var cpuVendor = SystemInfo.GetCpuVendor();
-        var cpuColor = DetectCpuColor();
-        if (cpuColor.Length > 0)
-            Log.Debug($"Detected CPU vendor: {cpuVendor} ({cpuColor})");
-        else
-            Log.Debug($"Detected CPU vendor '{cpuVendor}' (fallback color #00E5FF)");
-
-        var gpuVendor = SystemInfo.GetGpuVendor();
-        var gpuColor = DetectGpuColor();
-        if (gpuColor.Length > 0)
-            Log.Debug($"Detected GPU vendor: {gpuVendor} ({gpuColor})");
-        else
-            Log.Debug("No dedicated GPU detected (fallback color #88CCFF)");
-
-        var ramMfr = SystemInfo.GetRamManufacturer();
-        var ramColor = DetectRamColor();
-        if (ramColor.Length > 0)
-            Log.Debug($"Detected RAM vendor: {ramMfr} ({ramColor})");
-        else
-            Log.Debug($"Detected RAM vendor '{ramMfr}' (fallback color #A78BFA)");
-
-        var diskMfr = SystemInfo.GetDiskManufacturer();
-        var diskColor = DetectDiskColor();
-        if (diskColor.Length > 0)
-            Log.Debug($"Detected Disk vendor: {diskMfr} ({diskColor})");
-        else
-            Log.Debug($"Detected Disk vendor '{diskMfr}' (fallback color #AAAAAA)");
-
-        var nics = SystemInfo.GetNics();
-        var nicMfr = nics.Length > 0 ? nics[0].Manufacturer : "?";
-        var nicColor = DetectNicColor();
-        if (nicColor.Length > 0)
-            Log.Debug($"Detected NIC vendor: {nicMfr} ({nicColor})");
-        else
-            Log.Debug($"Detected NIC vendor '{nicMfr}' (using default fallback)");
-
-        var batMfr = SystemInfo.GetBatteryManufacturer();
-        var batColor = DetectBatteryColor();
-        if (batColor.Length > 0)
-            Log.Debug($"Detected Battery vendor: {batMfr} ({batColor})");
-        else
-            Log.Debug($"Detected Battery vendor '{batMfr}' (fallback color #80E080)");
-
-        var result = new Dictionary<string, string>
+        if (detectedColor.Length > 0)
         {
-            [Metrics.CpuPct] = cpuColor.Length > 0 ? cpuColor : CyanDefaultColor,
-            [Metrics.CpuTemp] = cpuColor.Length > 0 ? cpuColor : CyanDefaultColor,
-            [Metrics.CpuFreq] = cpuColor.Length > 0 ? cpuColor : CyanDefaultColor,
-            [Metrics.CpuPower] = cpuColor.Length > 0 ? cpuColor : CyanDefaultColor,
-            [Metrics.RamPct] = ramColor.Length > 0 ? ramColor : "#A78BFA",
-            [Metrics.RamUsed] = ramColor.Length > 0 ? ramColor : "#A78BFA",
-            [Metrics.GpuPct] = gpuColor.Length > 0 ? gpuColor : LightBlueDefaultColor,
-            [Metrics.GpuTemp] = gpuColor.Length > 0 ? gpuColor : LightBlueDefaultColor,
-            [Metrics.GpuVram] = gpuColor.Length > 0 ? gpuColor : LightBlueDefaultColor,
-            [Metrics.GpuFreq] = gpuColor.Length > 0 ? gpuColor : LightBlueDefaultColor,
-            [Metrics.GpuPower] = gpuColor.Length > 0 ? gpuColor : LightBlueDefaultColor,
-            [Metrics.NetDown] = nicColor.Length > 0 ? nicColor : "#38BDF8",
-            [Metrics.NetUp] = nicColor.Length > 0 ? nicColor : "#4ADE80",
-            [Metrics.NetTotal] = nicColor.Length > 0 ? nicColor : "#FBBF24",
-            [Metrics.BatteryPct] = batColor.Length > 0 ? batColor : "#80E080",
-            [Metrics.BatteryRate] = batColor.Length > 0 ? batColor : "#80E080",
-        };
+            Log.Debug($"Detected {hardwareName} vendor: {vendor} ({detectedColor})");
+            return detectedColor;
+        }
+
+        string vendorLabel = string.IsNullOrEmpty(vendor) ? "?" : vendor;
+        Log.Debug($"Detected {hardwareName} vendor '{vendorLabel}' (fallback color {fallbackColor})");
+        return fallbackColor;
+    }
+
+    private static void PopulateDiskMetrics(Dictionary<string, string> result)
+    {
         var disks = SystemInfo.GetAllDisks();
         bool multiDisk = disks.Count > 1;
         for (int i = 0; i < disks.Count; i++)
@@ -297,14 +245,48 @@ public static class BrandColorDefaults
             string perDiskColor = ResolveDiskColor(disk.Vendor, disk.Model);
             string label = multiDisk ? $"DISK {i + 1}" : "DISK";
             string mfr = string.IsNullOrEmpty(disk.Vendor) ? disk.Model : disk.Vendor;
-            if (perDiskColor.Length > 0)
-                Log.Debug($"Detected {label} vendor: {mfr} ({perDiskColor})");
-            else
-                Log.Debug($"Detected {label} vendor '{mfr}' (fallback color #AAAAAA)");
-            string fallback = perDiskColor.Length > 0 ? perDiskColor : "#AAAAAA";
-            result[$"disk_disk{i}_read"] = fallback;
-            result[$"disk_disk{i}_write"] = fallback;
+            string color = LogAndResolveColor(label, mfr, perDiskColor, "#AAAAAA");
+            result[$"disk_disk{i}_read"] = color;
+            result[$"disk_disk{i}_write"] = color;
         }
+    }
+
+    // Build default metric colors
+    /// <summary>Builds a full dictionary of metric ID → detected brand color, with fallbacks.</summary>
+    [SupportedOSPlatform("windows")]
+    public static Dictionary<string, string> BuildDefaultMetricColors()
+    {
+        var cpuEffective = LogAndResolveColor("CPU", SystemInfo.GetCpuVendor(), DetectCpuColor(), CyanDefaultColor);
+        var gpuEffective = LogAndResolveColor("GPU", SystemInfo.GetGpuVendor(), DetectGpuColor(), LightBlueDefaultColor);
+        var ramEffective = LogAndResolveColor("RAM", SystemInfo.GetRamManufacturer(), DetectRamColor(), "#A78BFA");
+
+        var nics = SystemInfo.GetNics();
+        var nicMfr = nics.Length > 0 ? nics[0].Manufacturer : "?";
+        var nicEffective = LogAndResolveColor("NIC", nicMfr, DetectNicColor(), "#38BDF8");
+
+        var batEffective = LogAndResolveColor("Battery", SystemInfo.GetBatteryManufacturer(), DetectBatteryColor(), "#80E080");
+
+        var result = new Dictionary<string, string>
+        {
+            [Metrics.CpuPct] = cpuEffective,
+            [Metrics.CpuTemp] = cpuEffective,
+            [Metrics.CpuFreq] = cpuEffective,
+            [Metrics.CpuPower] = cpuEffective,
+            [Metrics.RamPct] = ramEffective,
+            [Metrics.RamUsed] = ramEffective,
+            [Metrics.GpuPct] = gpuEffective,
+            [Metrics.GpuTemp] = gpuEffective,
+            [Metrics.GpuVram] = gpuEffective,
+            [Metrics.GpuFreq] = gpuEffective,
+            [Metrics.GpuPower] = gpuEffective,
+            [Metrics.NetDown] = nicEffective,
+            [Metrics.NetUp] = nicEffective == "#38BDF8" ? "#4ADE80" : nicEffective,
+            [Metrics.NetTotal] = nicEffective == "#38BDF8" ? "#FBBF24" : nicEffective,
+            [Metrics.BatteryPct] = batEffective,
+            [Metrics.BatteryRate] = batEffective,
+        };
+
+        PopulateDiskMetrics(result);
         return result;
     }
 

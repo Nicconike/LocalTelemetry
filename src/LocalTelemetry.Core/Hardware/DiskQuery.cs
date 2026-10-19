@@ -1,8 +1,7 @@
-using System.IO;
+using System.Collections.Concurrent;
 using System.Management;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
-using Microsoft.Win32.SafeHandles;
 
 namespace LocalTelemetry.Core.Hardware;
 
@@ -36,7 +35,7 @@ public static class DiskQuery
     private const uint IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS = 0x00560000;
     private const uint IOCTL_STORAGE_QUERY_PROPERTY = 0x002D1400;
 
-    private static readonly Lazy<Dictionary<int, string>> _busTypeIoctlCache = new(() => []);
+    private static readonly Lazy<ConcurrentDictionary<int, string>> _busTypeIoctlCache = new(() => new());
 
     private static List<DiskInfo>? _cachedDrives;
 
@@ -137,7 +136,7 @@ public static class DiskQuery
         if (handle is null || handle.IsInvalid)
             return cache[diskIndex] = string.Empty;
 
-        var query = new STORAGE_PROPERTY_QUERY
+        var query = new StoragePropertyQuery
         {
             PropertyId = 1, // StorageAdapterProperty
             QueryType = 0,  // PropertyStandardQuery
@@ -145,8 +144,8 @@ public static class DiskQuery
         };
         byte[] queryBytes = StructToBytes(query);
 
-        STORAGE_ADAPTER_DESCRIPTOR desc;
-        byte[] descBytes = new byte[Marshal.SizeOf<STORAGE_ADAPTER_DESCRIPTOR>()];
+        StorageAdapterDescriptor desc;
+        byte[] descBytes = new byte[Marshal.SizeOf<StorageAdapterDescriptor>()];
 
         if (NativeMethods.DeviceIoControl(handle, IOCTL_STORAGE_QUERY_PROPERTY,
                 queryBytes, (uint)queryBytes.Length,
@@ -154,7 +153,7 @@ public static class DiskQuery
         {
             try
             {
-                desc = BytesToStruct<STORAGE_ADAPTER_DESCRIPTOR>(descBytes);
+                desc = BytesToStruct<StorageAdapterDescriptor>(descBytes);
             }
             catch (Exception ex)
             {
@@ -431,7 +430,7 @@ public static class DiskQuery
 
     // IOCTL structs
     [StructLayout(LayoutKind.Sequential)]
-    private struct STORAGE_PROPERTY_QUERY
+    private struct StoragePropertyQuery
     {
         public uint PropertyId;
         public uint QueryType;
@@ -440,7 +439,7 @@ public static class DiskQuery
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct STORAGE_ADAPTER_DESCRIPTOR
+    private struct StorageAdapterDescriptor
     {
         public uint Version;
         public uint Size;

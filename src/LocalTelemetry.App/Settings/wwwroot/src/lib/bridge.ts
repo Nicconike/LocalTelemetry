@@ -1,7 +1,18 @@
+import { pristineSettings } from './store.ts';
 import type { BridgeEventType, BridgeMessageType } from "./types.ts";
 
 function getWebView() {
     return (globalThis as typeof globalThis & { window?: Window }).window?.chrome?.webview ?? null;
+}
+
+function formatErrorDetail(error?: unknown): string | undefined {
+    if (error instanceof Error) {
+        return `${error.name}: ${error.message}\n${error.stack ?? ''}`;
+    }
+    if (error !== undefined && error !== null) {
+        return String(error);
+    }
+    return undefined;
 }
 
 export function post(type: BridgeMessageType, payload: unknown = null): void {
@@ -30,13 +41,24 @@ export function onMessage(type: BridgeEventType, handler: (payload: unknown) => 
 
 export function requestSettings(): void { post('getSettings'); }
 
-import { pristineSettings } from './store.ts';
+export function logError(message: string, error?: unknown): void {
+    console.error(message, error);
+    const detail = formatErrorDetail(error);
+    post('log', { level: 'error', message, detail });
+}
+
+export function logWarn(message: string, detail?: unknown): void {
+    console.warn(message, detail);
+    post('log', { level: 'warn', message, detail: formatErrorDetail(detail) });
+}
 
 export function saveSettings(payload: unknown): void {
     if (payload) {
         try {
             pristineSettings.set(JSON.stringify(payload));
-        } catch { }
+        } catch (err) {
+            logError('Failed to serialize pristine settings payload', err);
+        }
     }
     post('saveSettings', payload);
 }

@@ -18,7 +18,7 @@ LocalTelemetry/
 │   ├── SECURITY.md              # Vulnerability reporting policy
 │   ├── SUPPORT.md               # Community support & troubleshooting hub
 │   └── dependabot.yml           # Automated dependency update configuration
-├── bucket/                      # Official Scoop package bucket
+├── bucket/                      # Scoop package bucket
 │   └── localtelemetry.json      # Scoop application installation manifest
 ├── docs/                        # VitePress documentation site
 │   ├── .vitepress/              # VitePress theme, Lucide markdown plugins & config
@@ -32,8 +32,7 @@ LocalTelemetry/
 │   ├── package.json             # Documentation dependencies (Bun runtime)
 │   └── tsconfig.json            # Documentation TypeScript compiler configuration
 ├── packaging/                   # Third-party distribution manifests
-│   └── chocolatey/              # Chocolatey package definition (.nuspec & verification scripts)
-│       └── tools/               # chocolateyinstall.ps1 & chocolateyuninstall.ps1
+│   └── winget/                  # Windows Package Manager manifest
 ├── src/                         # Production source code (.NET 10 + Svelte 5)
 │   ├── LocalTelemetry.Core/     # Hardware polling engine, PawnIO, SystemInfo, Config
 │   │   ├── Config/              # AppSettings.cs, schema migration & atomic persistence

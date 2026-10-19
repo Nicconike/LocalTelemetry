@@ -15,7 +15,7 @@
     </compatibility>
     <application xmlns="urn:schemas-microsoft-com:asm.v3">
         <windowsSettings>
-            <!-- Per-Monitor V2 on Windows 10 1607+; system-aware fallback on older OSes -->
+            <!-- Per-Monitor V2 on Windows 10 1607+; system-aware fallback on older OS -->
             <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
             <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true</dpiAware>
         </windowsSettings>

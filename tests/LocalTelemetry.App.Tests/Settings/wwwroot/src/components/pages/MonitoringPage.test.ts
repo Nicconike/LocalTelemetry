@@ -57,7 +57,7 @@ describe('MonitoringPage.svelte', () => {
         await tick();
 
         let currentVal: string | undefined;
-        settings.subscribe((s) => (currentVal = s.systemLogLevel))();
+        settings.subscribe((s) => (currentVal = s?.systemLogLevel))();
         expect(currentVal).toBe('Debug');
     });
 });

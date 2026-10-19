@@ -84,6 +84,16 @@ public static class Metrics
         }
     }
 
+    private static string FormatGpu(string id, TelemetrySnapshot s, bool useFahrenheit) => id switch
+    {
+        GpuPct => $"{s.GpuUsagePct:F0}%",
+        GpuTemp => Temp(s.GpuTempC, useFahrenheit),
+        GpuVram => $"{s.GpuVramUsedMb:F0}MB",
+        GpuFreq => s.GpuFreqMHz > 0 ? $"{s.GpuFreqMHz:F0}MHz" : "--",
+        GpuPower => s.GpuPowerW > 0 ? $"{s.GpuPowerW:F0}W" : "--",
+        _ => "--",
+    };
+
     /// <summary>Formats a snapshot value for display based on metric ID.</summary>
     /// <param name="id">Metric identifier constant.</param>
     /// <param name="s">Telemetry snapshot to read values from.</param>
@@ -99,11 +109,7 @@ public static class Metrics
             CpuPower => s.CpuPackagePowerW > 0 ? $"{s.CpuPackagePowerW:F0}W" : "--",
             RamPct => $"{s.RamUsagePct:F0}%",
             RamUsed => $"{s.RamUsedGb:F1}GB",
-            GpuPct => $"{s.GpuUsagePct:F0}%",
-            GpuTemp => Temp(s.GpuTempC, useFahrenheit),
-            GpuVram => $"{s.GpuVramUsedMb:F0}MB",
-            GpuFreq => s.GpuFreqMHz > 0 ? $"{s.GpuFreqMHz:F0}MHz" : "--",
-            GpuPower => s.GpuPowerW > 0 ? $"{s.GpuPowerW:F0}W" : "--",
+            GpuPct or GpuTemp or GpuVram or GpuFreq or GpuPower => FormatGpu(id, s, useFahrenheit),
             NetDown => string.IsNullOrEmpty(s.NetInterfaceName) && s.NetDownBps == 0 ? "--" : Net(s.NetDownBps, useBits),
             NetUp => string.IsNullOrEmpty(s.NetInterfaceName) && s.NetUpBps == 0 ? "--" : Net(s.NetUpBps, useBits),
             NetTotal => FormatTotalBytes(s.NetTotalBytes),

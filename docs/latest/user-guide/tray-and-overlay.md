@@ -62,7 +62,7 @@ Beyond the default 5-column layout, you can add, remove, and reorder metrics in 
 
 To ensure reliable mouse interaction without Windows Explorer intercepting or misdirecting taskbar click events, LocalTelemetry uses an integrated low-level mouse monitor:
 
-- **Right-Click**: Opens a quick-access context menu directly on the overlay rendered in modern Windows 11 dark mode with rounded corners. It features a non-clickable `LocalTelemetry` status header, visibility toggle (`Hide Overlay` / `Show Overlay`), `Open Settings`, **Windows Task Manager**, and an accent-red highlighted `Quit` option (`#FF453A`). Clicking anywhere outside immediately dismisses the menu cleanly.
+- **Right-Click**: Opens a quick-access context menu directly on the overlay rendered in modern Windows 11 dark mode with rounded corners. It features a non-clickable `LocalTelemetry` status header, visibility toggle (`Hide Overlay` / `Show Overlay`), `Open Settings`, **Task Manager**, and an accent-red highlighted `Quit` option (`#FF453A`). Clicking anywhere outside immediately dismisses the menu cleanly.
 - **Double-Click**: Triggers a customizable action configured in Settings (`None`, `Open Task Manager`, or `Open Settings`). Single left-clicks pass through safely to Windows to prevent accidental window moves.
 
 ![Overlay Right-Click Context Menu](/images/overlay-menu.png)

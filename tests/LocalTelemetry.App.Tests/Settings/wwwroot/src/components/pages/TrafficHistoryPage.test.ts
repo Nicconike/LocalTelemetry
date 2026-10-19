@@ -10,7 +10,7 @@ describe('TrafficHistoryPage.svelte', () => {
         document.body.innerHTML = '';
         trafficHistory.set([]);
         allTrafficHistory.set([]);
-        trafficToday.set({ bytesReceived: 1024, bytesSent: 2048, totalBytes: 3072 });
+        trafficToday.set({ downBytes: 1024, upBytes: 2048 });
         trafficMonths.set([]);
     });
 

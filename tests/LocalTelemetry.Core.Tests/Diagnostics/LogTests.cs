@@ -27,12 +27,7 @@ public sealed class LogTests : IDisposable
     public void Dispose()
     {
         Log.Shutdown();
-        try
-        {
-            if (Directory.Exists(_tempDir))
-                Directory.Delete(_tempDir, true);
-        }
-        catch (Exception) { /* Best-effort cleanup */ }
+        try { if (Directory.Exists(_tempDir)) Directory.Delete(_tempDir, true); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
     }
 
     [Fact]
@@ -41,7 +36,7 @@ public sealed class LogTests : IDisposable
         var method = typeof(Log).GetMethod("ModuleName", BindingFlags.NonPublic | BindingFlags.Static);
         method.Should().NotBeNull();
 
-        method!.Invoke(null, [null]).Should().Be("?");
+        method.Invoke(null, [null]).Should().Be("?");
         method.Invoke(null, ["C:\\Project\\LocalTelemetry.Core\\Hardware\\DiskQuery.cs"]).Should().Be("Hardware");
         method.Invoke(null, ["C:\\Project\\LocalTelemetry.Notifier\\ToastForm.cs"]).Should().Be("Notifier");
         method.Invoke(null, ["C:\\CustomPath\\MyClass.cs"]).Should().Be("MyClass");
@@ -152,7 +147,7 @@ public sealed class LogTests : IDisposable
         var maxBytesProp = typeof(Log).GetProperty("MaxSystemLogBytes", BindingFlags.NonPublic | BindingFlags.Static);
         maxBytesProp.Should().NotBeNull();
 
-        long original = (long)maxBytesProp!.GetValue(null)!;
+        long original = (long)maxBytesProp.GetValue(null)!;
 
         try
         {
@@ -177,7 +172,7 @@ public sealed class LogTests : IDisposable
     {
         var maxBytesProp = typeof(Log).GetProperty("MaxSystemLogBytes", BindingFlags.NonPublic | BindingFlags.Static);
         maxBytesProp.Should().NotBeNull();
-        long original = (long)maxBytesProp!.GetValue(null)!;
+        long original = (long)maxBytesProp.GetValue(null)!;
 
         try
         {
@@ -230,7 +225,7 @@ public sealed class LogTests : IDisposable
         dateField.Should().NotBeNull();
 
         // Simulate yesterday
-        dateField!.SetValue(null, DateOnly.FromDateTime(DateTime.Today.AddDays(-1)));
+        dateField.SetValue(null, DateOnly.FromDateTime(DateTime.Today.AddDays(-1)));
 
         Log.Info("Message after date change");
         Log.Shutdown();
@@ -464,5 +459,77 @@ public sealed class LogTests : IDisposable
         }
 
         File.Exists(dedicatedSysLog).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Log_ErrorBranches_And_RotationEdgeCases()
+    {
+        // 1. DeleteArchiveIfExists with non-existent and un-deletable file
+        var delMethod = typeof(Log).GetMethod("DeleteArchiveIfExists", BindingFlags.NonPublic | BindingFlags.Static);
+        delMethod.Should().NotBeNull();
+        delMethod.Invoke(null, [Path.Combine(_tempDir, "non_existent_file.log")]);
+
+        string lockedFile = Path.Combine(_tempDir, "locked_to_delete.log");
+        File.WriteAllText(lockedFile, "locked content");
+        using (var fs = new FileStream(lockedFile, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            delMethod.Invoke(null, [lockedFile]);
+            Log.LastRotationError.Should().NotBeNull();
+        }
+
+        // 2. ShiftArchiveIfExists with non-existent and locked target file
+        var shiftMethod = typeof(Log).GetMethod("ShiftArchiveIfExists", BindingFlags.NonPublic | BindingFlags.Static);
+        shiftMethod.Should().NotBeNull();
+        shiftMethod.Invoke(null, [Path.Combine(_tempDir, "non_existent_source.log"), Path.Combine(_tempDir, "target.log")]);
+
+        string sourceFile = Path.Combine(_tempDir, "shift_src.log");
+        string destFile = Path.Combine(_tempDir, "shift_dst.log");
+        File.WriteAllText(sourceFile, "src content");
+        File.WriteAllText(destFile, "dst content");
+        using (var fs = new FileStream(destFile, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            shiftMethod.Invoke(null, [sourceFile, destFile]);
+            Log.LastRotationError.Should().NotBeNull();
+        }
+
+        // 3. RotateSystemLog exception handling
+        var rotateMethod = typeof(Log).GetMethod("RotateSystemLog", BindingFlags.NonPublic | BindingFlags.Static);
+        rotateMethod.Should().NotBeNull();
+        rotateMethod.Invoke(null, ["invalid_path_with_illegal_char|<>:?.log"]);
+        Log.LastRotationError.Should().NotBeNull();
+
+        // 4. SessionStart / SessionEnd error handling when stream throws
+        var originalWriter = typeof(Log).GetField("_sysWriter", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null);
+        try
+        {
+            using var throwStream = new ThrowOnWriteOnlyStream();
+            using var throwWriter = new StreamWriter(throwStream) { AutoFlush = true };
+            typeof(Log).GetField("_sysWriter", BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, throwWriter);
+
+            Log.SessionStart("1.0.0", true, "config.json", "Test");
+            Log.LastWriteError.Should().NotBeNull();
+
+            typeof(Log).GetField("_sessionEnded", BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, false);
+            Log.SessionEnd("Test Exit", TimeSpan.FromMinutes(10));
+            Log.LastWriteError.Should().NotBeNull();
+        }
+        finally
+        {
+            typeof(Log).GetField("_sysWriter", BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, originalWriter);
+        }
+    }
+
+    private sealed class ThrowOnWriteOnlyStream : Stream
+    {
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => 0;
+        public override long Position { get => 0; set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new IOException("Simulated disk error");
     }
 }

@@ -109,26 +109,26 @@ public class TaskbarEmbedderTests
 
         var isCentered = typeof(TaskbarEmbedder).GetMethod("IsTaskbarCentered", BindingFlags.NonPublic | BindingFlags.Static);
         isCentered.Should().NotBeNull();
-        ((bool)isCentered!.Invoke(null, null)!).Should().BeTrue();
+        ((bool)isCentered.Invoke(null, null)!).Should().BeTrue();
 
         var getTrayLeft = typeof(TaskbarEmbedder).GetMethod("GetTrayLeftEdge", BindingFlags.NonPublic | BindingFlags.Static);
         getTrayLeft.Should().NotBeNull();
-        var leftEdge = (int)getTrayLeft!.Invoke(null, null)!;
+        var leftEdge = (int)getTrayLeft.Invoke(null, null)!;
         leftEdge.Should().BeGreaterThanOrEqualTo(-1);
 
         var logStructure = typeof(TaskbarEmbedder).GetMethod("LogTrayStructure", BindingFlags.NonPublic | BindingFlags.Static);
         logStructure.Should().NotBeNull();
-        var actLog = () => logStructure!.Invoke(null, null);
+        var actLog = () => logStructure.Invoke(null, null);
         actLog.Should().NotThrow();
 
         var isWin11 = typeof(TaskbarEmbedder).GetMethod("IsWindows11Taskbar", BindingFlags.NonPublic | BindingFlags.Static);
         isWin11.Should().NotBeNull();
-        var actWin11 = () => isWin11!.Invoke(null, null);
+        var actWin11 = () => isWin11.Invoke(null, null);
         actWin11.Should().NotThrow();
 
         var estWidth = typeof(TaskbarEmbedder).GetMethod("EstimateTrayWidth", BindingFlags.NonPublic | BindingFlags.Static);
         estWidth.Should().NotBeNull();
-        ((int)estWidth!.Invoke(null, null)!).Should().BeGreaterThan(0);
+        ((int)estWidth.Invoke(null, null)!).Should().BeGreaterThan(0);
 
         var trySetParent = typeof(TaskbarEmbedder).GetMethod("TrySetParent", BindingFlags.NonPublic | BindingFlags.Instance);
         trySetParent!.Invoke(embedder, [IntPtr.Zero, new Size(200, 30)]);
@@ -150,7 +150,7 @@ public class TaskbarEmbedderTests
 
         var posFloat = typeof(TaskbarEmbedder).GetMethod("PositionFloat", BindingFlags.NonPublic | BindingFlags.Instance);
         posFloat.Should().NotBeNull();
-        posFloat!.Invoke(embedder, [IntPtr.Zero, new Size(200, 30)]);
+        posFloat.Invoke(embedder, [IntPtr.Zero, new Size(200, 30)]);
 
         cfg.Overlay.Placement = "center";
         posFloat.Invoke(embedder, [IntPtr.Zero, new Size(200, 30)]);
@@ -318,7 +318,7 @@ public class TaskbarEmbedderTests
 
         cfg.Overlay.Placement = "left";
         cfg.Overlay.PlacementOffset = 10;
-        var xLeft = (int)computeBandX!.Invoke(embedder, [rect, new Size(200, 30)])!;
+        var xLeft = (int)computeBandX.Invoke(embedder, [rect, new Size(200, 30)])!;
         xLeft.Should().Be(10);
 
         // Branch 2: Win11 = true, Centered = true, trayLeftEdge > 0
@@ -596,7 +596,7 @@ public class TaskbarEmbedderTests
         posFloat.Should().NotBeNull();
 
         // First call sets position and flags
-        bool ok1 = (bool)posFloat!.Invoke(embedder, [form.Handle, new Size(200, 30)])!;
+        bool ok1 = (bool)posFloat.Invoke(embedder, [form.Handle, new Size(200, 30)])!;
         ok1.Should().BeTrue();
         embedder.LastComputedFloatX.Should().Be(120);
         embedder.LastComputedFloatY.Should().Be(80);
@@ -699,7 +699,7 @@ public class TaskbarEmbedderTests
 
         // 1. Invalid taskbar bounds (lines 705-710)
         rectField!.SetValue(embedder, Rectangle.Empty);
-        bool failRes = (bool)posFloatMethod!.Invoke(embedder, [IntPtr.Zero, new Size(200, 30)])!;
+        bool failRes = (bool)posFloatMethod.Invoke(embedder, [IntPtr.Zero, new Size(200, 30)])!;
         failRes.Should().BeFalse();
         embedder.State.Should().Be(OverlayDeploymentState.Failed);
 
@@ -747,7 +747,7 @@ public class TaskbarEmbedderTests
         cfg.Overlay.PlacementOffset = 10;
 
         var parentRect = new NativeMethods.RECT { Left = 0, Top = 0, Right = 1920, Bottom = 48 };
-        int x = (int)computeBandX!.Invoke(embedder, [parentRect, new Size(200, 30)])!;
+        int x = (int)computeBandX.Invoke(embedder, [parentRect, new Size(200, 30)])!;
         x.Should().BeGreaterThan(0);
 
         // Win11 with placement = "left" (lines 649-652)
@@ -776,7 +776,7 @@ public class TaskbarEmbedderTests
 
         // Legacy Win10 mode with invalid tray HWND (lines 471-473)
         isWin11Field!.SetValue(embedder, false);
-        bool res = (bool)resolveMethod!.Invoke(embedder, [IntPtr.Zero])!;
+        bool res = (bool)resolveMethod.Invoke(embedder, [IntPtr.Zero])!;
         res.Should().BeFalse();
 
         // TrySetParent with invalid tray (lines 428-432)
@@ -791,6 +791,98 @@ public class TaskbarEmbedderTests
         {
             TaskbarEmbedder.ExplorerTrayWndOverride = null;
         }
+    }
+
+    [Fact]
+    public void TaskbarEmbedder_Centered_And_TrayStructure_Coverage()
+    {
+        // 1. IsTaskbarCentered
+        var isCentered = typeof(TaskbarEmbedder).GetMethod("IsTaskbarCentered", BindingFlags.NonPublic | BindingFlags.Static);
+        isCentered.Should().NotBeNull();
+        var res = (bool)isCentered.Invoke(null, null)!;
+        res.Should().Be(res);
+
+        // 2. LogTrayStructure when ExplorerTrayWnd is zero
+        var logStructure = typeof(TaskbarEmbedder).GetMethod("LogTrayStructure", BindingFlags.NonPublic | BindingFlags.Static);
+        logStructure.Should().NotBeNull();
+
+        TaskbarEmbedder.ExplorerTrayWndOverride = () => IntPtr.Zero;
+        try
+        {
+            var act = () => logStructure.Invoke(null, null);
+            act.Should().NotThrow();
+        }
+        finally
+        {
+            TaskbarEmbedder.ExplorerTrayWndOverride = null;
+        }
+    }
+
+    [Fact]
+    public void TaskbarEmbedder_LeftWidgetPositioning_BandAndFloat()
+    {
+        var cfg = new AppSettings();
+        var embedder = new TaskbarEmbedder(cfg);
+
+        IntPtr tray = TaskbarEmbedder.FindExplorerTrayWnd();
+        if (tray == IntPtr.Zero)
+            tray = NativeMethods.FindWindowEx(IntPtr.Zero, IntPtr.Zero, "Progman", null);
+
+        typeof(TaskbarEmbedder).GetField("_parentHwnd", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, tray);
+        typeof(TaskbarEmbedder).GetField("_isWin11", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, true);
+        typeof(TaskbarEmbedder).GetField("_taskbarRect", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, new Rectangle(0, 1000, 1920, 48));
+
+        cfg.Overlay.Placement = "left";
+        cfg.Overlay.PlacementOffset = 10;
+
+        var computeBandX = typeof(TaskbarEmbedder).GetMethod("ComputeBandX", BindingFlags.NonPublic | BindingFlags.Instance);
+        var computeLeftFloat = typeof(TaskbarEmbedder).GetMethod("ComputeLeftFloatX", BindingFlags.NonPublic | BindingFlags.Instance);
+        var parentRect = new NativeMethods.RECT { Left = 0, Top = 0, Right = 1920, Bottom = 48 };
+
+        // 1. When widget is present on left at X=180
+        typeof(TaskbarEmbedder).GetField("_leftWidgetRightEdge", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, 180);
+        int floatXWithWidget = (int)computeLeftFloat!.Invoke(embedder, null)!;
+        floatXWithWidget.Should().Be(180 + 10); // 180 + Offset (10) = 190
+
+        int bandXWithWidget = (int)computeBandX!.Invoke(embedder, [parentRect, new Size(200, 30)])!;
+        bandXWithWidget.Should().BeGreaterThan(0);
+
+        // 2. When no widget is present (_leftWidgetRightEdge = -1)
+        typeof(TaskbarEmbedder).GetField("_leftWidgetRightEdge", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, -1);
+        int floatXNoWidget = (int)computeLeftFloat.Invoke(embedder, null)!;
+        floatXNoWidget.Should().Be(0 + 10); // _taskbarRect.Left (0) + Offset (10) = 10
+
+        int bandXNoWidget = (int)computeBandX.Invoke(embedder, [parentRect, new Size(200, 30)])!;
+        bandXNoWidget.Should().Be(10);
+    }
+
+    [Fact]
+    public void TaskbarEmbedder_LeftWidgetEdgeDetection_And_Overrides()
+    {
+        // 1. Override returns exact value
+        TaskbarEmbedder.LeftWidgetRightEdgeOverride = () => 215;
+        try
+        {
+            var getLeftWidget = typeof(TaskbarEmbedder).GetMethod("GetLeftWidgetRightEdge", BindingFlags.NonPublic | BindingFlags.Static);
+            getLeftWidget.Should().NotBeNull();
+            int edge = (int)getLeftWidget.Invoke(null, null)!;
+            edge.Should().Be(215);
+        }
+        finally
+        {
+            TaskbarEmbedder.LeftWidgetRightEdgeOverride = null;
+        }
+
+        // 2. Logging and feature detection helpers execute cleanly
+        var logWidgetEdge = typeof(TaskbarEmbedder).GetMethod("LogWidgetEdgeChange", BindingFlags.NonPublic | BindingFlags.Static);
+        logWidgetEdge.Should().NotBeNull();
+        var actLog = () => logWidgetEdge.Invoke(null, [200, "test"]);
+        actLog.Should().NotThrow();
+
+        var isWidgetsEnabled = typeof(TaskbarEmbedder).GetMethod("IsWidgetsFeatureEnabled", BindingFlags.NonPublic | BindingFlags.Static);
+        isWidgetsEnabled.Should().NotBeNull();
+        var actCheck = () => isWidgetsEnabled.Invoke(null, null);
+        actCheck.Should().NotThrow();
     }
 }
 

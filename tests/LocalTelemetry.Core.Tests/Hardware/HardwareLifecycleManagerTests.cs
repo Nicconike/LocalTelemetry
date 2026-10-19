@@ -63,7 +63,7 @@ public class HardwareLifecycleManagerTests
 
         // 1. Suspend
         var suspendArgs = new Microsoft.Win32.PowerModeChangedEventArgs(Microsoft.Win32.PowerModes.Suspend);
-        method!.Invoke(manager, [null, suspendArgs]);
+        method.Invoke(manager, [null, suspendArgs]);
         suspended.Should().BeTrue();
 
         // While suspended, notifications early-return
@@ -96,15 +96,15 @@ public class HardwareLifecycleManagerTests
         method.Should().NotBeNull();
 
         var shutdownArgs = new Microsoft.Win32.SessionEndingEventArgs(Microsoft.Win32.SessionEndReasons.SystemShutdown);
-        var actShutdown = () => method!.Invoke(manager, [null, shutdownArgs]);
+        var actShutdown = () => method.Invoke(manager, [null, shutdownArgs]);
         actShutdown.Should().NotThrow();
 
         var logoffArgs = new Microsoft.Win32.SessionEndingEventArgs(Microsoft.Win32.SessionEndReasons.Logoff);
-        var actLogoff = () => method!.Invoke(manager, [null, logoffArgs]);
+        var actLogoff = () => method.Invoke(manager, [null, logoffArgs]);
         actLogoff.Should().NotThrow();
 
         var otherArgs = new Microsoft.Win32.SessionEndingEventArgs((Microsoft.Win32.SessionEndReasons)999);
-        var actOther = () => method!.Invoke(manager, [null, otherArgs]);
+        var actOther = () => method.Invoke(manager, [null, otherArgs]);
         actOther.Should().NotThrow();
     }
 
@@ -127,7 +127,7 @@ public class HardwareLifecycleManagerTests
         })
         {
             var args = new Microsoft.Win32.SessionSwitchEventArgs(reason);
-            var act = () => method!.Invoke(manager, [null, args]);
+            var act = () => method.Invoke(manager, [null, args]);
             act.Should().NotThrow();
         }
     }
@@ -220,5 +220,47 @@ public class HardwareLifecycleManagerTests
         var onPower = typeof(HardwareLifecycleManager).GetMethod("OnPowerModeChanged", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
         var actPower = () => onPower!.Invoke(manager, [null, new Microsoft.Win32.PowerModeChangedEventArgs(Microsoft.Win32.PowerModes.Suspend)]);
         actPower.Should().NotThrow();
+    }
+
+    [Fact]
+    public void HardwareLifecycleManager_SessionEvents_AllReasons_Coverage()
+    {
+        var onSessionSwitch = typeof(HardwareLifecycleManager).GetMethod("OnSessionSwitch", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        onSessionSwitch.Should().NotBeNull();
+
+        Microsoft.Win32.SessionSwitchReason[] switchReasons =
+        [
+            Microsoft.Win32.SessionSwitchReason.SessionLock,
+            Microsoft.Win32.SessionSwitchReason.SessionUnlock,
+            Microsoft.Win32.SessionSwitchReason.SessionLogon,
+            Microsoft.Win32.SessionSwitchReason.SessionLogoff,
+            Microsoft.Win32.SessionSwitchReason.RemoteConnect,
+            Microsoft.Win32.SessionSwitchReason.RemoteDisconnect,
+            (Microsoft.Win32.SessionSwitchReason)999
+        ];
+
+        foreach (var reason in switchReasons)
+        {
+            var e = new Microsoft.Win32.SessionSwitchEventArgs(reason);
+            var act = () => onSessionSwitch.Invoke(null, [null, e]);
+            act.Should().NotThrow();
+        }
+
+        var onSessionEnding = typeof(HardwareLifecycleManager).GetMethod("OnSessionEnding", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        onSessionEnding.Should().NotBeNull();
+
+        Microsoft.Win32.SessionEndReasons[] endReasons =
+        [
+            Microsoft.Win32.SessionEndReasons.SystemShutdown,
+            Microsoft.Win32.SessionEndReasons.Logoff,
+            (Microsoft.Win32.SessionEndReasons)999
+        ];
+
+        foreach (var reason in endReasons)
+        {
+            var e = new Microsoft.Win32.SessionEndingEventArgs(reason);
+            var act = () => onSessionEnding.Invoke(null, [null, e]);
+            act.Should().NotThrow();
+        }
     }
 }

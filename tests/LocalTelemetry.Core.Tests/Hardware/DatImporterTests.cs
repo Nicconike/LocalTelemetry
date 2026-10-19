@@ -20,7 +20,7 @@ public class DatImporterTests
         }
         finally
         {
-            try { File.Delete(tempFile); } catch { }
+            try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
 
@@ -61,7 +61,7 @@ invalid line
         }
         finally
         {
-            try { File.Delete(tempFile); } catch { }
+            try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
 }

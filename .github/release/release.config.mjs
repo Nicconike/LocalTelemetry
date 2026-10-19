@@ -9,13 +9,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const commitPluginPath = resolve(__dirname, 'github-commit-plugin.ts');
 
 export default {
-    branches: [
-        {
-            name: 'master',
-            prerelease: 'rc',
-            channel: false,
-        },
-    ],
+    branches: ['master'],
     tagFormat: 'v${version}',
     plugins: [
         [
@@ -86,7 +80,7 @@ export default {
             {
                 changelogFile: 'CHANGELOG.md',
                 changelogTitle:
-                    '# Changelog\n\nAll notable changes to this project will be documented in this file.\n\nThe format is based on [Keep a Changelog](https://keepa.changelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org) & [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).',
+                    '# Changelog\n\nAll notable changes to this project will be documented in this file.\n\nThe format is based on [Keep a Changelog](https://keepachangelog.com), and this project adheres to [Semantic Versioning](https://semver.org) & [Conventional Commits](https://conventionalcommits.org).',
             },
         ],
         [
@@ -100,16 +94,10 @@ export default {
             '@semantic-release/github',
             {
                 assets: [
-                    { path: './LocalTelemetrySetup.exe', label: 'LocalTelemetry Setup Installer' },
-                    { path: './LocalTelemetry-win-x64.zip', label: 'LocalTelemetry Portable Archive' },
+                    { path: './LocalTelemetrySetup.exe', label: 'LocalTelemetry Setup' },
+                    { path: './LocalTelemetry-win-x64.zip', label: 'LocalTelemetry Portable Zip' },
                     { path: './checksums.txt', label: 'SHA-256 Checksums' },
                 ],
-            },
-        ],
-        [
-            '@semantic-release/exec',
-            {
-                publishCmd: 'pwsh -File ./.github/release/publish.ps1 -Version "${nextRelease.version}" -Tag "${nextRelease.gitTag}"',
             },
         ],
     ],

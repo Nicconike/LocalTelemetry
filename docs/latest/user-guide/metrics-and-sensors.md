@@ -14,8 +14,8 @@ Processor vitals monitor your CPU's workload, package temperature, operating clo
 | :--------------------- | :------------ | :-------------- | :----------------------------------------------------------------- |
 | **CPU Usage**          | `CPU`         | `42%`           | Overall processor utilization percentage across all active threads |
 | **CPU Temp**           | `CPU`         | `65°C` / `149°F`| Current CPU package temperature                                    |
-| **CPU Frequency**      | `CPU`         | `4.35 GHz`      | Operating clock speed (effective frequency)                        |
-| **CPU Package Power**  | `CPU`         | `65 W`          | Real-time CPU power consumption in Watts                           |
+| **CPU Frequency**      | `CPU`         | `4.35GHz`       | Operating clock speed (effective frequency)                        |
+| **CPU Package Power**  | `CPU`         | `65W`           | Real-time CPU power consumption in Watts                           |
 
 ### :list-clock: CPU Options (Settings -> Monitoring)
 
@@ -36,9 +36,9 @@ Graphics card telemetry tracks GPU core utilization, video memory consumption, c
 | :--------------------- | :------------ | :-------------- | :---------------------------------------------  |
 | **GPU Usage**          | `GPU`         | `78%`           | Graphics processing unit utilization percentage |
 | **GPU Temp**           | `GPU`         | `68°C` / `154°F`| GPU core temperature                            |
-| **GPU VRAM Usage**     | `GPU`         | `4120 MB`       | Dedicated video memory (VRAM) currently in use  |
-| **GPU Frequency**      | `GPU`         | `2150 MHz`      | Current GPU graphics core clock speed           |
-| **GPU Power**          | `GPU`         | `120 W`         | Total graphics card power draw in Watts         |
+| **GPU VRAM Usage**     | `GPU`         | `4120MB`        | Dedicated video memory (VRAM) currently in use  |
+| **GPU Frequency**      | `GPU`         | `2150MHz`       | Current GPU graphics core clock speed           |
+| **GPU Power**          | `GPU`         | `120W`          | Total graphics card power draw in Watts         |
 
 ### :square-activity: GPU Options (Settings -> Monitoring)
 
@@ -55,7 +55,7 @@ Memory telemetry tracks active system memory consumption and overall capacity ut
 | Metric (Settings Name) | Overlay Label | Typical Display | What It Measures |
 | :--------------------- | :------------ | :-------------- | :---------------------------------------------------- |
 | **RAM Usage**          | `RAM`         | `58%`           | Percentage of total physical memory currently in use  |
-| **RAM Used**           | `RAM`         | `18.5 GB`       | Active physical memory in Gigabytes                   |
+| **RAM Used**           | `RAM`         | `18.5GB`        | Active physical memory in Gigabytes                   |
 
 ---
 
@@ -65,8 +65,8 @@ LocalTelemetry automatically discovers your installed physical storage drives (N
 
 | Metric (Settings Name) | Overlay Label | Typical Display | What It Measures |
 | :--------------------- | :------------ | :-------------- | :---------------------------------------------------------------- |
-| **[Drive] Read** | `NVMeR` / `SATAR` / `HDDR` | `250 KB/s` / `1.2 GB/s` | Active read data throughput for the detected physical disk |
-| **[Drive] Write** | `NVMeW` / `SATAW` / `HDDW` | `14.8 MB/s` / `450 KB/s` | Active write data throughput for the detected physical disk |
+| **[Drive] Read** | `NVMeR` / `SATAR` / `HDDR` | `250KB/s` / `1.2GB/s` | Active read data throughput for the detected physical disk |
+| **[Drive] Write** | `NVMeW` / `SATAW` / `HDDW` | `14.8MB/s` / `450KB/s` | Active write data throughput for the detected physical disk |
 
 ### :tag: How Disk Labels Work on the Taskbar
 
@@ -84,9 +84,9 @@ Network telemetry monitors real-time transfer rates across your primary network 
 
 | Metric (Settings Name) | Overlay Label | Typical Display | What It Measures |
 | :--------------------- | :------------ | :-------------- | :----------------------------------------------------------------------------------- |
-| **Download**           | `DOWN↓`       | `1.2 MB/s` (or `9.6 Mb/s`) | Current incoming network throughput (displays `--` when disconnected) |
-| **Upload**             | `UP↑`         | `350 KB/s` (or `2.8 Mb/s`) | Current outgoing network throughput (displays `--` when disconnected) |
-| **Total Transferred**  | `Total`       | `14.25 GB`      | Cumulative data transferred (download + upload) during the current session (scales from `B` up to `TB`) |
+| **Download**           | `DOWN↓`       | `1.2MB/s` (or `9.6Mb/s`)   | Current incoming network throughput (displays `--` when disconnected) |
+| **Upload**             | `UP↑`         | `350KB/s` (or `2.8Mb/s`)   | Current outgoing network throughput (displays `--` when disconnected) |
+| **Total Transferred**  | `Total`       | `14.25GB`       | Cumulative data transferred (download + upload) during the current session (scales from `B` up to `TB`) |
 
 ### :network: Network Options (Settings -> Network)
 
@@ -102,13 +102,13 @@ On laptops, handheld PCs, and battery-powered Windows devices, LocalTelemetry pr
 | Metric (Settings Name) | Overlay Label | Typical Display | What It Measures |
 | :--------------------- | :------------ | :-------------- | :----------------------------------------------------------------------------------- |
 | **Battery**            | `BAT`         | `85%`           | Remaining battery charge percentage |
-| **Charge Rate**        | `BAT`         | `+45.0 W` / `Full` / `-18.5 W` | Real-time battery charging power or discharging rate in Watts |
+| **Charge Rate**        | `BAT`         | `+45.0W` / `Full` / `-18.5W` | Real-time battery charging power or discharging rate in Watts |
 
 ### :car-battery: Battery Display States
 
-- **Charging on AC Power**: Displays incoming charge wattage prefixed with a plus sign (e.g. `+45.2 W`).
+- **Charging on AC Power**: Displays incoming charge wattage prefixed with a plus sign (e.g. `+45.2W`).
 - **Fully Charged on AC Power**: Displays `Full` once the battery reaches 100% and charging completes.
-- **Running on Battery**: Displays real-time power consumption prefixed with a minus sign (e.g. `-18.5 W`) so you can monitor your laptop's current energy draw.
+- **Running on Battery**: Displays real-time power consumption prefixed with a minus sign (e.g. `-18.5W`) so you can monitor your laptop's current energy draw.
 - **Desktop Systems**: Battery metrics are automatically hidden when no physical battery is present.
 
 ---

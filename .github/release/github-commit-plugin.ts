@@ -92,9 +92,9 @@ export async function prepare(pluginConfig: PluginConfig, context: PluginContext
     const files = pluginConfig?.files || [
         'CHANGELOG.md',
         'bucket/localtelemetry.json',
-        'packaging/chocolatey/localtelemetry.nuspec',
-        'packaging/chocolatey/tools/VERIFICATION.txt',
-        'packaging/chocolatey/tools/chocolateyinstall.ps1',
+        'docs/package.json',
+        'packaging/winget/localtelemetry.yaml',
+        'src/LocalTelemetry.App/Settings/wwwroot/package.json',
     ];
 
     logger.log(`Checking files for GitHub API release commit on ${owner}/${repo}:${branch}...`);

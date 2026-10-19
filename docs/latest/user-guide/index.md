@@ -10,6 +10,8 @@ This documentation walks through installing, configuring, and getting the most o
 
 Instead of running floating widgets, desktop gadgets, or heavy overlays that obstruct your workspace or full-screen games, LocalTelemetry anchors directly to the taskbar. It operates as a lightweight background process with minimal CPU overhead, only initializing the embedded WebView2 engine when you open the settings interface.
 
+To read the personal story, background, and engineering philosophy behind this project, see [**Why I Built LocalTelemetry**](/about/).
+
 ![LocalTelemetry Default Taskbar Overlay](/images/overlay-default.png)
 *Default out-of-the-box taskbar overlay displaying 5 dual-row columns with automatic hardware vendor brand colors applied.*
 

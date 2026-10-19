@@ -179,7 +179,7 @@ When Windows display adapters restart (e.g. driver update, GPU TDR recovery, or 
 - `EseNetworkUsageReader.cs` queries the Windows System Resource Usage Monitor database (`C:\Windows\System32\sru\SRUDB.dat`).
 - Uses the native Windows Extensible Storage Engine (`esent.dll`) P/Invoke interface:
   - Attaches to the database in read-only recovery mode.
-  - Scans table `{973F5D5C-1D90-4944-BE81-21B9BD47E0E4}` for network interface data usage.
+  - Scans table `{973F5D5C-1D90-4944-BE8E-24B94231A174}` for network interface data usage.
   - Maps interface GUIDs to physical adapter names.
   - Feeds historical daily upload and download octets into `TrafficHistoryStore.cs` for calendar display.
 

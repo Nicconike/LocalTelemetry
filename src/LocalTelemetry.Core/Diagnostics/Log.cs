@@ -63,6 +63,28 @@ public static class Log
         }
     }
 
+    private static void DeleteArchiveIfExists(string path)
+    {
+        if (!File.Exists(path)) return;
+        try { File.Delete(path); }
+        catch (Exception ex)
+        {
+            LastRotationError = ex;
+            System.Diagnostics.Debug.WriteLine($"[Log.RotateSystemLog] Failed to delete archive '{path}': {ex}");
+        }
+    }
+
+    private static void ShiftArchiveIfExists(string currentPath, string nextPath)
+    {
+        if (!File.Exists(currentPath)) return;
+        try { File.Move(currentPath, nextPath, overwrite: true); }
+        catch (Exception ex)
+        {
+            LastRotationError = ex;
+            System.Diagnostics.Debug.WriteLine($"[Log.RotateSystemLog] Failed to shift archive '{currentPath}' to '{nextPath}': {ex}");
+        }
+    }
+
     private static void RotateSystemLog(string systemLogPath)
     {
         try
@@ -75,35 +97,15 @@ public static class Log
             string baseName = Path.GetFileNameWithoutExtension(systemLogPath);
             string ext = fi.Extension;
 
-            // Shift existing numbered archives: .3.log -> deleted, .2.log -> .3.log, .1.log -> .2.log
-            for (int i = MaxRollingFiles; i >= 1; i--)
+            // Delete oldest archive
+            DeleteArchiveIfExists(Path.Combine(dir, $"{baseName}.{MaxRollingFiles}{ext}"));
+
+            // Shift existing numbered archives: .2.log -> .3.log, .1.log -> .2.log
+            for (int i = MaxRollingFiles - 1; i >= 1; i--)
             {
                 string curr = Path.Combine(dir, $"{baseName}.{i}{ext}");
-                if (i == MaxRollingFiles)
-                {
-                    if (File.Exists(curr))
-                    {
-                        try { File.Delete(curr); }
-                        catch (Exception ex)
-                        {
-                            LastRotationError = ex;
-                            System.Diagnostics.Debug.WriteLine($"[Log.RotateSystemLog] Failed to delete archive '{curr}': {ex}");
-                        }
-                    }
-                }
-                else
-                {
-                    string next = Path.Combine(dir, $"{baseName}.{i + 1}{ext}");
-                    if (File.Exists(curr))
-                    {
-                        try { File.Move(curr, next, overwrite: true); }
-                        catch (Exception ex)
-                        {
-                            LastRotationError = ex;
-                            System.Diagnostics.Debug.WriteLine($"[Log.RotateSystemLog] Failed to shift archive '{curr}' to '{next}': {ex}");
-                        }
-                    }
-                }
+                string next = Path.Combine(dir, $"{baseName}.{i + 1}{ext}");
+                ShiftArchiveIfExists(curr, next);
             }
 
             // Current main file moves to .1.log
@@ -177,27 +179,45 @@ public static class Log
         }
     }
 
+    private const string NetworkModuleName = "Network";
+    private const string HardwareModuleName = "Hardware";
+
+    private static readonly (string Pattern, string Module)[] ModuleMappings =
+    [
+        ("/Overlay/", "Overlay"),
+        ("/Settings/", "Settings"),
+        ("/Tray/", "Tray"),
+        ("AlertService", "Alerts"),
+        ("UpdateCheckService", "Update"),
+        ("NotificationClient", "Notification"),
+        ("TaskbarEmbedder", "Overlay"),
+        ("WindowHelpers", "System"),
+        ("NetworkUsage", NetworkModuleName),
+        ("NetUsage", NetworkModuleName),
+        ("TrafficHistory", NetworkModuleName),
+        ("EseNetwork", NetworkModuleName),
+        ("DatImporter", NetworkModuleName),
+        ("/Hardware/", HardwareModuleName),
+        ("/Config/", "Config"),
+        ("/Models/", HardwareModuleName),
+        ("BrandColor", HardwareModuleName),
+        ("Notifier", "Notifier"),
+    ];
+
     private static string ModuleName(string? callerPath)
     {
         if (string.IsNullOrEmpty(callerPath)) return "?";
 
         string normalized = callerPath.Replace('\\', '/');
 
-        if (normalized.Contains("/Overlay/", StringComparison.OrdinalIgnoreCase)) return "Overlay";
-        if (normalized.Contains("/Settings/", StringComparison.OrdinalIgnoreCase)) return "Settings";
-        if (normalized.Contains("/Tray/", StringComparison.OrdinalIgnoreCase)) return "Tray";
-        if (normalized.Contains("AlertService", StringComparison.OrdinalIgnoreCase)) return "Alerts";
-        if (normalized.Contains("UpdateCheckService", StringComparison.OrdinalIgnoreCase)) return "Update";
-        if (normalized.Contains("NotificationClient", StringComparison.OrdinalIgnoreCase)) return "Notification";
-        if (normalized.Contains("TaskbarEmbedder", StringComparison.OrdinalIgnoreCase)) return "Overlay";
-        if (normalized.Contains("WindowHelpers", StringComparison.OrdinalIgnoreCase)) return "System";
-        if (normalized.Contains("NetworkUsage", StringComparison.OrdinalIgnoreCase) || normalized.Contains("NetUsage", StringComparison.OrdinalIgnoreCase) || normalized.Contains("TrafficHistory", StringComparison.OrdinalIgnoreCase)) return "Network";
-        if (normalized.Contains("EseNetwork", StringComparison.OrdinalIgnoreCase) || normalized.Contains("DatImporter", StringComparison.OrdinalIgnoreCase)) return "Network";
-        if (normalized.Contains("/Hardware/", StringComparison.OrdinalIgnoreCase)) return "Hardware";
-        if (normalized.Contains("/Config/", StringComparison.OrdinalIgnoreCase)) return "Config";
-        if (normalized.Contains("/Models/", StringComparison.OrdinalIgnoreCase) || normalized.Contains("BrandColor", StringComparison.OrdinalIgnoreCase)) return "Hardware";
-        if (normalized.Contains("Notifier", StringComparison.OrdinalIgnoreCase)) return "Notifier";
-        if (normalized.EndsWith("/App.xaml.cs", StringComparison.OrdinalIgnoreCase) || normalized.EndsWith("/App.cs", StringComparison.OrdinalIgnoreCase)) return "App";
+        foreach (var (pattern, module) in ModuleMappings)
+        {
+            if (normalized.Contains(pattern, StringComparison.OrdinalIgnoreCase))
+                return module;
+        }
+
+        if (normalized.EndsWith("/App.xaml.cs", StringComparison.OrdinalIgnoreCase) || normalized.EndsWith("/App.cs", StringComparison.OrdinalIgnoreCase))
+            return "App";
 
         string fileName = Path.GetFileNameWithoutExtension(callerPath);
         return string.IsNullOrEmpty(fileName) ? "System" : fileName;
@@ -232,6 +252,31 @@ public static class Log
         };
     }
 
+    private static string StripRedundantPrefixes(string message, string module)
+    {
+        string[] redundantPrefixes =
+        [
+            module + ":",
+            "App:", "Overlay:", "Hardware:", "Settings:", "Network:", "Config:", "System:", "Tray:", "Alerts:", "Notifier:",
+            "BrandDetection:", "DiskQuery:", "SRUM:", "NetUsage:", "TrafficHistoryStore:", "SetStartup:"
+        ];
+
+        string cleanMessage = message.TrimEnd('\r', '\n');
+        bool stripped;
+        do
+        {
+            stripped = false;
+            string? match = redundantPrefixes.FirstOrDefault(p => cleanMessage.StartsWith(p, StringComparison.OrdinalIgnoreCase));
+            if (match is not null)
+            {
+                cleanMessage = cleanMessage[match.Length..].TrimStart();
+                stripped = true;
+            }
+        } while (stripped);
+
+        return cleanMessage;
+    }
+
     private static void Write(StreamWriter? writer, Level level, string message, string? callerPath, Exception? ex)
     {
         if (writer is null) return;
@@ -252,29 +297,7 @@ public static class Log
 
         string module = ModuleName(callerPath);
         string timestamp = DateTime.Now.ToString("dd-MM-yyyy hh:mm:ss.fff tt");
-        string cleanMessage = message.TrimEnd('\r', '\n');
-
-        // Automatically strip redundant module or class prefixes if present
-        string[] redundantPrefixes =
-        [
-            module + ":",
-            "App:", "Overlay:", "Hardware:", "Settings:", "Network:", "Config:", "System:", "Tray:", "Alerts:", "Notifier:",
-            "BrandDetection:", "DiskQuery:", "SRUM:", "NetUsage:", "TrafficHistoryStore:", "SetStartup:"
-        ];
-
-        bool stripped;
-        do
-        {
-            stripped = false;
-            foreach (var p in redundantPrefixes)
-            {
-                if (cleanMessage.StartsWith(p, StringComparison.OrdinalIgnoreCase))
-                {
-                    cleanMessage = cleanMessage[p.Length..].TrimStart();
-                    stripped = true;
-                }
-            }
-        } while (stripped);
+        string cleanMessage = StripRedundantPrefixes(message, module);
 
         string line = ex is null
             ? $"{timestamp} [{levelStr}] {module}: {cleanMessage}"

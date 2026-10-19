@@ -48,7 +48,7 @@ public sealed class AppSettings
             catch (Exception ex)
             {
                 LastDirectoryError = ex;
-                System.Diagnostics.Debug.WriteLine($"[AppSettings.InitPaths] Failed to create data directory '{dataDir}': {ex}");
+                System.Diagnostics.Trace.WriteLine($"[AppSettings.InitPaths] Failed to create data directory '{dataDir}': {ex.Message}");
                 dataDir = exeDir;
             }
         }
@@ -58,7 +58,7 @@ public sealed class AppSettings
         catch (Exception ex)
         {
             LastDirectoryError = ex;
-            System.Diagnostics.Debug.WriteLine($"[AppSettings.InitPaths] Failed to create logs directory '{logsDir}': {ex}");
+            System.Diagnostics.Trace.WriteLine($"[AppSettings.InitPaths] Failed to create logs directory '{logsDir}': {ex.Message}");
             logsDir = dataDir;
         }
         LogsDir = logsDir;

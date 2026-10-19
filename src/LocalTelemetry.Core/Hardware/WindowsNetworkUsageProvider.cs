@@ -14,8 +14,6 @@ namespace LocalTelemetry.Core.Hardware;
 [SupportedOSPlatform("windows")]
 public static class WindowsNetworkUsageProvider
 {
-    private static void Log(string msg) { Diagnostics.Log.Debug(msg); }
-    private static void LogError(string msg) { Diagnostics.Log.Error(msg); }
 
     // Matches PhysicalInterfaceTypes in EseNetworkUsageReader
     //   6   = Ethernet, 62 = Fiber Channel, 69 = IEEE 1394,
@@ -38,7 +36,7 @@ public static class WindowsNetworkUsageProvider
         }
         catch (Exception ex)
         {
-            LogError($"WinRT GetInternetConnectionProfile failed: {ex.Message}");
+            Diagnostics.Log.Error(ex, "WinRT GetInternetConnectionProfile failed");
             return results;
         }
 
@@ -114,7 +112,7 @@ public static class WindowsNetworkUsageProvider
         }
         catch (Exception ex)
         {
-            Log($"WinRT today total query skipped ({profile.ProfileName}): {ex.Message}");
+            Diagnostics.Log.Debug(ex, $"WinRT today total query skipped ({profile.ProfileName})");
         }
     }
 
@@ -176,9 +174,38 @@ public static class WindowsNetworkUsageProvider
         }
         catch (Exception ex)
         {
-            Log($"WinRT network usage query {sliceStart:dd-MM-yyyy} to {sliceEnd:dd-MM-yyyy} skipped ({profile.ProfileName}): {ex.Message}");
+            Diagnostics.Log.Debug(ex, $"WinRT network usage query {sliceStart:dd-MM-yyyy} to {sliceEnd:dd-MM-yyyy} skipped ({profile.ProfileName})");
             return false;
         }
+    }
+
+    private static bool IsValidInstallDate(DateTime dt) => dt.Year >= 2000 && dt <= DateTime.Today;
+
+    private static DateTime? TryParseInstallTime(object? val)
+    {
+        if (val is long fileTime && fileTime > 0)
+        {
+            var dt = DateTime.FromFileTimeUtc(fileTime).ToLocalTime().Date;
+            if (IsValidInstallDate(dt)) return dt;
+        }
+        return null;
+    }
+
+    private static DateTime? TryParseInstallDate(object? val)
+    {
+        long? unixSeconds = val switch
+        {
+            int i when i > 0 => i,
+            long l when l > 0 => l,
+            _ => null
+        };
+
+        if (unixSeconds.HasValue)
+        {
+            var dt = DateTimeOffset.FromUnixTimeSeconds(unixSeconds.Value).LocalDateTime.Date;
+            if (IsValidInstallDate(dt)) return dt;
+        }
+        return null;
     }
 
     /// <summary>Retrieves the Windows installation date from the registry without arbitrary day limits.</summary>
@@ -191,30 +218,15 @@ public static class WindowsNetworkUsageProvider
                 @"SOFTWARE\Microsoft\Windows NT\CurrentVersion");
             if (key is not null)
             {
-                var installTimeVal = key.GetValue("InstallTime");
-                if (installTimeVal is long fileTime && fileTime > 0)
-                {
-                    var dt = DateTime.FromFileTimeUtc(fileTime).ToLocalTime().Date;
-                    if (dt.Year >= 2000 && dt <= DateTime.Today)
-                        return dt;
-                }
-
-                var installDateVal = key.GetValue("InstallDate");
-                if (installDateVal is int unixTime && unixTime > 0)
-                {
-                    var dt = DateTimeOffset.FromUnixTimeSeconds(unixTime).LocalDateTime.Date;
-                    if (dt.Year >= 2000 && dt <= DateTime.Today)
-                        return dt;
-                }
-                if (installDateVal is long unixTime64 && unixTime64 > 0)
-                {
-                    var dt = DateTimeOffset.FromUnixTimeSeconds(unixTime64).LocalDateTime.Date;
-                    if (dt.Year >= 2000 && dt <= DateTime.Today)
-                        return dt;
-                }
+                var dt = TryParseInstallTime(key.GetValue("InstallTime"))
+                    ?? TryParseInstallDate(key.GetValue("InstallDate"));
+                if (dt.HasValue) return dt.Value;
             }
         }
-        catch (Exception ex) { LogError($"GetWindowsInstallDate failed: {ex.Message}"); }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Error(ex, "GetWindowsInstallDate failed");
+        }
         return DateTime.Today.AddDays(-30);
     }
 
@@ -256,7 +268,7 @@ public static class WindowsNetworkUsageProvider
         }
         catch (Exception ex)
         {
-            LogError($"ImportAndSaveHistoryAsync failed: {ex.Message}");
+            Diagnostics.Log.Error(ex, "ImportAndSaveHistoryAsync failed");
         }
     }
 
@@ -278,8 +290,46 @@ public static class WindowsNetworkUsageProvider
         }
         catch (Exception ex)
         {
-            LogError($"RefreshTodayUsageAsync failed: {ex.Message}");
+            Diagnostics.Log.Error(ex, "RefreshTodayUsageAsync failed");
         }
+    }
+
+    private static (DateTime Start, DateTime End) ClampImportRange(DateTime start, DateTime end)
+    {
+        DateTime maxAllowed = DateTime.Today;
+        DateTime effectiveEnd = end.Date > maxAllowed ? maxAllowed : end.Date;
+
+        DateTime earliestAllowed = DateTime.Today.AddDays(-60);
+        DateTime effectiveStart = start.Date < earliestAllowed ? earliestAllowed : start.Date;
+
+        return (effectiveStart, effectiveEnd);
+    }
+
+    private static async Task<List<WindowsNetworkUsageRecord>> FetchRangeRecordsAsync(
+        DateTime start, DateTime end, CancellationToken ct)
+    {
+        var records = await EseNetworkUsageReader.ReadUsageAsync(start, end, ct);
+        return records.Count > 0 ? records : await GetUsageAsync(start, end, ct);
+    }
+
+    private static (long TotalDown, long TotalUp) MergeRecords(
+        TrafficHistoryFile historyFile, List<WindowsNetworkUsageRecord> records, HashSet<string> uniqueDays)
+    {
+        long totalDown = 0;
+        long totalUp = 0;
+        foreach (var r in records)
+        {
+            if (r.DownBytes <= 0 && r.UpBytes <= 0)
+                continue;
+
+            if (!MergeHistoricalRecord(historyFile, r, DateTime.Today))
+                continue;
+
+            uniqueDays.Add(r.Date);
+            totalDown += r.DownBytes;
+            totalUp += r.UpBytes;
+        }
+        return (totalDown, totalUp);
     }
 
     /// <summary>
@@ -300,49 +350,18 @@ public static class WindowsNetworkUsageProvider
                 };
             }
 
-            DateTime maxAllowed = DateTime.Today;
-            if (end.Date > maxAllowed)
-                end = maxAllowed;
-
-            DateTime startDate = start.Date;
-            DateTime earliestAllowed = DateTime.Today.AddDays(-60);
-            if (startDate < earliestAllowed)
-                startDate = earliestAllowed;
-
-            DateTime endDate = end.Date;
-
-            var allRecords = await EseNetworkUsageReader.ReadUsageAsync(startDate, endDate, ct);
-            if (allRecords.Count == 0)
-            {
-                allRecords = await GetUsageAsync(startDate, endDate, ct);
-            }
+            var (startDate, endDate) = ClampImportRange(start, end);
+            var allRecords = await FetchRangeRecordsAsync(startDate, endDate, ct);
 
             var uniqueDays = new HashSet<string>();
-            long totalDown = 0;
-            long totalUp = 0;
+            var (totalDown, totalUp) = MergeRecords(historyFile, allRecords, uniqueDays);
 
-            foreach (var r in allRecords)
+            if (endDate >= DateTime.Today && await ImportTodayBaselineAsync(historyFile, DateTime.Today, ct))
             {
-                if (r.DownBytes <= 0 && r.UpBytes <= 0)
-                    continue;
-
-                if (MergeHistoricalRecord(historyFile, r, DateTime.Today))
-                {
-                    uniqueDays.Add(r.Date);
-                    totalDown += r.DownBytes;
-                    totalUp += r.UpBytes;
-                }
-            }
-
-            if (endDate >= DateTime.Today)
-            {
-                bool todayUpdated = await ImportTodayBaselineAsync(historyFile, DateTime.Today, ct);
-                if (todayUpdated)
-                    uniqueDays.Add(DateTime.Today.ToString("dd-MM-yyyy"));
+                uniqueDays.Add(DateTime.Today.ToString("dd-MM-yyyy"));
             }
 
             int addedCount = uniqueDays.Count;
-
             if (addedCount > 0)
             {
                 historyFile.Save();
@@ -368,7 +387,7 @@ public static class WindowsNetworkUsageProvider
         }
         catch (Exception ex)
         {
-            LogError($"ImportDateRangeAsync failed: {ex.Message}");
+            Diagnostics.Log.Error(ex, "ImportDateRangeAsync failed");
             return new WindowsUsageImportResult
             {
                 Success = false,
@@ -463,7 +482,7 @@ public static class WindowsNetworkUsageProvider
         }
         catch (Exception ex)
         {
-            Log($"Today baseline query skipped ({ex.Message})");
+            Diagnostics.Log.Debug(ex, "Today baseline query skipped");
         }
         return todayUpdated;
     }

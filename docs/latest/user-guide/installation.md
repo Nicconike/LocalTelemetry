@@ -53,35 +53,28 @@ In accordance with official [Microsoft Windows 11 Specifications](https://www.mi
 > [!IMPORTANT]
 > **Internet Connection for First-Time Setup**: Because most users will not have the .NET 10 Desktop Runtime installed, an active internet connection is required during initial setup so the installer can fetch the runtime package. Once installed, all subsequent launches, driver initialization, and telemetry operations run completely offline.
 
-### :package: Method 2: Chocolatey
+### :package: Method 2: Windows Package Manager (WinGet)
 
-Install via [Chocolatey](https://community.chocolatey.org/packages/localtelemetry):
+Install via [WinGet](https://learn.microsoft.com/en-us/windows/package-manager/winget/):
 
 ```powershell
-choco install localtelemetry
+winget install --id Nicconike.LocalTelemetry
 ```
 
-For pre-release versions (Release Candidates & Beta builds):
+### :inbox: Method 3: Scoop Package Manager (Direct Repository Bucket)
+
+Install directly from the GitHub repository via [Scoop](https://scoop.sh/):
 
 ```powershell
-choco install localtelemetry --pre
-```
-
-### :inbox-tray: Method 3: Scoop
-
-Install via [Scoop](https://scoop.sh/):
-
-```powershell
-# Standard install (if the official extras bucket is enabled)
-scoop install localtelemetry
-
-# First-time Scoop GUI install (if extras is not yet added)
-scoop bucket add extras
-scoop install localtelemetry
-
-# Direct install from the project-hosted repository bucket
+# Add repository as a bucket and install
 scoop bucket add localtelemetry https://github.com/Nicconike/LocalTelemetry
 scoop install localtelemetry
+```
+
+To update LocalTelemetry to the latest release at any time:
+
+```powershell
+scoop update localtelemetry
 ```
 
 ### :folder-archive: Method 4: Portable ZIP (Zero Installation)

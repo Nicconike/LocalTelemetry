@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { SettingsDto, MonitoringDto, OverlayDto, AlertsDto, SystemInfo } from '../../../../../../../src/LocalTelemetry.App/Settings/wwwroot/src/lib/types';
+import type { SettingsDto, MonitoringDto, OverlayDto, AlertsDto, SystemInfo } from '../../../../../../src/LocalTelemetry.App/Settings/wwwroot/src/lib/types.ts';
 
 describe('types.ts structure & compatibility', () => {
     it('SettingsDto type contract supports full payload shape', () => {
@@ -7,6 +7,7 @@ describe('types.ts structure & compatibility', () => {
             runAtStartup: false,
             showSystemTrayIcon: true,
             enableFileLogging: true,
+            systemLogLevel: 'Info',
             windowTheme: 'default',
             monitoring: {
                 intervalMs: 1000,

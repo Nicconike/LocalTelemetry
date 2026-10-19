@@ -13,8 +13,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '../..');
 const docsDir = join(root, 'docs');
 const versionsFile = join(docsDir, '.vitepress', 'versions.mjs');
-const CONTENT_ROOT = ['index.md', 'user-guide', 'developer-guide'];
-const ABS_DOC_LINK = /(?<![:/.])\/(?:user-guide|developer-guide)(?:\/|$)/g;
+const CONTENT_ROOT = ['index.md', 'about', 'user-guide', 'developer-guide'];
+const ABS_DOC_LINK = /(?<![:/.])\/(?:about|user-guide|developer-guide)(?:\/|$)/g;
 
 // Only tags >= v1.0.0-rc.1 are included in versioned documentation
 const MIN_VERSION = '1.0.0-rc.1';

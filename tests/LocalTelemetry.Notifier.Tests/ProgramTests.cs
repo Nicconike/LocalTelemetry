@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
 using System.Reflection;
@@ -170,7 +171,7 @@ public class ProgramTests
         var cpProperty = typeof(Program.HiddenForm).GetProperty("CreateParams", BindingFlags.NonPublic | BindingFlags.Instance);
         cpProperty.Should().NotBeNull();
 
-        var cp = (CreateParams)cpProperty!.GetValue(form)!;
+        var cp = (CreateParams)cpProperty.GetValue(form)!;
         (cp.ExStyle & 0x00000080).Should().Be(0x00000080); // WS_EX_TOOLWINDOW
     }
 
@@ -196,7 +197,7 @@ public class ProgramTests
         wrapperType.Should().NotBeNull();
 
         using var pipe = new System.IO.Pipes.NamedPipeServerStream("TestPipeNotifierWrapper", PipeDirection.In, 1, PipeTransmissionMode.Message, PipeOptions.Asynchronous);
-        var wrapper = (Program.INotifierPipeServer)Activator.CreateInstance(wrapperType!, [pipe])!;
+        var wrapper = (Program.INotifierPipeServer)Activator.CreateInstance(wrapperType, [pipe])!;
 
         wrapper.Stream.Should().NotBeNull();
         wrapper.Dispose();
@@ -215,7 +216,7 @@ public class ProgramTests
             var createMethod = typeof(Program).GetMethod("CreatePipeServer", BindingFlags.NonPublic | BindingFlags.Static);
             createMethod.Should().NotBeNull();
 
-            using var server = (Program.INotifierPipeServer)createMethod!.Invoke(null, null)!;
+            using var server = (Program.INotifierPipeServer)createMethod.Invoke(null, null)!;
             server.Should().NotBeNull();
             server.Stream.Should().NotBeNull();
         }
@@ -231,7 +232,7 @@ public class ProgramTests
     {
         var resolveMethod = typeof(Program).GetMethod("ResolveLogPath", BindingFlags.NonPublic | BindingFlags.Static);
         resolveMethod.Should().NotBeNull();
-        string logPath = (string)resolveMethod!.Invoke(null, null)!;
+        string logPath = (string)resolveMethod.Invoke(null, null)!;
         logPath.Should().NotBeNullOrEmpty();
         logPath.Should().EndWith("lt_notifier.log");
     }
@@ -257,7 +258,7 @@ public class ProgramTests
             var mainMethod = typeof(Program).GetMethod("Main", BindingFlags.NonPublic | BindingFlags.Static);
             mainMethod.Should().NotBeNull();
 
-            var mainThread = new Thread(() => mainMethod!.Invoke(null, [Array.Empty<string>()]));
+            var mainThread = new Thread(() => mainMethod.Invoke(null, [Array.Empty<string>()]));
             mainThread.SetApartmentState(ApartmentState.STA);
             mainThread.Start();
 
@@ -291,7 +292,7 @@ public class ProgramTests
             var mainMethod = typeof(Program).GetMethod("Main", BindingFlags.NonPublic | BindingFlags.Static);
             mainMethod.Should().NotBeNull();
 
-            var mainThread = new Thread(() => mainMethod!.Invoke(null, [ParentPidArgs]));
+            var mainThread = new Thread(() => mainMethod.Invoke(null, [ParentPidArgs]));
             mainThread.SetApartmentState(ApartmentState.STA);
             mainThread.Start();
 
@@ -320,7 +321,7 @@ public class ProgramTests
                 createdMarker = true;
             }
 
-            var pathStandard = (string)resolveLogPath!.Invoke(null, null)!;
+            var pathStandard = (string)resolveLogPath.Invoke(null, null)!;
             pathStandard.Should().EndWith("lt_notifier.log");
         }
         finally
@@ -346,7 +347,7 @@ public class ProgramTests
 
         // Signal shutdown before handle is created
         cts.Cancel();
-        setupListener!.Invoke(null, [hiddenForm, cts]);
+        setupListener.Invoke(null, [hiddenForm, cts]);
 
         // Simulating form load trigger
         var onLoad = typeof(Form).GetMethod("OnLoad", BindingFlags.NonPublic | BindingFlags.Instance);
@@ -410,7 +411,15 @@ public class ProgramTests
         }
         finally
         {
-            try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true); } catch (Exception) { /* Best-effort cleanup */ }
+            try
+            {
+                if (Directory.Exists(tempDir))
+                    Directory.Delete(tempDir, true);
+            }
+            catch (IOException ex)
+            {
+                System.Diagnostics.Trace.WriteLine($"Cleanup of directory failed: {ex.Message}");
+            }
         }
     }
 
@@ -487,7 +496,7 @@ public class ProgramTests
             PipeTransmissionMode.Message,
             PipeOptions.Asynchronous);
 
-        var wrapper = (Program.INotifierPipeServer)Activator.CreateInstance(wrapperType!, pipeServer)!;
+        var wrapper = (Program.INotifierPipeServer)Activator.CreateInstance(wrapperType, pipeServer)!;
         using (wrapper)
         {
             wrapper.Stream.Should().NotBeNull();
@@ -514,7 +523,7 @@ public class ProgramTests
         method.Should().NotBeNull();
 
         using var cts = new CancellationTokenSource();
-        method!.Invoke(null, [99999999, cts]);
+        method.Invoke(null, [99999999, cts]);
 
         using var waitToken = new CancellationTokenSource(2000);
         while (!cts.IsCancellationRequested && !waitToken.IsCancellationRequested)
@@ -526,20 +535,45 @@ public class ProgramTests
     }
 
     [Fact]
+    public async Task SetupParentMonitoring_RealExitingProcess_Coverage()
+    {
+        var method = typeof(Program).GetMethod("SetupParentMonitoring", BindingFlags.NonPublic | BindingFlags.Static);
+        method.Should().NotBeNull();
+
+        using var dummyProc = Process.Start(new ProcessStartInfo("cmd.exe", "/c exit 0")
+        {
+            CreateNoWindow = true,
+            UseShellExecute = false
+        });
+        dummyProc.Should().NotBeNull();
+
+        using var cts = new CancellationTokenSource();
+        method.Invoke(null, [dummyProc.Id, cts]);
+
+        using var waitToken = new CancellationTokenSource(3000);
+        while (!cts.IsCancellationRequested && !waitToken.IsCancellationRequested)
+        {
+            await Task.Delay(20);
+        }
+
+        cts.IsCancellationRequested.Should().BeTrue();
+    }
+
+    [Fact]
     public void Program_UnhandledExceptionHandler_Coverage()
     {
         var cType = typeof(Program).GetNestedType("<>c", BindingFlags.NonPublic);
         cType.Should().NotBeNull();
-        var method = cType!.GetMethod("<Main>b__16_0", BindingFlags.NonPublic | BindingFlags.Instance);
+        var method = cType.GetMethod("<Main>b__16_0", BindingFlags.NonPublic | BindingFlags.Instance);
         method.Should().NotBeNull();
 
         var singletonField = cType.GetField("<>9", BindingFlags.NonPublic | BindingFlags.Static);
         var instance = singletonField?.GetValue(null) ?? Activator.CreateInstance(cType, nonPublic: true);
 
-        var actEx = () => method!.Invoke(instance, [null, new UnhandledExceptionEventArgs(new InvalidOperationException("Test crash"), false)]);
+        var actEx = () => method.Invoke(instance, [null, new UnhandledExceptionEventArgs(new InvalidOperationException("Test crash"), false)]);
         actEx.Should().NotThrow();
 
-        var actNonEx = () => method!.Invoke(instance, [null, new UnhandledExceptionEventArgs("Not an exception", false)]);
+        var actNonEx = () => method.Invoke(instance, [null, new UnhandledExceptionEventArgs("Not an exception", false)]);
         actNonEx.Should().NotThrow();
     }
 
@@ -560,7 +594,7 @@ public class ProgramTests
 
         var resolveLogMethod = typeof(Program).GetMethod("ResolveLogPath", BindingFlags.NonPublic | BindingFlags.Static);
         resolveLogMethod.Should().NotBeNull();
-        string logPath = (string)resolveLogMethod!.Invoke(null, null)!;
+        string logPath = (string)resolveLogMethod.Invoke(null, null)!;
         string? dir = Path.GetDirectoryName(logPath);
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
 
@@ -573,7 +607,7 @@ public class ProgramTests
             var mainMethod = typeof(Program).GetMethod("Main", BindingFlags.NonPublic | BindingFlags.Static);
             mainMethod.Should().NotBeNull();
 
-            var mainThread = new Thread(() => mainMethod!.Invoke(null, [Array.Empty<string>()]));
+            var mainThread = new Thread(() => mainMethod.Invoke(null, [Array.Empty<string>()]));
             mainThread.SetApartmentState(ApartmentState.STA);
             mainThread.Start();
 

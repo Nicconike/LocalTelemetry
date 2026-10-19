@@ -1,6 +1,6 @@
 import { mount, unmount, tick } from 'svelte';
 import { get } from 'svelte/store';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { settings, systemInfo } from '../../../../../../../src/LocalTelemetry.App/Settings/wwwroot/src/lib/store';
 import type { SettingsDto, SystemInfo } from '../../../../../../../src/LocalTelemetry.App/Settings/wwwroot/src/lib/types';
 import AppearancePage from '../../../../../../../src/LocalTelemetry.App/Settings/wwwroot/src/components/pages/AppearancePage.svelte';
@@ -18,6 +18,7 @@ function makePayload(): SettingsDto {
         runAtStartup: false,
         showSystemTrayIcon: true,
         enableFileLogging: false,
+        systemLogLevel: 'Info',
         windowTheme: 'default',
         monitoring: {
             intervalMs: 1000,
@@ -72,6 +73,8 @@ function makePayload(): SettingsDto {
             alertCpuPower: false,
             alertGpuFreq: false,
             alertGpuPower: false,
+            alertNetDaily: false,
+            alertNetMonthly: false,
             cpuUsageMaxPct: 90,
             ramUsageMaxPct: 90,
             gpuUsageMaxPct: 90,
@@ -83,12 +86,15 @@ function makePayload(): SettingsDto {
             cpuPowerMaxW: 100,
             gpuFreqMinMhz: 400,
             gpuPowerMaxW: 300,
+            netDailyMaxGb: 50,
+            netMonthlyMaxGb: 1000,
             showToastNotif: true,
             flashOverlay: true,
             cooldownSecs: 30,
             fireOncePerSession: false,
         },
         netUsage: { enabled: false },
+        updates: { checkFrequency: 'weekly', includePrereleases: true },
     };
 }
 
@@ -170,4 +176,35 @@ describe('AppearancePage.svelte', () => {
         expect(groupColorInput('All CPU')!.value.toLowerCase()).toBe('#ff0000');
         expect(get(settings)!.overlay.userCustomizedGroupColors).toContain('cpu');
     });
+
+    it('renders native color inputs with no custom popover or separate dropper buttons', async () => {
+        settings.set(makePayload());
+        systemInfo.set({ disks: [] } as unknown as SystemInfo);
+
+        component = mount(AppearancePage, { target: document.body });
+        await tick();
+
+        // Dedicated dropper buttons must NOT be present on the table rows
+        expect(document.querySelectorAll('.dropper-btn')).toHaveLength(0);
+
+        // No custom popover dialogs or backdrops
+        expect(document.querySelectorAll('.color-popover')).toHaveLength(0);
+        expect(document.querySelectorAll('.color-popover-backdrop')).toHaveLength(0);
+
+        // All color swatches must be standard native input[type="color"] elements
+        const colorInputs = document.querySelectorAll('input[type="color"].color-picker');
+        expect(colorInputs.length).toBeGreaterThan(0);
+
+        // Changing the color input fires change and updates settings
+        const cpuInput = groupColorInput('All CPU');
+        expect(cpuInput).not.toBeNull();
+        cpuInput!.value = '#123456';
+        cpuInput!.dispatchEvent(new Event('input', { bubbles: true }));
+        cpuInput!.dispatchEvent(new Event('change', { bubbles: true }));
+        await tick();
+
+        expect(get(settings)!.overlay.userCustomizedGroupColors).toContain('cpu');
+        expect(groupColorInput('All CPU')!.value.toLowerCase()).toBe('#123456');
+    });
 });
+

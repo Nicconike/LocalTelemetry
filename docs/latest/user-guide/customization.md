@@ -38,7 +38,7 @@ The settings panel is organized into 10 dedicated tabs matching the exact naviga
 - **Active Trackers**: Toggle individual hardware polling components on or off (CPU, GPU, RAM, Network, Disk, and Battery on portable devices). Toggling off an unused component completely halts its background polling loop and driver queries to eliminate unnecessary CPU wakeups.
 - **CPU Monitoring Mode**:
   - **Clock Mode**: Choose between `Average` (mean clock frequency across all active cores) or `Max Active Core` (highest clocked core frequency).
-  - **Usage Source**: Choose between `Overall` (average system-wide load matching Task Manager) or `Max Thread` (highest loaded thread, ideal for spotting single-core bottlenecks in games).
+  - **Usage Source**: Choose between `Overall (Task Manager)` (average system-wide load) or `Max Thread (Gaming)` (highest loaded thread, ideal for spotting single-core bottlenecks).
 - **GPU Usage Source**: Choose between `Driver (NVML/ADL)` (vendor driver engine load matching MSI Afterburner) or `WDDM (Task Manager)` (Windows display driver model engine statistics).
 - **Metrics Logging**: Master toggle to log periodic sensor telemetry to daily log files (`lt_DD-MM-YYYY.log`).
 - **Per-Category Log Modes**: Configure logging detail (`Off`, `Errors`, `Full`) independently for each hardware component.
@@ -62,7 +62,7 @@ The settings panel is organized into 10 dedicated tabs matching the exact naviga
 ### :network: Network
 
 - **Show Speed in Bits/s**: Toggle displaying network download and upload throughput in bits per second (`b/s`, `Kb/s`, `Mb/s`, `Gb/s`) instead of bytes per second (`B/s`, `KB/s`, `MB/s`, `GB/s`).
-- **Network Interface**: Select which network adapter is used for throughput monitoring (`Auto (Best Match)` or a specific physical adapter like `Ethernet` / `Wi-Fi`).
+- **Network Adapter**: Select which network adapter is used for throughput monitoring (`Auto (Best Match)` or a specific physical adapter like `Ethernet` / `Wi-Fi`).
 - **Internet Traffic Logging**: Toggle automatic daily bandwidth tracking to record download and upload volumes into `internet_usage.jsonl`.
 
 ![Network Settings Tab](/images/network-settings.png)
@@ -71,7 +71,7 @@ The settings panel is organized into 10 dedicated tabs matching the exact naviga
 ### :arrow-down-up: Traffic
 
 - **Usage Calendar**: View daily network download and upload totals on an interactive monthly calendar heatmap with 6 usage tiers.
-- **Filter by Adapter**: View bandwidth totals for **All**, **Ethernet**, or **Wi-Fi**.
+- **Filter by Adapter**: Filter bandwidth totals dynamically for **All** or any individual network interface discovered in the month's records (such as **Ethernet** or **Wi-Fi**).
 - **Day Detail Breakdown**: Click on any calendar day to inspect per-adapter upload and download volumes.
 - **Windows Network Usage Import**: Backfill historical usage from Windows SRUM using date presets (`Last 7 Days`, `Last 14 Days`, `Last 30 Days`) or custom `From` / `To` date pickers.
 - **Traffic Database (.dat format) Import**: Import external plaintext `.dat` backup logs into the database.

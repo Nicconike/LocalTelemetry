@@ -79,7 +79,7 @@ internal static class Program
                 catch (ArgumentException) { NotifierLog.Warn("Parent process not found (already exited)"); }
                 catch (OperationCanceledException)
                 {
-                    // Expected when shutdown is initiated elsewhere
+                    NotifierLog.Debug("Parent process exit wait cancelled");
                 }
             },
             shutdownCts), shutdownCts.Token);

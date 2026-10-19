@@ -4,66 +4,88 @@
 
 <p align="center">
     <a href="https://github.com/Nicconike/LocalTelemetry/actions/workflows/ci.yml">
-        <img src="https://img.shields.io/github/actions/workflow/status/Nicconike/LocalTelemetry/ci.yml?logo=githubactions&logoColor=white&labelColor=101318&label=CI" alt="CI" />
+        <img src="https://img.shields.io/github/actions/workflow/status/Nicconike/LocalTelemetry/ci.yml?logo=githubactions&logoColor=white&labelColor=101318&label=CI"
+            alt="CI" />
     </a>
     <a href="https://github.com/Nicconike/LocalTelemetry/actions/workflows/release.yml">
-        <img src="https://img.shields.io/github/actions/workflow/status/Nicconike/LocalTelemetry/release.yml?logo=githubactions&logoColor=white&labelColor=101318&label=Release" alt="Release" />
+        <img src="https://img.shields.io/github/actions/workflow/status/Nicconike/LocalTelemetry/release.yml?logo=githubactions&logoColor=white&labelColor=101318&label=Release"
+            alt="Release" />
     </a>
     <a href="https://github.com/Nicconike/LocalTelemetry/actions/workflows/docs.yml">
-        <img src="https://img.shields.io/github/actions/workflow/status/Nicconike/LocalTelemetry/docs.yml?logo=githubactions&logoColor=white&labelColor=101318&label=Deploy%20Docs" alt="Deploy Docs" />
+        <img src="https://img.shields.io/github/actions/workflow/status/Nicconike/LocalTelemetry/docs.yml?logo=githubactions&logoColor=white&labelColor=101318&label=Deploy%20Docs"
+            alt="Deploy Docs" />
     </a>
     <a href="https://sonarcloud.io/summary/new_code?id=LocalTelemetry">
-        <img src="https://img.shields.io/sonar/quality_gate/LocalTelemetry?server=https%3A%2F%2Fsonarcloud.io&logo=sonarqubecloud&logoColor=F3702A&labelColor=101318&label=SonarCloud" alt="Quality gate status" />
+        <img src="https://img.shields.io/sonar/quality_gate/LocalTelemetry?server=https%3A%2F%2Fsonarcloud.io&logo=sonarqubecloud&logoColor=F3702A&labelColor=101318&label=SonarCloud"
+            alt="Quality gate status" />
     </a>
     <a href="https://codecov.io/gh/Nicconike/LocalTelemetry">
-        <img src="https://img.shields.io/codecov/c/github/Nicconike/LocalTelemetry?token=OQ25T5D97Q&logo=codecov&logoColor=F01F7A&labelColor=101318&label=Codecov" alt="codecov" />
+        <img src="https://img.shields.io/codecov/c/github/Nicconike/LocalTelemetry?token=OQ25T5D97Q&logo=codecov&logoColor=F01F7A&labelColor=101318&label=Codecov"
+            alt="codecov" />
     </a>
 </p>
 
 <p align="center">
     <a href="https://github.com/Nicconike/LocalTelemetry/releases">
-        <img src="https://img.shields.io/github/v/release/nicconike/LocalTelemetry?include_prereleases&sort=semver&logo=github&logoColor=white&label=Release&color=0DBCBF&labelColor=101318" alt="GitHub Release" />
+        <img src="https://img.shields.io/github/v/release/nicconike/LocalTelemetry?include_prereleases&sort=semver&logo=github&logoColor=white&label=Release&color=0DBCBF&labelColor=101318"
+            alt="GitHub Release" />
     </a>
     <a href="https://github.com/Nicconike/LocalTelemetry/releases">
-        <img src="https://img.shields.io/github/downloads/nicconike/LocalTelemetry/total?logo=github&logoColor=white&color=0DBCBF&labelColor=101318&label=Downloads" alt="GitHub Downloads" />
+        <img src="https://img.shields.io/github/downloads/nicconike/LocalTelemetry/total?logo=github&logoColor=white&color=0DBCBF&labelColor=101318&label=Downloads"
+            alt="GitHub Downloads" />
     </a>
 </p>
 
 <p align="center">
     <a href="https://github.com/Nicconike/LocalTelemetry">
-        <img src="https://img.shields.io/badge/platform-Windows%20x64-0DBCBF?logo=data:image/svg%2Bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI%2BPHBhdGggZmlsbD0iIzAwNzhENiIgZD0iTTAgMy40NDkgOS43NSAyLjF2OS40NTFIMG0xMC45NDktOS42MDJMMjQgMHYxMS40SDEwLjk0OW0wIDkuNjAyTDI0IDIxLjc1VjI0SDEwLjk0OU0wIDEyLjZoOS43NXY5LjQ1MUwwIDIwLjY5OSIvPjwvc3ZnPg==&labelColor=101318" alt="Platform" />
+        <img src="https://img.shields.io/badge/platform-Windows%20x64-0DBCBF?logo=data:image/svg%2Bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI%2BPHBhdGggZmlsbD0iIzAwNzhENiIgZD0iTTAgMy40NDkgOS43NSAyLjF2OS40NTFIMG0xMC45NDktOS42MDJMMjQgMHYxMS40SDEwLjk0OW0wIDkuNjAyTDI0IDIxLjc1VjI0SDEwLjk0OU0wIDEyLjZoOS43NXY5LjQ1MUwwIDIwLjY5OSIvPjwvc3ZnPg==&labelColor=101318"
+            alt="Platform" />
     </a>
     <a href="https://dotnet.microsoft.com/">
-        <img src="https://img.shields.io/badge/.NET-10.0-0DBCBF?logo=dotnet&logoColor=white&labelColor=101318" alt=".NET 10" />
+        <img src="https://img.shields.io/badge/.NET-10.0-0DBCBF?logo=dotnet&logoColor=white&labelColor=101318"
+            alt=".NET 10" />
     </a>
     <a href="https://svelte.dev/">
-        <img src="https://img.shields.io/badge/Frontend-Svelte%205-0DBCBF?logo=svelte&logoColor=FF3E00&labelColor=101318" alt="Svelte 5" />
+        <img src="https://img.shields.io/badge/Frontend-Svelte%205-0DBCBF?logo=svelte&logoColor=FF3E00&labelColor=101318"
+            alt="Svelte 5" />
     </a>
 </p>
 
 <p align="center">
     <a href="https://www.bestpractices.dev/projects/13911">
-        <img src="https://img.shields.io/cii/level/13911?labelColor=101318&label=OpenSSF%20Best%20Practices" alt="OpenSSF Best Practices" />
+        <img src="https://img.shields.io/cii/level/13911?labelColor=101318&label=OpenSSF%20Best%20Practices"
+            alt="OpenSSF Best Practices" />
     </a>
     <a href="https://scorecard.dev/viewer/?uri=github.com/Nicconike/LocalTelemetry">
-        <img src="https://img.shields.io/ossf-scorecard/github.com/Nicconike/LocalTelemetry?labelColor=101318&label=Scorecard" alt="OpenSSF Scorecard" />
+        <img src="https://img.shields.io/ossf-scorecard/github.com/Nicconike/LocalTelemetry?labelColor=101318&label=Scorecard"
+            alt="OpenSSF Scorecard" />
     </a>
 </p>
 
 <p align="center">
     <a href="https://discord.gg/M2QevSgW3S">
-        <img src="https://img.shields.io/badge/Chat_on-Discord-0DBCBF?logo=discord&logoColor=5865F2&labelColor=101318" alt="Discord" />
+        <img src="https://img.shields.io/badge/Chat_on-Discord-0DBCBF?logo=discord&logoColor=5865F2&labelColor=101318"
+            alt="Discord" />
+    </a>
+    <a href="https://alternativeto.net/software/localtelemetry/about/?utm_source=badge&utm_medium=referral"
+        target="_blank">
+        <img src="https://img.shields.io/badge/Listed_on-AlternativeTo-0DBCBF?logo=alternativeto&logoColor=white&labelColor=101318"
+            alt="AlternativeTo" />
     </a>
     <a href="https://github.com/Nicconike/LocalTelemetry">
-        <img src="https://img.shields.io/github/license/nicconike/localtelemetry?logo=github&logoColor=white&color=0DBCBF&labelColor=101318" alt="GitHub License" />
+        <img src="https://img.shields.io/github/license/nicconike/localtelemetry?logo=github&logoColor=white&color=0DBCBF&labelColor=101318"
+            alt="GitHub License" />
     </a>
-    <a href="https://wakatime.com/badge/user/018e538b-3f55-4e8e-95fa-6c3225418eed/project/4a017698-b6e1-4859-a4f2-b5379b9a36ef">
-        <img src="https://wakatime.com/badge/user/018e538b-3f55-4e8e-95fa-6c3225418eed/project/4a017698-b6e1-4859-a4f2-b5379b9a36ef.svg?color=0DBCBF&label_color=101318" alt="wakatime" />
+    <a
+        href="https://wakatime.com/badge/user/018e538b-3f55-4e8e-95fa-6c3225418eed/project/4a017698-b6e1-4859-a4f2-b5379b9a36ef">
+        <img src="https://wakatime.com/badge/user/018e538b-3f55-4e8e-95fa-6c3225418eed/project/4a017698-b6e1-4859-a4f2-b5379b9a36ef.svg?color=0DBCBF&label_color=101318"
+            alt="wakatime" />
     </a>
 </p>
 
 <p align="center">
-    <a href="https://nicconike.github.io/LocalTelemetry/"><strong>Explore the Official Documentation & Guides »</strong></a>
+    <a href="https://nicconike.github.io/LocalTelemetry/"><strong>Explore the Official Documentation & Guides
+            »</strong></a>
     <br />
     <br />
     <a href="https://nicconike.github.io/LocalTelemetry/user-guide/quickstart">Quickstart Guide</a>
@@ -119,35 +141,28 @@
 >
 > **Administrator Privileges**: LocalTelemetry requires Administrator privileges to read low-level hardware sensors (PawnIO driver for CPU MSR/SMU registers and disk IOCTLs). Manual launches show a standard Windows UAC prompt. Enabling **Start with Windows** creates an elevated Windows Task Scheduler task that starts the application at boot without prompts.
 
-### Option 2: Chocolatey
+### Option 2: Windows Package Manager (WinGet)
 
-Install via [Chocolatey](https://community.chocolatey.org/packages/localtelemetry):
+Install via [WinGet](https://learn.microsoft.com/en-us/windows/package-manager/winget/):
 
 ```powershell
-choco install localtelemetry
+winget install --id Nicconike.LocalTelemetry
 ```
 
-For pre-release versions (Release Candidates and Beta builds):
+### Option 3: Scoop Package Manager (Direct Repository Bucket)
+
+If you prefer installing via CLI without manually downloading executable installers or ZIP files, install directly from this repository via [Scoop](https://scoop.sh/):
 
 ```powershell
-choco install localtelemetry --pre
-```
-
-### Option 3: Scoop
-
-Install via [Scoop](https://scoop.sh/):
-
-```powershell
-# Standard install (if the official extras bucket is enabled)
-scoop install localtelemetry
-
-# First-time Scoop install (if extras is not yet added)
-scoop bucket add extras
-scoop install localtelemetry
-
-# Direct install from the project-hosted repository bucket
+# Add this repository as a bucket and install
 scoop bucket add localtelemetry https://github.com/Nicconike/LocalTelemetry
 scoop install localtelemetry
+```
+
+To update LocalTelemetry to the latest release at any time:
+
+```powershell
+scoop update localtelemetry
 ```
 
 ### Option 4: Portable ZIP
@@ -231,6 +246,23 @@ Set warning limits for hardware metrics (for example, CPU at 90°C). When values
 - 🆘 **Support Guidelines**: Review [**SUPPORT.md**](.github/SUPPORT.md) for troubleshooting steps.
 - 🔒 **Security Policy**: Report security vulnerabilities through [**SECURITY.md**](.github/SECURITY.md).
 - 🛠️ **Contributing**: Read [**CONTRIBUTING.md**](.github/CONTRIBUTING.md) for coding and pull request guidelines.
+
+---
+
+## Support the Project
+
+If LocalTelemetry improves your daily desktop experience, consider supporting the project:
+
+- ⭐ **Star the Repository**: Star [**LocalTelemetry on GitHub**](https://github.com/Nicconike/LocalTelemetry) to help others discover it.
+- 💙 **Like on AlternativeTo**: Upvote and recommend [**LocalTelemetry on AlternativeTo**](https://alternativeto.net/software/localtelemetry/about/?utm_source=badge&utm_medium=referral).
+- 💬 **Join the Discord Community**: Chat with the developer and fellow users on [**Discord**](https://discord.gg/M2QevSgW3S).
+- 📢 **Spread the Word**: Share LocalTelemetry with friends, colleagues, or PC enthusiast forums.
+
+<p align="center">
+    <a href="https://alternativeto.net/software/localtelemetry/about/?utm_source=badge&utm_medium=referral" target="_blank">
+        <img src="https://alternativeto.net/static/badges/badge-compact-color.svg" alt="LocalTelemetry | AlternativeTo" width="171" height="55" />
+    </a>
+</p>
 
 ---
 

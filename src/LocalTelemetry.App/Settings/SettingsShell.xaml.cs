@@ -118,7 +118,7 @@ public sealed partial class SettingsShell : Window
         {
             if (_webViewReady && WebView?.CoreWebView2 is not null)
             {
-                try { WebView.CoreWebView2.ExecuteScriptAsync("try{document.activeElement?.blur()}catch(e){}"); }
+                try { WebView.CoreWebView2.ExecuteScriptAsync("try{document.activeElement?.blur();}catch(e){console.warn('WebView2 blur failed',e);}"); }
                 catch (Exception ex) { Log.Error(ex, "WebView2 blur script failed after window move"); }
             }
         };
@@ -153,12 +153,12 @@ public sealed partial class SettingsShell : Window
                     double cpuPct = 0;
                     if (timeDelta.TotalMilliseconds > 0)
                     {
-                        cpuPct = (cpuDelta.TotalMilliseconds / timeDelta.TotalMilliseconds) * 100.0 / Environment.ProcessorCount;
+                        cpuPct = cpuDelta.TotalMilliseconds / timeDelta.TotalMilliseconds * 100.0 / Environment.ProcessorCount;
                     }
 
                     WindowTitleText.Text = $"LocalTelemetry ({cpuPct:0.0}% CPU)";
                 }
-                catch (Exception ex) { Debug.WriteLine("Usage update failed: " + ex.Message); }
+                catch (Exception ex) { Log.Warn(ex, "App usage title update failed"); }
             };
             _appUsageTimer.Start();
         }
@@ -180,7 +180,11 @@ public sealed partial class SettingsShell : Window
                 ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LocalTelemetry", "webview2_data")
                 : Path.Combine(exeDir, "webview2_data");
 
-            var envOptions = new CoreWebView2EnvironmentOptions { Language = "en-GB" };
+            var envOptions = new CoreWebView2EnvironmentOptions
+            {
+                Language = "en-GB",
+                AdditionalBrowserArguments = "--disable-features=EyeDropper --force-dark-mode",
+            };
             CoreWebView2Environment env =
                 await CoreWebView2Environment.CreateAsync(
                     browserExecutableFolder: null,
@@ -188,10 +192,15 @@ public sealed partial class SettingsShell : Window
                     options: envOptions);
 
             await WebView.EnsureCoreWebView2Async(env);
+            WebView.CoreWebView2.Profile.PreferredColorScheme = CoreWebView2PreferredColorScheme.Dark;
 
             CoreWebView2Settings wv = WebView.CoreWebView2.Settings;
             wv.IsWebMessageEnabled = true;
+#if DEBUG
+            wv.AreDevToolsEnabled = true;
+#else
             wv.AreDevToolsEnabled = false;
+#endif
             wv.AreDefaultContextMenusEnabled = false;
             wv.IsStatusBarEnabled = false;
 
@@ -238,6 +247,7 @@ public sealed partial class SettingsShell : Window
         }
         catch (Exception ex)
         {
+            Log.Error(ex, "Settings window failed to initialise WebView2");
             if (MessageBoxAction is not null)
             {
                 MessageBoxAction("LocalTelemetry - Settings Error", ex.Message);
@@ -306,11 +316,31 @@ public sealed partial class SettingsShell : Window
                 case "importDat": HandleImportJson(json); break;
                 case "importWindowsUsage": _ = HandleImportWindowsUsage(root); break;
                 case "checkForUpdates": HandleCheckForUpdatesMsg(root); break;
+                case "log": HandleFrontendLog(root); break;
                 default: break;
             }
         }
         catch (JsonException ex) { Log.Error(ex, "Failed to parse incoming web message JSON"); }
         catch (Exception ex) { Log.Error(ex, "An error occurred while handling incoming web message"); }
+    }
+
+    private static void HandleFrontendLog(JsonElement root)
+    {
+        if (!root.TryGetProperty(PayloadProp, out JsonElement payload)) return;
+        string level = payload.TryGetProperty("level", out JsonElement l) ? l.GetString() ?? "error" : "error";
+        string message = payload.TryGetProperty("message", out JsonElement m) ? m.GetString() ?? string.Empty : string.Empty;
+        string? detail = payload.TryGetProperty("detail", out JsonElement d) ? d.GetString() : null;
+
+        string fullMsg = string.IsNullOrWhiteSpace(detail) ? message : $"{message} | {detail}";
+
+        if (level.Equals("warn", StringComparison.OrdinalIgnoreCase))
+        {
+            Log.Warn(fullMsg);
+        }
+        else
+        {
+            Log.Error(fullMsg);
+        }
     }
 
     private void HandleOpenUrl(JsonElement root)
@@ -976,6 +1006,65 @@ public sealed partial class SettingsShell : Window
         ("alerts.alertnetmonthly", "alerts.netmonthlymaxgb", "Monthly network limit", " GB", false),
     ];
 
+    private static string FormatMasterAlertToggle(
+        Dictionary<string, (string OldVal, string NewVal)> map,
+        (string OldVal, string NewVal) masterToggle)
+    {
+        if (masterToggle.NewVal.Equals("false", StringComparison.OrdinalIgnoreCase))
+            return "Alerts disabled";
+
+        var enabledSummaries = new List<string>();
+        foreach (var (toggleKey, threshKey, label, unit, isLow) in AlertMetricPairs)
+        {
+            if (!map.TryGetValue(toggleKey, out var toggle) ||
+                !toggle.NewVal.Equals("true", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            string prefix = isLow ? "≤ " : "";
+            if (map.TryGetValue(threshKey, out var thresh))
+                enabledSummaries.Add($"{label} ({prefix}{thresh.NewVal}{unit})");
+            else
+                enabledSummaries.Add($"{label} enabled");
+        }
+
+        return enabledSummaries.Count > 0
+            ? $"Alerts enabled: {string.Join(", ", enabledSummaries)}"
+            : "Alerts enabled";
+    }
+
+    private static string? FormatMetricPairAlert(
+        Dictionary<string, (string OldVal, string NewVal)> map,
+        (string ToggleKey, string ThreshKey, string Label, string Unit, bool IsLow) pair,
+        HashSet<string> handledKeys)
+    {
+        var (toggleKey, threshKey, label, unit, isLow) = pair;
+        bool hasToggle = map.TryGetValue(toggleKey, out var toggle);
+        bool hasThresh = map.TryGetValue(threshKey, out var thresh);
+
+        if (!hasToggle && !hasThresh) return null;
+
+        string prefix = isLow ? "≤ " : "";
+        if (hasToggle && hasThresh)
+        {
+            handledKeys.Add(toggleKey);
+            handledKeys.Add(threshKey);
+            return toggle.NewVal.Equals("true", StringComparison.OrdinalIgnoreCase)
+                ? $"{label} alert enabled ({prefix}{thresh.NewVal}{unit})"
+                : $"{label} alert disabled";
+        }
+
+        if (hasToggle)
+        {
+            handledKeys.Add(toggleKey);
+            return $"{label} alert {ToggleStr(toggle.NewVal)}";
+        }
+
+        handledKeys.Add(threshKey);
+        return $"{label} threshold set to {prefix}{thresh.NewVal}{unit}";
+    }
+
     private static string ConsolidateAlertsDiff(List<(string Path, string OldVal, string NewVal)> alertChanges)
     {
         var map = alertChanges.ToDictionary(
@@ -983,62 +1072,16 @@ public sealed partial class SettingsShell : Window
             c => (OldVal: c.OldVal.Trim('"').Trim(), NewVal: c.NewVal.Trim('"').Trim()));
 
         if (map.TryGetValue("alerts.enabled", out var masterToggle))
-        {
-            if (masterToggle.NewVal.Equals("false", StringComparison.OrdinalIgnoreCase))
-                return "Alerts disabled";
-
-            var enabledSummaries = new List<string>();
-            foreach (var (toggleKey, threshKey, label, unit, isLow) in AlertMetricPairs)
-            {
-                if (map.TryGetValue(toggleKey, out var toggle) && toggle.NewVal.Equals("true", StringComparison.OrdinalIgnoreCase))
-                {
-                    string prefix = isLow ? "≤ " : "";
-                    if (map.TryGetValue(threshKey, out var thresh))
-                        enabledSummaries.Add($"{label} ({prefix}{thresh.NewVal}{unit})");
-                    else
-                        enabledSummaries.Add($"{label} enabled");
-                }
-            }
-
-            if (enabledSummaries.Count > 0)
-                return $"Alerts enabled: {string.Join(", ", enabledSummaries)}";
-
-            return "Alerts enabled";
-        }
+            return FormatMasterAlertToggle(map, masterToggle);
 
         var formattedItems = new List<string>();
         var handledKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var (toggleKey, threshKey, label, unit, isLow) in AlertMetricPairs)
+        foreach (var pair in AlertMetricPairs)
         {
-            bool hasToggle = map.TryGetValue(toggleKey, out var toggle);
-            bool hasThresh = map.TryGetValue(threshKey, out var thresh);
-
-            if (hasToggle && hasThresh)
-            {
-                handledKeys.Add(toggleKey);
-                handledKeys.Add(threshKey);
-                if (toggle.NewVal.Equals("true", StringComparison.OrdinalIgnoreCase))
-                {
-                    string prefix = isLow ? "≤ " : "";
-                    formattedItems.Add($"{label} alert enabled ({prefix}{thresh.NewVal}{unit})");
-                }
-                else
-                {
-                    formattedItems.Add($"{label} alert disabled");
-                }
-            }
-            else if (hasToggle)
-            {
-                handledKeys.Add(toggleKey);
-                formattedItems.Add($"{label} alert {ToggleStr(toggle.NewVal)}");
-            }
-            else if (hasThresh)
-            {
-                handledKeys.Add(threshKey);
-                string prefix = isLow ? "≤ " : "";
-                formattedItems.Add($"{label} threshold set to {prefix}{thresh.NewVal}{unit}");
-            }
+            string? item = FormatMetricPairAlert(map, pair, handledKeys);
+            if (item is not null)
+                formattedItems.Add(item);
         }
 
         foreach (var change in alertChanges)

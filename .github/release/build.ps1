@@ -48,35 +48,56 @@ Invoke-WebRequest -Uri $pawnUrl -OutFile "./publish/PawnIO_setup.exe"
 
 # 4. Locate ISCC.exe and Compile Inno Setup Windows Installer
 Write-Host "Compiling Inno Setup Windows installer..."
-$possiblePaths = @(
+$inno7Paths = @(
     "C:\Program Files\Inno Setup 7\ISCC.exe",
-    "C:\Program Files (x86)\Inno Setup 7\ISCC.exe",
-    "C:\Program Files\Inno Setup 6\ISCC.exe",
-    "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+    "C:\Program Files (x86)\Inno Setup 7\ISCC.exe"
 )
-$iscc = "iscc"
-foreach ($p in $possiblePaths) {
+$iscc = $null
+foreach ($p in $inno7Paths) {
     if (Test-Path $p) {
         $iscc = $p
         break
     }
 }
-if ($iscc -eq "iscc" -and -not (Get-Command iscc -ErrorAction SilentlyContinue)) {
+
+if (-not $iscc) {
+    Write-Host "Inno Setup 7 not found. Installing JRSoftware.InnoSetup.7 via winget..."
     winget install --id JRSoftware.InnoSetup.7 --exact --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
-    foreach ($p in $possiblePaths) {
+    foreach ($p in $inno7Paths) {
         if (Test-Path $p) {
             $iscc = $p
             break
         }
     }
-    if ($iscc -eq "iscc") {
-        $found = Get-ChildItem -Path "C:\Program Files*" -Filter "ISCC.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $iscc) {
+        $found = Get-ChildItem -Path "C:\Program Files*\Inno Setup 7" -Filter "ISCC.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($found) { $iscc = $found.FullName }
     }
 }
-if (-not (Test-Path $iscc) -and -not (Get-Command $iscc -ErrorAction SilentlyContinue)) {
+
+if (-not $iscc) {
+    Write-Warning "Inno Setup 7 not available; falling back to secondary paths..."
+    $fallbackPaths = @(
+        "C:\Program Files\Inno Setup 6\ISCC.exe",
+        "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+    )
+    foreach ($p in $fallbackPaths) {
+        if (Test-Path $p) {
+            $iscc = $p
+            break
+        }
+    }
+    if (-not $iscc) {
+        $cmd = Get-Command iscc -ErrorAction SilentlyContinue
+        if ($cmd) { $iscc = $cmd.Source }
+    }
+}
+
+if (-not $iscc -or -not (Test-Path $iscc)) {
     throw "ISCC.exe compiler not found on system."
 }
+
+Write-Host "Using Inno Setup compiler: $iscc"
 
 & $iscc /DAppVersion=$Version /DAppVersionInfoVersion=$numVer setup.iss
 
@@ -93,6 +114,8 @@ $zipHash = ($hashes | Where-Object { $_.Path -like "*LocalTelemetry-win-x64.zip"
 if ($env:GITHUB_ENV) {
     "SETUP_HASH=$setupHash" | Out-File -FilePath $env:GITHUB_ENV -Append
     "ZIP_HASH=$zipHash" | Out-File -FilePath $env:GITHUB_ENV -Append
+    "RELEASE_VERSION=$Version" | Out-File -FilePath $env:GITHUB_ENV -Append
+    "RELEASE_TAG=$actualTag" | Out-File -FilePath $env:GITHUB_ENV -Append
 }
 
 # 6. Update Scoop Bucket Manifest
@@ -100,43 +123,48 @@ Write-Host "Updating Scoop bucket manifest..."
 $manifestFile = "bucket/localtelemetry.json"
 if (Test-Path $manifestFile) {
     $zipUrl = "https://github.com/$repo/releases/download/$actualTag/LocalTelemetry-win-x64.zip"
-    $manifest = Get-Content $manifestFile -Raw | ConvertFrom-Json
-    $manifest.version = $Version
-    $manifest.architecture.'64bit'.url = $zipUrl
-    $manifest.architecture.'64bit'.hash = $zipHash
-    $manifest | ConvertTo-Json -Depth 10 | Set-Content $manifestFile -Encoding utf8
+    $node = [System.Text.Json.Nodes.JsonNode]::Parse((Get-Content $manifestFile -Raw))
+    $node["version"] = $Version
+    $node["architecture"]["64bit"]["url"] = $zipUrl
+    $node["architecture"]["64bit"]["hash"] = $zipHash
+    $jsonOptions = [System.Text.Json.JsonSerializerOptions]::new()
+    $jsonOptions.WriteIndented = $true
+    $jsonOptions.IndentSize = 4
+    $node.ToJsonString($jsonOptions) | Set-Content $manifestFile -Encoding utf8
     Write-Host "Updated $manifestFile with version $Version."
 }
 else {
     Write-Warning "Manifest file $manifestFile not found."
 }
 
-# 7. Update Chocolatey Package Specifications and Pack
-Write-Host "Updating Chocolatey package specifications..."
-$nuspec = "packaging/chocolatey/localtelemetry.nuspec"
-if (Test-Path $nuspec) {
+# 7. Update WinGet Package Manifest
+Write-Host "Updating WinGet package manifest..."
+$wingetManifest = "packaging/winget/localtelemetry.yaml"
+if (Test-Path $wingetManifest) {
     $setupUrl = "https://github.com/$repo/releases/download/$actualTag/LocalTelemetrySetup.exe"
-    (Get-Content $nuspec -Raw) -replace '<version>.*</version>', "<version>$Version</version>" | Set-Content $nuspec -Encoding utf8
-
-    $installScript = "packaging/chocolatey/tools/chocolateyinstall.ps1"
-    if (Test-Path $installScript) {
-        (Get-Content $installScript -Raw) `
-            -replace '(?m)^\$url\s*=.*$', "`$url = '$setupUrl'" `
-            -replace '(?m)^\$checksum\s*=.*$', "`$checksum = '$setupHash'" |
-            Set-Content $installScript -Encoding utf8
-    }
-
-    $verificationFile = "packaging/chocolatey/tools/VERIFICATION.txt"
-    if (Test-Path $verificationFile) {
-        (Get-Content $verificationFile -Raw) `
-            -replace '(?m)(^The installer has been downloaded from the official GitHub Release:\r?\n).*$', "`${1}$setupUrl" `
-            -replace 'releases/download/[^/]+/checksums\.txt', "releases/download/$actualTag/checksums.txt" `
-            -replace '(?m)(^Checksum \(SHA256\):\r?\n).*$', "`${1}$setupHash" |
-            Set-Content $verificationFile -Encoding utf8
-    }
+    (Get-Content $wingetManifest -Raw) `
+        -replace '(?m)^PackageVersion:\s*.*$', "PackageVersion: $Version" `
+        -replace '(?m)^\s*InstallerUrl:\s*.*$', "      InstallerUrl: $setupUrl" `
+        -replace '(?m)^\s*InstallerSha256:\s*.*$', "      InstallerSha256: `"$setupHash`"" |
+        Set-Content $wingetManifest -Encoding utf8
+    Write-Host "Updated $wingetManifest with version $Version."
 }
 else {
-    Write-Warning "Nuspec file $nuspec not found."
+    Write-Warning "WinGet manifest $wingetManifest not found."
+}
+
+# 8. Synchronize Package Versions (Docs and Frontend UI)
+Write-Host "Synchronizing package.json versions..."
+$packageFiles = @(
+    "docs/package.json",
+    "src/LocalTelemetry.App/Settings/wwwroot/package.json"
+)
+foreach ($pkgFile in $packageFiles) {
+    if (Test-Path $pkgFile) {
+        (Get-Content $pkgFile -Raw) -replace '(?m)^(\s*"version":\s*")[^"]*(")', "`${1}$Version`${2}" |
+            Set-Content $pkgFile -Encoding utf8
+        Write-Host "Updated $pkgFile with version $Version."
+    }
 }
 
 Write-Host "Build and packaging complete for version $Version."

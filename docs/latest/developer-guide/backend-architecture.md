@@ -116,7 +116,7 @@ flowchart TD
 
 - Implemented in `HardwareLifecycleManager.cs`.
 - Listens to native Windows system events (`SystemEvents`) and network availability (`NetworkChange`):
-  - **Display & Graphics Resets (`DisplaySettingsChanged` / `WM_DISPLAYCHANGE`):** Debounced (1500 ms) and triggers dynamic refresh of WDDM GPU adapter state.
+  - **Display & Graphics Resets (`DisplaySettingsChanged` / `WM_DISPLAYCHANGE`):** Debounced (3000 ms) and triggers dynamic refresh of WDDM GPU adapter state.
   - **System Sleep (`PowerModes.Suspend`):** Immediately pauses the background polling timer to eliminate wakeups during standby.
   - **System Resume (`PowerModes.Resume`):** Waits 3 seconds for hardware warm-up, executes `ResetGpuMonitors()` across NVML, WDDM, ADL, and IGCL backends, re-initializes network adapter counters, and resumes polling.
   - **Network Topology Changes (`NetworkAddressChanged` / `NetworkAvailabilityChanged`):** Automatically detects adapter connections, disconnections, and IP address renewals.
@@ -126,7 +126,7 @@ flowchart TD
 
 - Implemented in `TestEnvironment.cs`.
 - Detects whether code is executing inside an automated test harness (xUnit, Vitest, or CI runners).
-- Provides `SuppressHardwarePolling` to prevent attempts to initialize kernel drivers or physical sensors in virtualized build pipelines.
+- Provides `IsTestHost()` to prevent driver downloads, kernel service mutations, and UAC elevation prompts during automated test runs.
 
 ### :database: MetricSnapshot & TelemetrySnapshot (State Models)
 

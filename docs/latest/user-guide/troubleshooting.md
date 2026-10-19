@@ -39,7 +39,7 @@ Yes. LocalTelemetry is fully compatible with both **Windows 10** (v2004+ / build
 
 ### :laptop-minimal-check: Why does telemetry take ~3 seconds to update after waking from sleep?
 
-LocalTelemetry includes an automatic hardware stabilization delay. When your computer resumes from sleep or hibernation, `HardwareLifecycleManager` waits 3 seconds before querying hardware sensors. This intentional delay allows PCIe buses, graphics drivers, and network adapters to reach full operational power states, preventing crashes and driver reset errors.
+LocalTelemetry includes an automatic hardware stabilization delay. When your computer resumes from sleep or hibernation, `HardwareMonitor` waits 3 seconds before querying hardware sensors. This intentional delay allows PCIe buses, graphics drivers, and network adapters to reach full operational power states, preventing crashes and driver reset errors.
 
 ---
 

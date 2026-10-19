@@ -121,11 +121,27 @@ const developerGuideSidebar = [
     }
 ];
 
+const aboutSidebar = [
+    {
+        text: 'About LocalTelemetry',
+        items: [
+            { text: 'Why I Built LocalTelemetry', link: '' }
+        ]
+    }
+];
+
 // Expand the relative sidebar definitions into one sidebar per docs version
 function buildSidebar(): DefaultTheme.Sidebar {
     const sidebar: DefaultTheme.Sidebar = {};
     for (const { link: versionBase } of versions) {
         const base = versionBase === '/' ? '/' : versionBase;
+        sidebar[`${base}about/`] = aboutSidebar.map((group) => ({
+            ...group,
+            items: group.items.map(({ text, link }) => ({
+                text,
+                link: `${base}about/${link}`
+            }))
+        }));
         sidebar[`${base}user-guide/`] = userGuideSidebar.map((group) => ({
             ...group,
             items: group.items.map(({ text, link }) => ({
@@ -165,6 +181,7 @@ export default withMermaid(
 
         rewrites: {
             'latest/index.md': 'index.md',
+            'latest/about/:path': 'about/:path',
             'latest/user-guide/:path': 'user-guide/:path',
             'latest/developer-guide/:path': 'developer-guide/:path',
             'latest/developer-guide/reference/:path': 'developer-guide/reference/:path'
@@ -179,7 +196,11 @@ export default withMermaid(
             flowchart: {
                 useMaxWidth: false,
                 htmlLabels: true,
-                padding: 16
+                padding: 16,
+                subGraphTitleMargin: {
+                    top: 12,
+                    bottom: 20
+                }
             },
             sequence: {
                 useMaxWidth: false,
@@ -212,6 +233,11 @@ export default withMermaid(
                     text: 'Developer Guide',
                     link: '/developer-guide/',
                     activeMatch: String.raw`^/(?:v\d[^/]+/)?developer-guide`
+                },
+                {
+                    text: 'About',
+                    link: '/about/',
+                    activeMatch: String.raw`^/(?:v\d[^/]+/)?about`
                 },
                 {
                     component: 'VersionNavDropdown'

@@ -475,8 +475,10 @@
                                 <input
                                     type="color"
                                     value={getGroupColor(grp.key, grp.ids)}
-                                    onchange={(e) => onGroupColorChange(e, grp)}
                                     class="color-picker"
+                                    onchange={(e) => onGroupColorChange(e, grp)}
+                                    title="Choose color for All {grp.group}"
+                                    aria-label="Choose color for All {grp.group}"
                                 />
                                 <input
                                     type="text"
@@ -504,8 +506,10 @@
                                     <input
                                         type="color"
                                         value={color}
-                                        onchange={(e) => onColorChange(e, id)}
                                         class="color-picker"
+                                        onchange={(e) => onColorChange(e, id)}
+                                        title="Choose color for {label}"
+                                        aria-label="Choose color for {label}"
                                     />
                                     <input
                                         type="text"
@@ -554,8 +558,10 @@
                                 <input
                                     type="color"
                                     value={getGroupColor(grp.key, grp.ids)}
-                                    onchange={(e) => onGroupColorChange(e, grp)}
                                     class="color-picker"
+                                    onchange={(e) => onGroupColorChange(e, grp)}
+                                    title="Choose color for All {grp.group}"
+                                    aria-label="Choose color for All {grp.group}"
                                 />
                                 <input
                                     type="text"
@@ -583,8 +589,10 @@
                                     <input
                                         type="color"
                                         value={color}
-                                        onchange={(e) => onColorChange(e, id)}
                                         class="color-picker"
+                                        onchange={(e) => onColorChange(e, id)}
+                                        title="Choose color for {label}"
+                                        aria-label="Choose color for {label}"
                                     />
                                     <input
                                         type="text"
@@ -636,12 +644,14 @@
                                         "disk",
                                         diskMetrics.map((d) => d.id),
                                     )}
+                                    class="color-picker"
                                     onchange={(e) =>
                                         onGroupColorChange(e, {
                                             key: "disk",
                                             ids: diskMetrics.map((d) => d.id),
                                         })}
-                                    class="color-picker"
+                                    title="Choose color for All Disks"
+                                    aria-label="Choose color for All Disks"
                                 />
                                 <input
                                     type="text"
@@ -669,8 +679,10 @@
                                     <input
                                         type="color"
                                         value={color}
-                                        onchange={(e) => onColorChange(e, id)}
                                         class="color-picker"
+                                        onchange={(e) => onColorChange(e, id)}
+                                        title="Choose color for {label}"
+                                        aria-label="Choose color for {label}"
                                     />
                                     <input
                                         type="text"
@@ -822,11 +834,17 @@
     }
     .reset-btn.small {
         margin-top: 0;
-        padding: 0 6px;
-        font-size: 16px;
-        line-height: 28px;
-        min-width: 28px;
+        padding: 0;
+        width: 28px;
+        height: 28px;
+        line-height: 26px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        border-radius: var(--radius-md);
         text-align: center;
+        box-sizing: border-box;
     }
     .reset-btn.group {
         margin-top: 0;
@@ -844,21 +862,26 @@
     }
 
     .color-columns {
-        display: flex;
-        flex-wrap: wrap;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
         gap: var(--space-6);
     }
 
     .color-column {
-        flex: 1;
-        min-width: min(100%, 240px);
         display: grid;
-        grid-template-columns: auto 36px 60px 28px;
+        grid-template-columns: 1fr 36px 72px 28px;
         gap: var(--space-1) var(--space-3);
         align-items: center;
     }
     .color-column .section-subtitle {
         grid-column: 1 / -1;
+        margin-top: var(--space-4);
+        margin-bottom: var(--space-2);
+        display: flex;
+        align-items: center;
+    }
+    .color-column .section-subtitle:first-of-type {
+        margin-top: 0;
     }
     .color-column .group-color-row {
         grid-column: 1 / -1;
@@ -870,6 +893,7 @@
         margin-bottom: var(--space-1);
         border-radius: var(--radius-md);
         background: var(--color-bg-subtle, rgba(128, 128, 128, 0.08));
+        font-weight: 600;
     }
 
     .theme-toggle {
@@ -890,21 +914,40 @@
     }
 
     .color-row {
-        display: contents;
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: subgrid;
+        gap: var(--space-1) var(--space-3);
+        align-items: center;
+        padding: var(--space-1) var(--space-2);
+        border-radius: var(--radius-md);
+        transition: background var(--transition);
+    }
+    .color-row:hover {
+        background: var(--color-bg-subtle, rgba(128, 128, 128, 0.04));
     }
     .color-label {
         font-size: var(--text-sm);
         font-weight: 500;
         color: var(--color-text);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
     .color-picker {
         width: 36px;
-        height: 30px;
+        height: 28px;
         padding: 0;
         border: 1px solid var(--color-border);
         border-radius: var(--radius-md);
         cursor: pointer;
         background: none;
+        box-sizing: border-box;
+        color-scheme: inherit;
+        transition: border-color var(--transition);
+    }
+    .color-picker:hover {
+        border-color: var(--color-primary);
     }
     .color-picker::-webkit-color-swatch-wrapper {
         padding: 2px;
@@ -920,8 +963,12 @@
         background: var(--color-bg);
         border: 1px solid var(--color-border);
         border-radius: var(--radius-md);
-        padding: 2px 4px;
-        width: 60px;
+        padding: 0 4px;
+        width: 72px;
+        height: 28px;
+        line-height: 28px;
+        text-align: center;
+        box-sizing: border-box;
         min-width: 0;
         outline: none;
         transition: border-color var(--transition);
@@ -935,5 +982,7 @@
     }
     .reset-spacer {
         width: 28px;
+        height: 28px;
+        display: inline-block;
     }
 </style>

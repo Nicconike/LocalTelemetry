@@ -227,7 +227,8 @@ export type BridgeMessageType =
     | "importWindowsUsage"
     | "checkForUpdates"
     | "openFolder"
-    | "openUrl";
+    | "openUrl"
+    | "log";
 
 export type BridgeEventType =
     | "settings"

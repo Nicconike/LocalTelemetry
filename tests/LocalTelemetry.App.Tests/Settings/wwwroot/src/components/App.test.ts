@@ -10,6 +10,7 @@ function makePayload(): SettingsDto {
         runAtStartup: false,
         showSystemTrayIcon: true,
         enableFileLogging: true,
+        systemLogLevel: 'Info',
         windowTheme: 'default',
         monitoring: {
             intervalMs: 1000,

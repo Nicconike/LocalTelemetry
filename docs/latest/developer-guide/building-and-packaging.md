@@ -1,6 +1,6 @@
-# :package: Building & Packaging (Inno Setup 7, Chocolatey & Scoop)
+# :package: Building & Packaging (Inno Setup 7, WinGet & Scoop)
 
-This guide explains how to produce production builds of **LocalTelemetry**, compile application binaries, configure Inno Setup 7, generate Chocolatey and Scoop packages, and execute uninstallation scripts.
+This guide explains how to produce production builds of **LocalTelemetry**, compile application binaries, configure Inno Setup 7, generate WinGet and Scoop manifests, and execute uninstallation scripts.
 
 ## :hammer: Building Production Binaries
 
@@ -78,25 +78,29 @@ For portable installations, [`Uninstall.bat`](https://github.com/Nicconike/Local
 
 ---
 
-## :package-check: Chocolatey Packaging Specifications
+## :package-check: WinGet Packaging Specifications
 
-The repository maintains Chocolatey package manifests in `packaging/chocolatey/`:
+The repository maintains the Windows Package Manager manifest in `packaging/winget/localtelemetry.yaml`:
 
-- `localtelemetry.nuspec`: Package metadata, dependencies, license URL, and release notes.
-- `tools/chocolateyinstall.ps1`: Installs `LocalTelemetrySetup.exe` silently with `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`.
-- `tools/chocolateyuninstall.ps1`: Uninstalls `unins000.exe` cleanly using registry uninstaller detection.
+- **Package Identifier**: `Nicconike.LocalTelemetry`
+- **Installer Type**: `inno`
+- **Silent Switches**: `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-`
+- **Automated Workflow**: When a release is published via `.github/workflows/release.yml`, the workflow calculates the SHA-256 hash of `LocalTelemetrySetup.exe`, updates `packaging/winget/localtelemetry.yaml`, and submits the release to the WinGet Community Repository via Microsoft's official `wingetcreate` CLI utility.
 
 ---
 
-## :inbox-tray: Scoop Packaging Specifications
+## :inbox: Scoop Packaging Specifications
 
-The repository hosts an official Scoop bucket manifest at `bucket/localtelemetry.json`:
+The repository hosts a direct Scoop bucket manifest at `bucket/localtelemetry.json`:
 
 - **Manifest**: Specifies binary extraction for `LocalTelemetry-win-x64.zip`, start menu shortcut creation, and GitHub release tracking.
-- **Automated Workflow**: When a release is published via `.github/workflows/release.yml`, the workflow calculates the SHA-256 hash of `LocalTelemetry-win-x64.zip`, updates `bucket/localtelemetry.json`, and commits the update directly to the repository.
-- **Installation Methods**:
-  - *Standard Extras Bucket*: Users with the official Scoop `extras` bucket enabled run `scoop install localtelemetry`. If `extras` is not yet enabled, they run `scoop bucket add extras` first.
-  - *Direct Repository Bucket*: Users can also add the project bucket directly via `scoop bucket add localtelemetry https://github.com/Nicconike/LocalTelemetry` followed by `scoop install localtelemetry`.
+- **Automated Workflow**: When a release is published, `build.ps1` updates `bucket/localtelemetry.json` with the new version and SHA-256 hash, and commits the update directly to `master`.
+- **Installation**: Users install directly from this repository without requiring third-party bucket approvals:
+
+  ```powershell
+  scoop bucket add localtelemetry https://github.com/Nicconike/LocalTelemetry
+  scoop install localtelemetry
+  ```
 
 ---
 

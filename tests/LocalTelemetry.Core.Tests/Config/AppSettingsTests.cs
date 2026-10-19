@@ -19,13 +19,7 @@ public sealed class AppSettingsTests : IDisposable
 
     public void Dispose()
     {
-        try
-        {
-            if (Directory.Exists(_tempDir))
-                Directory.Delete(_tempDir, true);
-        }
-        catch (Exception) { /* Best-effort cleanup */ }
-
+        try { if (Directory.Exists(_tempDir)) Directory.Delete(_tempDir, true); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         AppSettings.InitPaths(Path.GetTempPath());
     }
 

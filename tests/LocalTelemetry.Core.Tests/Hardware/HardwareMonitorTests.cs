@@ -43,9 +43,9 @@ public class HardwareMonitorTests
         var snapshot = (TelemetrySnapshot?)method?.Invoke(monitor, null);
 
         snapshot.Should().NotBeNull();
-        snapshot!.CpuUsagePct.Should().BeGreaterThanOrEqualTo(0);
+        snapshot.CpuUsagePct.Should().BeGreaterThanOrEqualTo(0);
 
-        try { File.Delete(tempPath); } catch { }
+        try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
     }
 
     [Fact]
@@ -77,7 +77,7 @@ public class HardwareMonitorTests
         var snapshot = (TelemetrySnapshot?)method?.Invoke(monitor, null);
 
         snapshot.Should().NotBeNull();
-        snapshot!.CpuUsagePct.Should().BeGreaterThanOrEqualTo(0);
+        snapshot.CpuUsagePct.Should().BeGreaterThanOrEqualTo(0);
     }
 
     [Fact]
@@ -522,7 +522,10 @@ public class HardwareMonitorSeamTests
             InvokeFloat(m, "ReadGpuFreqMHz").Should().BeGreaterThanOrEqualTo(0f);
             InvokeFloat(m, "ReadGpuPowerW").Should().BeGreaterThanOrEqualTo(0f);
         }
-        catch { /* no NVIDIA GPU / NVML unavailable - branch not exercisable */ }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"NVML unavailable in test environment: {ex.Message}");
+        }
     }
 
     [Fact]
@@ -538,7 +541,10 @@ public class HardwareMonitorSeamTests
             SetField(m, "_wddmGpu", wddm);
             InvokeFloat(m, "ReadGpuPct").Should().BeGreaterThanOrEqualTo(0f);
         }
-        catch { /* WDDM unavailable - branch not exercisable */ }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"WDDM unavailable in test environment: {ex.Message}");
+        }
     }
 
     [Fact]
@@ -568,7 +574,7 @@ public class HardwareMonitorSeamTests
 
             first.Should().NotBeNull();
             second.Should().NotBeNull();
-            second!.CpuUsagePct.Should().BeInRange(0f, 100f);
+            second.CpuUsagePct.Should().BeInRange(0f, 100f);
             second.CpuTempPackageC.Should().BeGreaterThanOrEqualTo(0f);
             second.CpuFreqGhz.Should().BeGreaterThanOrEqualTo(0f);
             second.RamUsagePct.Should().BeInRange(0f, 100f);
@@ -578,7 +584,7 @@ public class HardwareMonitorSeamTests
         }
         finally
         {
-            try { File.Delete(temp); } catch { }
+            try { if (File.Exists(temp)) File.Delete(temp); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
 
@@ -596,7 +602,7 @@ public class HardwareMonitorSeamTests
 
         var snap = (TelemetrySnapshot?)Invoke(m, "BuildSnapshot");
         snap.Should().NotBeNull();
-        snap!.DiskReadMbps.Should().Be(0f);
+        snap.DiskReadMbps.Should().Be(0f);
         snap.DiskWriteMbps.Should().Be(0f);
     }
 
@@ -720,7 +726,7 @@ public class HardwareMonitorSeamTests
         // 1. DetectGpuVendor
         var detectMethod = typeof(HardwareMonitor).GetMethod("DetectGpuVendor", BindingFlags.NonPublic | BindingFlags.Static);
         detectMethod.Should().NotBeNull();
-        ((string?)detectMethod!.Invoke(null, ["PCI\\VEN_1002&DEV_1234", "Radeon RX 6800"])).Should().Be("AMD");
+        ((string?)detectMethod.Invoke(null, ["PCI\\VEN_1002&DEV_1234", "Radeon RX 6800"])).Should().Be("AMD");
         ((string?)detectMethod.Invoke(null, ["PCI\\VEN_8086&DEV_1234", "Intel UHD Graphics"])).Should().Be("Intel");
         ((string?)detectMethod.Invoke(null, ["PCI\\VEN_9999&DEV_1234", "Unknown Adapter"])).Should().BeNull();
 
@@ -728,7 +734,7 @@ public class HardwareMonitorSeamTests
         var isDedicatedMethod = typeof(HardwareMonitor).GetMethod("IsDedicatedAdapter", BindingFlags.NonPublic | BindingFlags.Static);
         isDedicatedMethod.Should().NotBeNull();
         object dummyDevInfo = default(NativeMethods.SpDevinfoData);
-        ((bool)isDedicatedMethod!.Invoke(null, ["Intel", "Intel Arc A770", IntPtr.Zero, dummyDevInfo])!).Should().BeTrue();
+        ((bool)isDedicatedMethod.Invoke(null, ["Intel", "Intel Arc A770", IntPtr.Zero, dummyDevInfo])!).Should().BeTrue();
         ((bool)isDedicatedMethod.Invoke(null, ["AMD", "Radeon RX 6700 XT", IntPtr.Zero, dummyDevInfo])!).Should().BeTrue();
         ((bool)isDedicatedMethod.Invoke(null, ["AMD", "Radeon PRO W6800", IntPtr.Zero, dummyDevInfo])!).Should().BeTrue();
         ((bool)isDedicatedMethod.Invoke(null, ["AMD", "Radeon VII", IntPtr.Zero, dummyDevInfo])!).Should().BeTrue();
@@ -768,12 +774,12 @@ public class HardwareMonitorSeamTests
         // 4. InitWddmGpu and fallback branch
         var initWddmMethod = typeof(HardwareMonitor).GetMethod("InitWddmGpu", BindingFlags.NonPublic | BindingFlags.Instance);
         initWddmMethod.Should().NotBeNull();
-        initWddmMethod!.Invoke(m, null);
+        initWddmMethod.Invoke(m, null);
 
         // 5. GetBatteryStateDescription
         var batteryStateMethod = typeof(HardwareMonitor).GetMethod("GetBatteryStateDescription", BindingFlags.NonPublic | BindingFlags.Static);
         batteryStateMethod.Should().NotBeNull();
-        ((string)batteryStateMethod!.Invoke(null, [true, false])!).Should().Be("charging");
+        ((string)batteryStateMethod.Invoke(null, [true, false])!).Should().Be("charging");
         ((string)batteryStateMethod.Invoke(null, [false, true])!).Should().Be("charged");
         ((string)batteryStateMethod.Invoke(null, [false, false])!).Should().Be("discharging");
     }
@@ -789,7 +795,7 @@ public class HardwareMonitorSeamTests
 
         var method = typeof(HardwareMonitor).GetMethod("OnDisplayOrDriverChanged", BindingFlags.NonPublic | BindingFlags.Instance);
         method.Should().NotBeNull();
-        var act = () => method!.Invoke(monitor, null);
+        var act = () => method.Invoke(monitor, null);
         act.Should().NotThrow();
     }
 
@@ -804,7 +810,7 @@ public class HardwareMonitorSeamTests
 
         var method = typeof(HardwareMonitor).GetMethod("OnPowerSuspended", BindingFlags.NonPublic | BindingFlags.Instance);
         method.Should().NotBeNull();
-        var act = () => method!.Invoke(monitor, null);
+        var act = () => method.Invoke(monitor, null);
         act.Should().NotThrow();
     }
 
@@ -819,7 +825,7 @@ public class HardwareMonitorSeamTests
 
         var method = typeof(HardwareMonitor).GetMethod("OnNetworkTopologyChanged", BindingFlags.NonPublic | BindingFlags.Instance);
         method.Should().NotBeNull();
-        var act = () => method!.Invoke(monitor, null);
+        var act = () => method.Invoke(monitor, null);
         act.Should().NotThrow();
     }
 
@@ -834,7 +840,7 @@ public class HardwareMonitorSeamTests
 
         var method = typeof(HardwareMonitor).GetMethod("OnDevicePnPChanged", BindingFlags.NonPublic | BindingFlags.Instance);
         method.Should().NotBeNull();
-        var act = () => method!.Invoke(monitor, null);
+        var act = () => method.Invoke(monitor, null);
         act.Should().NotThrow();
     }
 
@@ -847,12 +853,12 @@ public class HardwareMonitorSeamTests
 
         var nicField = typeof(HardwareMonitor).GetField("_nicInterface", BindingFlags.NonPublic | BindingFlags.Instance);
         nicField.Should().NotBeNull();
-        nicField!.SetValue(monitor, null);
+        nicField.SetValue(monitor, null);
 
         var method = typeof(HardwareMonitor).GetMethod("ReadNetBytes", BindingFlags.NonPublic | BindingFlags.Instance);
         method.Should().NotBeNull();
 
-        var result = ((double inB, double outB))method!.Invoke(monitor, null)!;
+        var result = ((double inB, double outB))method.Invoke(monitor, null)!;
         result.inB.Should().Be(0);
         result.outB.Should().Be(0);
     }
@@ -868,8 +874,8 @@ public class HardwareMonitorSeamTests
         method.Should().NotBeNull();
 
         // Invoking multiple times with same category shouldn't throw and throttles
-        var act1 = () => method!.Invoke(monitor, ["test_cat", "key_1", "Test error message"]);
-        var act2 = () => method!.Invoke(monitor, ["test_cat", "key_1", "Test error message 2"]);
+        var act1 = () => method.Invoke(monitor, ["test_cat", "key_1", "Test error message"]);
+        var act2 = () => method.Invoke(monitor, ["test_cat", "key_1", "Test error message 2"]);
         act1.Should().NotThrow();
         act2.Should().NotThrow();
     }
@@ -911,14 +917,14 @@ public class HardwareMonitorSeamTests
         // 1. ResetGpuMonitors with mock backends
         var resetGpuMethod = typeof(HardwareMonitor).GetMethod("ResetGpuMonitors", BindingFlags.NonPublic | BindingFlags.Instance);
         resetGpuMethod.Should().NotBeNull();
-        var actReset = () => resetGpuMethod!.Invoke(monitor, ["test reason"]);
+        var actReset = () => resetGpuMethod.Invoke(monitor, ["test reason"]);
         actReset.Should().NotThrow();
 
         // 2. ComputeBatteryRateFromCapacityDelta
         var computeRate = typeof(HardwareMonitor).GetMethod("ComputeBatteryRateFromCapacityDelta", BindingFlags.NonPublic | BindingFlags.Instance);
         computeRate.Should().NotBeNull();
         // First sample primes
-        float r1 = (float)computeRate!.Invoke(monitor, [50000L])!;
+        float r1 = (float)computeRate.Invoke(monitor, [50000L])!;
         r1.Should().Be(0f);
         // Second sample with lower capacity computes discharge rate
         float r2 = (float)computeRate.Invoke(monitor, [49000L])!;
@@ -931,7 +937,7 @@ public class HardwareMonitorSeamTests
         var readMem = typeof(HardwareMonitor).GetMethod("ReadMemory", BindingFlags.NonPublic | BindingFlags.Instance);
         readMem.Should().NotBeNull();
         object?[] memArgs = [0f, 0f, 0f];
-        readMem!.Invoke(monitor, memArgs);
+        readMem.Invoke(monitor, memArgs);
         ((float)memArgs[2]!).Should().BeGreaterThanOrEqualTo(0f);
     }
 
@@ -944,7 +950,7 @@ public class HardwareMonitorSeamTests
 
         var onResumeMethod = typeof(HardwareMonitor).GetMethod("OnPowerResumed", BindingFlags.NonPublic | BindingFlags.Instance);
         onResumeMethod.Should().NotBeNull();
-        var act = () => onResumeMethod!.Invoke(monitor, null);
+        var act = () => onResumeMethod.Invoke(monitor, null);
         act.Should().NotThrow();
     }
 
@@ -958,7 +964,7 @@ public class HardwareMonitorSeamTests
 
         var ensureNic = typeof(HardwareMonitor).GetMethod("EnsureNicCounters", BindingFlags.NonPublic | BindingFlags.Instance);
         ensureNic.Should().NotBeNull();
-        var act = () => ensureNic!.Invoke(monitor, null);
+        var act = () => ensureNic.Invoke(monitor, null);
         act.Should().NotThrow();
     }
 
@@ -1147,7 +1153,7 @@ public class HardwareMonitorSeamTests
         // 2. ExtractDiskIndex
         var extractDisk = typeof(HardwareMonitor).GetMethod("ExtractDiskIndex", BindingFlags.NonPublic | BindingFlags.Static);
         extractDisk.Should().NotBeNull();
-        ((string)extractDisk!.Invoke(null, ["0 C:"])!).Should().Be("0");
+        ((string)extractDisk.Invoke(null, ["0 C:"])!).Should().Be("0");
         ((string)extractDisk.Invoke(null, ["12 D:"])!).Should().Be("12");
         ((string)extractDisk.Invoke(null, ["_Total"])!).Should().BeEmpty();
         ((string)extractDisk.Invoke(null, [""])!).Should().BeEmpty();
@@ -1155,15 +1161,15 @@ public class HardwareMonitorSeamTests
         // 3. InitDiskType and CreatePerDiskCounters
         var initDiskType = typeof(HardwareMonitor).GetMethod("InitDiskType", BindingFlags.NonPublic | BindingFlags.Instance);
         initDiskType.Should().NotBeNull();
-        initDiskType!.Invoke(monitor, null);
+        initDiskType.Invoke(monitor, null);
 
         var createPerDisk = typeof(HardwareMonitor).GetMethod("CreatePerDiskCounters", BindingFlags.NonPublic | BindingFlags.Static);
         createPerDisk.Should().NotBeNull();
-        createPerDisk!.Invoke(null, null);
+        createPerDisk.Invoke(null, null);
 
         var initDiskCounters = typeof(HardwareMonitor).GetMethod("InitDiskCounters", BindingFlags.NonPublic | BindingFlags.Instance);
         initDiskCounters.Should().NotBeNull();
-        initDiskCounters!.Invoke(monitor, null);
+        initDiskCounters.Invoke(monitor, null);
 
         // 4. InitNvGpu, InitIntelGpu, InitWddmGpu, InitAmdGpu
         var initNv = typeof(HardwareMonitor).GetMethod("InitNvGpu", BindingFlags.NonPublic | BindingFlags.Instance);
@@ -1180,13 +1186,13 @@ public class HardwareMonitorSeamTests
         var readMem = typeof(HardwareMonitor).GetMethod("ReadMemory", BindingFlags.NonPublic | BindingFlags.Instance);
         readMem.Should().NotBeNull();
         object?[] memArgs = [0f, 0f, 0f];
-        readMem!.Invoke(monitor, memArgs);
+        readMem.Invoke(monitor, memArgs);
         ((float)memArgs[0]!).Should().BeGreaterThanOrEqualTo(0);
 
         // 6. ReadBattery
         var readBatt = typeof(HardwareMonitor).GetMethod("ReadBattery", BindingFlags.NonPublic | BindingFlags.Instance);
         readBatt.Should().NotBeNull();
-        readBatt!.Invoke(monitor, null);
+        readBatt.Invoke(monitor, null);
 
         // 7. InitRamLogging, InitBatteryLogging
         var initRam = typeof(HardwareMonitor).GetMethod("InitRamLogging", BindingFlags.NonPublic | BindingFlags.Instance);
@@ -1251,7 +1257,7 @@ public class HardwareMonitorSeamTests
         // 1. ReadCpuFreqMsr (call twice: first primes, second calculates delta)
         var mFreqMsr = typeof(HardwareMonitor).GetMethod("ReadCpuFreqMsr", BindingFlags.NonPublic | BindingFlags.Instance);
         mFreqMsr.Should().NotBeNull();
-        float freqPrimed = (float)mFreqMsr!.Invoke(monitor, null)!;
+        float freqPrimed = (float)mFreqMsr.Invoke(monitor, null)!;
         freqPrimed.Should().Be(0f);
         float freqDelta = (float)mFreqMsr.Invoke(monitor, null)!;
         freqDelta.Should().BeGreaterThanOrEqualTo(0f);
@@ -1259,13 +1265,13 @@ public class HardwareMonitorSeamTests
         // 2. ReadCpuTdp
         var mTdp = typeof(HardwareMonitor).GetMethod("ReadCpuTdp", BindingFlags.NonPublic | BindingFlags.Instance);
         mTdp.Should().NotBeNull();
-        var tdp = (uint?)mTdp!.Invoke(monitor, null);
+        var tdp = (uint?)mTdp.Invoke(monitor, null);
         tdp.Should().NotBeNull();
 
         // 3. ReadCpuPowerRapl (call twice: first primes, second calculates delta)
         var mPowerRapl = typeof(HardwareMonitor).GetMethod("ReadCpuPowerRapl", BindingFlags.NonPublic | BindingFlags.Instance);
         mPowerRapl.Should().NotBeNull();
-        float powerPrimed = (float)mPowerRapl!.Invoke(monitor, null)!;
+        float powerPrimed = (float)mPowerRapl.Invoke(monitor, null)!;
         powerPrimed.Should().Be(0f);
         float powerDelta = (float)mPowerRapl.Invoke(monitor, null)!;
         powerDelta.Should().BeGreaterThanOrEqualTo(0f);
@@ -1292,17 +1298,17 @@ public class HardwareMonitorSeamTests
 
         // 1. Unknown vendor
         fieldVendor!.SetValue(monitor, "UnknownVendor");
-        ((float)mReadTemp!.Invoke(monitor, null)!).Should().Be(0f);
+        ((float)mReadTemp.Invoke(monitor, null)!).Should().Be(0f);
 
         // 2. Intel vendor with null reader
         fieldVendor.SetValue(monitor, "Intel");
         fieldIntelMsr!.SetValue(monitor, null);
-        ((float)mIntelTemp!.Invoke(monitor, null)!).Should().Be(0f);
+        ((float)mIntelTemp.Invoke(monitor, null)!).Should().Be(0f);
 
         // 3. AMD vendor with null reader
         fieldVendor.SetValue(monitor, "AMD");
         fieldAmdMsr!.SetValue(monitor, null);
-        ((float)mAmdTemp!.Invoke(monitor, null)!).Should().Be(0f);
+        ((float)mAmdTemp.Invoke(monitor, null)!).Should().Be(0f);
     }
 
     [Fact]
@@ -1317,7 +1323,7 @@ public class HardwareMonitorSeamTests
 
         // 1. WDDM source configured
         cfg.Monitoring.GpuUsageSource = "wddm";
-        float pctWddm = (float)mReadGpuPct!.Invoke(monitor, [null])!;
+        float pctWddm = (float)mReadGpuPct.Invoke(monitor, [null])!;
         pctWddm.Should().BeInRange(0f, 100f);
 
         // 2. Driver source configured (NVML / fallback)
@@ -1328,7 +1334,7 @@ public class HardwareMonitorSeamTests
         // 3. ResetGpuMonitors with mock state
         var mResetGpu = typeof(HardwareMonitor).GetMethod("ResetGpuMonitors", BindingFlags.NonPublic | BindingFlags.Instance);
         mResetGpu.Should().NotBeNull();
-        mResetGpu!.Invoke(monitor, ["Unit test driver recovery simulation"]);
+        mResetGpu.Invoke(monitor, ["Unit test driver recovery simulation"]);
     }
 
     [Fact]
@@ -1341,7 +1347,7 @@ public class HardwareMonitorSeamTests
         // 1. SelectActiveNic
         var mSelectNic = typeof(HardwareMonitor).GetMethod("SelectActiveNic", BindingFlags.NonPublic | BindingFlags.Static);
         mSelectNic.Should().NotBeNull();
-        mSelectNic!.Invoke(null, ["auto"]);
+        mSelectNic.Invoke(null, ["auto"]);
         mSelectNic.Invoke(null, ["NonExistentNicNameXYZ"]);
 
         // 2. EnsureNicCounters with specific preferred NIC
@@ -1349,7 +1355,7 @@ public class HardwareMonitorSeamTests
         mEnsureNic.Should().NotBeNull();
 
         cfg.Monitoring.PreferredNic = "NonExistentNicNameXYZ";
-        mEnsureNic!.Invoke(monitor, null);
+        mEnsureNic.Invoke(monitor, null);
         // Second call hits cache / same preferred NIC branch
         mEnsureNic.Invoke(monitor, null);
 
@@ -1365,7 +1371,7 @@ public class HardwareMonitorSeamTests
         mc.EnableBattery = true;
 
         // Charging battery
-        mLogTick!.Invoke(monitor, [
+        mLogTick.Invoke(monitor, [
             mc,
             (50f, 65f, 4.5f, 85f),
             (60f, 16f, 32f),
@@ -1454,7 +1460,7 @@ public class HardwareMonitorSeamTests
         mDelta.Should().NotBeNull();
 
         // Null / 0 capacity
-        ((float)mDelta!.Invoke(monitor, [null])!).Should().Be(0f);
+        ((float)mDelta.Invoke(monitor, [null])!).Should().Be(0f);
         ((float)mDelta.Invoke(monitor, [0L])!).Should().Be(0f);
 
         // First call primes capacity
@@ -1470,13 +1476,41 @@ public class HardwareMonitorSeamTests
 
         // Reset primed state
         typeof(HardwareMonitor).GetField("_nicPrimed", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(monitor, false);
-        var deltaPrimed = ((double down, double up))mNetDelta!.Invoke(monitor, [1000L, 2000L])!;
+        var deltaPrimed = ((double down, double up))mNetDelta.Invoke(monitor, [1000L, 2000L])!;
         deltaPrimed.down.Should().Be(0);
 
         // Second call calculates throughput
         var deltaCalc = ((double down, double up))mNetDelta.Invoke(monitor, [5000L, 8000L])!;
         deltaCalc.down.Should().BeGreaterThanOrEqualTo(0);
     }
+
+    [Fact]
+    public void HardwareMonitor_LifecycleEvents_Coverage()
+    {
+        var cfg = new AppSettings();
+        var sysInfoMock = Substitute.For<ISystemInfo>();
+        var pawnIoMock = Substitute.For<IPawnIoManager>();
+
+        using var monitor = new HardwareMonitor(cfg, sysInfoMock, pawnIoMock);
+
+        // 1. OnPowerSuspended
+        var onSuspend = typeof(HardwareMonitor).GetMethod("OnPowerSuspended", BindingFlags.NonPublic | BindingFlags.Instance);
+        onSuspend.Should().NotBeNull();
+        onSuspend.Invoke(monitor, null);
+
+        // 2. OnNetworkTopologyChanged
+        var onNetChange = typeof(HardwareMonitor).GetMethod("OnNetworkTopologyChanged", BindingFlags.NonPublic | BindingFlags.Instance);
+        onNetChange.Should().NotBeNull();
+        onNetChange.Invoke(monitor, null);
+
+        // 3. OnDevicePnPChanged
+        var onPnp = typeof(HardwareMonitor).GetMethod("OnDevicePnPChanged", BindingFlags.NonPublic | BindingFlags.Instance);
+        onPnp.Should().NotBeNull();
+        onPnp.Invoke(monitor, null);
+
+        // 4. ResetGpuMonitors
+        var resetGpu = typeof(HardwareMonitor).GetMethod("ResetGpuMonitors", BindingFlags.NonPublic | BindingFlags.Instance);
+        resetGpu.Should().NotBeNull();
+        resetGpu.Invoke(monitor, ["test reset"]);
+    }
 }
-
-

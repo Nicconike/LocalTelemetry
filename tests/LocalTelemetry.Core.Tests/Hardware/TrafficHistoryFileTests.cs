@@ -45,7 +45,7 @@ public class TrafficHistoryFileTests
         }
         finally
         {
-            try { File.Delete(tempFile); } catch { }
+            try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
 
@@ -86,7 +86,7 @@ public class TrafficHistoryFileTests
         }
         finally
         {
-            try { File.Delete(tempFile); } catch { }
+            try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
 
@@ -100,7 +100,7 @@ public class TrafficHistoryFileTests
             history.Load();
             history.Count.Should().Be(0);
         }
-        try { File.Delete(tempFile); } catch { }
+        try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
     }
 
     [Fact]
@@ -117,7 +117,7 @@ public class TrafficHistoryFileTests
         }
         finally
         {
-            try { Directory.Delete(subDir, true); } catch { }
+            try { if (Directory.Exists(subDir)) Directory.Delete(subDir, true); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
 
@@ -135,7 +135,7 @@ public class TrafficHistoryFileTests
         }
         finally
         {
-            try { Directory.Delete(dir); } catch { }
+            try { if (Directory.Exists(dir)) Directory.Delete(dir, true); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
 
@@ -167,7 +167,7 @@ public class TrafficHistoryFileTests
         }
         finally
         {
-            try { File.Delete(tempFile); } catch { }
+            try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
 }

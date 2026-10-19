@@ -297,9 +297,9 @@ public static class EseNetworkUsageReader
         {
             Api.JetOpenTable(sesid, dbid, NetworkDataUsageTable, null, 0, OpenTableGrbit.ReadOnly, out tableid);
         }
-        catch (EsentObjectNotFoundException)
+        catch (EsentObjectNotFoundException ex)
         {
-            Log.Warn($"Network data usage table '{NetworkDataUsageTable}' was not found in database");
+            Log.Warn(ex, $"Network data usage table '{NetworkDataUsageTable}' was not found in database");
         }
     }
 
@@ -316,9 +316,9 @@ public static class EseNetworkUsageReader
             cols = new ColumnHandles(colTime, colSent, colRecv, colIfLuid);
             return true;
         }
-        catch (EsentColumnNotFoundException)
+        catch (EsentColumnNotFoundException ex)
         {
-            Log.Warn("Required network usage columns are missing from table");
+            Log.Warn(ex, "Required network usage columns are missing from table");
             cols = new ColumnHandles(JET_COLUMNID.Nil, JET_COLUMNID.Nil, JET_COLUMNID.Nil, JET_COLUMNID.Nil);
             return false;
         }

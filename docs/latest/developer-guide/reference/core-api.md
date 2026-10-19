@@ -59,8 +59,8 @@ public sealed class HardwareLifecycleManager : IHardwareLifecycleManager
 
 #### Timing Constants
 
-- **Display and Device Debounce:** `1500 ms` consolidates rapid burst notifications into a single update.
-- **Network Debounce:** `1500 ms` consolidates DHCP and adapter state oscillations.
+- **Display and Device Debounce:** `3000 ms` consolidates rapid burst notifications into a single update.
+- **Network Debounce:** `2000 ms` consolidates DHCP and adapter state oscillations.
 - **Power Resume Stabilization Delay:** `3000 ms` ensures physical drivers finish initializing before sensor register reads.
 
 ---

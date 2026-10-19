@@ -305,6 +305,9 @@ export const themes: Theme[] = [
 
 export function applyThemeVars(themeValue: string): void {
     const root = document.documentElement;
+    const isLight = themeValue.endsWith("-light");
+    root.style.colorScheme = isLight ? "light" : "dark";
+    root.dataset.theme = isLight ? "light" : "dark";
     const t = themes.find((x) => x.value === themeValue);
     const defaults = themes[0].vars;
     for (const key of Object.keys(defaults)) {

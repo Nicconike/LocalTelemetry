@@ -16,8 +16,8 @@ describe('NetworkPage.svelte', () => {
             netUsage: { enabled: false },
         } as any);
         nics.set([
-            { id: 'auto', name: 'Auto-detect Active Interface' },
-            { id: 'eth0', name: 'Ethernet' },
+            'Ethernet',
+            'Wi-Fi',
         ]);
     });
 

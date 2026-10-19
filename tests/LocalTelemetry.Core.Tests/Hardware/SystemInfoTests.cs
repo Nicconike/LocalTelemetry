@@ -100,7 +100,7 @@ public class SystemInfoTests
         var method = typeof(SystemInfo).GetMethod("IsSocketName", BindingFlags.NonPublic | BindingFlags.Static);
         method.Should().NotBeNull();
 
-        method!.Invoke(null, ["LGA 1700"]).Should().Be(true);
+        method.Invoke(null, ["LGA 1700"]).Should().Be(true);
         method.Invoke(null, ["Socket AM5"]).Should().Be(true);
         method.Invoke(null, ["BGA 1964"]).Should().Be(true);
         method.Invoke(null, ["PGA 988"]).Should().Be(true);
@@ -116,7 +116,7 @@ public class SystemInfoTests
         var method = typeof(SystemInfo).GetMethod("SmbiosSocketName", BindingFlags.NonPublic | BindingFlags.Static);
         method.Should().NotBeNull();
 
-        method!.Invoke(null, [25]).Should().Be("Socket LGA 1366");
+        method.Invoke(null, [25]).Should().Be("Socket LGA 1366");
         method.Invoke(null, [48]).Should().Be("Socket BGA 1364");
         method.Invoke(null, [34]).Should().Be("Socket BGA 1023");
         method.Invoke(null, [9999]).Should().Be("");
@@ -139,14 +139,14 @@ public class SystemInfoHermeticTests
     {
         var method = typeof(SystemInfo).GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Static);
         method.Should().NotBeNull();
-        return method!.CreateDelegate<T>();
+        return method.CreateDelegate<T>();
     }
 
     private static object? Invoke(string methodName, params object?[]? args)
     {
         var method = typeof(SystemInfo).GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Static);
         method.Should().NotBeNull();
-        return method!.Invoke(null, args);
+        return method.Invoke(null, args);
     }
 
     [Theory]
@@ -544,7 +544,7 @@ public class SystemInfoHermeticTests
     {
         var method = typeof(SystemInfo).GetMethod("IsValidBatteryString", BindingFlags.NonPublic | BindingFlags.Static);
         method.Should().NotBeNull();
-        bool result = (bool)method!.Invoke(null, [input])!;
+        bool result = (bool)method.Invoke(null, [input])!;
         result.Should().Be(expected);
     }
 
@@ -615,46 +615,46 @@ public class SystemInfoHermeticTests
         // 1. CpuIdSocketLookup
         var cpuIdSocketMethod = typeof(SystemInfo).GetMethod("CpuIdSocketLookup", BindingFlags.NonPublic | BindingFlags.Static);
         cpuIdSocketMethod.Should().NotBeNull();
-        cpuIdSocketMethod!.Invoke(null, null);
+        cpuIdSocketMethod.Invoke(null, null);
 
         // 2. GetCpuBrandStringCpuid
         var cpuidBrandMethod = typeof(SystemInfo).GetMethod("GetCpuBrandStringCpuid", BindingFlags.NonPublic | BindingFlags.Static);
         cpuidBrandMethod.Should().NotBeNull();
-        cpuidBrandMethod!.Invoke(null, null);
+        cpuidBrandMethod.Invoke(null, null);
 
         // 3. GetCpuBrandString
         var brandMethod = typeof(SystemInfo).GetMethod("GetCpuBrandString", BindingFlags.NonPublic | BindingFlags.Static);
         brandMethod.Should().NotBeNull();
-        brandMethod!.Invoke(null, null);
+        brandMethod.Invoke(null, null);
 
         // 4. DeriveSocketFromCpuName
         var deriveSocketMethod = typeof(SystemInfo).GetMethod("DeriveSocketFromCpuName", BindingFlags.NonPublic | BindingFlags.Static);
         deriveSocketMethod.Should().NotBeNull();
-        deriveSocketMethod!.Invoke(null, null);
+        deriveSocketMethod.Invoke(null, null);
 
         // 5. DeriveQualcommSocket
         var qualcommMethod = typeof(SystemInfo).GetMethod("DeriveQualcommSocket", BindingFlags.NonPublic | BindingFlags.Static);
         qualcommMethod.Should().NotBeNull();
-        var qualcommDelegate = qualcommMethod!.CreateDelegate<ReadOnlySpanFunc>();
+        var qualcommDelegate = qualcommMethod.CreateDelegate<ReadOnlySpanFunc>();
         qualcommDelegate("Snapdragon X Elite".AsSpan()).Should().Be("Socket 2050");
         qualcommDelegate("Snapdragon 8 Gen 2".AsSpan()).Should().BeEmpty();
 
         // 6. QueryNtPowerMaxMhz
         var ntPowerMethod = typeof(SystemInfo).GetMethod("QueryNtPowerMaxMhz", BindingFlags.NonPublic | BindingFlags.Static);
         ntPowerMethod.Should().NotBeNull();
-        ntPowerMethod!.Invoke(null, null);
+        ntPowerMethod.Invoke(null, null);
 
         // 7. QueryRegistryProcessorSpeed
         var regSpeedMethod = typeof(SystemInfo).GetMethod("QueryRegistryProcessorSpeed", BindingFlags.NonPublic | BindingFlags.Static);
         regSpeedMethod.Should().NotBeNull();
-        regSpeedMethod!.Invoke(null, null);
+        regSpeedMethod.Invoke(null, null);
 
         // 8. QueryRamTypeSmbios and FindSmbiosType17MemoryType
         WithSmbios(BuildBlob(), () =>
         {
             var ramSmbiosMethod = typeof(SystemInfo).GetMethod("QueryRamTypeSmbios", BindingFlags.NonPublic | BindingFlags.Static);
             ramSmbiosMethod.Should().NotBeNull();
-            string ramType = (string)ramSmbiosMethod!.Invoke(null, null)!;
+            string ramType = (string)ramSmbiosMethod.Invoke(null, null)!;
             ramType.Should().Be("DDR4");
 
             // Battery properties with SMBIOS Type 22 present
@@ -712,10 +712,10 @@ public class SystemInfoHermeticTests
         qRootWmiInt.Should().NotBeNull();
 
         // Query non-existent WMI class to trigger ManagementException
-        ((string)qWmiFirst!.Invoke(null, ["SELECT NonExistentProp FROM Win32_NonExistentClass12345", "NonExistentProp"])!).Should().BeEmpty();
-        ((int)qWmiFirstInt!.Invoke(null, ["SELECT NonExistentProp FROM Win32_NonExistentClass12345", "NonExistentProp"])!).Should().Be(0);
-        ((string)qRootWmiStr!.Invoke(null, ["NonExistentRootClass12345", "NonExistentProp"])!).Should().BeEmpty();
-        ((int)qRootWmiInt!.Invoke(null, ["NonExistentRootClass12345", "NonExistentProp"])!).Should().Be(0);
+        ((string)qWmiFirst.Invoke(null, ["SELECT NonExistentProp FROM Win32_NonExistentClass12345", "NonExistentProp"])!).Should().BeEmpty();
+        ((int)qWmiFirstInt.Invoke(null, ["SELECT NonExistentProp FROM Win32_NonExistentClass12345", "NonExistentProp"])!).Should().Be(0);
+        ((string)qRootWmiStr.Invoke(null, ["NonExistentRootClass12345", "NonExistentProp"])!).Should().BeEmpty();
+        ((int)qRootWmiInt.Invoke(null, ["NonExistentRootClass12345", "NonExistentProp"])!).Should().Be(0);
 
         // Also test with empty / invalid SQL syntax to trigger generic Exception catch block
         ((string)qWmiFirst.Invoke(null, ["INVALID SQL SYNTAX !@#$%", "prop"])!).Should().BeEmpty();
@@ -738,7 +738,7 @@ public class SystemInfoHermeticTests
         // 1. SmbiosSocketName coverage
         var smbiosSocketMethod = typeof(SystemInfo).GetMethod("SmbiosSocketName", BindingFlags.NonPublic | BindingFlags.Static);
         smbiosSocketMethod.Should().NotBeNull();
-        ((string)smbiosSocketMethod!.Invoke(null, [64])!).Should().Be("Socket LGA 1700");
+        ((string)smbiosSocketMethod.Invoke(null, [64])!).Should().Be("Socket LGA 1700");
         ((string)smbiosSocketMethod.Invoke(null, [71])!).Should().Be("Socket AM5");
         ((string)smbiosSocketMethod.Invoke(null, [83])!).Should().Be("Socket LGA 1851");
         ((string)smbiosSocketMethod.Invoke(null, [85])!).Should().Be("Socket BGA 2833");
@@ -750,7 +750,7 @@ public class SystemInfoHermeticTests
         isSocketMethod.Should().NotBeNull();
         isPlaceholderMethod.Should().NotBeNull();
 
-        ((bool)isSocketMethod!.Invoke(null, ["LGA 1700"])!).Should().BeTrue();
+        ((bool)isSocketMethod.Invoke(null, ["LGA 1700"])!).Should().BeTrue();
         ((bool)isSocketMethod.Invoke(null, ["Socket AM5"])!).Should().BeTrue();
         ((bool)isSocketMethod.Invoke(null, ["BGA 2049"])!).Should().BeTrue();
         ((bool)isSocketMethod.Invoke(null, ["FP8"])!).Should().BeTrue();
@@ -758,7 +758,7 @@ public class SystemInfoHermeticTests
         ((bool)isSocketMethod.Invoke(null, ["GenericDevice"])!).Should().BeFalse();
         ((bool)isSocketMethod.Invoke(null, [""])!).Should().BeFalse();
 
-        ((bool)isPlaceholderMethod!.Invoke(null, ["Unknown"])!).Should().BeTrue();
+        ((bool)isPlaceholderMethod.Invoke(null, ["Unknown"])!).Should().BeTrue();
         ((bool)isPlaceholderMethod.Invoke(null, ["To Be Filled By O.E.M."])!).Should().BeTrue();
         ((bool)isPlaceholderMethod.Invoke(null, ["LGA 1700"])!).Should().BeFalse();
         ((bool)isPlaceholderMethod.Invoke(null, [""])!).Should().BeTrue();
@@ -769,8 +769,8 @@ public class SystemInfoHermeticTests
         cpuNameField.Should().NotBeNull();
         cpuSocketField.Should().NotBeNull();
 
-        object? origName = cpuNameField!.GetValue(null);
-        object? origSocket = cpuSocketField!.GetValue(null);
+        object? origName = cpuNameField.GetValue(null);
+        object? origSocket = cpuSocketField.GetValue(null);
 
         string[] testCpuNames =
         [
@@ -819,7 +819,7 @@ public class SystemInfoHermeticTests
             {
                 cpuNameField.SetValue(null, cpu);
                 cpuSocketField.SetValue(null, null);
-                string skt = (string)deriveSocket!.Invoke(null, null)!;
+                string skt = (string)deriveSocket.Invoke(null, null)!;
                 skt.Should().NotBeNull();
             }
         }
@@ -838,7 +838,7 @@ public class SystemInfoHermeticTests
         findValue.Should().NotBeNull();
 
         // 1. empty raw array
-        ((int)findValue!.Invoke(null, [Array.Empty<byte>(), 0x2A, 0x23])!).Should().Be(0);
+        ((int)findValue.Invoke(null, [Array.Empty<byte>(), 0x2A, 0x23])!).Should().Be(0);
 
         // 2. malformed length byte < 4
         byte[] malformed = [(byte)4, (byte)2, (byte)0, (byte)0];
@@ -909,7 +909,7 @@ public class SystemInfoHermeticTests
         smbiosSocketMethod.Should().NotBeNull();
         for (int i = 0; i <= 86; i++)
         {
-            var res = (string)smbiosSocketMethod!.Invoke(null, [i])!;
+            var res = (string)smbiosSocketMethod.Invoke(null, [i])!;
             res.Should().NotBeNull();
         }
 
@@ -961,7 +961,7 @@ public class SystemInfoHermeticTests
 
         // 1. Valid ratio (40 -> 4000 MHz)
         transport.Execute("ioctl_read_msr", Arg.Any<ulong[]>(), 1).Returns([(ulong)40]);
-        var mhz = (int)readMsr!.Invoke(null, [transport, 0x1ADu])!;
+        var mhz = (int)readMsr.Invoke(null, [transport, 0x1ADu])!;
         mhz.Should().Be(4000);
 
         // 2. Small ratio (5 -> 500 MHz, not > 1000)
@@ -1045,7 +1045,7 @@ public class SystemInfoHermeticTests
         byte[] blob = ms.ToArray();
 
         // Match type 1, offset 4 (Vendor Corp)
-        var mfr = (string)method!.Invoke(null, [blob, (byte)1, (byte)0x04])!;
+        var mfr = (string)method.Invoke(null, [blob, (byte)1, (byte)0x04])!;
         mfr.Should().Be("Vendor Corp");
 
         // Match type 1, offset 5 (Product Name)
@@ -1073,7 +1073,7 @@ public class SystemInfoHermeticTests
     {
         var field = typeof(SystemInfo).GetField("_smbiosCache", BindingFlags.NonPublic | BindingFlags.Static);
         field.Should().NotBeNull();
-        object? prior = field!.GetValue(null);
+        object? prior = field.GetValue(null);
         field.SetValue(null, blob);
         try
         {
@@ -1093,26 +1093,26 @@ public class SystemInfoHermeticTests
         // 1. Processor Speed and Brand Query Methods
         var ntPower = typeof(SystemInfo).GetMethod("QueryNtPowerMaxMhz", BindingFlags.NonPublic | BindingFlags.Static);
         ntPower.Should().NotBeNull();
-        var ntVal = (int)ntPower!.Invoke(null, null)!;
+        var ntVal = (int)ntPower.Invoke(null, null)!;
         ntVal.Should().BeGreaterThanOrEqualTo(0);
 
         var regSpeed = typeof(SystemInfo).GetMethod("QueryRegistryProcessorSpeed", BindingFlags.NonPublic | BindingFlags.Static);
         regSpeed.Should().NotBeNull();
-        var regVal = (int)regSpeed!.Invoke(null, null)!;
+        var regVal = (int)regSpeed.Invoke(null, null)!;
         regVal.Should().BeGreaterThanOrEqualTo(0);
 
         var cpuidSpeed = typeof(SystemInfo).GetMethod("QueryCpuMaxSpeedCpuid", BindingFlags.NonPublic | BindingFlags.Static);
         cpuidSpeed.Should().NotBeNull();
-        var cpuidVal = (int)cpuidSpeed!.Invoke(null, null)!;
+        var cpuidVal = (int)cpuidSpeed.Invoke(null, null)!;
         cpuidVal.Should().BeGreaterThanOrEqualTo(0);
 
         var brandCpuid = typeof(SystemInfo).GetMethod("GetCpuBrandStringCpuid", BindingFlags.NonPublic | BindingFlags.Static);
         brandCpuid.Should().NotBeNull();
-        var brandStr = (string?)brandCpuid!.Invoke(null, null);
+        brandCpuid.Invoke(null, null);
 
         var cpuidSocket = typeof(SystemInfo).GetMethod("CpuIdSocketLookup", BindingFlags.NonPublic | BindingFlags.Static);
         cpuidSocket.Should().NotBeNull();
-        var socketStr = (string)cpuidSocket!.Invoke(null, null)!;
+        var socketStr = (string)cpuidSocket.Invoke(null, null)!;
         socketStr.Should().NotBeNull();
 
         // 2. Socket Derivations via Delegates
@@ -1124,9 +1124,9 @@ public class SystemInfoHermeticTests
         mAmd.Should().NotBeNull();
         mQcom.Should().NotBeNull();
 
-        var deriveIntel = mIntel!.CreateDelegate<SpanSocketFunc>();
-        var deriveAmd = mAmd!.CreateDelegate<SpanSocketFunc>();
-        var deriveQcom = mQcom!.CreateDelegate<SpanSocketFunc>();
+        var deriveIntel = mIntel.CreateDelegate<SpanSocketFunc>();
+        var deriveAmd = mAmd.CreateDelegate<SpanSocketFunc>();
+        var deriveQcom = mQcom.CreateDelegate<SpanSocketFunc>();
 
         static ReadOnlySpan<char> U(string s) => s.ToUpperInvariant().AsSpan();
 
@@ -1182,7 +1182,7 @@ public class SystemInfoHermeticTests
         // 3. GPU Registry Data Query
         var gpuReg = typeof(SystemInfo).GetMethod("GetGpuRegistryData", BindingFlags.NonPublic | BindingFlags.Static);
         gpuReg.Should().NotBeNull();
-        gpuReg!.Invoke(null, ["NonExistentDisplayDeviceName"]);
+        gpuReg.Invoke(null, ["NonExistentDisplayDeviceName"]);
     }
 
     [Fact]
@@ -1194,7 +1194,7 @@ public class SystemInfoHermeticTests
         mQuerySmbios.Should().NotBeNull();
 
         // 1. Empty buffer returns 0
-        ((int)mFindType17!.Invoke(null, [Array.Empty<byte>()])!).Should().Be(0);
+        ((int)mFindType17.Invoke(null, [Array.Empty<byte>()])!).Should().Be(0);
 
         // 2. Truncated buffer returns 0
         ((int)mFindType17.Invoke(null, [new byte[] { 17, 2 }])!).Should().Be(0);
@@ -1216,7 +1216,7 @@ public class SystemInfoHermeticTests
         // Test QueryRamTypeSmbios with this blob injected
         WithSmbios(blob, () =>
         {
-            string label = (string)mQuerySmbios!.Invoke(null, null)!;
+            string label = (string)mQuerySmbios.Invoke(null, null)!;
             label.Should().Be("DDR4");
         });
     }
@@ -1241,7 +1241,7 @@ public class SystemInfoHermeticTests
 
         WithSmbios(blob, () =>
         {
-            string psu = (string)mPsuName!.Invoke(null, null)!;
+            string psu = (string)mPsuName.Invoke(null, null)!;
             psu.Should().Contain("Corsair");
             psu.Should().Contain("RM850x");
         });
@@ -1259,7 +1259,7 @@ public class SystemInfoHermeticTests
 
         WithSmbios(ms2.ToArray(), () =>
         {
-            string psu = (string)mPsuName!.Invoke(null, null)!;
+            string psu = (string)mPsuName.Invoke(null, null)!;
             psu.Should().Be("Seasonic");
         });
 
@@ -1276,7 +1276,7 @@ public class SystemInfoHermeticTests
 
         WithSmbios(ms3.ToArray(), () =>
         {
-            string psu = (string)mPsuName!.Invoke(null, null)!;
+            string psu = (string)mPsuName.Invoke(null, null)!;
             psu.Should().Be("Focus-GX");
         });
     }
@@ -1305,13 +1305,13 @@ public class SystemInfoHermeticTests
 
         WithSmbios(blob, () =>
         {
-            string mfr = (string)mBattStr!.Invoke(null, [0x05])!;
+            string mfr = (string)mBattStr.Invoke(null, [0x05])!;
             mfr.Should().Be("SimulatedBatteryCorp");
 
             string dev = (string)mBattStr.Invoke(null, [0x08])!;
             dev.Should().Be("SimulatedModelPack");
 
-            int word = (int)mBattWord!.Invoke(null, [0x0A])!;
+            int word = (int)mBattWord.Invoke(null, [0x0A])!;
             word.Should().Be(10000);
         });
     }
@@ -1325,11 +1325,48 @@ public class SystemInfoHermeticTests
         mWin32Mfr.Should().NotBeNull();
         mWin32Name.Should().NotBeNull();
 
-        var mfr = (string?)mWin32Mfr!.Invoke(null, null);
-        var name = (string?)mWin32Name!.Invoke(null, null);
+        var mfr = (string?)mWin32Mfr.Invoke(null, null);
+        var name = (string?)mWin32Name.Invoke(null, null);
 
         mfr.Should().NotBeNull();
         name.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void SystemInfo_IsValidBatteryString_AllBranches_Coverage()
+    {
+        var mIsValid = typeof(SystemInfo).GetMethod("IsValidBatteryString", BindingFlags.NonPublic | BindingFlags.Static);
+        mIsValid.Should().NotBeNull();
+
+        ((bool)mIsValid.Invoke(null, [null])!).Should().BeFalse();
+        ((bool)mIsValid.Invoke(null, [""])!).Should().BeFalse();
+        ((bool)mIsValid.Invoke(null, ["   "])!).Should().BeFalse();
+        ((bool)mIsValid.Invoke(null, ["Virtual Battery"])!).Should().BeFalse();
+        ((bool)mIsValid.Invoke(null, ["CRB Battery"])!).Should().BeFalse();
+        ((bool)mIsValid.Invoke(null, ["CRB Device"])!).Should().BeFalse();
+        ((bool)mIsValid.Invoke(null, ["Fake"])!).Should().BeFalse();
+        ((bool)mIsValid.Invoke(null, ["None"])!).Should().BeFalse();
+        ((bool)mIsValid.Invoke(null, ["Unknown"])!).Should().BeFalse();
+        ((bool)mIsValid.Invoke(null, ["To be filled by O.E.M."])!).Should().BeFalse();
+        ((bool)mIsValid.Invoke(null, ["-Test-"])!).Should().BeFalse();
+        ((bool)mIsValid.Invoke(null, ["LGC-L19L3PF5"])!).Should().BeTrue();
+        ((bool)mIsValid.Invoke(null, ["SMP-SimulatedPack"])!).Should().BeTrue();
+    }
+
+    [Fact]
+    public void SystemInfo_SmbiosSocketName_Coverage()
+    {
+        var mSmbiosSocket = typeof(SystemInfo).GetMethod("SmbiosSocketName", BindingFlags.NonPublic | BindingFlags.Static);
+        mSmbiosSocket.Should().NotBeNull();
+
+        for (int i = 1; i <= 86; i++)
+        {
+            var res = (string)mSmbiosSocket.Invoke(null, [i])!;
+            res.Should().NotBeNull();
+        }
+
+        ((string)mSmbiosSocket.Invoke(null, [0])!).Should().BeEmpty();
+        ((string)mSmbiosSocket.Invoke(null, [999])!).Should().BeEmpty();
     }
 }
 

@@ -12,7 +12,9 @@ import {
     requestHistoryData,
     requestHistoryMonths,
     importDatContent,
-    openUrl
+    openUrl,
+    logError,
+    logWarn
 } from '../../../../../../src/LocalTelemetry.App/Settings/wwwroot/src/lib/bridge';
 
 describe('bridge.ts', () => {
@@ -137,4 +139,35 @@ describe('bridge.ts', () => {
         const unsub = onMessage('saved', vi.fn());
         unsub();
     });
+
+    it('logError and logWarn dispatch log messages via IPC and write to console', () => {
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
+
+        logError('Something failed', new Error('details'));
+        expect(errorSpy).toHaveBeenCalled();
+        expect(mockPostMessage).toHaveBeenCalledWith({
+            type: 'log',
+            payload: {
+                level: 'error',
+                message: 'Something failed',
+                detail: expect.stringContaining('Error: details')
+            }
+        });
+
+        logWarn('Warning occurred', 'simple string');
+        expect(warnSpy).toHaveBeenCalled();
+        expect(mockPostMessage).toHaveBeenCalledWith({
+            type: 'log',
+            payload: {
+                level: 'warn',
+                message: 'Warning occurred',
+                detail: 'simple string'
+            }
+        });
+
+        errorSpy.mockRestore();
+        warnSpy.mockRestore();
+    });
 });
+

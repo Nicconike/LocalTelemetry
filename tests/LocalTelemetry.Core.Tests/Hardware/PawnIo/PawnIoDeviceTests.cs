@@ -254,8 +254,17 @@ public class PawnIoDeviceTests
         {
             PawnIoDevice.CleanupHandler = null;
             PawnIoDevice.InstallerDownloader = null;
-            PawnIoDevice.ProcessRunner = null;
-            try { File.Delete(localSetup); } catch { }
+            try
+            {
+                if (File.Exists(localSetup))
+                {
+                    File.Delete(localSetup);
+                }
+            }
+            catch (IOException ex)
+            {
+                System.Diagnostics.Trace.WriteLine(ex.Message);
+            }
         }
     }
 

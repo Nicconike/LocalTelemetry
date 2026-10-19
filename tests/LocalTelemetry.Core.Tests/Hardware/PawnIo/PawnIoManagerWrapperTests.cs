@@ -37,10 +37,10 @@ public class PawnIoManagerWrapperTests
         var wrapper = new PawnIoManagerWrapper();
         var act = () =>
         {
-            try { wrapper.TryCreate(); } catch (Exception) { /* Best-effort execution */ }
-            try { wrapper.TryInstall(); } catch (Exception) { /* Best-effort execution */ }
-            try { wrapper.StartDriverService(); } catch (Exception) { /* Best-effort execution */ }
-            try { wrapper.LoadResourceBytes("IntelMSR.bin"); } catch (Exception) { /* Best-effort execution */ }
+            try { wrapper.TryCreate(); } catch (Exception ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+            try { wrapper.TryInstall(); } catch (Exception ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+            try { wrapper.StartDriverService(); } catch (Exception ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+            try { wrapper.LoadResourceBytes("IntelMSR.bin"); } catch (Exception ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         };
         act.Should().NotThrow();
     }

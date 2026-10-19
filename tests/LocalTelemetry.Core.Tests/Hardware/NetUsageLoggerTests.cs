@@ -51,7 +51,7 @@ public class NetUsageLoggerTests
         }
         finally
         {
-            try { File.Delete(tempPath); } catch { }
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
 
@@ -81,7 +81,7 @@ public class NetUsageLoggerTests
         }
         finally
         {
-            try { File.Delete(tempPath); } catch { }
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
 
@@ -124,12 +124,12 @@ public class NetUsageLoggerTests
 
             var rec = loaded.Find(today.Year, today.Month, today.Day, "Ethernet");
             rec.Should().NotBeNull();
-            rec!.Value.DownBytes.Should().BeGreaterThanOrEqualTo(333);
+            rec.Value.DownBytes.Should().BeGreaterThanOrEqualTo(333);
             rec.Value.UpBytes.Should().BeGreaterThanOrEqualTo(444);
         }
         finally
         {
-            try { File.Delete(tempPath); } catch { }
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
 
@@ -156,7 +156,7 @@ public class NetUsageLoggerTests
         }
         finally
         {
-            try { File.Delete(tempPath); } catch { }
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
 
@@ -193,12 +193,12 @@ public class NetUsageLoggerTests
 
             var prev = loaded.Find(yesterday.Year, yesterday.Month, yesterday.Day, "Ethernet");
             prev.Should().NotBeNull();
-            prev!.Value.DownBytes.Should().Be(333);
+            prev.Value.DownBytes.Should().Be(333);
             prev.Value.UpBytes.Should().Be(444);
         }
         finally
         {
-            try { File.Delete(tempPath); } catch { }
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
 
@@ -243,7 +243,7 @@ public class NetUsageLoggerTests
         }
         finally
         {
-            try { File.Delete(tempPath); } catch { }
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
 }

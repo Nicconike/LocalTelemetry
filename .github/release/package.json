@@ -3,13 +3,13 @@
     "devDependencies": {
         "@octokit/rest": "^22.0.1",
         "@semantic-release/changelog": "^6.0.3",
-        "@semantic-release/commit-analyzer": "^13.0.0",
+        "@semantic-release/commit-analyzer": "^13.0.1",
         "@semantic-release/exec": "^6.0.3",
         "@semantic-release/git": "^10.0.1",
-        "@semantic-release/github": "^11.0.1",
-        "@semantic-release/release-notes-generator": "^14.0.1",
+        "@semantic-release/github": "^11.0.6",
+        "@semantic-release/release-notes-generator": "^14.1.1",
         "@types/node": "^26.6.5",
-        "semantic-release": "^24.2.0"
+        "semantic-release": "^24.2.9"
     },
     "private": true,
     "name": "localtelemetry-release",
@@ -20,7 +20,10 @@
         "conventional-changelog-conventionalcommits": "^8.0.0"
     },
     "overrides": {
-        "braces": "^3.0.3",
+        "braces": "npm:@franciscosolis/braces@^3.1.1",
+        "pacote": "^21.5.1",
+        "@sigstore/core": "^3.2.1",
+        "sigstore": "^4.1.1",
         "micromatch": "^4.0.8",
         "cross-spawn": "^7.0.6"
     }

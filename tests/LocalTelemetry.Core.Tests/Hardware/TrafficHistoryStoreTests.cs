@@ -7,12 +7,14 @@ namespace LocalTelemetry.Core.Tests.Hardware;
 [Collection("TrafficHistory")]
 public class TrafficHistoryStoreTests
 {
+    private static readonly object SyncLock = new();
+
     [Fact]
     public void TrafficHistoryStore_InitializeAndDelegates()
     {
         string tempFile = Path.Combine(Path.GetTempPath(), $"TrafficHistoryStore_{Guid.NewGuid():N}.jsonl");
 
-        lock (typeof(TrafficHistoryStore))
+        lock (SyncLock)
         {
             try
             {
@@ -40,7 +42,7 @@ public class TrafficHistoryStoreTests
             }
             finally
             {
-                try { File.Delete(tempFile); } catch { }
+                try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
             }
         }
     }

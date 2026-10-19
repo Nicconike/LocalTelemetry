@@ -1,4 +1,3 @@
-using System.IO;
 using FluentAssertions;
 using LocalTelemetry.Core.Hardware;
 using NSubstitute;
@@ -6,7 +5,7 @@ using Xunit;
 
 namespace LocalTelemetry.Core.Tests.Hardware;
 
-public class HardwareInventoryTests : IDisposable
+public sealed class HardwareInventoryTests : IDisposable
 {
     private readonly string _tempDir;
     private readonly string _stateFilePath;
@@ -20,13 +19,7 @@ public class HardwareInventoryTests : IDisposable
 
     public void Dispose()
     {
-        try
-        {
-            if (Directory.Exists(_tempDir))
-                Directory.Delete(_tempDir, recursive: true);
-        }
-        catch { }
-        GC.SuppressFinalize(this);
+        try { if (Directory.Exists(_tempDir)) Directory.Delete(_tempDir, true); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
     }
 
     private static ISystemInfo CreateMockSysInfo(

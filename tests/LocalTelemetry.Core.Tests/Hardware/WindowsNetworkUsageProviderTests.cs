@@ -41,7 +41,7 @@ public class WindowsNetworkUsageProviderTests
 
         // Non-existent GUID tests fallback logic
         string fakeGuid = Guid.NewGuid().ToString();
-        ((string)method!.Invoke(null, [fakeGuid, 6u])!).Should().Be("Ethernet");
+        ((string)method.Invoke(null, [fakeGuid, 6u])!).Should().Be("Ethernet");
         ((string)method.Invoke(null, [fakeGuid, 71u])!).Should().Be("WiFi");
         ((string)method.Invoke(null, [fakeGuid, 243u])!).Should().Be("WiFi");
         ((string)method.Invoke(null, [fakeGuid, 117u])!).Should().Be("IanaType117");
@@ -83,20 +83,14 @@ public class WindowsNetworkUsageProviderTests
         }
         finally
         {
-            try { File.Delete(tempPath); } catch { }
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
 
     [Fact]
     public async Task WindowsNetworkUsageProvider_Logging_InstallDate_And_ImportFlows()
     {
-        // 1. Log and LogError private methods
-        var logMethod = typeof(WindowsNetworkUsageProvider).GetMethod("Log", BindingFlags.NonPublic | BindingFlags.Static);
-        var logErrorMethod = typeof(WindowsNetworkUsageProvider).GetMethod("LogError", BindingFlags.NonPublic | BindingFlags.Static);
-        logMethod!.Invoke(null, ["Test debug log"]);
-        logErrorMethod!.Invoke(null, ["Test error log"]);
-
-        // 2. GetWindowsInstallDate
+        // 1. GetWindowsInstallDate
         var installDate = WindowsNetworkUsageProvider.GetWindowsInstallDate();
         installDate.Should().BeBefore(DateTime.UtcNow.AddDays(1));
 
@@ -114,17 +108,17 @@ public class WindowsNetworkUsageProviderTests
             // ImportTodayBaselineAsync via reflection with empty vs existing
             var importToday = typeof(WindowsNetworkUsageProvider).GetMethod("ImportTodayBaselineAsync", BindingFlags.NonPublic | BindingFlags.Static);
             importToday.Should().NotBeNull();
-            var taskEmpty = (Task<bool>)importToday!.Invoke(null, [historyFile, DateTime.Today, CancellationToken.None])!;
+            var taskEmpty = (Task<bool>)importToday.Invoke(null, [historyFile, DateTime.Today, CancellationToken.None])!;
             await taskEmpty;
 
             // With cancellation token to hit cancelled path
             using var cts = new CancellationTokenSource();
-            cts.Cancel();
+            await cts.CancelAsync();
             await WindowsNetworkUsageProvider.ImportAndSaveHistoryAsync(historyFile, cts.Token);
         }
         finally
         {
-            try { File.Delete(tempPath); } catch { }
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
 
@@ -139,13 +133,13 @@ public class WindowsNetworkUsageProviderTests
             await act.Should().NotThrowAsync();
 
             using var cts = new CancellationTokenSource();
-            cts.Cancel();
+            await cts.CancelAsync();
             var actCanceled = async () => await WindowsNetworkUsageProvider.RefreshTodayUsageAsync(historyFile, cts.Token);
             await actCanceled.Should().NotThrowAsync();
         }
         finally
         {
-            try { File.Delete(tempPath); } catch { }
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
 
@@ -164,7 +158,7 @@ public class WindowsNetworkUsageProviderTests
         }
         finally
         {
-            try { File.Delete(tempPath); } catch { }
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
 
@@ -203,13 +197,13 @@ public class WindowsNetworkUsageProviderTests
             DateTime end = DateTime.Today.AddDays(-1);
             DateTime today = DateTime.Today;
 
-            var task = (Task<int>)importHist!.Invoke(null, [historyFile, start, end, today, CancellationToken.None])!;
+            var task = (Task<int>)importHist.Invoke(null, [historyFile, start, end, today, CancellationToken.None])!;
             int count = await task;
             count.Should().BeGreaterThanOrEqualTo(0);
         }
         finally
         {
-            try { File.Delete(tempPath); } catch { }
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
 
@@ -226,7 +220,7 @@ public class WindowsNetworkUsageProviderTests
 
         // 3. With cancelled token
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await cts.CancelAsync();
         Func<Task> act = async () => await WindowsNetworkUsageProvider.GetUsageAsync(DateTime.Today.AddDays(-3), DateTime.Today.AddDays(-1), cts.Token);
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
@@ -255,7 +249,37 @@ public class WindowsNetworkUsageProviderTests
         }
         finally
         {
-            try { File.Delete(tempPath); } catch { }
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
+    }
+
+    [Fact]
+    public void WindowsNetworkUsageProvider_InstallDate_Parsers_Coverage()
+    {
+        var parseTimeMethod = typeof(WindowsNetworkUsageProvider).GetMethod(
+            "TryParseInstallTime", BindingFlags.NonPublic | BindingFlags.Static);
+        parseTimeMethod.Should().NotBeNull();
+
+        // 1. Valid long and invalid byte[] or null
+        ((DateTime?)parseTimeMethod.Invoke(null, [null])).Should().BeNull();
+        ((DateTime?)parseTimeMethod.Invoke(null, ["invalid string"])).Should().BeNull();
+        ((DateTime?)parseTimeMethod.Invoke(null, [new byte[] { 1, 2, 3 }])).Should().BeNull();
+
+        long validFileTime = DateTime.UtcNow.AddDays(-10).ToFileTimeUtc();
+        ((DateTime?)parseTimeMethod.Invoke(null, [validFileTime])).Should().NotBeNull();
+
+        // 2. TryParseInstallDate
+        var parseDateMethod = typeof(WindowsNetworkUsageProvider).GetMethod(
+            "TryParseInstallDate", BindingFlags.NonPublic | BindingFlags.Static);
+        parseDateMethod.Should().NotBeNull();
+
+        ((DateTime?)parseDateMethod.Invoke(null, [null])).Should().BeNull();
+        ((DateTime?)parseDateMethod.Invoke(null, [-5])).Should().BeNull();
+        ((DateTime?)parseDateMethod.Invoke(null, [0])).Should().BeNull();
+        ((DateTime?)parseDateMethod.Invoke(null, [(long)-10])).Should().BeNull();
+
+        long validSeconds = DateTimeOffset.UtcNow.AddDays(-20).ToUnixTimeSeconds();
+        ((DateTime?)parseDateMethod.Invoke(null, [(int)validSeconds])).Should().NotBeNull();
+        ((DateTime?)parseDateMethod.Invoke(null, [validSeconds])).Should().NotBeNull();
     }
 }

@@ -1,2 +1,5 @@
 # Auto-generated docs snapshots (scripts/snapshot-docs.mjs)
 docs/v*/ linguist-generated
+
+# Ensure consistent line endings for markdown and changelog
+*.md text eol=lf

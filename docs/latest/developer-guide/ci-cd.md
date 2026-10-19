@@ -21,63 +21,68 @@ All workflow definition files are located in `.github/workflows/`:
 ```
 
 ```mermaid
-%%{init: {'theme': 'dark', 'themeVariables': {'fontSize': '13px'}, 'flowchart': {'nodeSpacing': 25, 'rankSpacing': 30, 'curve': 'basis'}}}%%
+%%{init: {'theme': 'dark', 'themeVariables': {'fontSize': '13px'}, 'flowchart': {'nodeSpacing': 30, 'rankSpacing': 36, 'subGraphTitleMargin': {'top': 12, 'bottom': 20}, 'curve': 'linear'}}}%%
 flowchart TD
-    subgraph Triggers["GitHub Event Triggers"]
-        PushPR(["Push / Pull Request to master"])
-        PushMaster(["Push to master (release paths)"])
-    end
-
-    subgraph CI["Continuous Integration Pipeline (ci.yml)"]
+    %% COLUMN 1: CONTINUOUS INTEGRATION
+    subgraph TrackCI["1. Continuous Integration (ci.yml)"]
         direction TB
-        Commitlint{{"1. Commitlint<br/>Conventional Commits Rules"}}
-        FrontendTest{{"2. Bun Vitest<br/>Svelte 5 Runes Unit Tests"}}
-        DotNetBuild[["3. .NET 10 SDK<br/>dotnet build & format --verify"]]
-        DotNetTest[["4. xUnit Automated Suites<br/>Core • App • Notifier Tests"]]
-        Coverage[("5. Code Coverage<br/>XPlat Code Coverage -> Codecov")]
+        TriggerCI["<b>Push / Pull Request</b><br/>Targets master branch"]
+        Commitlint["<b>1. Commitlint</b><br/>Enforces Conventional Commits"]
+        Vitest["<b>2. Bun Vitest</b><br/>Svelte 5 Runes Unit Tests"]
+        DotNetBuild["<b>3. .NET 10 Build</b><br/>dotnet build & format --verify"]
+        DotNetTest["<b>4. xUnit Test Suites</b><br/>Core • App • Notifier Tests"]
+        Coverage["<b>5. Code Coverage</b><br/>XPlat Coverage Report -> Codecov"]
 
-        Commitlint --> FrontendTest
-        FrontendTest --> DotNetBuild
+        TriggerCI --> Commitlint
+        Commitlint --> Vitest
+        Vitest --> DotNetBuild
         DotNetBuild --> DotNetTest
         DotNetTest --> Coverage
     end
 
-    subgraph QualitySec["Static Analysis & Project Automation Workflows"]
+    %% COLUMN 2: CODE QUALITY & SECURITY
+    subgraph TrackQuality["2. Security & Quality Analysis"]
         direction TB
-        CodeQL{{"CodeQL Security Scan<br/>codeql.yml"}}
-        Scorecard{{"OpenSSF Scorecard<br/>scorecard.yml"}}
-        Sonar{{"SonarCloud Quality Gate<br/>sonar.yml"}}
-        SyncPR{{"PR Auto-Sync & Rebase<br/>sync.yml"}}
-        ProjectTriage{{"GitHub Projects v2 Triage<br/>project.yml"}}
+        TriggerQuality["<b>Push, PR & Schedules</b><br/>Master commits & weekly cron"]
+        CodeQL["<b>CodeQL Analysis</b><br/>Deep semantic vulnerability scan"]
+        Sonar["<b>SonarCloud Quality Gate</b><br/>Static analysis & maintainability"]
+        Scorecard["<b>OpenSSF Scorecard</b><br/>Supply-chain security audit"]
+        SyncPR["<b>PR Auto-Sync & Rebase</b><br/>Automated branch synchronization"]
+        Triage["<b>GitHub Projects v2 Triage</b><br/>Issue & PR automated sorting"]
+
+        TriggerQuality --> CodeQL
+        CodeQL --> Sonar
+        Sonar --> Scorecard
+        Scorecard --> SyncPR
+        SyncPR --> Triage
     end
 
-    subgraph Release["Automated Release Pipeline (release.yml)"]
+    %% COLUMN 3: AUTOMATED RELEASE PIPELINE
+    subgraph TrackRelease["3. Automated Release (release.yml)"]
         direction TB
-        SemRelRunner{{"semantic-release Runner (run.ts)<br/>Conventional Commits Analysis & Tagging"}}
-        BuildScript[["build.ps1<br/>dotnet publish, Inno Setup & Manifest Updates"]]
-        CommitPlugin{{"github-commit-plugin<br/>GitHub REST API Signed Commits"}}
-        GitHubRelease(["GitHub Release Publication<br/>Installers, Portable ZIP & Checksums"])
-        PublishScript[["publish.ps1<br/>Chocolatey Push"]]
-        Attestation{{"actions/attest<br/>SLSA Level 3 Provenance"}}
+        TriggerRelease["<b>Push to master</b><br/>release/* and src/* changes"]
+        SemRel["<b>Semantic Release</b><br/>Analyzes commits & tags version"]
+        BuildPkg["<b>Build & Inno Setup</b><br/>build.ps1 publishes win-x64 & installer"]
+        SignedCommit["<b>Signed Release Commit</b><br/>github-commit-plugin via REST API"]
+        GHRelease["<b>GitHub Release</b><br/>Publishes installer, ZIP & SHA256"]
+        WinGet["<b>WinGet Submission</b><br/>Official wingetcreate CLI"]
+        Attestation["<b>SLSA Provenance</b><br/>actions/attest Level 3 build proof"]
 
-        SemRelRunner --> BuildScript
-        BuildScript --> CommitPlugin
-        CommitPlugin --> GitHubRelease
-        GitHubRelease --> PublishScript
-        PublishScript --> Attestation
+        TriggerRelease --> SemRel
+        SemRel --> BuildPkg
+        BuildPkg --> SignedCommit
+        SignedCommit --> GHRelease
+        GHRelease --> WinGet
+        WinGet --> Attestation
     end
 
-    PushPR --> CI
-    PushPR --> QualitySec
-    PushMaster --> Release
-
-    class PushPR,PushMaster,GitHubRelease triggerNode
-    class Commitlint,FrontendTest,CodeQL,Scorecard,Sonar,SyncPR,ProjectTriage,SemRelRunner,CommitPlugin,PublishScript,Attestation toolNode
-    class DotNetBuild,DotNetTest,BuildScript buildNode
+    class TriggerCI,TriggerQuality,TriggerRelease triggerNode
+    class Commitlint,Vitest,CodeQL,Sonar,Scorecard,SyncPR,Triage,SemRel,SignedCommit,WinGet,Attestation stepNode
+    class DotNetBuild,DotNetTest,BuildPkg,GHRelease buildNode
     class Coverage dataNode
 
     classDef triggerNode fill:#0b1329,stroke:#38bdf8,stroke-width:1.5px,color:#e0f2fe
-    classDef toolNode fill:#1e1b4b,stroke:#818cf8,stroke-width:1.5px,color:#ffffff
+    classDef stepNode fill:#18181b,stroke:#a1a1aa,stroke-width:1.5px,color:#f4f4f5
     classDef buildNode fill:#0369a1,stroke:#67e8f9,stroke-width:2px,color:#ffffff
     classDef dataNode fill:#18181b,stroke:#eab308,stroke-width:1.5px,color:#fef08a
 ```
@@ -131,12 +136,11 @@ The release pipeline is defined in [`.github/workflows/release.yml`](https://git
      - Compiles `LocalTelemetrySetup.exe` with Inno Setup 7 (`ISCC.exe`).
      - Packages the portable archive `LocalTelemetry-win-x64.zip`.
      - Generates SHA-256 cryptographic hashes in `checksums.txt`.
-     - Injects updated version and checksum values into `bucket/localtelemetry.json` and `packaging/chocolatey/**`.
+     - Injects updated version and checksum values into `bucket/localtelemetry.json` and `packaging/winget/localtelemetry.yaml`, and synchronizes package versions.
    - **Repository State Commit (`github-commit-plugin.ts`)**: Uploads file blobs and creates a signed commit via the GitHub REST API. This step updates `master` with web-flow signing and bypasses branch protections cleanly.
    - **Release Publication (`@semantic-release/github`)**: Creates the GitHub Release tag pointing to the new commit. Attaches `LocalTelemetrySetup.exe`, `LocalTelemetry-win-x64.zip`, and `checksums.txt`.
-   - **Third-Party Package Publication (`@semantic-release/exec`)**:
-     - Executes `pwsh -File ./.github/release/publish.ps1 -Version "${nextRelease.version}" -Tag "${nextRelease.gitTag}"`.
-     - Packs the `.nupkg` and pushes the package to the Chocolatey Community repository.
+   - **WinGet Package Submission (`wingetcreate`)**:
+     - Submits updated metadata to the official Microsoft WinGet Community Repository using Microsoft's official `wingetcreate` CLI utility.
 4. **Cryptographic Provenance Attestations**:
    - Generates SLSA Level 3 build provenance attestations for `LocalTelemetrySetup.exe` and `LocalTelemetry-win-x64.zip` via `actions/attest`.
 

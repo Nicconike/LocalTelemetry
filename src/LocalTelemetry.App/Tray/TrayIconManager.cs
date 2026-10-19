@@ -38,7 +38,7 @@ public sealed class TrayIconManager : IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error($"Failed to extract application icon: {ex.Message}");
+            Log.Error(ex, "Failed to extract application icon");
             _baseIcon = SystemIcons.Application;
         }
 
@@ -295,7 +295,7 @@ public sealed class TrayIconManager : IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error($"Notification tooltip update failed: {ex.Message}");
+            Log.Error(ex, "Notification tooltip update failed");
         }
     }
 

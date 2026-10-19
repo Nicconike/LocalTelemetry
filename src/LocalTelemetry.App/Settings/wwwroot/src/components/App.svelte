@@ -22,6 +22,7 @@
         requestSystemInfo,
         requestTrafficMonths,
         requestTrafficHistoryAll,
+        logError,
     } from "../lib/bridge.ts";
     import { deepClone } from "../lib/utils.ts";
     import { applyThemeVars } from "../lib/themes.ts";
@@ -192,7 +193,9 @@
         try {
             const restored = JSON.parse($pristineSettings);
             settings.set(restored);
-        } catch {}
+        } catch (err) {
+            logError("Failed to restore pristine settings during discard", err);
+        }
     }
 
     function handleNavigateRequest(event) {

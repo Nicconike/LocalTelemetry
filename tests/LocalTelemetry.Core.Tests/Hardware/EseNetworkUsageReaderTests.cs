@@ -54,7 +54,7 @@ public class EseNetworkUsageReaderTests
         }
         finally
         {
-            try { File.Delete(tempSrum); } catch (Exception) { /* Best-effort cleanup */ }
+            try { if (File.Exists(tempSrum)) File.Delete(tempSrum); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
 
@@ -64,7 +64,7 @@ public class EseNetworkUsageReaderTests
         var method = typeof(EseNetworkUsageReader).GetMethod("RunRepair", BindingFlags.NonPublic | BindingFlags.Static);
         method.Should().NotBeNull();
 
-        bool ok = (bool)method!.Invoke(null, ["invalid_esentutl.exe", "invalid_db.dat"])!;
+        bool ok = (bool)method.Invoke(null, ["invalid_esentutl.exe", "invalid_db.dat"])!;
         ok.Should().BeFalse();
     }
 
@@ -87,7 +87,7 @@ public class EseNetworkUsageReaderTests
             try
             {
                 EseNetworkUsageReader.ProcessRunner = _ => 0;
-                bool ok = (bool)method!.Invoke(null, ["esentutl.exe", testDbPath])!;
+                bool ok = (bool)method.Invoke(null, ["esentutl.exe", testDbPath])!;
                 ok.Should().BeTrue();
 
                 for (int retry = 0; retry < 5 && File.Exists(dummyInteg); retry++)
@@ -103,7 +103,7 @@ public class EseNetworkUsageReaderTests
             finally
             {
                 EseNetworkUsageReader.ProcessRunner = priorRunner;
-                try { if (File.Exists(dummyInteg)) File.Delete(dummyInteg); } catch (Exception) { /* Best-effort cleanup */ }
+                try { if (File.Exists(dummyInteg)) File.Delete(dummyInteg); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
             }
         }
     }
@@ -128,7 +128,7 @@ public class EseNetworkUsageReaderTests
                 try
                 {
                     EseNetworkUsageReader.ProcessRunner = _ => 0;
-                    taskSuccess = (Task<bool>)method!.Invoke(null, ["esentutl.exe", "srum.dat", tempDest, "/vss", CancellationToken.None])!;
+                    taskSuccess = (Task<bool>)method.Invoke(null, ["esentutl.exe", "srum.dat", tempDest, "/vss", CancellationToken.None])!;
 
                     EseNetworkUsageReader.ProcessRunner = _ => 1;
                     taskFail = (Task<bool>)method.Invoke(null, ["esentutl.exe", "srum.dat", tempDest, null, CancellationToken.None])!;
@@ -147,7 +147,7 @@ public class EseNetworkUsageReaderTests
         }
         finally
         {
-            try { File.Delete(tempDest); } catch (Exception) { /* Best-effort cleanup */ }
+            try { if (File.Exists(tempDest)) File.Delete(tempDest); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
 
@@ -182,7 +182,7 @@ public class EseNetworkUsageReaderTests
         }
         finally
         {
-            try { File.Delete(tempSrum); } catch (Exception) { /* Best-effort cleanup */ }
+            try { if (File.Exists(tempSrum)) File.Delete(tempSrum); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
 
@@ -203,7 +203,7 @@ public class EseNetworkUsageReaderTests
         }
         finally
         {
-            try { File.Delete(tempSrum); } catch (Exception) { /* Best-effort cleanup */ }
+            try { if (File.Exists(tempSrum)) File.Delete(tempSrum); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
 
@@ -239,7 +239,7 @@ public class EseNetworkUsageReaderTests
         }
         finally
         {
-            try { File.Delete(tempSrum); } catch (Exception) { /* Best-effort cleanup */ }
+            try { if (File.Exists(tempSrum)) File.Delete(tempSrum); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
 
         flags.Count.Should().Be(2);
@@ -300,7 +300,7 @@ public class EseNetworkUsageReaderTests
         }
         finally
         {
-            try { File.Delete(dbPath); } catch (Exception) { /* Best-effort cleanup */ }
+            try { if (File.Exists(dbPath)) File.Delete(dbPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
 
@@ -329,7 +329,7 @@ public class EseNetworkUsageReaderTests
         }
         finally
         {
-            try { File.Delete(dbPath); } catch (Exception) { /* Best-effort cleanup */ }
+            try { if (File.Exists(dbPath)) File.Delete(dbPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
 
@@ -367,11 +367,11 @@ public class EseNetworkUsageReaderTests
         {
             if (sesid != JET_SESID.Nil)
             {
-                try { Api.JetEndSession(sesid, EndSessionGrbit.None); } catch (Exception) { /* Best-effort cleanup */ }
+                try { Api.JetEndSession(sesid, EndSessionGrbit.None); } catch (EsentErrorException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
             }
             if (instance != JET_INSTANCE.Nil)
             {
-                try { Api.JetTerm(instance); } catch (Exception) { /* Best-effort cleanup */ }
+                try { Api.JetTerm(instance); } catch (EsentErrorException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
             }
         }
     }
@@ -384,7 +384,10 @@ public class EseNetworkUsageReaderTests
             Api.JetSetSystemParameter(instance, JET_SESID.Nil, JET_param.CircularLog, 0, null);
             Api.JetSetSystemParameter(instance, JET_SESID.Nil, JET_param.DatabasePageSize, 32768, null);
         }
-        catch (EsentAlreadyInitializedException) { /* Engine already configured */ }
+        catch (EsentAlreadyInitializedException ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"Engine already initialized: {ex.Message}");
+        }
     }
 
     private static Dictionary<string, JET_COLUMNID> DefineSrumColumns(JET_SESID sesid, JET_TABLEID tableid, string[] columns)
@@ -442,7 +445,7 @@ public class EseNetworkUsageReaderTests
             var tryResolve = typeof(EseNetworkUsageReader).GetMethod("TryResolveColumns", BindingFlags.NonPublic | BindingFlags.Static);
             tryResolve.Should().NotBeNull();
             object[] args = [sesid, tableid, null!];
-            bool success = (bool)tryResolve!.Invoke(null, args)!;
+            bool success = (bool)tryResolve.Invoke(null, args)!;
             success.Should().BeFalse();
 
             Api.JetCloseTable(sesid, tableid);
@@ -453,13 +456,13 @@ public class EseNetworkUsageReaderTests
         {
             if (sesid != JET_SESID.Nil)
             {
-                try { Api.JetEndSession(sesid, EndSessionGrbit.None); } catch (Exception) { /* Best-effort cleanup */ }
+                try { Api.JetEndSession(sesid, EndSessionGrbit.None); } catch (EsentErrorException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
             }
             if (instance != JET_INSTANCE.Nil)
             {
-                try { Api.JetTerm(instance); } catch (Exception) { /* Best-effort cleanup */ }
+                try { Api.JetTerm(instance); } catch (EsentErrorException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
             }
-            try { File.Delete(dbPath); } catch (Exception) { /* Best-effort cleanup */ }
+            try { if (File.Exists(dbPath)) File.Delete(dbPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
 }

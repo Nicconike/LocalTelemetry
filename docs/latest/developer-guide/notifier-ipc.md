@@ -109,7 +109,7 @@ Implemented in [`ToastForm.cs`](https://github.com/Nicconike/LocalTelemetry/blob
 
 - **Dimensions**: `320px` width × `90px` height.
 - **Appearance**: Dark background (`Color.FromArgb(32, 32, 32)`), rounded corners (`CornerRadius = 8` via `GraphicsPath`), border pen (`Color.FromArgb(60, 60, 60)`).
-- **Audio Cue**: Plays system asterisk sound (`SystemSounds.Asterisk.Play()`).
+- **Audio Cue**: Plays system exclamation sound (`SystemSounds.Exclamation.Play()`).
 - **Ease-Out Slide-In Animation**: `OnLoad` animates the window position from below the screen working area using a cubic ease-out curve (`1.0 - Math.Pow(1.0 - t, 3)`) over `300ms`.
 - **Auto-Dismiss**: A `System.Windows.Forms.Timer` automatically closes the toast window after `5000ms`.
 

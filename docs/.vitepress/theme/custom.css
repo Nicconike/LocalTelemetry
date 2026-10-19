@@ -52,9 +52,9 @@
 }
 
 /* Navbar Logo */
-.VPNavBarTitle .logo {
-    height: 24px !important;
-    width: 24px !important;
+:root .VPNavBarTitle .logo {
+    height: 24px;
+    width: 24px;
     object-fit: contain;
     margin-right: 8px;
 }
@@ -161,72 +161,94 @@
     filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.35));
 }
 
+/* Subgraph / Cluster Container and Labels */
+.vp-doc .mermaid .cluster rect,
+.mermaid-modal-content .cluster rect {
+    rx: 8px;
+    ry: 8px;
+    stroke: rgba(255, 255, 255, 0.12);
+    fill: rgba(255, 255, 255, 0.02);
+}
+
+.vp-doc .mermaid .cluster .cluster-label text,
+.vp-doc .mermaid .cluster text.cluster-label,
+.vp-doc .mermaid .cluster-label span,
+.mermaid-modal-content .cluster-label text,
+.mermaid-modal-content .cluster text.cluster-label,
+.mermaid-modal-content .cluster-label span {
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    fill: #cbd5e1;
+    color: #cbd5e1;
+}
+
 /* Node Text Resets - Both In-page and Modal Lightbox */
-.mermaid .node foreignObject,
+.vp-doc .mermaid .node foreignObject,
 .mermaid-modal-content .node foreignObject {
-    overflow: visible !important;
+    overflow: visible;
 }
 
-.mermaid .node foreignObject>div,
+.vp-doc .mermaid .node foreignObject>div,
 .mermaid-modal-content .node foreignObject>div {
-    overflow: visible !important;
-    line-height: 1.3 !important;
-    text-align: center !important;
+    overflow: visible;
+    line-height: 1.3;
+    text-align: center;
 }
 
-.mermaid .node p,
-.mermaid .node span,
-.mermaid .node div,
-.mermaid .node *,
+.vp-doc .mermaid .node p,
+.vp-doc .mermaid .node span,
+.vp-doc .mermaid .node div,
+.vp-doc .mermaid .node *,
 .mermaid-modal-content .node p,
 .mermaid-modal-content .node span,
 .mermaid-modal-content .node div,
 .mermaid-modal-content .node * {
-    margin: 0 !important;
-    padding: 0 !important;
-    line-height: 1.3 !important;
-    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+    margin: 0;
+    padding: 0;
+    line-height: 1.3;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 /* Edge Labels: Seamless text along arrows - cleanly masks arrow line beneath without any visible box */
-.mermaid g.edgeLabel foreignObject,
+.vp-doc .mermaid g.edgeLabel foreignObject,
 .mermaid-modal-content g.edgeLabel foreignObject {
-    overflow: visible !important;
+    overflow: visible;
 }
 
-.mermaid g.edgeLabel,
-.mermaid g.edgeLabel span,
-.mermaid g.edgeLabel p,
+.vp-doc .mermaid g.edgeLabel,
+.vp-doc .mermaid g.edgeLabel span,
+.vp-doc .mermaid g.edgeLabel p,
 .mermaid-modal-content g.edgeLabel,
 .mermaid-modal-content g.edgeLabel span,
 .mermaid-modal-content g.edgeLabel p {
-    background: transparent !important;
-    background-color: transparent !important;
+    background: transparent;
+    background-color: transparent;
 }
 
-.mermaid g.edgeLabel .labelBkg,
+.vp-doc .mermaid g.edgeLabel .labelBkg,
 .mermaid-modal-content g.edgeLabel .labelBkg {
-    background: #090a0f !important;
-    background-color: #090a0f !important;
-    fill: #090a0f !important;
-    border: none !important;
-    outline: none !important;
-    box-shadow: none !important;
-    border-radius: 4px !important;
-    padding: 1px 6px !important;
+    background: #090a0f;
+    background-color: #090a0f;
+    fill: #090a0f;
+    border: none;
+    outline: none;
+    box-shadow: none;
+    border-radius: 4px;
+    padding: 1px 6px;
 }
 
-.mermaid g.edgeLabel p,
-.mermaid g.edgeLabel span,
+.vp-doc .mermaid g.edgeLabel p,
+.vp-doc .mermaid g.edgeLabel span,
 .mermaid-modal-content g.edgeLabel p,
 .mermaid-modal-content g.edgeLabel span {
-    color: #94a3b8 !important;
-    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
-    font-size: 11px !important;
-    font-weight: 500 !important;
-    line-height: 1.25 !important;
-    margin: 0 !important;
-    padding: 0 !important;
+    color: #94a3b8;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.25;
+    margin: 0;
+    padding: 0;
 }
 
 /* Custom scrollbars for wide diagrams */
@@ -249,71 +271,71 @@
 }
 
 /* Primary Action Button Matching Logo Gradient */
-.VPHomeHero .VPButton.brand {
-    background: linear-gradient(135deg, #38bdf8 0%, #60a5fa 50%, #a855f7 100%) !important;
-    border: none !important;
-    color: #ffffff !important;
-    font-weight: 600 !important;
-    transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease !important;
+:root .VPHomeHero .actions .VPButton.brand {
+    background: linear-gradient(135deg, #0369a1 0%, #1d4ed8 50%, #6d28d9 100%);
+    border-color: transparent;
+    color: #ffffff;
+    font-weight: 600;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
 }
 
-.VPHomeHero .VPButton.brand:hover {
-    filter: brightness(1.1) !important;
-    transform: translateY(-1px) !important;
-    box-shadow: 0 6px 20px rgba(56, 189, 248, 0.4) !important;
+:root .VPHomeHero .actions .VPButton.brand:hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(3, 105, 161, 0.4);
 }
 
-.VPHomeHero .VPButton.alt {
-    border-color: var(--vp-c-border) !important;
-    background: var(--vp-c-bg-alt) !important;
-    transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease !important;
+:root .VPHomeHero .actions .VPButton.alt {
+    border-color: var(--vp-c-border);
+    background: var(--vp-c-bg-alt);
+    transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
 }
 
-.VPHomeHero .VPButton.alt:hover {
-    border-color: rgba(96, 165, 250, 0.5) !important;
-    background: var(--vp-c-bg-elv) !important;
-    transform: translateY(-1px) !important;
+:root .VPHomeHero .actions .VPButton.alt:hover {
+    border-color: rgba(96, 165, 250, 0.5);
+    background: var(--vp-c-bg-elv);
+    transform: translateY(-1px);
 }
 
 /* Feature Cards & Icon Badges */
-.VPFeature {
-    border: 1px solid var(--vp-c-border) !important;
-    background: var(--vp-c-bg-alt) !important;
-    transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease !important;
+:root .VPFeatures .VPFeature {
+    border: 1px solid var(--vp-c-border);
+    background: var(--vp-c-bg-alt);
+    transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
-.VPFeature:hover {
+:root .VPFeatures .VPFeature:hover {
     transform: translateY(-3px);
-    border-color: rgba(96, 165, 250, 0.4) !important;
+    border-color: rgba(96, 165, 250, 0.4);
     box-shadow: 0 12px 32px rgba(56, 189, 248, 0.12);
 }
 
-.VPFeature .icon {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    width: 48px !important;
-    height: 48px !important;
-    font-size: 24px !important;
-    line-height: 1 !important;
-    border-radius: 10px !important;
-    background: rgba(56, 189, 248, 0.08) !important;
-    border: 1px solid rgba(56, 189, 248, 0.18) !important;
-    margin-bottom: 18px !important;
-    color: var(--vp-c-brand-1) !important;
-    transition: background 0.25s ease, border-color 0.25s ease, color 0.25s ease !important;
+:root .VPFeatures .VPFeature .icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    font-size: 24px;
+    line-height: 1;
+    border-radius: 10px;
+    background: rgba(56, 189, 248, 0.08);
+    border: 1px solid rgba(56, 189, 248, 0.18);
+    margin-bottom: 18px;
+    color: var(--vp-c-brand-1);
+    transition: background 0.25s ease, border-color 0.25s ease, color 0.25s ease;
 }
 
-.VPFeature:hover .icon {
-    background: linear-gradient(135deg, rgba(56, 189, 248, 0.18) 0%, rgba(168, 85, 247, 0.18) 100%) !important;
-    border-color: rgba(96, 165, 250, 0.5) !important;
-    color: #38bdf8 !important;
+:root .VPFeatures .VPFeature:hover .icon {
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.18) 0%, rgba(168, 85, 247, 0.18) 100%);
+    border-color: rgba(96, 165, 250, 0.5);
+    color: var(--vp-c-brand-1);
 }
 
-.VPFeature .icon img,
-.VPFeature .icon svg {
-    width: 24px !important;
-    height: 24px !important;
+:root .VPFeatures .VPFeature .icon img,
+:root .VPFeatures .VPFeature .icon svg {
+    width: 24px;
+    height: 24px;
 }
 
 /* Breadcrumb Links Styling */
@@ -359,68 +381,43 @@
     font-style: normal;
 }
 
-/* Documentation Content Enhancements */
-.vp-doc img {
-    border-radius: 12px;
-    border: 1px solid var(--vp-c-border);
-    margin: 16px 0;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-}
-
-/* Lucide Line Icon Alignment & Dark Theme Styling */
-.vp-lucide-icon {
-    display: inline-flex;
-    align-items: center;
-    vertical-align: -0.16em;
-    color: var(--vp-c-brand-1);
-    stroke-width: 2px;
-}
-
-.vp-doc h1 .vp-lucide-icon,
-.vp-doc h2 .vp-lucide-icon,
-.vp-doc h3 .vp-lucide-icon {
-    margin-right: 0.25em;
-    color: var(--vp-c-brand-1);
-}
-
-
 /* Landing Page Tight Natural Layout */
-.VPHome {
-    margin-bottom: 0 !important;
+:root .VPHome {
+    margin-bottom: 0;
 }
 
-.VPHomeHero {
-    padding-top: calc(var(--vp-nav-height) + 14px) !important;
-    padding-bottom: 16px !important;
+:root .VPHomeHero.VPHomeHero {
+    padding-top: calc(var(--vp-nav-height) + 14px);
+    padding-bottom: 16px;
 }
 
-.VPFeatures.VPHomeFeatures {
-    padding-top: 0 !important;
-    padding-bottom: 16px !important;
+:root .VPFeatures.VPHomeFeatures {
+    padding-top: 0;
+    padding-bottom: 16px;
 }
 
 /* Exact Alignment Across Hero, Features, and CTA Banner */
-.VPHomeHero .container,
-.VPFeatures .container,
-.VPHome .vp-doc {
-    max-width: 1040px !important;
-    margin: 0 auto !important;
+:root .VPHomeHero .container,
+:root .VPFeatures .container,
+:root .VPHome .vp-doc {
+    max-width: 1040px;
+    margin: 0 auto;
 }
 
-.VPHome .vp-doc {
-    padding: 0 24px 18px !important;
-    width: 100% !important;
+:root .VPHome .vp-doc {
+    padding: 0 24px 18px;
+    width: 100%;
 }
 
 @media (min-width: 640px) {
-    .VPHome .vp-doc {
-        padding: 0 32px 18px !important;
+    :root .VPHome .vp-doc {
+        padding: 0 32px 18px;
     }
 }
 
 @media (min-width: 960px) {
-    .VPHome .vp-doc {
-        padding: 0 40px 20px !important;
+    :root .VPHome .vp-doc {
+        padding: 0 40px 20px;
     }
 }
 
@@ -476,19 +473,12 @@
     box-shadow: 0 0 8px #38bdf8;
 }
 
-.home-cta-text {
-    font-size: 0.9rem !important;
-    color: var(--vp-c-text-2) !important;
-    margin: 0 !important;
-    line-height: 1.45 !important;
-    white-space: normal !important;
-}
-
-.home-cta-actions {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-shrink: 0;
+.vp-doc p.home-cta-text {
+    font-size: 0.9rem;
+    color: var(--vp-c-text-2);
+    margin: 0;
+    line-height: 1.45;
+    white-space: normal;
 }
 
 .home-cta-actions .VPButton {
@@ -500,32 +490,44 @@
     font-size: 12.5px;
     font-weight: 600;
     border-radius: 6px;
-    text-decoration: none !important;
+    text-decoration: none;
     transition: all 0.2s ease;
 }
 
-.home-cta-discord-btn {
-    background: #5865F2 !important;
-    color: #ffffff !important;
-    border: none !important;
+.home-cta-actions a.home-cta-discord-btn {
+    background: #5865F2;
+    color: #ffffff;
+    border: 1px solid transparent;
 }
 
-.home-cta-discord-btn:hover {
-    background: #4752C4 !important;
+.home-cta-actions a.home-cta-discord-btn:hover {
+    background: #4752C4;
     transform: translateY(-1px);
     box-shadow: 0 4px 14px rgba(88, 101, 242, 0.4);
 }
 
-.home-cta-github-btn {
-    background: var(--vp-c-bg-elv) !important;
-    border: 1px solid var(--vp-c-border) !important;
-    color: var(--vp-c-text-1) !important;
+.home-cta-actions a.home-cta-github-btn {
+    background: var(--vp-c-bg-elv);
+    border: 1px solid var(--vp-c-border);
+    color: var(--vp-c-text-1);
 }
 
-.home-cta-github-btn:hover {
-    border-color: rgba(96, 165, 250, 0.5) !important;
+.home-cta-actions a.home-cta-github-btn:hover {
+    border-color: rgba(96, 165, 250, 0.5);
     transform: translateY(-1px);
-    color: var(--vp-c-brand-1) !important;
+    color: var(--vp-c-brand-1);
+}
+
+.home-cta-actions a.home-cta-altto-btn {
+    background: var(--vp-c-bg-elv);
+    border: 1px solid var(--vp-c-border);
+    color: var(--vp-c-text-1);
+}
+
+.home-cta-actions a.home-cta-altto-btn:hover {
+    border-color: #0c9ef0;
+    transform: translateY(-1px);
+    color: #0c9ef0;
 }
 
 @media (max-width: 860px) {
@@ -542,14 +544,14 @@
         text-align: center;
     }
 
-    .home-cta-text {
+    .vp-doc p.home-cta-text {
         white-space: normal;
     }
 }
 
-.VPFooter {
-    margin-top: 0 !important;
-    padding-top: 18px !important;
-    padding-bottom: 18px !important;
-    border-top: 1px solid var(--vp-c-divider) !important;
+:root .VPFooter {
+    margin-top: 0;
+    padding-top: 18px;
+    padding-bottom: 18px;
+    border-top: 1px solid var(--vp-c-divider);
 }

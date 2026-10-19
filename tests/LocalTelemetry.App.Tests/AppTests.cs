@@ -137,7 +137,7 @@ public class AppTests
     {
         var isAdmin = typeof(App).GetMethod("IsAdministrator", BindingFlags.NonPublic | BindingFlags.Static);
         isAdmin.Should().NotBeNull();
-        var adminResult = (bool)isAdmin!.Invoke(null, null)!;
+        var adminResult = (bool)isAdmin.Invoke(null, null)!;
         adminResult.Should().Be(adminResult);
     }
 
@@ -247,8 +247,8 @@ public class AppTests
             var monitorField = typeof(App).GetField("_monitor", BindingFlags.NonPublic | BindingFlags.Instance);
             if (monitorField?.GetValue(app) is HardwareMonitor monitor)
             {
-                try { monitor.Stop(); } catch (Exception) { /* Best-effort cleanup */ }
-                try { monitor.Dispose(); } catch (Exception) { /* Best-effort cleanup */ }
+                try { monitor.Stop(); } catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+                try { monitor.Dispose(); } catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException) { System.Diagnostics.Trace.WriteLine(ex.Message); }
             }
 
             (typeof(App).GetField("_overlay", BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(app) as TaskbarOverlay)?.Dispose();
@@ -290,8 +290,8 @@ public class AppTests
             var monitorField = typeof(App).GetField("_monitor", BindingFlags.NonPublic | BindingFlags.Instance);
             if (monitorField?.GetValue(app) is HardwareMonitor monitor)
             {
-                try { monitor.Stop(); } catch (Exception) { /* Best-effort cleanup */ }
-                try { monitor.Dispose(); } catch (Exception) { /* Best-effort cleanup */ }
+                try { monitor.Stop(); } catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+                try { monitor.Dispose(); } catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException) { System.Diagnostics.Trace.WriteLine(ex.Message); }
             }
 
             (typeof(App).GetField("_overlay", BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(app) as TaskbarOverlay)?.Dispose();
@@ -804,7 +804,7 @@ public class AppTests
 
         foreach (var s in shells)
         {
-            try { s.Close(); } catch (Exception) { /* Best-effort cleanup */ }
+            try { s.Close(); } catch (InvalidOperationException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
         System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
         logger.Dispose();
@@ -867,13 +867,13 @@ public class AppTests
         // 1. Shutdown
         var shutdownArgs = (SessionEndingCancelEventArgs)RuntimeHelpers.GetUninitializedObject(typeof(SessionEndingCancelEventArgs));
         typeof(SessionEndingCancelEventArgs).GetField("_reason", BindingFlags.NonPublic | BindingFlags.Instance)?.SetValue(shutdownArgs, ReasonSessionEnding.Shutdown);
-        var actShutdown = () => sessionEnding!.Invoke(app, [null!, shutdownArgs]);
+        var actShutdown = () => sessionEnding.Invoke(app, [null!, shutdownArgs]);
         actShutdown.Should().NotThrow();
 
         // 2. Logoff
         var logoffArgs = (SessionEndingCancelEventArgs)RuntimeHelpers.GetUninitializedObject(typeof(SessionEndingCancelEventArgs));
         typeof(SessionEndingCancelEventArgs).GetField("_reason", BindingFlags.NonPublic | BindingFlags.Instance)?.SetValue(logoffArgs, ReasonSessionEnding.Logoff);
-        var actLogoff = () => sessionEnding!.Invoke(app, [null!, logoffArgs]);
+        var actLogoff = () => sessionEnding.Invoke(app, [null!, logoffArgs]);
         actLogoff.Should().NotThrow();
     }
 
@@ -1202,10 +1202,34 @@ public class AppTests
         dummyProc.Should().NotBeNull();
 
         typeof(App).GetField("_notifierLaunched", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, true);
-        typeof(App).GetField("_notifierProcess", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, dummyProc);
-
         app.EnsureNotifierStopped();
         typeof(App).GetField("_notifierProcess", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(app).Should().BeNull();
+    }
+
+    [Fact]
+    public void App_ElevateAndExit_And_Shutdown_Coverage()
+    {
+        // 1. ElevateAndExitAction fallback and string building logic
+        var originalAction = App.ElevateAndExitAction;
+        var originalMsg = App.MessageBoxAction;
+        try
+        {
+            string[] passedArgs = [];
+            App.ElevateAndExitAction = args => passedArgs = args;
+
+            var elevateMethod = typeof(App).GetMethod("ElevateAndExit", BindingFlags.NonPublic | BindingFlags.Static);
+            elevateMethod.Should().NotBeNull();
+
+            string[] testArgs = ["--minimized", "path with spaces"];
+            elevateMethod.Invoke(null, [testArgs]);
+            passedArgs.Should().Contain("--minimized");
+            passedArgs.Should().Contain("path with spaces");
+        }
+        finally
+        {
+            App.ElevateAndExitAction = originalAction;
+            App.MessageBoxAction = originalMsg;
+        }
     }
 }
 

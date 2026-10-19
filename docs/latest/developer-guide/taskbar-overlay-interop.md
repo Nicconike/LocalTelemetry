@@ -7,64 +7,71 @@ LocalTelemetry embeds a high-performance GDI+ render surface (`NativeWindow`) di
 The taskbar overlay management is handled inside `TaskbarOverlay.cs` and `TaskbarEmbedder.cs`.
 
 ```mermaid
-%%{init: {'theme': 'dark', 'themeVariables': {'fontSize': '13px'}, 'flowchart': {'nodeSpacing': 25, 'rankSpacing': 30, 'curve': 'basis'}}}%%
+%%{init: {'theme': 'dark', 'themeVariables': {'fontSize': '13px'}, 'flowchart': {'nodeSpacing': 35, 'rankSpacing': 40, 'subGraphTitleMargin': {'top': 12, 'bottom': 20}, 'curve': 'linear'}}}%%
 flowchart TD
-    Desktop(["Windows Desktop (HWND 0)"])
-    Tray[["<b>Shell_TrayWnd</b><br/>Native Windows Taskbar HWND"]]
-    Desktop --> Tray
+    %% 1. DESKTOP & TASKBAR ROOT
+    Desktop["<b>Windows Desktop</b><br/>HWND 0"] --> Tray["<b>Shell_TrayWnd</b><br/>Native Windows Taskbar HWND"]
 
-    subgraph Win10Arch["Windows 10 Classic Shell Hierarchy"]
+    %% 2. OS SHELL ARCHITECTURES (SIDE BY SIDE)
+    subgraph Win10Arch["Windows 10 Classic Shell"]
         direction TB
-        ReBar[["<b>ReBarWindow32</b><br/>Taskbar Control Container"]]
-        TaskSw[["<b>MSTaskSwWClass</b><br/>Running Apps TaskBand"]]
-        Tray --> ReBar
+        ReBar["<b>ReBarWindow32</b><br/>Taskbar Control Container"]
+        TaskSw["<b>MSTaskSwWClass</b><br/>Running Apps TaskBand"]
         ReBar --> TaskSw
     end
 
-    subgraph Win11Arch["Windows 11 Modern Shell Hierarchy"]
+    subgraph Win11Arch["Windows 11 Modern Shell"]
         direction TB
-        Win11Bridge[["<b>DesktopWindowContentBridge</b><br/>XAML Islands Taskbar Canvas"]]
-        Tray --> Win11Bridge
+        Win11Bridge["<b>DesktopWindowContentBridge</b><br/>XAML Islands Taskbar Canvas"]
     end
 
-    subgraph EmbeddingStrategy["TaskbarEmbedder.cs Strategy Resolution"]
-        direction TB
-        ShrinkBand{{"ShrinkTaskBand Interop<br/>Reserves Pixel Real-Estate"}}
-        ChildMode(["<b>Tier 1: Child Mode (SetParent HWND)</b><br/>WS_CHILD • WS_EX_TOOLWINDOW • WS_EX_LAYERED"])
-        FallbackMode(["<b>Tier 2: Layered Fallback Window</b><br/>WS_EX_TOPMOST • WS_EX_NOACTIVATE • WS_EX_LAYERED"])
-    end
+    Tray --> ReBar
+    Tray --> Win11Bridge
 
-    subgraph DeploymentStateMachine["OverlayDeploymentState Enum"]
+    %% 3. EMBEDDING STRATEGY
+    subgraph EmbeddingStrategy["TaskbarEmbedder Strategy Resolution"]
         direction TB
-        StateInit["Uninitialized"]
-        StateActive["Active"]
-        StateFailed["Failed"]
-        StateRecov["Recovering"]
+        ShrinkBand["<b>ShrinkTaskBand Interop</b><br/>Reserves Pixel Space on Win10"]
+        ChildMode["<b>Tier 1: Child Mode (SetParent HWND)</b><br/>WS_CHILD • WS_EX_TOOLWINDOW • WS_EX_LAYERED"]
+        FallbackMode["<b>Tier 2: Layered Fallback Window</b><br/>WS_EX_TOPMOST • WS_EX_NOACTIVATE • WS_EX_LAYERED"]
 
-        StateInit -->|Embed success| StateActive
-        StateInit -->|Embed denied| StateFailed
-        StateActive -->|Explorer crash| StateRecov
-        StateRecov -->|Recovery success| StateActive
-        StateRecov -->|Recovery fail| StateFailed
-    end
-
-    subgraph OverlayComponent["LocalTelemetry.App TaskbarOverlay.cs"]
-        direction TB
-        GdiSurface[\"<b>GDI+ Render Surface</b><br/>Double-Buffered Memory DC Paint"/]
-        Watchdog{{"5-Second Watchdog & 200ms Loop<br/>Tracks ABM_GETTASKBARPOS"}}
-        MouseHook{{"Low-Level Mouse Hook (WH_MOUSE_LL)<br/>Intercepts Click / DblClick"}}
+        ShrinkBand --> ChildMode
+        ChildMode -.->|"SetParent Fails"| FallbackMode
     end
 
     TaskSw --> ShrinkBand
     Win11Bridge --> ChildMode
-    ShrinkBand --> ChildMode
-    ChildMode -.->|Denied| FallbackMode
+
+    %% 4. TASKBAR OVERLAY SURFACE & RUNTIME
+    subgraph OverlayComponent["LocalTelemetry Taskbar Overlay Surface"]
+        direction TB
+        GdiSurface["<b>GDI+ Render Surface (NativeWindow)</b><br/>Double-Buffered Memory DC Paint"]
+        Watchdog["<b>Heartbeat Watchdog (5s & 200ms)</b><br/>Tracks Taskbar HWND Validity"]
+        MouseHook["<b>Low-Level Mouse Hook</b><br/>WH_MOUSE_LL Click & DblClick"]
+
+        GdiSurface --- Watchdog
+        GdiSurface --- MouseHook
+    end
 
     ChildMode --> GdiSurface
     FallbackMode --> GdiSurface
-    GdiSurface --- Watchdog
-    GdiSurface --- MouseHook
-    Watchdog --> DeploymentStateMachine
+
+    %% 5. DEPLOYMENT STATE MACHINE
+    subgraph DeploymentStateMachine["OverlayDeploymentState Lifecycle"]
+        direction LR
+        StateInit["<b>Uninitialized</b>"]
+        StateActive["<b>Active</b>"]
+        StateRecov["<b>Recovering</b>"]
+        StateFailed["<b>Failed</b>"]
+
+        StateInit -->|"Embed OK"| StateActive
+        StateInit -->|"Embed Fail"| StateFailed
+        StateActive -->|"Explorer Restart"| StateRecov
+        StateRecov -->|"Re-embed OK"| StateActive
+        StateRecov -->|"Re-embed Fail"| StateFailed
+    end
+
+    Watchdog ==>|"Drives Recovery"| StateRecov
 
     class Desktop,Tray,ReBar,TaskSw,Win11Bridge shellNode
     class ShrinkBand,Watchdog,MouseHook toolNode

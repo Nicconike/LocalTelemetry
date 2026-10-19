@@ -12,8 +12,7 @@
     Background="#1C1B19"
     ResizeMode="CanResize"
     WindowStartupLocation="CenterScreen"
-    WindowStyle="None"
->
+    WindowStyle="None">
 
     <WindowChrome.WindowChrome>
         <WindowChrome
@@ -48,15 +47,40 @@
             </Grid.ColumnDefinitions>
 
             <!--  Window title  -->
-            <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="10,0,0,0">
-                <Viewbox Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center">
+            <StackPanel
+                Grid.Column="0"
+                Margin="10,0,0,0"
+                Orientation="Horizontal">
+                <Viewbox
+                    Width="16"
+                    Height="16"
+                    Margin="0,0,8,0"
+                    VerticalAlignment="Center">
                     <Grid Width="24" Height="24">
-                        <Path Stroke="{StaticResource TitleFg}" StrokeThickness="2" StrokeLineJoin="Round" Data="M11.5 3H5.5C4.12 3 3 4.12 3 5.5V9.5" />
-                        <Path Stroke="{StaticResource TitleFg}" StrokeThickness="2" StrokeLineJoin="Round" Data="M3 14.5V18.5C3 19.88 4.12 21 5.5 21H11.5" />
-                        <Path Stroke="{StaticResource TitleFg}" StrokeThickness="2" StrokeLineJoin="Round" Data="M12.5 3H18.5C19.88 3 21 4.12 21 5.5V7" />
-                        <Path Fill="{StaticResource TitleFg}" Data="M12.5 20H18.5C19.33 20 20 19.33 20 18.5V13.844L22 12.5V18.5C22 20.43 20.43 22 18.5 22H12.5V20Z" />
-                        <Path Stroke="{StaticResource TitleFg}" StrokeThickness="2" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Data="M1 12H5.7619L7.19048 9.2L8.61905 13.6L10.5238 6L12.4286 18L14.3333 13.2H16.2381L21 10" />
-                        <Path Fill="{StaticResource TitleFg}" Data="M24 7.5L19 8.5L22 12L24 7.5Z" />
+                        <Path
+                            Data="M11.5 3H5.5C4.12 3 3 4.12 3 5.5V9.5"
+                            Stroke="{StaticResource TitleFg}"
+                            StrokeLineJoin="Round"
+                            StrokeThickness="2" />
+                        <Path
+                            Data="M3 14.5V18.5C3 19.88 4.12 21 5.5 21H11.5"
+                            Stroke="{StaticResource TitleFg}"
+                            StrokeLineJoin="Round"
+                            StrokeThickness="2" />
+                        <Path
+                            Data="M12.5 3H18.5C19.88 3 21 4.12 21 5.5V7"
+                            Stroke="{StaticResource TitleFg}"
+                            StrokeLineJoin="Round"
+                            StrokeThickness="2" />
+                        <Path Data="M12.5 20H18.5C19.33 20 20 19.33 20 18.5V13.844L22 12.5V18.5C22 20.43 20.43 22 18.5 22H12.5V20Z" Fill="{StaticResource TitleFg}" />
+                        <Path
+                            Data="M1 12H5.7619L7.19048 9.2L8.61905 13.6L10.5238 6L12.4286 18L14.3333 13.2H16.2381L21 10"
+                            Stroke="{StaticResource TitleFg}"
+                            StrokeEndLineCap="Round"
+                            StrokeLineJoin="Round"
+                            StrokeStartLineCap="Round"
+                            StrokeThickness="2" />
+                        <Path Data="M24 7.5L19 8.5L22 12L24 7.5Z" Fill="{StaticResource TitleFg}" />
                     </Grid>
                 </Viewbox>
                 <TextBlock
@@ -109,7 +133,3 @@
             Margin="10,0,10,10" />
     </Grid>
 </Window>
-
-
-
-
