@@ -63,17 +63,25 @@ jobs:
                   bun run ./.github/release/run.ts --extends ./.github/release/release.config.mjs
 
             - name: Submit to WinGet Community Repo
-              if: ${{ secrets.WINGET_TOKEN != '' && env.RELEASE_TAG != '' }}
+              if: env.RELEASE_TAG != ''
               continue-on-error: true
               shell: pwsh
               env:
                   WINGET_CREATE_GITHUB_TOKEN: ${{ secrets.WINGET_TOKEN }}
               run: |
+                  if ([string]::IsNullOrWhiteSpace($env:RELEASE_TAG)) {
+                      Write-Host "No release tag found. Skipping WinGet submission."
+                      exit 0
+                  }
+                  if ([string]::IsNullOrWhiteSpace($env:WINGET_CREATE_GITHUB_TOKEN)) {
+                      Write-Host "WINGET_TOKEN is not configured. Skipping WinGet submission."
+                      exit 0
+                  }
                   $wingetCreatePath = "$env:TEMP\wingetcreate.exe"
                   if (-not (Test-Path $wingetCreatePath)) {
                       Invoke-WebRequest -Uri "https://aka.ms/wingetcreate/latest" -OutFile $wingetCreatePath
                   }
-                  & $wingetCreatePath submit packaging/winget/localtelemetry.yaml --prtitle "LocalTelemetry: ${{ env.RELEASE_VERSION }}" --no-open
+                  & $wingetCreatePath submit packaging/winget/localtelemetry.yaml --prtitle "LocalTelemetry: $env:RELEASE_VERSION" --no-open
 
             - name: Generate Attestations
               if: always() && hashFiles('./LocalTelemetrySetup.exe') != ''

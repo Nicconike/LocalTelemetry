@@ -258,12 +258,6 @@ If LocalTelemetry improves your daily desktop experience, consider supporting th
 - 💬 **Join the Discord Community**: Chat with the developer and fellow users on [**Discord**](https://discord.gg/M2QevSgW3S).
 - 📢 **Spread the Word**: Share LocalTelemetry with friends, colleagues, or PC enthusiast forums.
 
-<p align="center">
-    <a href="https://alternativeto.net/software/localtelemetry/about/?utm_source=badge&utm_medium=referral" target="_blank">
-        <img src="https://alternativeto.net/static/badges/badge-compact-color.svg" alt="LocalTelemetry | AlternativeTo" width="171" height="55" />
-    </a>
-</p>
-
 ---
 
 ## License

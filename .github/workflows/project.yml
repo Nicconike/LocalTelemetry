@@ -157,6 +157,7 @@ jobs:
                                       }) {
                                           projectV2Item { id }
                                       }
+                                  }
                                   `;
                               await graphqlWithPat(updateMutation, {
                                   projectId,
