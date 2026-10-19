@@ -25,9 +25,10 @@ Installers:
     - Architecture: x64
       InstallerType: inno
       InstallerUrl: https://github.com/Nicconike/LocalTelemetry/releases/download/v1.0.0/LocalTelemetrySetup.exe
-      InstallerSha256: "0000000000000000000000000000000000000000000000000000000000000000"
+      InstallerSha256: "84396BE0FE79FE196E9167961493229563750CF42DC3BCDE53E8B7D9C7BC0F03"
       Scope: machine
       ElevationRequirement: elevationRequired
       UpgradeBehavior: install
 ManifestType: singleton
 ManifestVersion: 1.6.0
+

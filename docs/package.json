@@ -1,6 +1,6 @@
 {
     "name": "localtelemetry-docs",
-    "version": "1.0.0-rc.2",
+    "version": "1.0.0",
     "private": true,
     "type": "module",
     "scripts": {
@@ -40,3 +40,4 @@
         "vite": "^6.4.3"
     }
 }
+
