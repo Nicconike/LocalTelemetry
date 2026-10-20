@@ -49,10 +49,13 @@ jobs:
                       echo "Updating branch for PR #$pr_num..."
                       gh api --method PUT "repos/$REPO/pulls/$pr_num/update-branch" --silent || true
 
-                      clean_title="$pr_title"
-                      if [[ "$clean_title" =~ bump\ the\ (.+)-deps\ group ]]; then
-                          group="${BASH_REMATCH[1]}"
-                          clean_title="${pr_title%%:*}: bump ${group} dependencies"
+                      clean_title="${pr_title%% in /*}"
+                      clean_title="${clean_title%% in the * group}"
+                      clean_title=$(echo "$clean_title" | sed -E 's/ across [0-9]+ director(y|ies)//')
+
+                      if [ "$clean_title" != "$pr_title" ]; then
+                          echo "Updating PR #$pr_num title to '$clean_title'..."
+                          gh pr edit "$pr_num" --repo "$REPO" --title "$clean_title" || true
                       fi
 
                       gh pr merge "$pr_num" --repo "$REPO" --squash --admin --subject "$clean_title" --body "" || \
@@ -69,11 +72,15 @@ jobs:
                   PR_TITLE: ${{ github.event.pull_request.title }}
               run: |
                   echo "Configuring auto-merge for PR #$PR_NUMBER (author: $PR_AUTHOR)"
-                  clean_title="$PR_TITLE"
-                  if [[ "$clean_title" =~ bump\ the\ (.+)-deps\ group ]]; then
-                      group="${BASH_REMATCH[1]}"
-                      clean_title="${PR_TITLE%%:*}: bump ${group} dependencies"
+                  clean_title="${PR_TITLE%% in /*}"
+                  clean_title="${clean_title%% in the * group}"
+                  clean_title=$(echo "$clean_title" | sed -E 's/ across [0-9]+ director(y|ies)//')
+
+                  if [ "$clean_title" != "$PR_TITLE" ]; then
+                      echo "Updating PR #$PR_NUMBER title to '$clean_title'..."
+                      gh pr edit "$PR_NUMBER" --repo "$REPO" --title "$clean_title" || true
                   fi
+
                   gh pr merge "$PR_NUMBER" --repo "$REPO" --auto --squash --subject "$clean_title" --body "" || true
 
             - name: Auto-Merge Passing PR on CI Completion
@@ -86,10 +93,14 @@ jobs:
                   if [ -n "$pr_number" ] && [ "$pr_number" != "null" ]; then
                       echo "CI completed successfully for PR #$pr_number"
                       pr_title=$(gh pr view "$pr_number" --repo "$REPO" --json title --jq '.title')
-                      clean_title="$pr_title"
-                      if [[ "$clean_title" =~ bump\ the\ (.+)-deps\ group ]]; then
-                          group="${BASH_REMATCH[1]}"
-                          clean_title="${pr_title%%:*}: bump ${group} dependencies"
+                      clean_title="${pr_title%% in /*}"
+                      clean_title="${clean_title%% in the * group}"
+                      clean_title=$(echo "$clean_title" | sed -E 's/ across [0-9]+ director(y|ies)//')
+
+                      if [ "$clean_title" != "$pr_title" ]; then
+                          echo "Updating PR #$pr_number title to '$clean_title'..."
+                          gh pr edit "$pr_number" --repo "$REPO" --title "$clean_title" || true
                       fi
+
                       gh pr merge "$pr_number" --repo "$REPO" --squash --admin --subject "$clean_title" --body "" || true
                   fi
