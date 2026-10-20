@@ -4,7 +4,7 @@ I built **LocalTelemetry** because I wanted a lightweight, reliable hardware and
 
 ---
 
-## :monitor: The Initial Goal: Essentials on the Taskbar
+## :goal: The Initial Goal: Essentials on the Taskbar
 
 When I started, I did not want floating widgets, desktop gadgets, or heavy overlays that obstruct the screen.
 
@@ -44,7 +44,7 @@ That is why I chose **[PawnIO](https://github.com/namazso/PawnIO)**.
 
 PawnIO is a modern, secure, and officially signed Windows kernel driver. Major open-source projects, including **LibreHardwareMonitor (LHM)**, use and trust PawnIO.
 
-With PawnIO, LocalTelemetry gets direct kernel access for temperature and power monitoring with **zero Defender false alarms**, full Secure Boot support, and clean scans on VirusTotal.
+With PawnIO, LocalTelemetry gets direct kernel access for temperature and power monitoring with **zero Defender false alarms**, full Secure Boot support, and clean scans on Antivirus softwares.
 
 ---
 
@@ -55,18 +55,18 @@ Once the core taskbar monitor was solid, I kept improving it.
 What started as a simple monitor for temperatures, usage, and network speeds grew into a comprehensive utility. I added unique capabilities you will not find in other taskbar monitors:
 
 - **Real-Time Disk Activity**: Live read and write throughput directly beside CPU and GPU metrics.
-- **Laptop Battery Metrics**: Live charge and discharge rates in Watts, battery health, and estimated runtime.
+- **Laptop Battery Metrics**: Live charge and discharge rates in Watts.
 - **Gapless Network History**: Imports historical data from the Windows System Resource Usage Monitor (**SRUM**) database so your bandwidth history never has gaps.
 - **Per-Metric Customization**: Custom colors, custom metric order, and authentic manufacturer brand palettes.
 - **Focus-Safe Toast Alerts**: Alerts sent through an out-of-process helper over Named Pipes so notifications never minimize full-screen games or steal keyboard focus.
 
 ---
 
-## :star: Support LocalTelemetry
+## :heart-pulse: Support LocalTelemetry
 
 LocalTelemetry is 100% free and open source under the **GPL-3.0 license**. If LocalTelemetry improves your daily desktop experience, you can support the project:
 
 - :star: **Star on GitHub**: Star [**LocalTelemetry on GitHub**](https://github.com/Nicconike/LocalTelemetry) to help more people discover the project.
 - :heart: **Like on AlternativeTo**: Upvote and review [**LocalTelemetry on AlternativeTo**](https://alternativeto.net/software/localtelemetry/about/?utm_source=badge&utm_medium=referral) to help users find a lightweight alternative.
-- :message-square: **Join the Discord**: Chat with the community and share your setup on our [**Discord Server**](https://discord.gg/M2QevSgW3S).
-- :bug: **Report Bugs & Suggest Features**: Open an issue on our [**GitHub Issue Tracker**](https://github.com/Nicconike/LocalTelemetry/issues).
+- :message-square: **Join the Discord**: Chat with the community and share your setup on [**Discord Server**](https://discord.gg/M2QevSgW3S).
+- :bug: **Report Bugs & Suggest Features**: Open an issue on [**GitHub Issue Tracker**](https://github.com/Nicconike/LocalTelemetry/issues).
