@@ -2,9 +2,9 @@ name: Project Automation
 
 on:
     issues:
-        types: [opened, closed]
+        types: [opened, closed, reopened, assigned, unassigned]
     pull_request_target:
-        types: [opened, synchronize, reopened, closed]
+        types: [opened, synchronize, reopened, closed, ready_for_review, converted_to_draft, review_requested]
     workflow_dispatch:
 
 permissions:
@@ -29,21 +29,11 @@ jobs:
                       const action = context.payload.action;
                       const isIssue = !!context.payload.issue;
                       const item = isIssue ? context.payload.issue : context.payload.pull_request;
-                      const title = item ? item.title.toLowerCase() : '';
-                      const author = item ? item.user.login : '';
-                      const number = item ? item.number : 0;
-                      const contentId = item ? item.node_id : '';
-
-                      if (!item) {
-                          console.log("Ran via workflow_dispatch.");
-                          return;
-                      }
-
                       const owner = context.repo.owner;
                       const projectNumber = 7;
                       const graphqlWithPat = github.graphql;
 
-                      // 2. Add to User Project #7 & Fetch Field Schema
+                      // 1. Fetch Project #7 and Field Schema
                       const projectQuery = `
                           query($owner: String!, $number: Int!) {
                               user(login: $owner) {
@@ -82,36 +72,23 @@ jobs:
                           }
                       `;
 
-                      let project, projectId, allFields, itemId;
+                      let project, projectId, allFields;
                       try {
                           const projectData = await graphqlWithPat(projectQuery, { owner, number: projectNumber });
                           project = projectData.user ? projectData.user.projectV2 : null;
-
                           if (!project) {
                               core.setFailed(`Project #${projectNumber} not found under user '${owner}'. Ensure PROJECTS secret is configured.`);
                               return;
                           }
-
                           projectId = project.id;
                           allFields = project.fields.nodes;
-
-                          // Add Item to Project #7
-                          const addItemMutation = `
-                              mutation($projectId: ID!, $contentId: ID!) {
-                                  addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) {
-                                      item { id }
-                                  }
-                              }
-                          `;
-                          const addItemRes = await graphqlWithPat(addItemMutation, { projectId, contentId });
-                          itemId = addItemRes.addProjectV2ItemById.item.id;
                       } catch (err) {
-                          core.setFailed(`Project fetch/addition failed: ${err.message}`);
+                          core.setFailed(`Project fetch failed: ${err.message}`);
                           return;
                       }
 
-                      // Helper for updating single select fields accurately
-                      const updateSingleSelectField = async (fieldName, targetOptionName) => {
+                      // Helper: Update Single-Select Field (Status, Priority, Scope, Kind)
+                      const updateSingleSelectField = async (targetItemId, fieldName, targetOptionName) => {
                           const field = allFields.find(f => f.name && f.name.toLowerCase() === fieldName.toLowerCase());
                           if (field && field.options && targetOptionName) {
                               const matchedOption = field.options.find(opt =>
@@ -134,17 +111,17 @@ jobs:
                                   `;
                                   await graphqlWithPat(updateMutation, {
                                       projectId,
-                                      itemId,
+                                      itemId: targetItemId,
                                       fieldId: field.id,
                                       optionId: matchedOption.id
                                   });
-                                  console.log(`Assigned #${number} to ${fieldName}: ${matchedOption.name}`);
+                                  console.log(`Updated item ${targetItemId} -> ${fieldName}: ${matchedOption.name}`);
                               }
                           }
                       };
 
-                      // Helper for updating number fields (Effort)
-                      const updateNumberField = async (fieldName, numValue) => {
+                      // Helper: Update Number Field (Effort)
+                      const updateNumberField = async (targetItemId, fieldName, numValue) => {
                           const field = allFields.find(f => f.name && f.name.toLowerCase() === fieldName.toLowerCase());
                           if (field && field.id && numValue !== undefined) {
                               const updateMutation = `
@@ -158,241 +135,371 @@ jobs:
                                           projectV2Item { id }
                                       }
                                   }
-                                  `;
+                              `;
                               await graphqlWithPat(updateMutation, {
                                   projectId,
-                                  itemId,
+                                  itemId: targetItemId,
                                   fieldId: field.id,
                                   numValue: parseFloat(numValue)
                               });
-                              console.log(`Assigned #${number} to ${fieldName}: ${numValue}`);
+                              console.log(`Updated item ${targetItemId} -> ${fieldName}: ${numValue}`);
                           }
                       };
 
-                      // --- CLOSED EVENT HANDLING (Status = Done or Cancelled) ---
-                      if (action === 'closed') {
-                          let isMergedOrCompleted = false;
-                          if (!isIssue) {
-                              isMergedOrCompleted = !!item.merged;
-                          } else {
-                              isMergedOrCompleted = item.state_reason === 'completed' || !item.state_reason;
+                      // Helper: Update Sprint Iteration
+                      const updateSprintField = async (targetItemId) => {
+                          const iterationField = allFields.find(f => f.configuration && f.configuration.iterations);
+                          if (iterationField) {
+                              const todayStr = new Date().toISOString().split('T')[0];
+                              const iterations = iterationField.configuration.iterations;
+                              let activeIteration = iterations.find(iter => {
+                                  const startStr = iter.startDate;
+                                  const endDate = new Date(new Date(iter.startDate).getTime() + iter.duration * 86400000);
+                                  const endStr = endDate.toISOString().split('T')[0];
+                                  return todayStr >= startStr && todayStr < endStr;
+                              });
+                              if (!activeIteration) {
+                                  activeIteration = iterations.find(iter => iter.startDate > todayStr);
+                              }
+                              if (activeIteration) {
+                                  const updateSprintMutation = `
+                                      mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $iterationId: String!) {
+                                          updateProjectV2ItemFieldValue(input: {
+                                              projectId: $projectId,
+                                              itemId: $itemId,
+                                              fieldId: $fieldId,
+                                              value: { iterationId: $iterationId }
+                                          }) {
+                                              projectV2Item { id }
+                                          }
+                                      }
+                                  `;
+                                  await graphqlWithPat(updateSprintMutation, {
+                                      projectId,
+                                      itemId: targetItemId,
+                                      fieldId: iterationField.id,
+                                      iterationId: activeIteration.id
+                                  });
+                                  console.log(`Assigned item ${targetItemId} to Sprint (${activeIteration.id})`);
+                              }
                           }
+                      };
 
-                          if (isMergedOrCompleted) {
-                              await updateSingleSelectField('Status', 'Done');
-                              console.log(`Closed #${number} as Merged/Completed -> Status: Done`);
-                          } else {
-                              await updateSingleSelectField('Status', 'Cancelled');
-                              console.log(`Closed #${number} as Unmerged/Not Planned -> Status: Cancelled`);
-                          }
-                          return;
-                      }
+                      // Helper: Compute metadata based on title and PR diff
+                      const computeMetadata = (rawTitle, isPr, author, additions, deletions) => {
+                          const title = (rawTitle || '').toLowerCase();
+                          let labelsToAdd = new Set();
+                          let kindName = "";
+                          let scopeName = "";
+                          let priorityName = "🟡 Medium";
+                          let effortValue = 2;
 
-                      // --- OPENED EVENT HANDLING (Fields, Sprint, Labels Calculation) ---
-                      let labelsToAdd = new Set();
-                      let kindName = "";
-                      let scopeName = "";
-                      let priorityName = "🟡 Medium";
-                      let effortValue = 2; // Default Fibonacci point = 2
-
-                      if (author === 'dependabot[bot]' || author.includes('bot') || title.includes('(deps)')) {
-                          if (author === 'dependabot[bot]') labelsToAdd.add('dependabot');
-                          labelsToAdd.add('dependencies');
-                          labelsToAdd.add('scope:ci');
-                          kindName = "📦 Build";
-                          scopeName = "CI";
-                          priorityName = "🔵 Low";
-                          effortValue = 1;
-                      } else {
-                          // Conventional Commits Semantic Evaluation
-                          // 1. breaking: (Breaking Change)
-                          if (title.includes('breaking') || title.includes('!') || title.startsWith('breaking')) {
-                              labelsToAdd.add('enhancement');
-                              kindName = "💥 Breaking";
-                              priorityName = "🔴 Urgent";
-                              effortValue = 5;
-                          }
-                          // 2. feat: (Feature)
-                          else if (title.startsWith('feat')) {
-                              labelsToAdd.add('enhancement');
-                              kindName = "✨ Feature";
-                              priorityName = "🟠 High";
-                              effortValue = 3;
-                          }
-                          // 3. fix: (Bug Fix)
-                          else if (title.startsWith('fix')) {
-                              labelsToAdd.add('bug');
-                              kindName = "🐛 Bug";
-                              priorityName = title.includes('critical') || title.includes('security') ? "🔴 Urgent" : "🟠 High";
-                              effortValue = 2;
-                          }
-                          // 4. perf: (Performance Optimization)
-                          else if (title.startsWith('perf')) {
-                              labelsToAdd.add('perf');
-                              labelsToAdd.add('enhancement');
-                              kindName = "⚡ Perf";
-                              priorityName = "🟡 Medium";
-                              effortValue = 3;
-                          }
-                          // 5. refactor: (Code Cleanup)
-                          else if (title.startsWith('refactor')) {
-                              labelsToAdd.add('refactor');
-                              kindName = "♻️ Refactor";
-                              priorityName = "🟡 Medium";
-                              effortValue = 2;
-                          }
-                          // 6. test: (Testing)
-                          else if (title.startsWith('test')) {
-                              labelsToAdd.add('testing');
-                              kindName = "🧪 Test";
-                              priorityName = "🟡 Medium";
-                              effortValue = 2;
-                          }
-                          // 7. docs: (Documentation)
-                          else if (title.startsWith('docs')) {
-                              labelsToAdd.add('documentation');
-                              kindName = "📚 Docs";
-                              priorityName = "🔵 Low";
-                              effortValue = 1;
-                          }
-                          // 8. build: (Build & Dependencies)
-                          else if (title.startsWith('build')) {
+                          if (author === 'dependabot[bot]' || author.includes('bot') || title.includes('(deps)')) {
+                              if (author === 'dependabot[bot]') labelsToAdd.add('dependabot');
                               labelsToAdd.add('dependencies');
                               labelsToAdd.add('scope:ci');
                               kindName = "📦 Build";
                               scopeName = "CI";
                               priorityName = "🔵 Low";
                               effortValue = 1;
+                          } else {
+                              if (title.includes('breaking') || title.includes('!') || title.startsWith('breaking')) {
+                                  labelsToAdd.add('enhancement');
+                                  kindName = "💥 Breaking";
+                                  priorityName = "🔴 Urgent";
+                                  effortValue = 5;
+                              } else if (title.startsWith('feat')) {
+                                  labelsToAdd.add('enhancement');
+                                  kindName = "✨ Feature";
+                                  priorityName = "🟠 High";
+                                  effortValue = 3;
+                              } else if (title.startsWith('fix')) {
+                                  labelsToAdd.add('bug');
+                                  kindName = "🐛 Bug";
+                                  priorityName = title.includes('critical') || title.includes('security') ? "🔴 Urgent" : "🟠 High";
+                                  effortValue = 2;
+                              } else if (title.startsWith('perf')) {
+                                  labelsToAdd.add('perf');
+                                  labelsToAdd.add('enhancement');
+                                  kindName = "⚡ Perf";
+                                  priorityName = "🟡 Medium";
+                                  effortValue = 3;
+                              } else if (title.startsWith('refactor')) {
+                                  labelsToAdd.add('refactor');
+                                  kindName = "♻️ Refactor";
+                                  priorityName = "🟡 Medium";
+                                  effortValue = 2;
+                              } else if (title.startsWith('test')) {
+                                  labelsToAdd.add('testing');
+                                  kindName = "🧪 Test";
+                                  priorityName = "🟡 Medium";
+                                  effortValue = 2;
+                              } else if (title.startsWith('docs')) {
+                                  labelsToAdd.add('documentation');
+                                  kindName = "📚 Docs";
+                                  priorityName = "🔵 Low";
+                                  effortValue = 1;
+                              } else if (title.startsWith('build')) {
+                                  labelsToAdd.add('dependencies');
+                                  labelsToAdd.add('scope:ci');
+                                  kindName = "📦 Build";
+                                  scopeName = "CI";
+                                  priorityName = "🔵 Low";
+                                  effortValue = 1;
+                              } else if (title.startsWith('ci')) {
+                                  labelsToAdd.add('ci');
+                                  labelsToAdd.add('actions');
+                                  labelsToAdd.add('scope:ci');
+                                  kindName = "⚙️ CI";
+                                  scopeName = "CI";
+                                  priorityName = "🔵 Low";
+                                  effortValue = 1;
+                              } else if (title.startsWith('chore')) {
+                                  labelsToAdd.add('chore');
+                                  kindName = "🔧 Chore";
+                                  priorityName = "🔵 Low";
+                                  effortValue = 1;
+                              } else if (title.startsWith('style')) {
+                                  kindName = "🎨 Style";
+                                  priorityName = "🔵 Low";
+                                  effortValue = 1;
+                              } else if (title.startsWith('revert')) {
+                                  labelsToAdd.add('bug');
+                                  kindName = "🐛 Bug";
+                                  priorityName = "🟠 High";
+                                  effortValue = 2;
+                              }
+
+                              if (isPr && additions !== undefined && deletions !== undefined) {
+                                  const totalDiff = additions + deletions;
+                                  if (totalDiff < 30) effortValue = 1;
+                                  else if (totalDiff <= 100) effortValue = 2;
+                                  else if (totalDiff <= 300) effortValue = 3;
+                                  else if (totalDiff <= 600) effortValue = 5;
+                                  else effortValue = 8;
+                              }
+
+                              if (title.includes('(core)')) labelsToAdd.add('scope:core');
+                              if (title.includes('(app)')) labelsToAdd.add('scope:app');
+                              if (title.includes('(overlay)')) labelsToAdd.add('scope:overlay');
+                              if (title.includes('(monitor)')) labelsToAdd.add('scope:monitor');
+                              if (title.includes('(config)')) labelsToAdd.add('scope:config');
+                              if (title.includes('(ci)') || title.includes('(actions)')) labelsToAdd.add('scope:ci');
+
+                              if (title.includes('(core)') || title.includes('(config)') || title.includes('(monitor)')) labelsToAdd.add('csharp');
+                              if (title.includes('(app)') || title.includes('(overlay)')) labelsToAdd.add('frontend');
+
+                              if (title.includes('(core)')) scopeName = "Core";
+                              else if (title.includes('(app)')) scopeName = "App";
+                              else if (title.includes('(overlay)')) scopeName = "Overlay";
+                              else if (title.includes('(monitor)')) scopeName = "Monitor";
+                              else if (title.includes('(config)')) scopeName = "Config";
+                              else if (title.includes('(ci)') || title.includes('(actions)')) scopeName = "CI";
                           }
-                          // 9. ci: (CI Workflows)
-                          else if (title.startsWith('ci')) {
-                              labelsToAdd.add('ci');
-                              labelsToAdd.add('actions');
-                              labelsToAdd.add('scope:ci');
-                              kindName = "⚙️ CI";
-                              scopeName = "CI";
-                              priorityName = "🔵 Low";
-                              effortValue = 1;
-                          }
-                          // 10. chore: (Housekeeping)
-                          else if (title.startsWith('chore')) {
-                              labelsToAdd.add('chore');
-                              kindName = "🔧 Chore";
-                              priorityName = "🔵 Low";
-                              effortValue = 1;
-                          }
-                          // 11. style: (Formatting)
-                          else if (title.startsWith('style')) {
-                              kindName = "🎨 Style";
-                              priorityName = "🔵 Low";
-                              effortValue = 1;
-                          }
-                          // 12. revert: (Revert Commit)
-                          else if (title.startsWith('revert')) {
-                              labelsToAdd.add('bug');
-                              kindName = "🐛 Bug";
-                              priorityName = "🟠 High";
-                              effortValue = 2;
-                          }
 
-                          // Fibonacci Scale for PRs based on total code additions + deletions
-                          if (!isIssue && item.additions !== undefined && item.deletions !== undefined) {
-                              const totalDiff = item.additions + item.deletions;
-                              if (totalDiff < 30) effortValue = 1;
-                              else if (totalDiff <= 100) effortValue = 2;
-                              else if (totalDiff <= 300) effortValue = 3;
-                              else if (totalDiff <= 600) effortValue = 5;
-                              else effortValue = 8;
-                          }
+                          return { labelsToAdd, kindName, scopeName, priorityName, effortValue };
+                      };
 
-                          // Multi-Scope Label Detection (Tags ALL matching component scopes)
-                          if (title.includes('(core)')) labelsToAdd.add('scope:core');
-                          if (title.includes('(app)')) labelsToAdd.add('scope:app');
-                          if (title.includes('(overlay)')) labelsToAdd.add('scope:overlay');
-                          if (title.includes('(monitor)')) labelsToAdd.add('scope:monitor');
-                          if (title.includes('(config)')) labelsToAdd.add('scope:config');
-                          if (title.includes('(ci)') || title.includes('(actions)')) labelsToAdd.add('scope:ci');
-
-                          if (title.includes('(core)') || title.includes('(config)') || title.includes('(monitor)')) labelsToAdd.add('csharp');
-                          if (title.includes('(app)') || title.includes('(overlay)')) labelsToAdd.add('frontend');
-
-                          // Architectural Scope Precedence for Single-Select Field (Core > App > Overlay > Monitor > Config > CI)
-                          if (title.includes('(core)')) scopeName = "Core";
-                          else if (title.includes('(app)')) scopeName = "App";
-                          else if (title.includes('(overlay)')) scopeName = "Overlay";
-                          else if (title.includes('(monitor)')) scopeName = "Monitor";
-                          else if (title.includes('(config)')) scopeName = "Config";
-                          else if (title.includes('(ci)') || title.includes('(actions)')) scopeName = "CI";
-                      }
-
-                      // Label Addition runs under GITHUB_TOKEN -> records actor as github-actions[bot]
-                      const finalLabels = Array.from(labelsToAdd);
-                      if (finalLabels.length > 0) {
-                          await github.rest.issues.addLabels({
-                              owner: context.repo.owner,
-                              repo: context.repo.repo,
-                              issue_number: number,
-                              labels: finalLabels
-                          });
-                          console.log(`Labeled #${number} as github-actions[bot] with: ${finalLabels.join(', ')}`);
-                      }
-
-                      // A. Assign Active Sprint / Iteration
-                      const iterationField = allFields.find(f => f.configuration && f.configuration.iterations);
-                      if (iterationField) {
-                          const todayStr = new Date().toISOString().split('T')[0];
-                          const iterations = iterationField.configuration.iterations;
-
-                          let activeIteration = iterations.find(iter => {
-                              const startStr = iter.startDate;
-                              const endDate = new Date(new Date(iter.startDate).getTime() + iter.duration * 86400000);
-                              const endStr = endDate.toISOString().split('T')[0];
-                              return todayStr >= startStr && todayStr < endStr;
-                          });
-
-                          if (!activeIteration) {
-                              activeIteration = iterations.find(iter => iter.startDate > todayStr);
-                          }
-
-                          if (activeIteration) {
-                              const updateSprintMutation = `
-                                  mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $iterationId: String!) {
-                                      updateProjectV2ItemFieldValue(input: {
-                                          projectId: $projectId,
-                                          itemId: $itemId,
-                                          fieldId: $fieldId,
-                                          value: { iterationId: $iterationId }
-                                      }) {
-                                          projectV2Item { id }
+                      // --- WORKFLOW_DISPATCH AUDIT & RECONCILIATION ---
+                      if (!item) {
+                          console.log("Triggered via workflow_dispatch: Auditing and reconciling Project #7 items...");
+                          const itemsQuery = `
+                              query($projectId: ID!) {
+                                  node(id: $projectId) {
+                                      ... on ProjectV2 {
+                                          items(first: 100) {
+                                              nodes {
+                                                  id
+                                                  content {
+                                                      __typename
+                                                      ... on Issue {
+                                                          number
+                                                          title
+                                                          state
+                                                          stateReason
+                                                          author { login }
+                                                          assignees(first: 5) { totalCount }
+                                                      }
+                                                      ... on PullRequest {
+                                                          number
+                                                          title
+                                                          state
+                                                          merged
+                                                          isDraft
+                                                          author { login }
+                                                          additions
+                                                          deletions
+                                                      }
+                                                  }
+                                                  fieldValues(first: 20) {
+                                                      nodes {
+                                                          ... on ProjectV2ItemFieldSingleSelectValue {
+                                                              field { ... on ProjectV2SingleSelectField { name } }
+                                                              name
+                                                          }
+                                                          ... on ProjectV2ItemFieldNumberValue {
+                                                              field { ... on ProjectV2Field { name } }
+                                                              number
+                                                          }
+                                                      }
+                                                  }
+                                              }
+                                          }
                                       }
                                   }
-                              `;
-                              await graphqlWithPat(updateSprintMutation, {
-                                  projectId,
-                                  itemId,
-                                  fieldId: iterationField.id,
-                                  iterationId: activeIteration.id
-                              });
-                              console.log(`Assigned #${number} to Sprint (${activeIteration.id})`);
+                              }
+                          `;
+                          const itemsData = await graphqlWithPat(itemsQuery, { projectId });
+                          const projectItems = itemsData.node ? itemsData.node.items.nodes : [];
+                          console.log(`Found ${projectItems.length} items in Project #7.`);
+
+                          for (const pItem of projectItems) {
+                              if (!pItem.content) continue;
+                              const content = pItem.content;
+                              const isPr = content.__typename === 'PullRequest';
+                              const currentStatus = pItem.fieldValues.nodes.find(v => v.field && v.field.name === 'Status')?.name;
+                              const currentEffort = pItem.fieldValues.nodes.find(v => v.field && v.field.name === 'Effort')?.number;
+                              const currentKind = pItem.fieldValues.nodes.find(v => v.field && v.field.name === 'Kind')?.name;
+                              const currentScope = pItem.fieldValues.nodes.find(v => v.field && v.field.name === 'Scope')?.name;
+                              const currentPriority = pItem.fieldValues.nodes.find(v => v.field && v.field.name === 'Priority')?.name;
+
+                              let expectedStatus = '';
+                              if (isPr) {
+                                  if (content.state === 'MERGED' || content.merged) {
+                                      expectedStatus = 'Done';
+                                  } else if (content.state === 'CLOSED') {
+                                      expectedStatus = 'Cancelled';
+                                  } else if (content.isDraft) {
+                                      expectedStatus = 'In Progress';
+                                  } else {
+                                      expectedStatus = 'In Review';
+                                  }
+                              } else {
+                                  if (content.state === 'CLOSED') {
+                                      expectedStatus = (content.stateReason === 'NOT_PLANNED') ? 'Cancelled' : 'Done';
+                                  } else if (content.assignees && content.assignees.totalCount > 0) {
+                                      expectedStatus = 'In Progress';
+                                  } else {
+                                      expectedStatus = 'Todo';
+                                  }
+                              }
+
+                              if (expectedStatus && currentStatus !== expectedStatus) {
+                                  console.log(`Reconciling #${content.number} (${content.__typename}): Status '${currentStatus}' -> '${expectedStatus}'`);
+                                  await updateSingleSelectField(pItem.id, 'Status', expectedStatus);
+                              }
+
+                              // Populate missing metadata
+                              const authorLogin = content.author ? content.author.login : '';
+                              const meta = computeMetadata(content.title, isPr, authorLogin, content.additions, content.deletions);
+
+                              if (!currentEffort && meta.effortValue !== undefined) {
+                                  await updateNumberField(pItem.id, 'Effort', meta.effortValue);
+                              }
+                              if (!currentKind && meta.kindName) {
+                                  await updateSingleSelectField(pItem.id, 'Kind', meta.kindName);
+                              }
+                              if (!currentScope && meta.scopeName) {
+                                  await updateSingleSelectField(pItem.id, 'Scope', meta.scopeName);
+                              }
+                              if (!currentPriority && meta.priorityName) {
+                                  await updateSingleSelectField(pItem.id, 'Priority', meta.priorityName);
+                              }
+                          }
+                          console.log("Project #7 audit and reconciliation completed.");
+                          return;
+                      }
+
+                      // --- EVENT-DRIVEN AUTOMATION (Issues & Pull Requests) ---
+                      const title = item.title || '';
+                      const author = item.user ? item.user.login : '';
+                      const number = item.number;
+                      const contentId = item.node_id;
+
+                      // 2. Add Item to Project #7 if not present
+                      let itemId;
+                      try {
+                          const addItemMutation = `
+                              mutation($projectId: ID!, $contentId: ID!) {
+                                  addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) {
+                                      item { id }
+                                  }
+                              }
+                          `;
+                          const addItemRes = await graphqlWithPat(addItemMutation, { projectId, contentId });
+                          itemId = addItemRes.addProjectV2ItemById.item.id;
+                      } catch (err) {
+                          core.setFailed(`Project item addition failed: ${err.message}`);
+                          return;
+                      }
+
+                      // 3. Determine Lifecycle Stage (Status lane)
+                      let targetStatus = '';
+                      if (action === 'closed') {
+                          if (isIssue) {
+                              targetStatus = (item.state_reason === 'not_planned') ? 'Cancelled' : 'Done';
+                          } else {
+                              targetStatus = item.merged ? 'Done' : 'Cancelled';
+                          }
+                      } else if (isIssue) {
+                          if (action === 'assigned') {
+                              targetStatus = 'In Progress';
+                          } else if (action === 'unassigned') {
+                              targetStatus = (item.assignees && item.assignees.length > 0) ? 'In Progress' : 'Todo';
+                          } else if (action === 'reopened') {
+                              targetStatus = (item.assignees && item.assignees.length > 0) ? 'In Progress' : 'Todo';
+                          } else if (action === 'opened') {
+                              targetStatus = title.toLowerCase().includes('backlog') ? 'Backlog' : 'Todo';
+                          }
+                      } else {
+                          // Pull Request Lifecycle Stages
+                          if (action === 'converted_to_draft') {
+                              targetStatus = 'In Progress';
+                          } else if (action === 'ready_for_review' || action === 'review_requested') {
+                              targetStatus = 'In Review';
+                          } else if (action === 'opened' || action === 'synchronize' || action === 'reopened') {
+                              targetStatus = item.draft ? 'In Progress' : 'In Review';
                           }
                       }
 
-                      // B. Assign Kind Custom Field
-                      if (kindName) {
-                          await updateSingleSelectField('Kind', kindName);
+                      if (targetStatus) {
+                          await updateSingleSelectField(itemId, 'Status', targetStatus);
+                          console.log(`Assigned #${number} to Status lane: ${targetStatus}`);
                       }
 
-                      // C. Assign Scope Custom Field
-                      if (scopeName) {
-                          await updateSingleSelectField('Scope', scopeName);
+                      // 4. Compute and Assign Item Metadata
+                      const meta = computeMetadata(title, !isIssue, author, item.additions, item.deletions);
+
+                      // Apply Labels
+                      const finalLabels = Array.from(meta.labelsToAdd);
+                      if (finalLabels.length > 0) {
+                          try {
+                              await github.rest.issues.addLabels({
+                                  owner: context.repo.owner,
+                                  repo: context.repo.repo,
+                                  issue_number: number,
+                                  labels: finalLabels
+                              });
+                              console.log(`Labeled #${number} as github-actions[bot] with: ${finalLabels.join(', ')}`);
+                          } catch (err) {
+                              console.warn(`Label addition skipped: ${err.message}`);
+                          }
                       }
 
-                      // D. Assign Priority Custom Field
-                      if (priorityName) {
-                          await updateSingleSelectField('Priority', priorityName);
-                      }
+                      // Apply Sprint, Kind, Scope, Priority, Effort (on non-closed events)
+                      if (action !== 'closed') {
+                          await updateSprintField(itemId);
 
-                      // E. Assign Effort Custom Field (Number)
-                      if (effortValue !== undefined) {
-                          await updateNumberField('Effort', effortValue);
+                          if (meta.kindName) {
+                              await updateSingleSelectField(itemId, 'Kind', meta.kindName);
+                          }
+                          if (meta.scopeName) {
+                              await updateSingleSelectField(itemId, 'Scope', meta.scopeName);
+                          }
+                          if (meta.priorityName) {
+                              await updateSingleSelectField(itemId, 'Priority', meta.priorityName);
+                          }
+                          if (meta.effortValue !== undefined) {
+                              await updateNumberField(itemId, 'Effort', meta.effortValue);
+                          }
                       }

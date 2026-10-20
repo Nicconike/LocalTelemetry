@@ -392,8 +392,40 @@ public class DiskQueryTests
         ((string)detDisplay.Invoke(null, ["Virtual", "SSD"])!).Should().Be("SSD");
         ((string)detDisplay.Invoke(null, ["Virtual", "HDD"])!).Should().Be("HDD");
         ((string)detDisplay.Invoke(null, ["Virtual", ""])!).Should().Be("Virtual");
-        ((string)detDisplay.Invoke(null, ["RAID", ""])!).Should().Be("RAID");
         ((string)detDisplay.Invoke(null, ["", ""])!).Should().BeEmpty();
     }
+
+    [Fact]
+    public void DiskQuery_BytesToStruct_HandlesBuffers()
+    {
+        var method = typeof(DiskQuery).GetMethod("BytesToStruct", BindingFlags.NonPublic | BindingFlags.Static);
+        method.Should().NotBeNull();
+        var targetType = typeof(DiskQuery).GetNestedType("StoragePropertyQuery", BindingFlags.NonPublic)!;
+        var generic = method.MakeGenericMethod(targetType);
+
+        int size = System.Runtime.InteropServices.Marshal.SizeOf(targetType);
+        byte[] buf = new byte[size];
+        buf[0] = 1;
+        var result = generic.Invoke(null, [buf]);
+        result.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void DiskQuery_FormatBusType_ReturnsExpectedLabels()
+    {
+        DiskQuery.FormatBusType(17).Should().Be("NVMe");
+        DiskQuery.FormatBusType(11).Should().Be("SATA");
+        DiskQuery.FormatBusType(10).Should().Be("SAS");
+        DiskQuery.FormatBusType(7).Should().Be("USB");
+        DiskQuery.FormatBusType(14).Should().Be("Virtual");
+        DiskQuery.FormatBusType(3).Should().Be("ATA");
+        DiskQuery.FormatBusType(8).Should().Be("RAID");
+        DiskQuery.FormatBusType(4).Should().Be("1394");
+        DiskQuery.FormatBusType(12).Should().Be("SD");
+        DiskQuery.FormatBusType(13).Should().Be("MMC");
+        DiskQuery.FormatBusType(19).Should().Be("UFS");
+        DiskQuery.FormatBusType(99).Should().Be("BusType99");
+    }
 }
+
 

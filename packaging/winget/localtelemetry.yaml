@@ -31,4 +31,3 @@ Installers:
       UpgradeBehavior: install
 ManifestType: singleton
 ManifestVersion: 1.6.0
-

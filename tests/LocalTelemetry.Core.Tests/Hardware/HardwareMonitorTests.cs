@@ -115,15 +115,7 @@ public class HardwareMonitorTests
 
         received.Should().NotBeNull();
     }
-}
 
-/// <summary>
-/// Hermetic tests for <see cref="HardwareMonitor"/> private seams: MSR/RAPL/TDP reads via a
-/// mocked <see cref="IPawnIoTransport"/>, CPU temperature via the MSR readers, battery/disk/net
-/// fallbacks and lifecycle methods. No kernel driver is required.
-/// </summary>
-public class HardwareMonitorSeamTests
-{
     private const ulong MsrAperf = 0xE8;
     private const ulong MsrMperf = 0xE7;
     private const ulong MsrPowerUnit = 0x606;
@@ -1513,4 +1505,341 @@ public class HardwareMonitorSeamTests
         resetGpu.Should().NotBeNull();
         resetGpu.Invoke(monitor, ["test reset"]);
     }
+
+    [Fact]
+    public void HardwareMonitor_GetBatteryStateDescription_ReturnsCorrectStates()
+    {
+        var method = typeof(HardwareMonitor).GetMethod("GetBatteryStateDescription", BindingFlags.NonPublic | BindingFlags.Static);
+        method.Should().NotBeNull();
+
+        method.Invoke(null, [true, true]).Should().Be("charging");
+        method.Invoke(null, [true, false]).Should().Be("charging");
+        method.Invoke(null, [false, true]).Should().Be("charged");
+        method.Invoke(null, [false, false]).Should().Be("discharging");
+    }
+
+    [Fact]
+    public void HardwareMonitor_LogTickMetrics_AllMetricsEnabled()
+    {
+        var cfg = new AppSettings();
+        cfg.Monitoring.EnableCpu = true;
+        cfg.Monitoring.EnableRam = true;
+        cfg.Monitoring.EnableDisk = true;
+        cfg.Monitoring.EnableGpu = true;
+        cfg.Monitoring.EnableBattery = true;
+
+        var sysInfoMock = Substitute.For<ISystemInfo>();
+        var pawnIoMock = Substitute.For<IPawnIoManager>();
+        using var monitor = new HardwareMonitor(cfg, sysInfoMock, pawnIoMock);
+
+        var logTick = typeof(HardwareMonitor).GetMethod("LogTickMetrics", BindingFlags.NonPublic | BindingFlags.Instance);
+        logTick.Should().NotBeNull();
+
+        // Exercise charging, charged, discharging
+        logTick.Invoke(monitor, [
+            cfg.Monitoring,
+            (50f, 60f, 4.5f, 95f),
+            (65f, 16f, 32f),
+            (120.5, 45.2, 2),
+            (80f, 70f, 250f, 2100f),
+            (85f, true, true, 45f)
+        ]);
+
+        logTick.Invoke(monitor, [
+            cfg.Monitoring,
+            (10f, 40f, 2.5f, 30f),
+            (30f, 8f, 32f),
+            (10.0, 5.0, 1),
+            (20f, 45f, 50f, 800f),
+            (100f, false, true, 0f)
+        ]);
+
+        logTick.Invoke(monitor, [
+            cfg.Monitoring,
+            (20f, 45f, 3.0f, 40f),
+            (40f, 12f, 32f),
+            (20.0, 10.0, 1),
+            (30f, 50f, 60f, 1000f),
+            (50f, false, false, 25f)
+        ]);
+    }
+
+    [Fact]
+    public void HardwareMonitor_ReadGpu_WddmAndDriverFallbacks()
+    {
+        var cfg = new AppSettings();
+        cfg.Monitoring.GpuUsageSource = "wddm";
+
+        var sysInfoMock = Substitute.For<ISystemInfo>();
+        var pawnIoMock = Substitute.For<IPawnIoManager>();
+        using var monitor = new HardwareMonitor(cfg, sysInfoMock, pawnIoMock);
+
+        using var wddm = new WddmGpuMonitor();
+        SetField(monitor, "_wddmGpu", wddm);
+
+        // When source is "wddm", uses WDDM directly
+        InvokeFloat(monitor, "ReadGpuPct", (NvGpuMonitor.NvGpuData?)null).Should().BeGreaterThanOrEqualTo(0f);
+
+        // When source is driver, but driver unavailable, falls back to WDDM
+        cfg.Monitoring.GpuUsageSource = "driver";
+        InvokeFloat(monitor, "ReadGpuPct", (NvGpuMonitor.NvGpuData?)null).Should().BeGreaterThanOrEqualTo(0f);
+
+        // When driver and WDDM unavailable, returns 0
+        SetField(monitor, "_wddmGpu", null);
+        SetField(monitor, "_nvGpu", null);
+        SetField(monitor, "_amdGpu", null);
+        InvokeFloat(monitor, "ReadGpuPct", (NvGpuMonitor.NvGpuData?)null).Should().Be(0f);
+    }
+
+    [Fact]
+    public void HardwareMonitor_ReadCpuPowerRapl_And_Tdp_EdgeCases()
+    {
+        var transport = TransportMock();
+        var monitor = WiredDevice(transport, 5000, "Intel");
+
+        // Power SKU raw == 0 -> returns null
+        transport.Execute(Arg.Any<string>(), Arg.Is<ulong[]>(x => x[0] == MsrPowerUnit), 1)
+            .Returns([0x1003UL]);
+        transport.Execute(Arg.Any<string>(), Arg.Is<ulong[]>(x => x[0] == MsrPkgSku), 1)
+            .Returns([0UL]);
+
+        var readTdp = typeof(HardwareMonitor).GetMethod("ReadCpuTdp", BindingFlags.NonPublic | BindingFlags.Instance);
+        readTdp.Should().NotBeNull();
+        readTdp.Invoke(monitor, null).Should().BeNull();
+
+        // ReadRaplPowerUnit throws exception -> handled safely
+        transport.When(x => x.Execute(Arg.Any<string>(), Arg.Is<ulong[]>(u => u[0] == MsrPowerUnit), 1))
+            .Do(_ => throw new InvalidOperationException("MSR read fault"));
+
+        var readRaplUnit = typeof(HardwareMonitor).GetMethod("ReadRaplPowerUnit", BindingFlags.NonPublic | BindingFlags.Instance);
+        readRaplUnit.Should().NotBeNull();
+        var act = () => readRaplUnit.Invoke(monitor, null);
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void HardwareMonitor_IsVirtualAdapter_DetectsVirtualAdaptersCorrectly()
+    {
+        string[] virtualDescs = [
+            "Hyper-V Virtual Ethernet Adapter",
+            "VMware Virtual Ethernet Adapter for VMnet1",
+            "VirtualBox Host-Only Ethernet Adapter",
+            "WSL Virtual Network Interface",
+            "TAP-Windows Adapter V9",
+            "Teredo Tunneling Pseudo-Interface",
+            "Microsoft Loopback Adapter",
+            "WAN Miniport (IP)",
+            "WFP Native MAC Layer LightWeight Filter-0000"
+        ];
+
+        foreach (var desc in virtualDescs)
+        {
+            var nic = Substitute.For<NetworkInterface>();
+            nic.Description.Returns(desc);
+            nic.Name.Returns("Ethernet");
+            HardwareMonitor.IsVirtualAdapter(nic).Should().BeTrue();
+        }
+
+        string[] virtualNames = ["vEthernet (Default Switch)", "WSL", "Local Area Connection* 1"];
+        foreach (var name in virtualNames)
+        {
+            var nic = Substitute.For<NetworkInterface>();
+            nic.Description.Returns("Standard Adapter");
+            nic.Name.Returns(name);
+            HardwareMonitor.IsVirtualAdapter(nic).Should().BeTrue();
+        }
+
+        var realNic = Substitute.For<NetworkInterface>();
+        realNic.Description.Returns("Intel(R) Ethernet Connection (7) I219-V");
+        realNic.Name.Returns("Ethernet");
+        HardwareMonitor.IsVirtualAdapter(realNic).Should().BeFalse();
+    }
+
+    [Fact]
+    public void HardwareMonitor_ExtractDiskIndex_And_PollControl()
+    {
+        var extractIndex = typeof(HardwareMonitor).GetMethod("ExtractDiskIndex", BindingFlags.NonPublic | BindingFlags.Static);
+        extractIndex.Should().NotBeNull();
+
+        extractIndex.Invoke(null, ["0 C:"]).Should().Be("0");
+        extractIndex.Invoke(null, ["12 D:"]).Should().Be("12");
+        extractIndex.Invoke(null, ["NonDigit"]).Should().Be("");
+        extractIndex.Invoke(null, [""]).Should().Be("");
+
+        var cfg = BasicCfg();
+        var sysInfoMock = Substitute.For<ISystemInfo>();
+        var pawnIoMock = Substitute.For<IPawnIoManager>();
+        using var monitor = new HardwareMonitor(cfg, sysInfoMock, pawnIoMock);
+
+        var pollMethod = typeof(HardwareMonitor).GetMethod("Poll", BindingFlags.NonPublic | BindingFlags.Instance);
+        pollMethod.Should().NotBeNull();
+
+        // When suspended -> early return
+        SetField(monitor, "_isSuspended", true);
+        var actSuspend = () => pollMethod.Invoke(monitor, null);
+        actSuspend.Should().NotThrow();
+
+        // When already polling -> early return
+        SetField(monitor, "_isSuspended", false);
+        SetField(monitor, "_isPolling", 1);
+        var actPolling = () => pollMethod.Invoke(monitor, null);
+        actPolling.Should().NotThrow();
+    }
+
+    [Fact]
+    public void HardwareMonitor_AmdAndIntelGpuReaders_And_Lifecycle_Coverage()
+    {
+        var cfg = BasicCfg();
+        var sysInfoMock = Substitute.For<ISystemInfo>();
+        var pawnIoMock = Substitute.For<IPawnIoManager>();
+        using var monitor = new HardwareMonitor(cfg, sysInfoMock, pawnIoMock);
+
+        // Setup mock AMD monitor
+        var amdNative = Substitute.For<IAmdAdlNative>();
+        amdNative.Create().Returns(0);
+        amdNative.GetAdapterInfo(out Arg.Any<int>(), out Arg.Any<string>()).Returns(x => { x[0] = 0; x[1] = "AMD Radeon RX 7900 XTX"; return 0; });
+        amdNative.GetTemperature(0, out Arg.Any<int>()).Returns(x => { x[1] = 62000; return 0; });
+        amdNative.GetActivity(0, out Arg.Any<int>(), out Arg.Any<int>()).Returns(x => { x[1] = 45; x[2] = 24000; return 0; });
+        amdNative.GetMemoryInfo(0, out Arg.Any<long>(), out Arg.Any<long>()).Returns(x => { x[1] = 24L * 1024 * 1024 * 1024; x[2] = 12L * 1024 * 1024 * 1024; return 0; });
+        amdNative.GetPowerLimit(0, out Arg.Any<int>(), out Arg.Any<int>()).Returns(x => { x[1] = 280000; x[2] = 280000; return 0; });
+        using var amdGpu = new AmdGpuMonitor(amdNative);
+
+        // Setup mock Intel monitor
+        var intelNative = Substitute.For<IIntelGpuNative>();
+        intelNative.Init(out Arg.Any<IntPtr>()).Returns(x => { x[0] = (IntPtr)0x1; return 0; });
+        intelNative.EnumerateDevices((IntPtr)0x1, out Arg.Any<IntPtr[]>()).Returns(x => { x[1] = new IntPtr[] { (IntPtr)0x2 }; return 0; });
+        intelNative.GetDeviceName((IntPtr)0x2, out Arg.Any<string>()).Returns(x => { x[1] = "Intel Arc A770"; return 0; });
+        intelNative.GetTempSensor((IntPtr)0x2, out Arg.Any<IntPtr>()).Returns(x => { x[1] = (IntPtr)0x3; return 0; });
+        intelNative.GetTempC((IntPtr)0x3, out Arg.Any<double>()).Returns(x => { x[1] = 55.0; return 0; });
+        intelNative.GetFreqDomain((IntPtr)0x2, out Arg.Any<IntPtr>()).Returns(x => { x[1] = (IntPtr)0x4; return 0; });
+        intelNative.GetClockMHz((IntPtr)0x4, out Arg.Any<double>()).Returns(x => { x[1] = 2100.0; return 0; });
+        intelNative.GetMemModule((IntPtr)0x2, out Arg.Any<IntPtr>()).Returns(x => { x[1] = (IntPtr)0x5; return 0; });
+        intelNative.GetVram((IntPtr)0x5, out Arg.Any<ulong>(), out Arg.Any<ulong>()).Returns(x => { x[1] = 16UL * 1024 * 1024 * 1024; x[2] = 8UL * 1024 * 1024 * 1024; return 0; });
+        using var intelGpu = new IntelGpuMonitor(intelNative);
+
+        SetField(monitor, "_nvGpu", null);
+        SetField(monitor, "_wddmGpu", null);
+
+        // Test AMD GPU path
+        SetField(monitor, "_amdGpu", amdGpu);
+        SetField(monitor, "_intelGpu", null);
+
+        var readTempMethod = typeof(HardwareMonitor).GetMethod("ReadGpuTemp", BindingFlags.NonPublic | BindingFlags.Instance);
+        var readVramMethod = typeof(HardwareMonitor).GetMethod("ReadGpuVramUsedMb", BindingFlags.NonPublic | BindingFlags.Instance);
+        var readFreqMethod = typeof(HardwareMonitor).GetMethod("ReadGpuFreqMHz", BindingFlags.NonPublic | BindingFlags.Instance);
+        var readPowerMethod = typeof(HardwareMonitor).GetMethod("ReadGpuPowerW", BindingFlags.NonPublic | BindingFlags.Instance);
+
+        readTempMethod.Should().NotBeNull();
+        readVramMethod.Should().NotBeNull();
+        readFreqMethod.Should().NotBeNull();
+        readPowerMethod.Should().NotBeNull();
+
+        ((float)readTempMethod.Invoke(monitor, [null])!).Should().Be(62.0f);
+        ((float)readVramMethod.Invoke(monitor, [null])!).Should().BeGreaterThan(0);
+        ((float)readFreqMethod.Invoke(monitor, [null])!).Should().Be(240.0f);
+        ((float)readPowerMethod.Invoke(monitor, [null])!).Should().Be(280.0f);
+
+        // Test Intel GPU path
+        SetField(monitor, "_amdGpu", null);
+        SetField(monitor, "_intelGpu", intelGpu);
+
+        ((float)readTempMethod.Invoke(monitor, [null])!).Should().Be(55.0f);
+        ((float)readVramMethod.Invoke(monitor, [null])!).Should().BeGreaterThan(0);
+        ((float)readFreqMethod.Invoke(monitor, [null])!).Should().Be(2100.0f);
+
+        // Test Stop, Restart, ResetGpuMonitors, Lifecycle handlers
+        monitor.Stop();
+        monitor.Restart(200);
+
+        var resetMethod = typeof(HardwareMonitor).GetMethod("ResetGpuMonitors", BindingFlags.NonPublic | BindingFlags.Instance);
+        resetMethod?.Invoke(monitor, ["unit test reset"]);
+
+        var onDisplay = typeof(HardwareMonitor).GetMethod("OnDisplayOrDriverChanged", BindingFlags.NonPublic | BindingFlags.Instance);
+        onDisplay?.Invoke(monitor, null);
+
+        var onNetwork = typeof(HardwareMonitor).GetMethod("OnNetworkTopologyChanged", BindingFlags.NonPublic | BindingFlags.Instance);
+        onNetwork?.Invoke(monitor, null);
+
+        var onPnp = typeof(HardwareMonitor).GetMethod("OnDevicePnPChanged", BindingFlags.NonPublic | BindingFlags.Instance);
+        onPnp?.Invoke(monitor, null);
+
+        var onSuspended = typeof(HardwareMonitor).GetMethod("OnPowerSuspended", BindingFlags.NonPublic | BindingFlags.Instance);
+        onSuspended?.Invoke(monitor, null);
+
+        monitor.ExecutePowerResumeWarmUp();
+    }
+
+    [Fact]
+    public void HardwareMonitor_NvGpu_And_ErrorHandling_And_WarmUp_Coverage()
+    {
+        var cfg = new AppSettings();
+        using var monitor = new HardwareMonitor(cfg);
+
+        monitor.ExecutePowerResumeWarmUp();
+
+        var nvNative = Substitute.For<INvGpuNative>();
+        nvNative.Init().Returns(0);
+        nvNative.GetDeviceHandleByIndex(0, out Arg.Any<IntPtr>()).Returns(x => { x[1] = new IntPtr(1234); return 0; });
+        nvNative.GetTemperature(Arg.Any<IntPtr>(), 0, out Arg.Any<uint>()).Returns(x => { x[2] = 68u; return 0; });
+        nvNative.GetUtilizationRates(Arg.Any<IntPtr>(), out Arg.Any<uint>(), out Arg.Any<uint>()).Returns(x => { x[1] = 45u; x[2] = 10u; return 0; });
+        nvNative.GetMemoryInfo(Arg.Any<IntPtr>(), out Arg.Any<ulong>(), out Arg.Any<ulong>(), out Arg.Any<ulong>()).Returns(x => { x[1] = 8192UL * 1024 * 1024; x[3] = 4096UL * 1024 * 1024; return 0; });
+        nvNative.GetClockInfo(Arg.Any<IntPtr>(), 0, out Arg.Any<uint>()).Returns(x => { x[2] = 1950u; return 0; });
+        nvNative.GetPowerUsage(Arg.Any<IntPtr>(), out Arg.Any<uint>()).Returns(x => { x[1] = 150000u; return 0; });
+
+        using var nvGpu = new NvGpuMonitor(nvNative);
+        SetField(monitor, "_nvGpu", nvGpu);
+        SetField(monitor, "_amdGpu", null);
+        SetField(monitor, "_intelGpu", null);
+
+        var readTempMethod = typeof(HardwareMonitor).GetMethod("ReadGpuTemp", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var readVramMethod = typeof(HardwareMonitor).GetMethod("ReadGpuVramUsedMb", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var readFreqMethod = typeof(HardwareMonitor).GetMethod("ReadGpuFreqMHz", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var readPowerMethod = typeof(HardwareMonitor).GetMethod("ReadGpuPowerW", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var readGpuPctMethod = typeof(HardwareMonitor).GetMethod("ReadGpuPct", BindingFlags.NonPublic | BindingFlags.Instance)!;
+
+        ((float)readTempMethod.Invoke(monitor, [null])!).Should().Be(68.0f);
+        ((float)readVramMethod.Invoke(monitor, [null])!).Should().Be(4096.0f);
+        ((float)readFreqMethod.Invoke(monitor, [null])!).Should().Be(1950.0f);
+        ((float)readPowerMethod.Invoke(monitor, [null])!).Should().Be(150.0f);
+        ((float)readGpuPctMethod.Invoke(monitor, [null])!).Should().Be(45.0f);
+
+        var throwingAmdNative = Substitute.For<IAmdAdlNative>();
+        throwingAmdNative.Create().Returns(0);
+        throwingAmdNative.GetAdapterInfo(out Arg.Any<int>(), out Arg.Any<string>()).Returns(x => { x[0] = 0; x[1] = "AMD Radeon"; return 0; });
+        throwingAmdNative.GetTemperature(Arg.Any<int>(), out Arg.Any<int>()).Returns(x => throw new InvalidOperationException("ADL error"));
+        throwingAmdNative.GetMemoryInfo(Arg.Any<int>(), out Arg.Any<long>(), out Arg.Any<long>()).Returns(x => throw new InvalidOperationException("ADL error"));
+        throwingAmdNative.GetActivity(Arg.Any<int>(), out Arg.Any<int>(), out Arg.Any<int>()).Returns(x => throw new InvalidOperationException("ADL error"));
+        throwingAmdNative.GetPowerLimit(Arg.Any<int>(), out Arg.Any<int>(), out Arg.Any<int>()).Returns(x => throw new InvalidOperationException("ADL error"));
+
+        using var throwingAmdGpu = new AmdGpuMonitor(throwingAmdNative);
+        SetField(monitor, "_nvGpu", null);
+        SetField(monitor, "_amdGpu", throwingAmdGpu);
+
+        ((float)readTempMethod.Invoke(monitor, [null])!).Should().Be(0f);
+        ((float)readVramMethod.Invoke(monitor, [null])!).Should().Be(0f);
+        ((float)readFreqMethod.Invoke(monitor, [null])!).Should().Be(0f);
+        ((float)readPowerMethod.Invoke(monitor, [null])!).Should().Be(0f);
+
+        var pwrNative = Substitute.For<IIntelPowerGadgetNative>();
+        pwrNative.TryLoadLibrary().Returns(true);
+        pwrNative.Initialize().Returns(0);
+        pwrNative.GetNumNodes(out Arg.Any<int>()).Returns(x => { x[0] = 1; return 0; });
+        pwrNative.GetIAFrequency(0, out Arg.Any<double>()).Returns(x => { x[1] = 3400.0; return 0; });
+
+        using var pwrGadget = new IntelPowerGadget(pwrNative);
+        SetField(monitor, "_intelPwrGadget", pwrGadget);
+        SetField(monitor, "_pawnIoDevice", null);
+        SetField(monitor, "_maxCpuMhz", 0u);
+
+        var readCpuFreqMethod = typeof(HardwareMonitor).GetMethod("ReadCpuFreq", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        ((float)readCpuFreqMethod.Invoke(monitor, null)!).Should().Be(3.4f);
+
+        var extractDiskIndexMethod = typeof(HardwareMonitor).GetMethod("ExtractDiskIndex", BindingFlags.NonPublic | BindingFlags.Static)!;
+        ((string)extractDiskIndexMethod.Invoke(null, ["0 C: D:"])!).Should().Be("0");
+        ((string)extractDiskIndexMethod.Invoke(null, ["12 E:"])!).Should().Be("12");
+        ((string)extractDiskIndexMethod.Invoke(null, ["_Total"])!).Should().BeEmpty();
+        ((string)extractDiskIndexMethod.Invoke(null, [""])!).Should().BeEmpty();
+    }
 }
+
+

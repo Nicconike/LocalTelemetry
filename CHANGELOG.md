@@ -2,58 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com), and this project adheres to [Semantic Versioning](https://semver.org) & [Conventional Commits](https://conventionalcommits.org).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org) & [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
 
-## 1.0.0 (2026-10-19)
-
-### Features
-
-* **settings:** add per-group overlay color customization and navigation guard ([ebdd7ad](https://github.com/Nicconike/LocalTelemetry/commit/ebdd7adf6e79e7e7ff2737ad107d6bbafcdd3b25))
-* **app:** implement hardware telemetry engine, taskbar overlay, settings UI, and packaging ([08c0d05](https://github.com/Nicconike/LocalTelemetry/commit/08c0d05f73416599159b935b062b92a84783d419))
-* initial release of localtelemetry ([d0b783e](https://github.com/Nicconike/LocalTelemetry/commit/d0b783e154054f8539500c39c64da3e837408bce))
-* Enhance installation and startup experience for LocalTelemetry ([b902bbb](https://github.com/Nicconike/LocalTelemetry/commit/b902bbbd475d8ee8a31fb320ff1a8db8eb0a31e8))
+## [1.0.0](https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0-rc.2...v1.0.0) (2026-10-19)
 
 ### Bug Fixes
 
 * **taskbar:** resolve overlay alignment offsets, release workflows, and analyzer issues ([265d8b9](https://github.com/Nicconike/LocalTelemetry/commit/265d8b928ea16d6e65c07a9aa2ecb614e0671f2a))
-* **core:** display dashes for offline network speeds and resolve CI workflows ([313daec](https://github.com/Nicconike/LocalTelemetry/commit/313daec3df5c3e3519d404dedd7d7f1da52d76da))
-* **ci:** update frontend test command, change report paths ([e8baa04](https://github.com/Nicconike/LocalTelemetry/commit/e8baa047736cd26ff2b814c7728b21c1a7582be6))
-* **ci:** restore required status check names, project automation, and release configuration ([a547306](https://github.com/Nicconike/LocalTelemetry/commit/a547306141c556d0b247b74f236d1eb4bb551f14))
-* **ci:** resolve SonarQube vulnerabilities, workflow errors and docs favicon ([43a4cde](https://github.com/Nicconike/LocalTelemetry/commit/43a4cdeb505cdc04c94c4d10b911a386e92813ba))
-* **ci:** harden release pipeline, sonarlint alerts, and project automation ([54125e0](https://github.com/Nicconike/LocalTelemetry/commit/54125e0973920aa96e3abc4586a1ea1a4009473e))
-* **ci:** harden release pipeline, add verified bot commits and fix package feeds ([4ec76c2](https://github.com/Nicconike/LocalTelemetry/commit/4ec76c27271710c4f5452971354fb5ef4ed42a8e))
-* resolve SonarQube issues and improve CI, uninstaller and app robustness; commit bun lockfiles ([b06c0f4](https://github.com/Nicconike/LocalTelemetry/commit/b06c0f484f994f3d0fd7a3f7be3b7506886c3b8d))
-* resolve scorecard alerts, codeql false positives, and workflow failures ([2e8288b](https://github.com/Nicconike/LocalTelemetry/commit/2e8288b9d8a984f78ef4d9cf41aed72ac909ce05))
-* harden release pipeline, unblock CI dependencies, and fix docs favicon ([85011b1](https://github.com/Nicconike/LocalTelemetry/commit/85011b131faa88756318adb07624ac1dae85b3b3))
-
-### Documentation
-
-* update changelog for v1.0.0-beta.1 ([a07d3ac](https://github.com/Nicconike/LocalTelemetry/commit/a07d3ac3f54880a97131f218030aa475558db293))
-
-### Build System
-
-* **deps-dev:** bump happy-dom from 18.0.1 to 20.11.1 in /tests/LocalTelemetry.App.Tests/Settings/wwwroot in the npm_and_yarn group across 1 directory ([#2](https://github.com/Nicconike/LocalTelemetry/issues/2)) ([7fb2104](https://github.com/Nicconike/LocalTelemetry/commit/7fb2104cf3f662d8de4539ca1bc54dacedadabd4))
 
 ### Continuous Integration
 
-* **workflows:** simplify workflow naming, add PR auto-sync and fix release pipeline ([f4d8533](https://github.com/Nicconike/LocalTelemetry/commit/f4d85338f08983e1e324c93196517dc87f541726))
-* **security:** update workflow configurations ([6eaccf5](https://github.com/Nicconike/LocalTelemetry/commit/6eaccf53422b1bc04172fb9e840a99aebe6be861))
-* **release:** sequence manifest updates in prepare step and support single branch rc ([3b01ec6](https://github.com/Nicconike/LocalTelemetry/commit/3b01ec6474426c9b2f41a1b3c129d7798f270959))
-* **release:** migrate release pipeline to semantic-release ([529130a](https://github.com/Nicconike/LocalTelemetry/commit/529130a93fa591d81c7b41ca0fb6281826b972e6))
 * resolve project automation graphql syntax and release workflow conditionals ([08f8e25](https://github.com/Nicconike/LocalTelemetry/commit/08f8e25341f199cc98a1083433486fbe5d283da2))
-* prevent release workflow self-trigger and stay on 1.x prereleases ([eb0f1ed](https://github.com/Nicconike/LocalTelemetry/commit/eb0f1edd6deb00eb25a97ac0093d18ced84ed293))
-* generate release notes and changelog with git-cliff ([021cc85](https://github.com/Nicconike/LocalTelemetry/commit/021cc8523f98ad2942731cd02f74a593b53c4f76))
-* fix invalid secrets context ([00b6380](https://github.com/Nicconike/LocalTelemetry/commit/00b63804a0053d9dc7d8894bcd16f0486e99845e))
-* fix dependabot PR runs and sort changelog ([d827cf2](https://github.com/Nicconike/LocalTelemetry/commit/d827cf272f6adad8b8afdb5c7922882dcd1604d7))
-* cache sonar scanner and fix token reference ([e7176e5](https://github.com/Nicconike/LocalTelemetry/commit/e7176e5f1ceba483d4a6ca1b9919656379ba1383))
-* Add CommitLint ([e9add45](https://github.com/Nicconike/LocalTelemetry/commit/e9add453013f8dcfa8442d1ba6f3c653133b0118))
-* add commitlint ([da8f4a0](https://github.com/Nicconike/LocalTelemetry/commit/da8f4a05a5ea33d259a27fe9a8ea7cb29e1ee64c))
-
-# Changelog
-
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org) & [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
 
 ## [1.0.0-rc.2](https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0-rc.1...v1.0.0-rc.2) (2026-10-15)
 
@@ -144,6 +103,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - bump happy-dom from 18.0.1 to 20.11.1 in /tests/LocalTelemetry.App.Tests/Settings/wwwroot in the npm_and_yarn group across 1 directory (#2) (deps-dev) ([7fb2104](https://github.com/Nicconike/LocalTelemetry/commit/7fb2104cf3f662d8de4539ca1bc54dacedadabd4))
 
+[1.0.0]: https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0-rc.2...v1.0.0
 [1.0.0-rc.2]: https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0-rc.1...v1.0.0-rc.2
 [1.0.0-rc.1]: https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0-beta.4...v1.0.0-rc.1
 [1.0.0-beta.4]: https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0-beta.3...v1.0.0-beta.4

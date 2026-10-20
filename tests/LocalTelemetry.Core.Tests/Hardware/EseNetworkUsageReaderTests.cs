@@ -18,7 +18,7 @@ public class EseNetworkUsageReaderTests
         method.Should().NotBeNull();
 
         byte[] rawIf = [0, 0];
-        method!.Invoke(null, [rawIf, (ushort)6]).Should().Be("Ethernet");
+        method.Invoke(null, [rawIf, (ushort)6]).Should().Be("Ethernet");
         method.Invoke(null, [rawIf, (ushort)71]).Should().Be("WiFi");
         method.Invoke(null, [rawIf, (ushort)243]).Should().Be("WiFi");
         method.Invoke(null, [rawIf, (ushort)62]).Should().Be("Fiber Channel");
@@ -248,7 +248,7 @@ public class EseNetworkUsageReaderTests
         receivedStart.Should().Be(new DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc));
         receivedEnd.Should().Be(new DateTime(2026, 8, 7, 0, 0, 0, DateTimeKind.Utc));
         receivedDest.Should().NotBeNullOrEmpty();
-        File.Exists(receivedDest!).Should().BeFalse();
+        File.Exists(receivedDest).Should().BeFalse();
     }
 
     private const string NetworkDataUsageTable = "{973F5D5C-1D90-4944-BE8E-24B94231A174}";
@@ -464,6 +464,20 @@ public class EseNetworkUsageReaderTests
             }
             try { if (File.Exists(dbPath)) File.Delete(dbPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
+    }
+
+    [Fact]
+    public void EseNetworkUsageReader_CleanupJetResources_HandlesNilAndExceptions()
+    {
+        var cleanup = typeof(EseNetworkUsageReader).GetMethod("CleanupJetResources", BindingFlags.NonPublic | BindingFlags.Static);
+        cleanup.Should().NotBeNull();
+
+        // 1. All nil -> safe no-op
+        cleanup.Invoke(null, [JET_INSTANCE.Nil, JET_SESID.Nil, JET_DBID.Nil, JET_TABLEID.Nil]);
+
+        // 2. Real instance terminated via cleanup
+        Api.JetCreateInstance(out var instance, $"test-clean-{Guid.NewGuid():N}");
+        cleanup.Invoke(null, [instance, JET_SESID.Nil, JET_DBID.Nil, JET_TABLEID.Nil]);
     }
 }
 

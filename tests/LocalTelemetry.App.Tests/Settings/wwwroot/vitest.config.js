@@ -6,6 +6,13 @@ export default defineConfig({
     test: {
         environment: 'happy-dom',
         globals: true,
+        include: ['src/**/*.test.ts'],
+        coverage: {
+            provider: 'v8',
+            reporter: ['text', 'json', 'lcov', 'clover', 'cobertura'],
+            reportsDirectory: './coverage',
+            allowExternal: true,
+        },
         server: {
             deps: {
                 inline: [/lucide-svelte/],

@@ -121,16 +121,7 @@ public class SystemInfoTests
         method.Invoke(null, [34]).Should().Be("Socket BGA 1023");
         method.Invoke(null, [9999]).Should().Be("");
     }
-}
 
-/// <summary>
-/// Hermetic tests for SystemInfo private helpers. No real hardware, WMI, SMBIOS or
-/// registry access is required: pure functions are invoked via reflection, and SMBIOS
-/// parsing paths are exercised by injecting a crafted raw SMBIOS blob into the cache.
-/// </summary>
-[Collection("SystemInfo")]
-public class SystemInfoHermeticTests
-{
     private delegate string SpanStringFunc(ReadOnlySpan<char> value);
     private delegate string SpanSpanStringFunc(ReadOnlySpan<char> a, ReadOnlySpan<char> b);
     private delegate void CpuidAppender(Span<byte> buf, ref int pos, int reg);
@@ -1368,5 +1359,530 @@ public class SystemInfoHermeticTests
         ((string)mSmbiosSocket.Invoke(null, [0])!).Should().BeEmpty();
         ((string)mSmbiosSocket.Invoke(null, [999])!).Should().BeEmpty();
     }
+
+    [Fact]
+    public void SystemInfo_QueryRamTypeSmbios_ParsesType17Correctly()
+    {
+        // Build synthetic Type 17 (Memory Device) header (length 0x18), byte at offset 0x12 is memory type (0x1A = DDR5)
+        var ms = new MemoryStream();
+        ms.WriteByte(17); // Type 17
+        ms.WriteByte(0x18); // Length
+        ms.Write([0, 0]); // Handle
+        // Fill up to offset 0x12 (18)
+        for (int i = 4; i < 0x12; i++) ms.WriteByte(0);
+        ms.WriteByte(0x22); // 0x22 = DDR5
+        ms.Write([0, 0, 0, 0, 0]); // remaining length to 0x18
+        // String table: 1 string + double null terminator
+        byte[] str = Encoding.ASCII.GetBytes("DDR5-Module");
+        ms.Write(str);
+        ms.WriteByte(0);
+        ms.WriteByte(0);
+
+        // Add Type 127 end of table
+        ms.Write([127, 4, 0, 0, 0, 0]);
+
+        byte[] blob = ms.ToArray();
+
+        WithSmbios(blob, () =>
+        {
+            var method = typeof(SystemInfo).GetMethod("QueryRamTypeSmbios", BindingFlags.NonPublic | BindingFlags.Static);
+            method.Should().NotBeNull();
+            string ramType = (string)method.Invoke(null, null)!;
+            ramType.Should().Be("DDR5");
+        });
+    }
+
+    [Fact]
+    public void SystemInfo_SmbiosBattery_ParsesType22Correctly()
+    {
+        // Build synthetic Type 22 (Portable Battery) header:
+        // offset 0: type (22), offset 1: length (0x1A), offset 2-3: handle
+        // offset 4: location str index (1)
+        // offset 5: manufacturer str index (2)
+        // offset 6: manufacture date str index (0)
+        // offset 7: serial number str index (0)
+        // offset 8: device name str index (3)
+        // offset 0x0A: design capacity word (50000 mWh = 0xC350)
+        var ms = new MemoryStream();
+        ms.WriteByte(22); // Type 22
+        ms.WriteByte(0x1A); // Length
+        ms.Write([0, 0]); // Handle
+        ms.WriteByte(1); // Location
+        ms.WriteByte(2); // Manufacturer
+        ms.WriteByte(0); // Date
+        ms.WriteByte(0); // Serial
+        ms.WriteByte(3); // Device Name
+        ms.WriteByte(0); // Chemistry
+        ms.WriteByte(0x50); // Design capacity low byte
+        ms.WriteByte(0xC3); // Design capacity high byte (50000)
+        for (int i = 0x0C; i < 0x1A; i++) ms.WriteByte(0);
+
+        // String table: string 1 = "Primary", string 2 = "Dell OEM", string 3 = "Battery-X"
+        ms.Write(Encoding.ASCII.GetBytes("Primary"));
+        ms.WriteByte(0);
+        ms.Write(Encoding.ASCII.GetBytes("Dell OEM"));
+        ms.WriteByte(0);
+        ms.Write(Encoding.ASCII.GetBytes("Battery-X"));
+        ms.WriteByte(0);
+        ms.WriteByte(0); // Double null terminator
+
+        // Type 127
+        ms.Write([127, 4, 0, 0, 0, 0]);
+
+        byte[] blob = ms.ToArray();
+
+        WithSmbios(blob, () =>
+        {
+            var strMethod = typeof(SystemInfo).GetMethod("GetSmbiosBatteryString", BindingFlags.NonPublic | BindingFlags.Static);
+            strMethod.Should().NotBeNull();
+            string mfr = (string)strMethod.Invoke(null, [5])!;
+            string devName = (string)strMethod.Invoke(null, [8])!;
+            mfr.Should().Be("Dell OEM");
+            devName.Should().Be("Battery-X");
+
+            var wordMethod = typeof(SystemInfo).GetMethod("GetSmbiosBatteryWord", BindingFlags.NonPublic | BindingFlags.Static);
+            wordMethod.Should().NotBeNull();
+            int cap = (int)wordMethod.Invoke(null, [0x0A])!;
+            cap.Should().Be(50000);
+        });
+    }
+
+    [Fact]
+    public void SystemInfo_HasBattery_And_SystemTypeLabel_CachedBehavior()
+    {
+        var cacheField = typeof(SystemInfo).GetField("_hasBatteryCache", BindingFlags.NonPublic | BindingFlags.Static);
+        cacheField.Should().NotBeNull();
+        object? prior = cacheField.GetValue(null);
+
+        try
+        {
+            cacheField.SetValue(null, true);
+            SystemInfo.HasBattery().Should().BeTrue();
+            SystemInfo.GetSystemTypeLabel().Should().Be("Laptop");
+
+            cacheField.SetValue(null, false);
+            SystemInfo.HasBattery().Should().BeFalse();
+            SystemInfo.GetSystemTypeLabel().Should().Be("Desktop");
+        }
+        finally
+        {
+            cacheField.SetValue(null, prior);
+        }
+    }
+
+    [Fact]
+    public void SystemInfo_CpuIdSocketLookup_HandlesKnownIntelAndAmdFamilies()
+    {
+        // Intel Arrow Lake desktop: family 6, model 0xC6 => key: (6 << 16) | 0xC6
+        // eax: family (bits 8-11 = 6), extModel (bits 16-19 = 0xC), model (bits 4-7 = 6)
+        int eaxArrowLake = (0xC << 16) | (6 << 8) | (6 << 4);
+        SystemInfo.CpuIdSocketLookupRaw(eaxArrowLake).Should().Be("Socket LGA 1851");
+
+        // Intel Raptor Lake S: family 6, model 0xBA
+        int eaxRaptor = (0xB << 16) | (6 << 8) | (0xA << 4);
+        SystemInfo.CpuIdSocketLookupRaw(eaxRaptor).Should().Be("Socket LGA 1700");
+
+        // Intel Comet Lake: family 6, model 0xA5
+        int eaxComet = (0xA << 16) | (6 << 8) | (5 << 4);
+        SystemInfo.CpuIdSocketLookupRaw(eaxComet).Should().Be("Socket LGA 1200");
+
+        // Intel Kaby Lake: family 6, model 0x9E
+        int eaxKaby = (0x9 << 16) | (6 << 8) | (0xE << 4);
+        SystemInfo.CpuIdSocketLookupRaw(eaxKaby).Should().Be("Socket LGA 1151");
+
+        // AMD Granite Ridge: family 0x19, model 0x5E
+        // For family 0x0F: family += extFamily (0x0A => 0x19)
+        int eaxGranite = (5 << 16) | (0x0A << 20) | (0x0F << 8) | (0xE << 4);
+        SystemInfo.CpuIdSocketLookupRaw(eaxGranite).Should().Be("Socket AM5");
+
+        // AMD Vermeer: family 0x19, model 0x11
+        int eaxVermeer = (1 << 16) | (0x0A << 20) | (0x0F << 8) | (1 << 4);
+        SystemInfo.CpuIdSocketLookupRaw(eaxVermeer).Should().Be("Socket AM4");
+
+        // AMD Rembrandt: family 0x19, model 0x21
+        int eaxRembrandt = (2 << 16) | (0x0A << 20) | (0x0F << 8) | (1 << 4);
+        SystemInfo.CpuIdSocketLookupRaw(eaxRembrandt).Should().Be("Socket FP7");
+
+        // Intel remaining cases
+        int eaxArrowLakeH = (0xC << 16) | (6 << 8) | (4 << 4);
+        SystemInfo.CpuIdSocketLookupRaw(eaxArrowLakeH).Should().Be("Socket BGA 2049");
+
+        int eaxLunarLake = (0xC << 16) | (6 << 8) | (7 << 4);
+        SystemInfo.CpuIdSocketLookupRaw(eaxLunarLake).Should().Be("Socket BGA 2833");
+
+        int eaxMeteorLake = (0xA << 16) | (6 << 8) | (0xC << 4);
+        SystemInfo.CpuIdSocketLookupRaw(eaxMeteorLake).Should().Be("Socket LGA 1851");
+
+        int eaxRaptorRefresh = (0xB << 16) | (6 << 8) | (0xE << 4);
+        SystemInfo.CpuIdSocketLookupRaw(eaxRaptorRefresh).Should().Be("Socket LGA 1700");
+
+        int eaxRaptorHx = (0xB << 16) | (6 << 8) | (0xF << 4);
+        SystemInfo.CpuIdSocketLookupRaw(eaxRaptorHx).Should().Be("Socket BGA 1964");
+
+        int eaxRaptorP = (0xB << 16) | (6 << 8) | (0xB << 4);
+        SystemInfo.CpuIdSocketLookupRaw(eaxRaptorP).Should().Be("Socket BGA 1744");
+
+        int eaxAlderLakeS = (0xB << 16) | (6 << 8) | (7 << 4);
+        SystemInfo.CpuIdSocketLookupRaw(eaxAlderLakeS).Should().Be("Socket LGA 1700");
+
+        int eaxAlderLake = (0x9 << 16) | (6 << 8) | (0xA << 4);
+        SystemInfo.CpuIdSocketLookupRaw(eaxAlderLake).Should().Be("Socket LGA 1700");
+
+        int eaxRaptorPAlt = (0xA << 16) | (6 << 8) | (0xA << 4);
+        SystemInfo.CpuIdSocketLookupRaw(eaxRaptorPAlt).Should().Be("Socket BGA 1744");
+
+        int eaxTigerU = (0x8 << 16) | (6 << 8) | (0xC << 4);
+        SystemInfo.CpuIdSocketLookupRaw(eaxTigerU).Should().Be("Socket BGA 1440");
+
+        int eaxTigerDesk = (0x8 << 16) | (6 << 8) | (0xD << 4);
+        SystemInfo.CpuIdSocketLookupRaw(eaxTigerDesk).Should().Be("Socket LGA 1200");
+
+        int eaxKaby2 = (0x8 << 16) | (6 << 8) | (0xE << 4);
+        SystemInfo.CpuIdSocketLookupRaw(eaxKaby2).Should().Be("Socket LGA 1151");
+
+        // AMD remaining cases
+        int eaxRaphael = (6 << 16) | (0x0A << 20) | (0x0F << 8) | (1 << 4);
+        SystemInfo.CpuIdSocketLookupRaw(eaxRaphael).Should().Be("Socket AM5");
+
+        int eaxPhoenix = (6 << 16) | (0x0A << 20) | (0x0F << 8) | (4 << 4);
+        SystemInfo.CpuIdSocketLookupRaw(eaxPhoenix).Should().Be("Socket FP8");
+
+        int eaxPhoenix2 = (7 << 16) | (0x0A << 20) | (0x0F << 8) | (4 << 4);
+        SystemInfo.CpuIdSocketLookupRaw(eaxPhoenix2).Should().Be("Socket FP8");
+
+        int eaxDragon = (7 << 16) | (0x0A << 20) | (0x0F << 8) | (8 << 4);
+        SystemInfo.CpuIdSocketLookupRaw(eaxDragon).Should().Be("Socket FL1");
+
+        int eaxCezanne = (5 << 16) | (0x0A << 20) | (0x0F << 8);
+        SystemInfo.CpuIdSocketLookupRaw(eaxCezanne).Should().Be("Socket FP6");
+
+        int eaxMatisse = (7 << 16) | (0x0A << 20) | (0x0F << 8) | (1 << 4);
+        SystemInfo.CpuIdSocketLookupRaw(eaxMatisse).Should().Be("Socket AM4");
+
+        // Zen+ (extFamily = 8 => 0x0F + 8 = 0x17)
+        int eaxZenPlus = (3 << 16) | (8 << 20) | (0x0F << 8) | (1 << 4);
+        SystemInfo.CpuIdSocketLookupRaw(eaxZenPlus).Should().Be("Socket AM4");
+
+        // Unknown CPUID eax
+        SystemInfo.CpuIdSocketLookupRaw(0).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void SystemInfo_DeriveSocketFromCpuName_HandlesVendorsAndModels()
+    {
+        // Intel Ultra
+        SystemInfo.DeriveSocketFromCpuBrand("Intel(R) Core(TM) Ultra 9 285K").Should().Be("Socket LGA 1851");
+        SystemInfo.DeriveSocketFromCpuBrand("Intel(R) Core(TM) Ultra 7 258V").Should().Be("Socket BGA 2833");
+        SystemInfo.DeriveSocketFromCpuBrand("Intel(R) Core(TM) Ultra 7 155H").Should().Be("Socket BGA 2049");
+        SystemInfo.DeriveSocketFromCpuBrand("Intel(R) Core(TM) Ultra 5 125U").Should().Be("Socket BGA 2551");
+
+        // Intel Core Traditional
+        SystemInfo.DeriveSocketFromCpuBrand("Intel(R) Core(TM) i9-13900K").Should().Be("Socket LGA 1700");
+        SystemInfo.DeriveSocketFromCpuBrand("Intel(R) Core(TM) i7-13700HX").Should().Be("Socket BGA 1744");
+        SystemInfo.DeriveSocketFromCpuBrand("Intel(R) Core(TM) i7-12700H").Should().Be("Socket BGA 1964");
+        SystemInfo.DeriveSocketFromCpuBrand("Intel(R) Core(TM) i7-11700K").Should().Be("Socket LGA 1200");
+        SystemInfo.DeriveSocketFromCpuBrand("Intel(R) Core(TM) i7-11850H").Should().Be("Socket BGA 1440");
+        SystemInfo.DeriveSocketFromCpuBrand("Intel(R) Core(TM) i7-10510U").Should().Be("Socket BGA 1526");
+        SystemInfo.DeriveSocketFromCpuBrand("Intel(R) Core(TM) i7-9700K").Should().Be("Socket LGA 1151");
+        SystemInfo.DeriveSocketFromCpuBrand("Intel(R) Core(TM) i7-8750H").Should().Be("Socket BGA 1440");
+        SystemInfo.DeriveSocketFromCpuBrand("Intel(R) Core(TM) i7-4770K").Should().Be("Socket LGA 1150");
+        SystemInfo.DeriveSocketFromCpuBrand("Intel(R) Core(TM) i7-4700HQ").Should().Be("Socket BGA");
+
+        // Intel Xeon
+        SystemInfo.DeriveSocketFromCpuBrand("Intel(R) Xeon(R) w9-3495X").Should().Be("Socket LGA 4677");
+        SystemInfo.DeriveSocketFromCpuBrand("Intel(R) Xeon(R) Gold 6348").Should().Be("Socket LGA 4189");
+
+        // AMD Threadripper & EPYC
+        SystemInfo.DeriveSocketFromCpuBrand("AMD Ryzen Threadripper 7000 Series").Should().Be("Socket sTR5");
+        SystemInfo.DeriveSocketFromCpuBrand("AMD Ryzen Threadripper 3990X").Should().Be("Socket sTRX4");
+        SystemInfo.DeriveSocketFromCpuBrand("AMD EPYC 9004 Series").Should().Be("Socket SP5");
+        SystemInfo.DeriveSocketFromCpuBrand("AMD EPYC 8004 Series").Should().Be("Socket SP6");
+        SystemInfo.DeriveSocketFromCpuBrand("AMD EPYC 7763").Should().Be("Socket SP3");
+
+        // AMD Ryzen
+        SystemInfo.DeriveSocketFromCpuBrand("AMD Ryzen 9 9950X").Should().Be("Socket AM5");
+        SystemInfo.DeriveSocketFromCpuBrand("AMD Ryzen 7 8840HS").Should().Be("Socket FP8");
+        SystemInfo.DeriveSocketFromCpuBrand("AMD Ryzen 7 8700G").Should().Be("Socket AM5");
+        SystemInfo.DeriveSocketFromCpuBrand("AMD Ryzen 9 7945HX").Should().Be("Socket FL1");
+        SystemInfo.DeriveSocketFromCpuBrand("AMD Ryzen 7 7840U").Should().Be("Socket FP8");
+        SystemInfo.DeriveSocketFromCpuBrand("AMD Ryzen 9 7900X").Should().Be("Socket AM5");
+        SystemInfo.DeriveSocketFromCpuBrand("AMD Ryzen 7 6800U").Should().Be("Socket FP7");
+        SystemInfo.DeriveSocketFromCpuBrand("AMD Ryzen 9 5900HX").Should().Be("Socket FP7");
+        SystemInfo.DeriveSocketFromCpuBrand("AMD Ryzen 7 5800H").Should().Be("Socket FP6");
+        SystemInfo.DeriveSocketFromCpuBrand("AMD Ryzen 7 5800X").Should().Be("Socket AM4");
+        SystemInfo.DeriveSocketFromCpuBrand("AMD Ryzen 7 4800H").Should().Be("Socket FP6");
+        SystemInfo.DeriveSocketFromCpuBrand("AMD Ryzen 5 3500U").Should().Be("Socket FP5");
+        SystemInfo.DeriveSocketFromCpuBrand("AMD Ryzen 5 3600").Should().Be("Socket AM4");
+        SystemInfo.DeriveSocketFromCpuBrand("AMD Ryzen 5 2500U").Should().Be("Socket FP5");
+        SystemInfo.DeriveSocketFromCpuBrand("AMD Ryzen 5 1600").Should().Be("Socket AM4");
+
+        // Qualcomm
+        SystemInfo.DeriveSocketFromCpuBrand("Snapdragon X Elite - X1E-80-100").Should().Be("Socket 2050");
+
+        // Unknown / edge cases
+        SystemInfo.DeriveSocketFromCpuBrand("").Should().BeEmpty();
+        SystemInfo.DeriveSocketFromCpuBrand("ABC").Should().BeEmpty();
+        SystemInfo.DeriveSocketFromCpuBrand("Generic Processor").Should().BeEmpty();
+    }
+
+    [Fact]
+    public void SystemInfo_SocketClassification_And_SmbiosSocketNames()
+    {
+        SystemInfo.IsSocketName("Socket LGA 1700").Should().BeTrue();
+        SystemInfo.IsSocketName("Socket AM5").Should().BeTrue();
+        SystemInfo.IsSocketName("BGA 2833").Should().BeTrue();
+        SystemInfo.IsSocketName("PGA 988").Should().BeTrue();
+        SystemInfo.IsSocketName("FCBGA 1528").Should().BeTrue();
+        SystemInfo.IsSocketName("FCLGA 4189").Should().BeTrue();
+        SystemInfo.IsSocketName("Slot 1").Should().BeTrue();
+        SystemInfo.IsSocketName("FP8").Should().BeTrue();
+        SystemInfo.IsSocketName("FL1").Should().BeTrue();
+        SystemInfo.IsSocketName("").Should().BeFalse();
+        SystemInfo.IsSocketName("Normal Chip").Should().BeFalse();
+
+        SystemInfo.IsPlaceholderSocket("Other").Should().BeTrue();
+        SystemInfo.IsPlaceholderSocket("Unknown").Should().BeTrue();
+        SystemInfo.IsPlaceholderSocket("None").Should().BeTrue();
+        SystemInfo.IsPlaceholderSocket("CPU").Should().BeTrue();
+        SystemInfo.IsPlaceholderSocket("CPU Socket").Should().BeTrue();
+        SystemInfo.IsPlaceholderSocket("Socket").Should().BeTrue();
+        SystemInfo.IsPlaceholderSocket("To Be Filled By O.E.M.").Should().BeTrue();
+        SystemInfo.IsPlaceholderSocket("Default string").Should().BeTrue();
+        SystemInfo.IsPlaceholderSocket("Not Specified").Should().BeTrue();
+        SystemInfo.IsPlaceholderSocket("N/A").Should().BeTrue();
+        SystemInfo.IsPlaceholderSocket("  ").Should().BeTrue();
+        SystemInfo.IsPlaceholderSocket("LGA 1700").Should().BeFalse();
+
+        SystemInfo.SmbiosSocketName(4).Should().Be("ZIF Socket");
+        SystemInfo.SmbiosSocketName(7).Should().Be("LIF Socket");
+        SystemInfo.SmbiosSocketName(8).Should().Be("Slot 1");
+        SystemInfo.SmbiosSocketName(21).Should().Be("Socket LGA 775");
+        SystemInfo.SmbiosSocketName(49).Should().Be("Socket AM4");
+        SystemInfo.SmbiosSocketName(50).Should().Be("Socket LGA 1151");
+        SystemInfo.SmbiosSocketName(62).Should().Be("Socket LGA 1200");
+        SystemInfo.SmbiosSocketName(64).Should().Be("Socket LGA 1700");
+        SystemInfo.SmbiosSocketName(71).Should().Be("Socket AM5");
+        SystemInfo.SmbiosSocketName(83).Should().Be("Socket LGA 1851");
+        SystemInfo.SmbiosSocketName(85).Should().Be("Socket BGA 2833");
+        SystemInfo.SmbiosSocketName(3).Should().BeEmpty();
+        SystemInfo.SmbiosSocketName(999).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void SystemInfo_FormFactor_And_MemoryTypeLabels()
+    {
+        SystemInfo.FormFactorLabel(0x01).Should().Be("Other");
+        SystemInfo.FormFactorLabel(0x02).Should().Be("Unknown");
+        SystemInfo.FormFactorLabel(0x09).Should().Be("DIMM");
+        SystemInfo.FormFactorLabel(0x0A).Should().Be("SODIMM");
+        SystemInfo.FormFactorLabel(0x0D).Should().Be("Mini-RDIMM");
+        SystemInfo.FormFactorLabel(0xFF).Should().Be("TypeFF");
+
+        SystemInfo.MemoryTypeLabel(0x00).Should().Be("Unknown");
+        SystemInfo.MemoryTypeLabel(0x11).Should().Be("SDRAM");
+        SystemInfo.MemoryTypeLabel(0x18).Should().Be("DDR3");
+        SystemInfo.MemoryTypeLabel(0x1A).Should().Be("DDR4");
+        SystemInfo.MemoryTypeLabel(0x22).Should().Be("DDR5");
+        SystemInfo.MemoryTypeLabel(0x26).Should().Be("LPDDR5X");
+        SystemInfo.MemoryTypeLabel(0xFE).Should().Be("TypeFE");
+    }
+
+    [Fact]
+    public void SystemInfo_BatteryString_Validation()
+    {
+        SystemInfo.IsValidBatteryString(null).Should().BeFalse();
+        SystemInfo.IsValidBatteryString("").Should().BeFalse();
+        SystemInfo.IsValidBatteryString("   ").Should().BeFalse();
+        SystemInfo.IsValidBatteryString("Virtual Battery").Should().BeFalse();
+        SystemInfo.IsValidBatteryString("CRB Battery").Should().BeFalse();
+        SystemInfo.IsValidBatteryString("CRB123").Should().BeFalse();
+        SystemInfo.IsValidBatteryString("Fake").Should().BeFalse();
+        SystemInfo.IsValidBatteryString("None").Should().BeFalse();
+        SystemInfo.IsValidBatteryString("Unknown").Should().BeFalse();
+        SystemInfo.IsValidBatteryString("To be filled by O.E.M.").Should().BeFalse();
+        SystemInfo.IsValidBatteryString("-placeholder-").Should().BeFalse();
+        SystemInfo.IsValidBatteryString("Sunwoda L20M4PC0").Should().BeTrue();
+    }
+
+    [Fact]
+    public void SystemInfo_HardwareHelpers_Glpi_Msr_Smbios_And_Vendors()
+    {
+        // DetectGlpiStructSize
+        SystemInfo.DetectGlpiStructSize(24).Should().Be(24);
+        SystemInfo.DetectGlpiStructSize(32).Should().Be(32);
+        SystemInfo.DetectGlpiStructSize(16).Should().Be(16);
+        SystemInfo.DetectGlpiStructSize(20).Should().Be(20);
+        SystemInfo.DetectGlpiStructSize(7).Should().Be(0);
+
+        // ReadMsrRatioMhz
+        var pawnIoMock = Substitute.For<IPawnIoTransport>();
+        pawnIoMock.Execute("ioctl_read_msr", Arg.Any<ulong[]>(), 1).Returns([0x30UL]);
+        SystemInfo.ReadMsrRatioMhz(pawnIoMock, 0x1AD).Should().Be(4800);
+
+        pawnIoMock.Execute("ioctl_read_msr", Arg.Any<ulong[]>(), 1).Returns([0x05UL]);
+        SystemInfo.ReadMsrRatioMhz(pawnIoMock, 0x1AD).Should().Be(0);
+
+        pawnIoMock.Execute("ioctl_read_msr", Arg.Any<ulong[]>(), 1).Returns([]);
+        SystemInfo.ReadMsrRatioMhz(pawnIoMock, 0x1AD).Should().Be(0);
+
+        // IsWirelessAdapter
+        SystemInfo.IsWirelessAdapter("Intel(R) Wi-Fi 6E AX211 160MHz").Should().BeTrue();
+        SystemInfo.IsWirelessAdapter("TP-Link Wireless USB Adapter").Should().BeTrue();
+        SystemInfo.IsWirelessAdapter("Qualcomm 802.11ac NIC").Should().BeTrue();
+        SystemInfo.IsWirelessAdapter("Realtek Gaming 2.5GbE Family Controller").Should().BeFalse();
+
+        // ParseVendor
+        SystemInfo.ParseVendor("PCI\\VEN_10DE&DEV_2684", "").Should().Be("NVIDIA");
+        SystemInfo.ParseVendor("PCI\\VEN_1002&DEV_744C", "").Should().Be("AMD");
+        SystemInfo.ParseVendor("PCI\\VEN_8086&DEV_56A0", "").Should().Be("Intel");
+        SystemInfo.ParseVendor("", "NVIDIA GeForce RTX 4080").Should().Be("NVIDIA");
+        SystemInfo.ParseVendor("", "AMD Radeon RX 7900 XTX").Should().Be("AMD");
+        SystemInfo.ParseVendor("", "Intel Arc A770").Should().Be("Intel");
+        SystemInfo.ParseVendor("", "Microsoft Basic Render Driver").Should().BeEmpty();
+
+        // FindSmbiosType4Value
+        byte[] type4Raw = new byte[64];
+        type4Raw[0] = 4;
+        type4Raw[1] = 0x30;
+        type4Raw[0x2A] = 8;
+        type4Raw[0x23] = 4;
+        SystemInfo.FindSmbiosType4Value(type4Raw, 0x2A, 0x23).Should().Be(8);
+        SystemInfo.FindSmbiosType4Value([], 0x2A, 0x23).Should().Be(0);
+
+        // FindSmbiosString and GetSmbiosString
+        var ms = new MemoryStream();
+        ms.Write([1, 0x1B, 0, 0, 1, 2]); // Type 1, length 0x1B, offset 4 = str 1, offset 5 = str 2
+        for (int i = 6; i < 0x1B; i++) ms.WriteByte(0);
+        ms.Write(Encoding.ASCII.GetBytes("TestManufacturer"));
+        ms.WriteByte(0);
+        ms.Write(Encoding.ASCII.GetBytes("TestProduct"));
+        ms.WriteByte(0);
+        ms.WriteByte(0); // Terminate struct 1
+        ms.Write([127, 4, 0, 0, 0, 0]); // Type 127
+        byte[] smbiosBlob = ms.ToArray();
+
+        SystemInfo.FindSmbiosString(smbiosBlob, 1, 4).Should().Be("TestManufacturer");
+        SystemInfo.FindSmbiosString(smbiosBlob, 1, 5).Should().Be("TestProduct");
+        SystemInfo.FindSmbiosString(smbiosBlob, 1, 20).Should().BeEmpty();
+        SystemInfo.GetSmbiosString(smbiosBlob, 0, 0x1B, 0).Should().BeEmpty();
+        SystemInfo.GetSmbiosString(smbiosBlob, 0, 0x1B, 99).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void SystemInfo_GpuAndBatteryAndColor_Branches_Coverage()
+    {
+        var isDiscrete = typeof(SystemInfo).GetMethod("IsDiscreteGpu", BindingFlags.NonPublic | BindingFlags.Static);
+        isDiscrete.Should().NotBeNull();
+
+        var dummyDev = default(NativeMethods.SpDevinfoData);
+        ((bool)isDiscrete.Invoke(null, ["Intel Arc A770", "Intel", IntPtr.Zero, dummyDev])!).Should().BeTrue();
+        ((bool)isDiscrete.Invoke(null, ["AMD Radeon RX 7900 XTX", "AMD", IntPtr.Zero, dummyDev])!).Should().BeTrue();
+        ((bool)isDiscrete.Invoke(null, ["AMD Radeon PRO W6800", "AMD", IntPtr.Zero, dummyDev])!).Should().BeTrue();
+        ((bool)isDiscrete.Invoke(null, ["Radeon VII", "AMD", IntPtr.Zero, dummyDev])!).Should().BeTrue();
+        ((bool)isDiscrete.Invoke(null, ["Radeon Pro WX 7100", "AMD", IntPtr.Zero, dummyDev])!).Should().BeTrue();
+        ((bool)isDiscrete.Invoke(null, ["Intel UHD Graphics", "Intel", IntPtr.Zero, dummyDev])!).Should().BeFalse();
+
+        var gpusField = typeof(SystemInfo).GetField("_gpusCache", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var originalGpus = gpusField.GetValue(null);
+
+        try
+        {
+            (string Name, string Vendor, bool IsDedicated, long? VramBytes, string? DriverVersion)[] intelDedicated =
+            [
+                ("Intel Arc A770", "Intel", true, 16L * 1024 * 1024 * 1024, "31.0")
+            ];
+            gpusField.SetValue(null, intelDedicated);
+            SystemInfo.GetGpuVendor().Should().Be("Intel");
+            SystemInfo.GetGpuColor().Should().NotBeEmpty();
+
+            (string Name, string Vendor, bool IsDedicated, long? VramBytes, string? DriverVersion)[] intelIntegrated =
+            [
+                ("Intel Iris Xe Graphics", "Intel", false, 0L, "31.0")
+            ];
+            gpusField.SetValue(null, intelIntegrated);
+            SystemInfo.GetGpuVendor().Should().Be("Intel");
+            SystemInfo.GetGpuColor().Should().NotBeEmpty();
+
+            (string Name, string Vendor, bool IsDedicated, long? VramBytes, string? DriverVersion)[] emptyGpus = [];
+            gpusField.SetValue(null, emptyGpus);
+            SystemInfo.GetGpuVendor().Should().Be("Unknown");
+            SystemInfo.GetGpuColor().Should().BeEmpty();
+        }
+        finally
+        {
+            gpusField.SetValue(null, originalGpus);
+        }
+
+        SystemInfo.GetDiskColor().Should().NotBeNull();
+        SystemInfo.GetRamColor().Should().NotBeNull();
+        SystemInfo.GetNicColor().Should().NotBeNull();
+        SystemInfo.GetSystemOemColor().Should().NotBeNull();
+
+        // 4. Battery queries with cache forced to true
+        var hasBatField = typeof(SystemInfo).GetField("_hasBatteryCache", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var originalHasBat = hasBatField.GetValue(null);
+        var mfrCacheField = typeof(SystemInfo).GetField("_batteryManufacturerCache", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var devCacheField = typeof(SystemInfo).GetField("_batteryDeviceNameCache", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var designCacheField = typeof(SystemInfo).GetField("_batteryDesignCapacityCache", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var fullCacheField = typeof(SystemInfo).GetField("_batteryFullChargeCapacityCache", BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        try
+        {
+            hasBatField.SetValue(null, true);
+            mfrCacheField.SetValue(null, null);
+            devCacheField.SetValue(null, null);
+            designCacheField.SetValue(null, null);
+            fullCacheField.SetValue(null, null);
+
+            SystemInfo.GetBatteryManufacturer().Should().NotBeNull();
+            SystemInfo.GetBatteryDeviceName().Should().NotBeNull();
+            SystemInfo.GetBatteryDesignCapacity().Should().NotBeNull();
+            SystemInfo.GetBatteryFullChargedCapacity().Should().NotBeNull();
+        }
+        finally
+        {
+            hasBatField.SetValue(null, originalHasBat);
+            mfrCacheField.SetValue(null, null);
+            devCacheField.SetValue(null, null);
+            designCacheField.SetValue(null, null);
+            fullCacheField.SetValue(null, null);
+        }
+
+        // 5. PSU and Disk enumeration queries
+        SystemInfo.GetPsuName().Should().NotBeNull();
+        SystemInfo.GetPsuMaxCapacity().Should().NotBeNull();
+        SystemInfo.GetDiskManufacturer().Should().NotBeNull();
+        SystemInfo.GetAllDisks().Should().NotBeNull();
+
+        // 6. CPU Max Speed MSR query
+        var queryMsrMethod = typeof(SystemInfo).GetMethod("QueryCpuMaxSpeedMsr", BindingFlags.NonPublic | BindingFlags.Static);
+        queryMsrMethod?.Invoke(null, null);
+
+        // 7. WMI error handling and battery internal helpers
+        var qWmiFirst = typeof(SystemInfo).GetMethod("QueryWmiFirst", BindingFlags.NonPublic | BindingFlags.Static)!;
+        ((string)qWmiFirst.Invoke(null, ["SELECT InvalidProp FROM Win32_NonExistentClass", "InvalidProp"])!).Should().BeEmpty();
+
+        var qWmiFirstInt = typeof(SystemInfo).GetMethod("QueryWmiFirstInt", BindingFlags.NonPublic | BindingFlags.Static)!;
+        ((int)qWmiFirstInt.Invoke(null, ["SELECT InvalidProp FROM Win32_NonExistentClass", "InvalidProp"])!).Should().Be(0);
+
+        var qRootStr = typeof(SystemInfo).GetMethod("QueryRootWmiString", BindingFlags.NonPublic | BindingFlags.Static)!;
+        ((string)qRootStr.Invoke(null, ["NonExistentClass", "Prop"])!).Should().BeEmpty();
+
+        var qRootInt = typeof(SystemInfo).GetMethod("QueryRootWmiInt", BindingFlags.NonPublic | BindingFlags.Static)!;
+        ((int)qRootInt.Invoke(null, ["NonExistentClass", "Prop"])!).Should().Be(0);
+
+        var qWin32Name = typeof(SystemInfo).GetMethod("QueryWin32BatteryName", BindingFlags.NonPublic | BindingFlags.Static)!;
+        qWin32Name.Invoke(null, null).Should().NotBeNull();
+
+        var qWin32Mfr = typeof(SystemInfo).GetMethod("QueryWin32BatteryManufacturer", BindingFlags.NonPublic | BindingFlags.Static)!;
+        qWin32Mfr.Invoke(null, null).Should().NotBeNull();
+
+        var getSmbiosBatStr = typeof(SystemInfo).GetMethod("GetSmbiosBatteryString", BindingFlags.NonPublic | BindingFlags.Static)!;
+        getSmbiosBatStr.Invoke(null, [0x05]).Should().NotBeNull();
+
+        var getSmbiosBatWord = typeof(SystemInfo).GetMethod("GetSmbiosBatteryWord", BindingFlags.NonPublic | BindingFlags.Static)!;
+        getSmbiosBatWord.Invoke(null, [0x0A]).Should().NotBeNull();
+    }
 }
+
 

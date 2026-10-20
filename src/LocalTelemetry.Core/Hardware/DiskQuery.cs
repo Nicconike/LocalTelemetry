@@ -6,6 +6,7 @@ using System.Runtime.Versioning;
 namespace LocalTelemetry.Core.Hardware;
 
 /// <summary>Information about a single physical disk drive.</summary>
+[SupportedOSPlatform("windows")]
 public record DiskInfo
 {
     /// <summary>Drive model name from WMI.</summary>
@@ -165,26 +166,28 @@ public static class DiskQuery
             if (desc.BusType == 0 || desc.BusType > 32)
                 return cache[diskIndex] = string.Empty;
 
-            string busType = desc.BusType switch
-            {
-                17 => "NVMe",
-                11 => "SATA",
-                10 => "SAS",
-                7 => "USB",
-                14 => "Virtual",
-                3 => "ATA",
-                8 => "RAID",
-                4 => "1394",
-                12 => "SD",
-                13 => "MMC",
-                19 => "UFS",
-                _ => $"BusType{desc.BusType}"
-            };
+            string busType = FormatBusType(desc.BusType);
             return cache[diskIndex] = busType;
         }
 
         return cache[diskIndex] = string.Empty;
     }
+
+    internal static string FormatBusType(uint busType) => busType switch
+    {
+        17 => "NVMe",
+        11 => "SATA",
+        10 => "SAS",
+        7 => "USB",
+        14 => "Virtual",
+        3 => "ATA",
+        8 => "RAID",
+        4 => "1394",
+        12 => "SD",
+        13 => "MMC",
+        19 => "UFS",
+        _ => $"BusType{busType}"
+    };
 
     /// <summary>Best-effort bus type from PNPDeviceID keywords.</summary>
     private static string BusTypeFromPnpId(string pnpId)

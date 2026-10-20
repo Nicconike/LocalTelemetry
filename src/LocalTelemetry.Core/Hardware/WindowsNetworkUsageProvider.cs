@@ -60,7 +60,7 @@ public static class WindowsNetworkUsageProvider
         return results;
     }
 
-    private static string ResolveAdapterInterfaceName(string adapterGuid, uint ianaType)
+    internal static string ResolveAdapterInterfaceName(string adapterGuid, uint ianaType)
     {
         try
         {

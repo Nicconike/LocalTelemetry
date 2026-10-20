@@ -5,6 +5,9 @@ on:
         branches: [master]
     pull_request_target:
         types: [opened, synchronize, reopened]
+    workflow_run:
+        workflows: ["CI"]
+        types: [completed]
 
 permissions:
     contents: read
@@ -29,7 +32,7 @@ jobs:
                   GH_TOKEN: ${{ steps.app_token.outputs.token }}
                   REPO: ${{ github.repository }}
               run: |
-                  prs=$(gh pr list --repo "$REPO" --state open --json number,headRefName,author --jq '.[]')
+                  prs=$(gh pr list --repo "$REPO" --state open --json number,headRefName,author,title --jq '.[]')
                   if [ -z "$prs" ]; then
                       echo "No open pull requests found."
                       exit 0
@@ -39,18 +42,21 @@ jobs:
                       pr_num=$(echo "$pr" | jq -r '.number')
                       pr_author=$(echo "$pr" | jq -r '.author.login')
                       pr_branch=$(echo "$pr" | jq -r '.headRefName')
+                      pr_title=$(echo "$pr" | jq -r '.title')
 
                       echo "Processing PR #$pr_num (branch: $pr_branch, author: $pr_author)..."
 
-                      if [ "$pr_author" = "app/dependabot" ] || [ "$pr_author" = "dependabot" ] || [ "$pr_author" = "dependabot[bot]" ]; then
-                          echo "Triggering Dependabot rebase for PR #$pr_num..."
-                          gh pr comment "$pr_num" --repo "$REPO" --body "@dependabot rebase" || true
-                      else
-                          echo "Updating branch for PR #$pr_num..."
-                          gh api --method PUT "repos/$REPO/pulls/$pr_num/update-branch" --silent || true
+                      echo "Updating branch for PR #$pr_num..."
+                      gh api --method PUT "repos/$REPO/pulls/$pr_num/update-branch" --silent || true
+
+                      clean_title="$pr_title"
+                      if [[ "$clean_title" =~ bump\ the\ (.+)-deps\ group ]]; then
+                          group="${BASH_REMATCH[1]}"
+                          clean_title="${pr_title%%:*}: bump ${group} dependencies"
                       fi
 
-                      gh pr merge "$pr_num" --repo "$REPO" --auto --squash || true
+                      gh pr merge "$pr_num" --repo "$REPO" --squash --admin --subject "$clean_title" --body "" || \
+                      gh pr merge "$pr_num" --repo "$REPO" --auto --squash --subject "$clean_title" --body "" || true
                   done
 
             - name: Configure Auto-Merge on PR Event
@@ -60,13 +66,30 @@ jobs:
                   REPO: ${{ github.repository }}
                   PR_NUMBER: ${{ github.event.pull_request.number }}
                   PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+                  PR_TITLE: ${{ github.event.pull_request.title }}
               run: |
-                  echo "Configuring auto-merge for PR #$PR_NUMBER (author: $PR_AUTHOR)..."
-
-                  if [ "$PR_AUTHOR" = "app/dependabot" ] || [ "$PR_AUTHOR" = "dependabot" ] || [ "$PR_AUTHOR" = "dependabot[bot]" ]; then
-                      echo "Approving Dependabot PR #$PR_NUMBER..."
-                      gh pr review "$PR_NUMBER" --repo "$REPO" --approve --body "Auto-approved Dependabot PR" || true
+                  echo "Configuring auto-merge for PR #$PR_NUMBER (author: $PR_AUTHOR)"
+                  clean_title="$PR_TITLE"
+                  if [[ "$clean_title" =~ bump\ the\ (.+)-deps\ group ]]; then
+                      group="${BASH_REMATCH[1]}"
+                      clean_title="${PR_TITLE%%:*}: bump ${group} dependencies"
                   fi
+                  gh pr merge "$PR_NUMBER" --repo "$REPO" --auto --squash --subject "$clean_title" --body "" || true
 
-                  echo "Enabling auto-merge for PR #$PR_NUMBER..."
-                  gh pr merge "$PR_NUMBER" --repo "$REPO" --auto --squash || true
+            - name: Auto-Merge Passing PR on CI Completion
+              if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
+              env:
+                  GH_TOKEN: ${{ steps.app_token.outputs.token }}
+                  REPO: ${{ github.repository }}
+              run: |
+                  pr_number="${{ github.event.workflow_run.pull_requests[0].number }}"
+                  if [ -n "$pr_number" ] && [ "$pr_number" != "null" ]; then
+                      echo "CI completed successfully for PR #$pr_number"
+                      pr_title=$(gh pr view "$pr_number" --repo "$REPO" --json title --jq '.title')
+                      clean_title="$pr_title"
+                      if [[ "$clean_title" =~ bump\ the\ (.+)-deps\ group ]]; then
+                          group="${BASH_REMATCH[1]}"
+                          clean_title="${pr_title%%:*}: bump ${group} dependencies"
+                      fi
+                      gh pr merge "$pr_number" --repo "$REPO" --squash --admin --subject "$clean_title" --body "" || true
+                  fi

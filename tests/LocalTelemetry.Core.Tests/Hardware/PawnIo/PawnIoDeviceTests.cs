@@ -190,7 +190,7 @@ public class PawnIoDeviceTests
         PawnIoDevice.ProcessRunner = null;
         try
         {
-            method!.Invoke(null, ["stop PawnIO"]);
+            method.Invoke(null, ["stop PawnIO"]);
         }
         finally
         {
@@ -212,7 +212,7 @@ public class PawnIoDeviceTests
         };
         try
         {
-            method!.Invoke(null, ["delete PawnIO"]);
+            method.Invoke(null, ["delete PawnIO"]);
         }
         finally
         {
@@ -226,7 +226,7 @@ public class PawnIoDeviceTests
     {
         var bytes = PawnIoDevice.LoadResourceBytes("Echo.bin");
         bytes.Should().NotBeNull();
-        bytes!.Length.Should().BeGreaterThan(0);
+        bytes.Length.Should().BeGreaterThan(0);
     }
 
     [Fact]
@@ -340,5 +340,17 @@ public class PawnIoDeviceTests
         // Post-disposal guards
         device.LoadModule(new byte[16]).Should().BeFalse();
         device.Execute("test_fn", null, 1).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void PawnIoDevice_ElevationAndProcessChecks_Coverage()
+    {
+        var isElevated = typeof(PawnIoDevice).GetMethod("IsProcessElevated", BindingFlags.NonPublic | BindingFlags.Static);
+        isElevated.Should().NotBeNull();
+        isElevated.Invoke(null, null).Should().NotBeNull();
+
+        var canRun = typeof(PawnIoDevice).GetMethod("CanRunElevatedOperation", BindingFlags.NonPublic | BindingFlags.Static);
+        canRun.Should().NotBeNull();
+        ((bool)canRun.Invoke(null, null)!).Should().BeFalse();
     }
 }

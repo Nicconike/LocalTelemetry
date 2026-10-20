@@ -19,6 +19,9 @@ updates:
           - "dependencies"
           - "dependabot"
           - "csharp"
+      ignore:
+          - dependency-name: "*"
+            update-types: ["version-update:semver-patch"]
       groups:
           dotnet-deps:
               patterns:
@@ -40,6 +43,9 @@ updates:
           - "dependencies"
           - "dependabot"
           - "scope:ci"
+      ignore:
+          - dependency-name: "*"
+            update-types: ["version-update:semver-patch"]
       groups:
           sdk-deps:
               patterns:
@@ -62,6 +68,9 @@ updates:
           - "dependencies"
           - "dependabot"
           - "frontend"
+      ignore:
+          - dependency-name: "*"
+            update-types: ["version-update:semver-patch"]
       groups:
           frontend-deps:
               patterns:
@@ -83,6 +92,9 @@ updates:
           - "dependabot"
           - "actions"
           - "scope:ci"
+      ignore:
+          - dependency-name: "*"
+            update-types: ["version-update:semver-patch"]
       groups:
           actions-deps:
               patterns:

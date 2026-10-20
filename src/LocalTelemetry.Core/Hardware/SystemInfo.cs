@@ -136,54 +136,59 @@ public static class SystemInfo
         try
         {
             var (eax, _, _, _) = X86Base.CpuId(0x01, 0);
-            int family = (eax >> 8) & 0xF;
-            int extFamily = (eax >> 20) & 0xFF;
-            int model = (eax >> 4) & 0xF;
-            int extModel = (eax >> 16) & 0xF;
-            if (family == 0x06 || family == 0x0F) // Intel uses family 6, AMD uses extended family
-            {
-                if (family == 0x0F)
-                    family += extFamily;
-                model |= extModel << 4;
-            }
-
-            int key = (family << 16) | (model & 0xFFFF);
-
-            // Intel
-            return key switch
-            {
-                (0x06 << 16) | 0xC6 => SocketLga1851, // Arrow Lake desktop
-                (0x06 << 16) | 0xC4 => SocketBga2049, // Arrow Lake H
-                (0x06 << 16) | 0xC7 => SocketBga2833, // Lunar Lake
-                (0x06 << 16) | 0xAC => SocketLga1851, // Meteor Lake desktop
-                (0x06 << 16) | 0xBE => SocketLga1700, // Raptor Lake Refresh desktop
-                (0x06 << 16) | 0xBF => SocketBga1964, // Raptor Lake HX
-                (0x06 << 16) | 0xBA => SocketLga1700, // Raptor Lake S desktop
-                (0x06 << 16) | 0xBB => SocketBga1744, // Raptor Lake P
-                (0x06 << 16) | 0xB7 => SocketLga1700, // Alder Lake S desktop
-                (0x06 << 16) | 0x9A => SocketLga1700, // Alder Lake desktop
-                (0x06 << 16) | 0xAA => SocketBga1744, // Raptor Lake P
-                (0x06 << 16) | 0xA5 => SocketLga1200, // Comet Lake desktop
-                (0x06 << 16) | 0x8C => SocketBga1440, // Tiger Lake U
-                (0x06 << 16) | 0x8D => SocketLga1200, // Tiger Lake desktop
-                (0x06 << 16) | 0x9E => SocketLga1151, // Kaby Lake desktop
-                (0x06 << 16) | 0x8E => SocketLga1151, // Kaby Lake desktop
-
-                // AMD
-                (0x19 << 16) | 0x5E => SocketAm5, // Granite Ridge (Ryzen 9000)
-                (0x19 << 16) | 0x61 => SocketAm5, // Raphael (Ryzen 7000)
-                (0x19 << 16) | 0x64 => SocketFp8, // Phoenix (Ryzen 7040)
-                (0x19 << 16) | 0x74 => SocketFp8, // Phoenix 2
-                (0x19 << 16) | 0x78 => SocketFl1, // Dragon Range (Ryzen 7045 HX)
-                (0x19 << 16) | 0x50 => SocketFp6, // Cezanne (Ryzen 5000 mobile)
-                (0x19 << 16) | 0x21 => SocketFp7, // Rembrandt (Ryzen 6000)
-                (0x19 << 16) | 0x11 => SocketAm4, // Vermeer (Ryzen 5000 desktop)
-                (0x19 << 16) | 0x71 => SocketAm4, // Matisse (Ryzen 3000 desktop)
-                (0x17 << 16) | 0x31 => SocketAm4, // Zen+ desktop
-                _ => ""
-            };
+            return CpuIdSocketLookupRaw(eax);
         }
         catch (Exception ex) { Diagnostics.Log.Error(ex, "Failed to resolve CPU socket via CPUID"); return ""; }
+    }
+
+    internal static string CpuIdSocketLookupRaw(int eax)
+    {
+        int family = (eax >> 8) & 0xF;
+        int extFamily = (eax >> 20) & 0xFF;
+        int model = (eax >> 4) & 0xF;
+        int extModel = (eax >> 16) & 0xF;
+        if (family == 0x06 || family == 0x0F) // Intel uses family 6, AMD uses extended family
+        {
+            if (family == 0x0F)
+                family += extFamily;
+            model |= extModel << 4;
+        }
+
+        int key = (family << 16) | (model & 0xFFFF);
+
+        // Intel
+        return key switch
+        {
+            (0x06 << 16) | 0xC6 => SocketLga1851, // Arrow Lake desktop
+            (0x06 << 16) | 0xC4 => SocketBga2049, // Arrow Lake H
+            (0x06 << 16) | 0xC7 => SocketBga2833, // Lunar Lake
+            (0x06 << 16) | 0xAC => SocketLga1851, // Meteor Lake desktop
+            (0x06 << 16) | 0xBE => SocketLga1700, // Raptor Lake Refresh desktop
+            (0x06 << 16) | 0xBF => SocketBga1964, // Raptor Lake HX
+            (0x06 << 16) | 0xBA => SocketLga1700, // Raptor Lake S desktop
+            (0x06 << 16) | 0xBB => SocketBga1744, // Raptor Lake P
+            (0x06 << 16) | 0xB7 => SocketLga1700, // Alder Lake S desktop
+            (0x06 << 16) | 0x9A => SocketLga1700, // Alder Lake desktop
+            (0x06 << 16) | 0xAA => SocketBga1744, // Raptor Lake P
+            (0x06 << 16) | 0xA5 => SocketLga1200, // Comet Lake desktop
+            (0x06 << 16) | 0x8C => SocketBga1440, // Tiger Lake U
+            (0x06 << 16) | 0x8D => SocketLga1200, // Tiger Lake desktop
+            (0x06 << 16) | 0x9E => SocketLga1151, // Kaby Lake desktop
+            (0x06 << 16) | 0x8E => SocketLga1151, // Kaby Lake desktop
+
+            // AMD
+            (0x19 << 16) | 0x5E => SocketAm5, // Granite Ridge (Ryzen 9000)
+            (0x19 << 16) | 0x61 => SocketAm5, // Raphael (Ryzen 7000)
+            (0x19 << 16) | 0x64 => SocketFp8, // Phoenix (Ryzen 7040)
+            (0x19 << 16) | 0x74 => SocketFp8, // Phoenix 2
+            (0x19 << 16) | 0x78 => SocketFl1, // Dragon Range (Ryzen 7045 HX)
+            (0x19 << 16) | 0x50 => SocketFp6, // Cezanne (Ryzen 5000 mobile)
+            (0x19 << 16) | 0x21 => SocketFp7, // Rembrandt (Ryzen 6000)
+            (0x19 << 16) | 0x11 => SocketAm4, // Vermeer (Ryzen 5000 desktop)
+            (0x19 << 16) | 0x71 => SocketAm4, // Matisse (Ryzen 3000 desktop)
+            (0x17 << 16) | 0x31 => SocketAm4, // Zen+ desktop
+            _ => ""
+        };
     }
 
     /// <summary>Reads CPU brand string via CPUID leaf 0x80000002-0x80000004 (fastest, most reliable).</summary>
@@ -226,27 +231,22 @@ public static class SystemInfo
         return QueryWmiFirst("SELECT Name FROM Win32_Processor", "Name");
     }
 
-    private static string DeriveSocketFromCpuName()
+    private static string DeriveSocketFromCpuName() => DeriveSocketFromCpuBrand(GetCpuBrandString());
+
+    internal static string DeriveSocketFromCpuBrand(string? name)
     {
-        string name = GetCpuBrandString();
         if (string.IsNullOrEmpty(name)) return "";
 
-        ReadOnlySpan<char> s = name.AsSpan().Trim();
-        if (s.Length < 4) return "";
+        ReadOnlySpan<char> u = name.ToUpperInvariant().AsSpan().Trim();
+        if (u.Length < 4) return "";
 
         // Detect vendor from brand string
-        if (s.IndexOf("INTEL", StringComparison.OrdinalIgnoreCase) >= 0)
-            return DeriveIntelSocket(s);
-        if (s.IndexOf("AMD", StringComparison.OrdinalIgnoreCase) >= 0)
-            return DeriveAmdSocket(s);
-        if (s.IndexOf("SNAPDRAGON", StringComparison.OrdinalIgnoreCase) >= 0)
-            return DeriveQualcommSocket(s);
-
-        // Try uppercased fallback in case vendor is embedded differently
-        ReadOnlySpan<char> u = name.ToUpperInvariant().AsSpan().Trim();
-        if (u.IndexOf("INTEL") >= 0) return DeriveIntelSocket(u);
-        if (u.IndexOf("AMD") >= 0) return DeriveAmdSocket(u);
-        if (u.IndexOf("SNAPDRAGON") >= 0) return DeriveQualcommSocket(u);
+        if (u.IndexOf("INTEL") >= 0)
+            return DeriveIntelSocket(u);
+        if (u.IndexOf("AMD") >= 0)
+            return DeriveAmdSocket(u);
+        if (u.IndexOf("SNAPDRAGON") >= 0)
+            return DeriveQualcommSocket(u);
 
         return "";
     }
@@ -474,7 +474,7 @@ public static class SystemInfo
         return SocketAm4;
     }
 
-    private static bool IsSocketName(string s)
+    internal static bool IsSocketName(string s)
     {
         if (string.IsNullOrEmpty(s)) return false;
         return s.Contains("LGA", StringComparison.OrdinalIgnoreCase)
@@ -493,7 +493,7 @@ public static class SystemInfo
     }
 
     /// <summary>True for SMBIOS/OEM placeholder strings that are not real socket names.</summary>
-    private static bool IsPlaceholderSocket(string s)
+    internal static bool IsPlaceholderSocket(string s)
     {
         if (string.IsNullOrWhiteSpace(s)) return true;
         string t = s.Trim();
@@ -509,7 +509,7 @@ public static class SystemInfo
             || t.Equals("N/A", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string SmbiosSocketName(int code)
+    internal static string SmbiosSocketName(int code)
     {
         // Values per the official SMBIOS "Processor Upgrade" enumeration
         // (Microsoft Win32_Processor.UpgradeMethod / DMTF Processor Information Type 4).
@@ -679,7 +679,7 @@ public static class SystemInfo
 
     private static readonly int[] GlpiCandidateSizes = [24, 32, 16, 20];
 
-    private static int DetectGlpiStructSize(int totalLen)
+    internal static int DetectGlpiStructSize(int totalLen)
     {
         return GlpiCandidateSizes.FirstOrDefault(sz => totalLen >= sz && totalLen % sz == 0);
     }
@@ -709,7 +709,7 @@ public static class SystemInfo
         return Environment.ProcessorCount;
     }
 
-    private static int FindSmbiosType4Value(byte[] raw, int wordOffset, int byteOffset)
+    internal static int FindSmbiosType4Value(byte[] raw, int wordOffset, int byteOffset)
     {
         if (raw.Length == 0) return 0;
         int p = 0;
@@ -718,25 +718,41 @@ public static class SystemInfo
             byte t = raw[p];
             byte len = raw[p + 1];
             if (len < 4 || p + len > raw.Length) break;
+
             if (t == 4)
             {
-                if (len >= wordOffset + 2)
-                {
-                    int wordVal = raw[p + wordOffset] | (raw[p + wordOffset + 1] << 8);
-                    if (wordVal > 0) return wordVal;
-                }
-                if (len >= byteOffset + 1)
-                {
-                    int byteVal = raw[p + byteOffset];
-                    if (byteVal > 0) return byteVal;
-                }
+                int val = ReadSmbiosType4Field(raw, p, len, wordOffset, byteOffset);
+                if (val > 0) return val;
             }
-            p += len;
-            while (p < raw.Length && !(raw[p] == 0 && raw[p + 1] == 0)) p++;
-            p += 2;
+
+            p = AdvanceToNextSmbiosStructure(raw, p + len);
             if (t == 127) break;
         }
         return 0;
+    }
+
+    private static int ReadSmbiosType4Field(byte[] raw, int p, byte len, int wordOffset, int byteOffset)
+    {
+        if (len >= wordOffset + 2)
+        {
+            int wordVal = raw[p + wordOffset] | (raw[p + wordOffset + 1] << 8);
+            if (wordVal > 0) return wordVal;
+        }
+        if (len >= byteOffset + 1)
+        {
+            int byteVal = raw[p + byteOffset];
+            if (byteVal > 0) return byteVal;
+        }
+        return 0;
+    }
+
+    private static int AdvanceToNextSmbiosStructure(byte[] raw, int p)
+    {
+        while (p + 1 < raw.Length && !(raw[p] == 0 && raw[p + 1] == 0))
+        {
+            p++;
+        }
+        return p + 2;
     }
 
     /// <summary>Gets the maximum (turbo) CPU frequency in MHz via MSR, CPUID or WMI.</summary>
@@ -781,7 +797,7 @@ public static class SystemInfo
         return 0;
     }
 
-    private static int ReadMsrRatioMhz(IPawnIoTransport pawnIo, uint msr)
+    internal static int ReadMsrRatioMhz(IPawnIoTransport pawnIo, uint msr)
     {
         var result = pawnIo.Execute("ioctl_read_msr", [msr], 1);
         if (result.Length >= 1)
@@ -1207,7 +1223,7 @@ public static class SystemInfo
         return mfrs;
     }
 
-    private static string FormFactorLabel(int ff) => ff switch
+    internal static string FormFactorLabel(int ff) => ff switch
     {
         0x01 => "Other",
         0x02 => UnknownLabel,
@@ -1225,7 +1241,7 @@ public static class SystemInfo
         _ => $"Type{ff:X}",
     };
 
-    private static string MemoryTypeLabel(int mt) => mt switch
+    internal static string MemoryTypeLabel(int mt) => mt switch
     {
         0x00 => UnknownLabel,
         0x11 => "SDRAM",
@@ -1445,7 +1461,7 @@ public static class SystemInfo
         return 0;
     }
 
-    private static bool IsValidBatteryString(string? s)
+    internal static bool IsValidBatteryString(string? s)
     {
         if (string.IsNullOrWhiteSpace(s)) return false;
         string trimmed = s.Trim();
@@ -1712,7 +1728,7 @@ public static class SystemInfo
     }
 
     /// <summary>True if the adapter name identifies a wireless (Wi-Fi) NIC.</summary>
-    private static bool IsWirelessAdapter(string name)
+    internal static bool IsWirelessAdapter(string name)
     {
         return name.Contains("Wi-Fi", StringComparison.OrdinalIgnoreCase)
             || name.Contains("WiFi", StringComparison.OrdinalIgnoreCase)
@@ -1824,7 +1840,7 @@ public static class SystemInfo
     }
 
     // Private helpers
-    private static string ParseVendor(string hwId, string name)
+    internal static string ParseVendor(string hwId, string name)
     {
         if (hwId?.Contains("VEN_10DE") == true) return NvidiaVendor;
         if (hwId?.Contains("VEN_1002") == true) return "AMD";
@@ -1891,7 +1907,7 @@ public static class SystemInfo
         finally { Marshal.FreeHGlobal(buf); }
     }
 
-    private static string FindSmbiosString(byte[] smbios, byte type, byte offset)
+    internal static string FindSmbiosString(byte[] smbios, byte type, byte offset)
     {
         int p = 0;
         while (p < smbios.Length)
@@ -1914,7 +1930,7 @@ public static class SystemInfo
         return "";
     }
 
-    private static string GetSmbiosString(byte[] smbios, int structStart, int dataLen, byte stringIdx)
+    internal static string GetSmbiosString(byte[] smbios, int structStart, int dataLen, byte stringIdx)
     {
         if (stringIdx == 0) return "";
         int p = structStart + dataLen;

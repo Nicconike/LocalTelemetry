@@ -45,13 +45,66 @@ jobs:
             - name: Setup .NET
               uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
               with:
-                  dotnet-version: |
-                      10.0.x
-                      9.0.x
+                  dotnet-version: 10.0.x
 
             - name: Install Release Dependencies
               run: bun install --frozen-lockfile
               working-directory: .github/release
+
+            - name: Install Inno Setup 7
+              shell: pwsh
+              env:
+                  GH_TOKEN: ${{ steps.app_token.outputs.token }}
+              run: |
+                  Write-Host "Querying official JRSoftware releases for latest Inno Setup 7..."
+                  $headers = @{ "User-Agent" = "GitHub-Actions-LocalTelemetry-Release" }
+                  if ($env:GH_TOKEN) { $headers["Authorization"] = "Bearer $env:GH_TOKEN" }
+                  $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/jrsoftware/issrc/releases?per_page=10" -Headers $headers
+                  $inno7Release = $releases | Where-Object { (-not $_.prerelease) -and ($_.tag_name -match '^is-7_') } | Select-Object -First 1
+                  if (-not $inno7Release) {
+                      throw "Could not locate a stable Inno Setup 7 release on jrsoftware/issrc."
+                  }
+                  $asset = $inno7Release.assets | Where-Object { $_.name -match '^innosetup-7\..*-x64\.exe$' } | Select-Object -First 1
+                  if (-not $asset) {
+                      throw "Could not locate 64-bit Inno Setup 7 installer asset in release $($inno7Release.tag_name)."
+                  }
+
+                  $downloadUrl = $asset.browser_download_url
+                  if (-not $downloadUrl.StartsWith("https://github.com/jrsoftware/issrc/releases/download/")) {
+                      throw "Insecure download URL detected: $downloadUrl"
+                  }
+
+                  $installerPath = Join-Path $env:TEMP "innosetup-7-latest.exe"
+                  Write-Host "Downloading $($asset.name) from $downloadUrl..."
+                  Invoke-WebRequest -Uri $downloadUrl -OutFile $installerPath
+
+                  Write-Host "Verifying digital Authenticode signature..."
+                  $sig = Get-AuthenticodeSignature -FilePath $installerPath
+                  if ($sig.Status -ne "Valid") {
+                      throw "Cryptographic verification failed: installer signature status is '$($sig.Status)'."
+                  }
+                  if ($sig.SignerCertificate.Subject -notmatch "Pyrsys B\.V\.") {
+                      throw "Untrusted certificate subject '$($sig.SignerCertificate.Subject)'. Expected 'Pyrsys B.V.'."
+                  }
+                  Write-Host "Signature verified successfully: $($sig.SignerCertificate.Subject)"
+
+                  Write-Host "Installing Inno Setup 7..."
+                  $proc = Start-Process -FilePath $installerPath -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-" -Wait -PassThru
+                  if ($proc.ExitCode -ne 0) {
+                      throw "Inno Setup 7 installer failed with exit code $($proc.ExitCode)."
+                  }
+
+                  $isccPath = "C:\Program Files\Inno Setup 7\ISCC.exe"
+                  if (-not (Test-Path $isccPath)) {
+                      $isccPath = "C:\Program Files (x86)\Inno Setup 7\ISCC.exe"
+                  }
+                  if (-not (Test-Path $isccPath)) {
+                      throw "Inno Setup 7 installation completed but ISCC.exe not found."
+                  }
+                  Write-Host "Inno Setup 7 installed and verified at: $isccPath"
+
+                  $isccDir = Split-Path $isccPath -Parent
+                  "$isccDir" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
             - name: Run Semantic Release
               shell: pwsh
@@ -84,7 +137,7 @@ jobs:
                   & $wingetCreatePath submit packaging/winget/localtelemetry.yaml --prtitle "LocalTelemetry: $env:RELEASE_VERSION" --no-open
 
             - name: Generate Attestations
-              if: always() && hashFiles('./LocalTelemetrySetup.exe') != ''
+              if: success() && hashFiles('./LocalTelemetrySetup.exe') != ''
               uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
               with:
                   subject-path: |

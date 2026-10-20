@@ -41,6 +41,9 @@ public class TrayIconManagerTests
             GpuUsagePct = 75.8f
         };
 
+        tray.SetTrayVisible(true);
+        tray.Update(snap);
+        tray.SetTrayVisible(false);
         tray.Update(snap);
         tray.Update(null);
 
@@ -65,7 +68,7 @@ public class TrayIconManagerTests
             GpuUsagePct = 100.0f
         };
 
-        var tooltip = (string)method!.Invoke(null, [snap])!;
+        var tooltip = (string)method.Invoke(null, [snap])!;
         tooltip.Length.Should().BeLessThanOrEqualTo(63);
     }
 
@@ -149,7 +152,7 @@ public class TrayIconManagerTests
         var themeType = typeof(TrayIconManager).Assembly.GetType("LocalTelemetry.App.Tray.TrayMenuTheme");
         themeType.Should().NotBeNull();
 
-        var theme = Activator.CreateInstance(themeType!);
+        var theme = Activator.CreateInstance(themeType);
         theme.Should().NotBeNull();
 
         // Verify color theme properties
@@ -162,12 +165,12 @@ public class TrayIconManagerTests
 
         foreach (var name in propNames)
         {
-            var prop = themeType!.GetProperty(name);
+            var prop = themeType.GetProperty(name);
             var color = (Color)prop!.GetValue(theme)!;
             color.Should().NotBe(Color.Empty);
         }
 
-        var renderer = Activator.CreateInstance(rendererType!) as ToolStripProfessionalRenderer;
+        var renderer = Activator.CreateInstance(rendererType) as ToolStripProfessionalRenderer;
         renderer.Should().NotBeNull();
 
         using var bmp = new Bitmap(100, 30);
@@ -178,7 +181,7 @@ public class TrayIconManagerTests
         // Test render separator
         using var sep = new ToolStripSeparator { Size = new Size(100, 10) };
         var sepArgs = new ToolStripSeparatorRenderEventArgs(g, sep, false);
-        var renderSepMethod = rendererType!.GetMethod("OnRenderSeparator", BindingFlags.Instance | BindingFlags.NonPublic);
+        var renderSepMethod = rendererType.GetMethod("OnRenderSeparator", BindingFlags.Instance | BindingFlags.NonPublic);
         renderSepMethod!.Invoke(renderer, [sepArgs]);
 
         // Test render item text

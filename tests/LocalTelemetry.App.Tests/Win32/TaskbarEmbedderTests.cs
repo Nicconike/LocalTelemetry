@@ -884,5 +884,43 @@ public class TaskbarEmbedderTests
         var actCheck = () => isWidgetsEnabled.Invoke(null, null);
         actCheck.Should().NotThrow();
     }
+
+    [Fact]
+    public void TaskbarEmbedder_PositionInBand_FailurePaths()
+    {
+        var cfg = new AppSettings();
+        var embedder = new TaskbarEmbedder(cfg);
+
+        var posBand = typeof(TaskbarEmbedder).GetMethod("PositionInBand", BindingFlags.NonPublic | BindingFlags.Instance);
+        posBand.Should().NotBeNull();
+
+        // 1. Invalid parent window -> returns false, state becomes Failed
+        typeof(TaskbarEmbedder).GetField("_parentHwnd", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(embedder, IntPtr.Zero);
+        bool res1 = (bool)posBand.Invoke(embedder, [IntPtr.Zero, new Size(150, 30)])!;
+        res1.Should().BeFalse();
+        embedder.State.Should().Be(OverlayDeploymentState.Failed);
+
+        // 2. QueryWidgetsButtonRightEdge with zero pointer -> returns -1
+        var queryWidgets = typeof(TaskbarEmbedder).GetMethod("QueryWidgetsButtonRightEdge", BindingFlags.NonPublic | BindingFlags.Static);
+        queryWidgets.Should().NotBeNull();
+        int edge = (int)queryWidgets.Invoke(null, [IntPtr.Zero])!;
+        edge.Should().Be(-1);
+
+        // 3. FindExplorerTrayWnd and SetWindowPos failure path
+        var primaryHwnd = TaskbarEmbedder.FindExplorerTrayWnd();
+
+        if (primaryHwnd != IntPtr.Zero)
+        {
+            typeof(TaskbarEmbedder).GetField("_parentHwnd", BindingFlags.NonPublic | BindingFlags.Instance)!
+                .SetValue(embedder, primaryHwnd);
+            typeof(TaskbarEmbedder).GetField("_trayLeftEdge", BindingFlags.NonPublic | BindingFlags.Instance)!
+                .SetValue(embedder, 500);
+
+            bool resSetPosFail = (bool)posBand.Invoke(embedder, [new IntPtr(-1), new Size(150, 30)])!;
+            resSetPosFail.Should().BeFalse();
+            embedder.State.Should().Be(OverlayDeploymentState.Failed);
+        }
+    }
 }
 

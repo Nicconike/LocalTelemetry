@@ -519,6 +519,33 @@ public sealed class LogTests : IDisposable
         }
     }
 
+    [Fact]
+    public void Log_LiveSystemLogRoll_And_MidnightRollover_Coverage()
+    {
+        long originalMax = Log.MaxSystemLogBytes;
+        Log.LastWriteError = null;
+        try
+        {
+            Log.MaxSystemLogBytes = 50;
+            Log.Info("Trigger first line that exceeds live limit and rotates the system log file");
+            Log.Info("Trigger second line after rotation has executed");
+
+            string archivePath = Path.Combine(_tempDir, "sys.1.log");
+            File.Exists(archivePath).Should().BeTrue();
+
+            var currentDateField = typeof(Log).GetField("_currentDate", BindingFlags.NonPublic | BindingFlags.Static)!;
+            currentDateField.SetValue(null, DateOnly.FromDateTime(DateTime.Today.AddDays(-1)));
+
+            Log.LastWriteError = null;
+            Log.Info("Trigger midnight rollover with calendar line and new metrics file");
+            Log.LastWriteError.Should().BeNull();
+        }
+        finally
+        {
+            Log.MaxSystemLogBytes = originalMax;
+        }
+    }
+
     private sealed class ThrowOnWriteOnlyStream : Stream
     {
         public override bool CanRead => false;

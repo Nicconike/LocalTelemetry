@@ -47,8 +47,8 @@ features:
 <div class="home-cta-box">
     <div class="home-cta-left">
         <span class="home-cta-badge"><span class="home-cta-dot"></span> Shape the Future</span>
-        <p class="home-cta-text">Help build the ultimate taskbar monitor! Share your feedback, suggest new hardware
-            features, report bugs and chat live with the developer.</p>
+        <p class="home-cta-text">Join the community and help shape LocalTelemetry! <br>
+            Share your feedback, suggest new hardware features, report bugs, and chat live with me.</p>
     </div>
     <div class="home-cta-actions">
         <a href="https://discord.gg/M2QevSgW3S" target="_blank" rel="noreferrer"

@@ -30,7 +30,7 @@ public class SettingsShellTests
     {
         var getActiveNics = typeof(SettingsShell).GetMethod("GetActiveNics", BindingFlags.NonPublic | BindingFlags.Static);
         getActiveNics.Should().NotBeNull();
-        var nics = (List<string>)getActiveNics!.Invoke(null, null)!;
+        var nics = (List<string>)getActiveNics.Invoke(null, null)!;
         nics.Should().NotBeNull();
     }
 
@@ -41,7 +41,7 @@ public class SettingsShellTests
         method.Should().NotBeNull();
         foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
         {
-            var res = method!.Invoke(null, [nic]);
+            var res = method.Invoke(null, [nic]);
             res.Should().NotBeNull();
         }
     }
@@ -493,7 +493,7 @@ public class SettingsShellTests
         }
         """;
 
-        var diffs = (List<string>)computeDiff!.Invoke(null, [before, after])!;
+        var diffs = (List<string>)computeDiff.Invoke(null, [before, after])!;
         diffs.Should().NotBeEmpty();
 
         // Invalid JSON to trigger catch
@@ -507,7 +507,7 @@ public class SettingsShellTests
         string[] metrics = ["cpu_pct", "cpu_temp", "cpu_freq", "cpu_power", "ram_pct", "ram_used", "gpu_pct", "gpu_temp", "gpu_vram", "gpu_freq", "gpu_power", "net_down", "net_up", "net_total", "battery_pct", "battery_rate", "disk_0_read", "unknown_metric"];
         foreach (var m in metrics)
         {
-            var name = (string)getMetricName!.Invoke(null, [m])!;
+            var name = (string)getMetricName.Invoke(null, [m])!;
             name.Should().NotBeNullOrEmpty();
         }
     }
@@ -614,12 +614,12 @@ public class SettingsShellTests
 
         foreach (var p in paths)
         {
-            var res = (string)formatMethod!.Invoke(null, [p, "false", "true"])!;
+            var res = (string)formatMethod.Invoke(null, [p, "false", "true"])!;
             res.Should().NotBeNull();
         }
 
         // Test alternate branch values
-        ((string)formatMethod!.Invoke(null, ["monitoring.preferrednic", "", "auto"])!).Should().Contain("Auto");
+        ((string)formatMethod.Invoke(null, ["monitoring.preferrednic", "", "auto"])!).Should().Contain("Auto");
         ((string)formatMethod.Invoke(null, ["monitoring.preferrednic", "auto", "Ethernet 1"])!).Should().Contain("Ethernet 1");
         ((string)formatMethod.Invoke(null, ["monitoring.logcpumode", "0", "1"])!).Should().Contain("Errors Only");
         ((string)formatMethod.Invoke(null, ["monitoring.logcpumode", "1", "2"])!).Should().Contain("Full");
@@ -638,7 +638,7 @@ public class SettingsShellTests
         parseMethod.Should().NotBeNull();
 
         // Pass unquoted array string [cpu_pct, ram_pct] which fails JSON parse and falls back to delimiter split
-        var res = (List<string>)parseMethod!.Invoke(null, ["[cpu_pct, ram_pct]"])!;
+        var res = (List<string>)parseMethod.Invoke(null, ["[cpu_pct, ram_pct]"])!;
         res.Should().Contain("cpu_pct");
         res.Should().Contain("ram_pct");
     }
@@ -660,7 +660,7 @@ public class SettingsShellTests
         {
             // 1. target = "app"
             using var docApp = System.Text.Json.JsonDocument.Parse("""{"payload": {"target": "app"}}""");
-            method!.Invoke(null, [docApp.RootElement]);
+            method.Invoke(null, [docApp.RootElement]);
             openedDir.Should().Be(AppSettings.ExeDir);
 
             // 2. target = "logs"
@@ -694,7 +694,7 @@ public class SettingsShellTests
         appendPower.Should().NotBeNull();
 
         var laptopDict = new Dictionary<string, object?>();
-        appendPower!.Invoke(null, [laptopDict, true]);
+        appendPower.Invoke(null, [laptopDict, true]);
 
         var desktopDict = new Dictionary<string, object?>();
         appendPower.Invoke(null, [desktopDict, false]);
@@ -710,8 +710,8 @@ public class SettingsShellTests
         formatTdp.Should().NotBeNull();
 
         var gpuTuple = ("RTX 4090", "NVIDIA", true, (long?)(16L * 1024 * 1024 * 1024), "550.00");
-        _ = (string?)formatVram!.Invoke(null, [gpuTuple]);
-        _ = (string?)formatTdp!.Invoke(null, [gpuTuple, (float?)250f]);
+        _ = (string?)formatVram.Invoke(null, [gpuTuple]);
+        _ = (string?)formatTdp.Invoke(null, [gpuTuple, (float?)250f]);
 
         var amdTuple = ("RX 7900", "AMD", true, (long?)(24L * 1024 * 1024 * 1024), "24.0.0");
         var resAmdVram = (string?)formatVram.Invoke(null, [amdTuple]);
@@ -890,10 +890,10 @@ public class SettingsShellTests
         using var docLogs = System.Text.Json.JsonDocument.Parse("""{"payload":{"target":"logs"}}""");
         using var docEmpty = System.Text.Json.JsonDocument.Parse("""{"payload":{}}""");
 
-        var actApp = () => handleOpenFolder!.Invoke(null, [docApp.RootElement]);
-        var actData = () => handleOpenFolder!.Invoke(null, [docData.RootElement]);
-        var actLogs = () => handleOpenFolder!.Invoke(null, [docLogs.RootElement]);
-        var actEmpty = () => handleOpenFolder!.Invoke(null, [docEmpty.RootElement]);
+        var actApp = () => handleOpenFolder.Invoke(null, [docApp.RootElement]);
+        var actData = () => handleOpenFolder.Invoke(null, [docData.RootElement]);
+        var actLogs = () => handleOpenFolder.Invoke(null, [docLogs.RootElement]);
+        var actEmpty = () => handleOpenFolder.Invoke(null, [docEmpty.RootElement]);
 
         actApp.Should().NotThrow();
         actData.Should().NotThrow();
@@ -973,7 +973,7 @@ public class SettingsShellTests
         string before = """{"monitoring":{"preferredNic":"auto"}}""";
         string after = """{"monitoring":{"preferredNic":"Ethernet (Realtek PCIe GbE Family Controller)"}}""";
 
-        var diffs = (List<string>)method!.Invoke(null, [before, after])!;
+        var diffs = (List<string>)method.Invoke(null, [before, after])!;
         diffs.Should().ContainSingle();
         diffs[0].Should().Be("Preferred network interface set to 'Ethernet (Realtek PCIe GbE Family Controller)'");
     }
@@ -987,7 +987,7 @@ public class SettingsShellTests
         string before = """{"overlay":{"followWindowsTheme":false}}""";
         string after = """{"overlay":{"followWindowsTheme":true}}""";
 
-        var diffs = (List<string>)method!.Invoke(null, [before, after])!;
+        var diffs = (List<string>)method.Invoke(null, [before, after])!;
         diffs.Should().ContainSingle();
         diffs[0].Should().Be("Follow Windows theme enabled");
     }
@@ -1025,7 +1025,7 @@ public class SettingsShellTests
         }
         """;
 
-        var diffs = (List<string>)method!.Invoke(null, [before, after])!;
+        var diffs = (List<string>)method.Invoke(null, [before, after])!;
         diffs.Should().ContainSingle();
         diffs[0].Should().Be("Alerts enabled: CPU temp (90°C), GPU temp (85°C), RAM usage (90%)");
     }
@@ -1039,7 +1039,7 @@ public class SettingsShellTests
         string before = """{"alerts":{"enabled":true}}""";
         string after = """{"alerts":{"enabled":false}}""";
 
-        var diffs = (List<string>)method!.Invoke(null, [before, after])!;
+        var diffs = (List<string>)method.Invoke(null, [before, after])!;
         diffs.Should().ContainSingle();
         diffs[0].Should().Be("Alerts disabled");
     }
@@ -1069,7 +1069,7 @@ public class SettingsShellTests
         }
         """;
 
-        var diffs = (List<string>)method!.Invoke(null, [before, after])!;
+        var diffs = (List<string>)method.Invoke(null, [before, after])!;
         diffs.Should().ContainSingle();
         diffs[0].Should().Be("Alerts updated: CPU temp threshold set to 95°C, Low battery alert enabled (≤ 20%)");
     }
@@ -1105,7 +1105,7 @@ public class SettingsShellTests
         }
         """;
 
-        var diffs = (List<string>)method!.Invoke(null, [before, after])!;
+        var diffs = (List<string>)method.Invoke(null, [before, after])!;
         diffs.Should().ContainSingle();
         diffs[0].Should().Be("Network group color changed to #0DB8E3 (applied to Download Speed, Upload Speed, Total Network Usage)");
     }
@@ -1131,7 +1131,7 @@ public class SettingsShellTests
         }
         """;
 
-        var diffs = (List<string>)method!.Invoke(null, [before, after])!;
+        var diffs = (List<string>)method.Invoke(null, [before, after])!;
         diffs.Should().ContainSingle();
         diffs[0].Should().Be("Metric 'Upload Speed' color changed from #0DB8E3 to #E3630D");
     }
@@ -1140,7 +1140,7 @@ public class SettingsShellTests
     {
         var method = typeof(SettingsShell).GetMethod("FormatLogMode", BindingFlags.NonPublic | BindingFlags.Static);
         method.Should().NotBeNull();
-        ((string)method!.Invoke(null, ["0"])!).Should().Be("Off");
+        ((string)method.Invoke(null, ["0"])!).Should().Be("Off");
         ((string)method.Invoke(null, ["1"])!).Should().Be("Errors Only");
         ((string)method.Invoke(null, ["2"])!).Should().Be("Full (All Metrics)");
         ((string)method.Invoke(null, ["3"])!).Should().Be("3");
@@ -1151,7 +1151,7 @@ public class SettingsShellTests
     {
         var method = typeof(SettingsShell).GetMethod("FormatGeneralOrLoggingChange", BindingFlags.NonPublic | BindingFlags.Static);
         method.Should().NotBeNull();
-        ((string?)method!.Invoke(null, ["showsystemtrayicon", "true"])!).Should().Be("System tray icon shown");
+        ((string?)method.Invoke(null, ["showsystemtrayicon", "true"])!).Should().Be("System tray icon shown");
         ((string?)method.Invoke(null, ["showsystemtrayicon", "false"])!).Should().Be("System tray icon hidden");
         ((string?)method.Invoke(null, ["runatstartup", "true"])!).Should().Be("Run at startup enabled");
         ((string?)method.Invoke(null, ["startminimized", "true"])!).Should().Be("Start minimized enabled");
@@ -1167,7 +1167,7 @@ public class SettingsShellTests
     {
         var method = typeof(SettingsShell).GetMethod("FormatNetworkChange", BindingFlags.NonPublic | BindingFlags.Static);
         method.Should().NotBeNull();
-        ((string?)method!.Invoke(null, ["network.selectedinterface", ""])!).Should().Be("Network adapter set to All Adapters");
+        ((string?)method.Invoke(null, ["network.selectedinterface", ""])!).Should().Be("Network adapter set to All Adapters");
         ((string?)method.Invoke(null, ["network.selectedinterface", "Ethernet"])!).Should().Be("Network adapter set to 'Ethernet'");
         ((string?)method.Invoke(null, ["network.unitformat", "auto"])!).Should().Be("Network unit format set to auto");
         ((string?)method.Invoke(null, ["network.speedunit", "bytes"])!).Should().Be("Network speed unit set to bytes");
@@ -1180,7 +1180,7 @@ public class SettingsShellTests
     {
         var method = typeof(SettingsShell).GetMethod("FormatOverlayChange", BindingFlags.NonPublic | BindingFlags.Static);
         method.Should().NotBeNull();
-        ((string?)method!.Invoke(null, ["overlay.visible", "overlay.visible", "false", "true"])!).Should().Be("Taskbar overlay turned on");
+        ((string?)method.Invoke(null, ["overlay.visible", "overlay.visible", "false", "true"])!).Should().Be("Taskbar overlay turned on");
         ((string?)method.Invoke(null, ["overlay.visible", "overlay.visible", "true", "false"])!).Should().Be("Taskbar overlay turned off");
         ((string?)method.Invoke(null, ["overlay.placement", "overlay.placement", "", "Right"])!).Should().Be("Position changed to Right");
         ((string?)method.Invoke(null, ["overlay.placementoffset", "overlay.placementoffset", "", "10"])!).Should().Be("Offset changed to 10 px");
@@ -1232,11 +1232,11 @@ public class SettingsShellTests
 
         foreach (var p in paths)
         {
-            var res = (string?)method!.Invoke(null, [p, p.Contains("max") || p.Contains("min") || p.Contains("cooldown") ? "50" : "true"]);
+            var res = (string?)method.Invoke(null, [p, p.Contains("max") || p.Contains("min") || p.Contains("cooldown") ? "50" : "true"]);
             res.Should().NotBeNull();
         }
 
-        ((string?)method!.Invoke(null, ["unknown.path", "val"])).Should().BeNull();
+        ((string?)method.Invoke(null, ["unknown.path", "val"])).Should().BeNull();
     }
 
     [Fact]
@@ -1257,7 +1257,7 @@ public class SettingsShellTests
 
         foreach (var id in metricIds)
         {
-            var name = (string)method!.Invoke(null, [id])!;
+            var name = (string)method.Invoke(null, [id])!;
             name.Should().NotBeNullOrEmpty();
         }
     }
@@ -1300,7 +1300,7 @@ public class SettingsShellTests
         method.Should().NotBeNull();
 
         // 1. Cleared
-        var res1 = (string?)method!.Invoke(null, ["cpu", ""]);
+        var res1 = (string?)method.Invoke(null, ["cpu", ""]);
         res1.Should().Be("Metrics layout cleared (0 metrics)");
 
         // 2. Old empty (1 metric)
@@ -1357,7 +1357,7 @@ public class SettingsShellTests
         // ClickCount == 2: Normal -> Maximized
         ctx.Shell.WindowState = WindowState.Normal;
         typeof(MouseButtonEventArgs).GetProperty("ClickCount")?.SetValue(eventArgs, 2);
-        titleBarMethod!.Invoke(ctx.Shell, [ctx.Shell, eventArgs]);
+        titleBarMethod.Invoke(ctx.Shell, [ctx.Shell, eventArgs]);
         ctx.Shell.WindowState.Should().Be(WindowState.Maximized);
 
         // ClickCount == 2: Maximized -> Normal
@@ -1367,7 +1367,7 @@ public class SettingsShellTests
         // CloseButton_Click
         var closeMethod = typeof(SettingsShell).GetMethod("CloseButton_Click", BindingFlags.NonPublic | BindingFlags.Instance);
         closeMethod.Should().NotBeNull();
-        closeMethod!.Invoke(ctx.Shell, [ctx.Shell, new RoutedEventArgs()]);
+        closeMethod.Invoke(ctx.Shell, [ctx.Shell, new RoutedEventArgs()]);
     }
 
     private sealed class ShellContext : IDisposable
@@ -1409,9 +1409,9 @@ public class SettingsShellTests
     {
         var method = typeof(SettingsShell).GetMethod("SafeGetGateways", BindingFlags.NonPublic | BindingFlags.Static);
         method.Should().NotBeNull();
-        var res = method!.Invoke(null, [null]);
+        var res = method.Invoke(null, [null]);
         res.Should().NotBeNull();
-        ((List<System.Net.IPAddress>)res!).Should().BeEmpty();
+        ((List<System.Net.IPAddress>)res).Should().BeEmpty();
     }
 
     [Fact]
@@ -1420,7 +1420,7 @@ public class SettingsShellTests
         var method = typeof(SettingsShell).GetMethod("CapitalizeGroupName", BindingFlags.NonPublic | BindingFlags.Static);
         method.Should().NotBeNull();
 
-        ((string)method!.Invoke(null, ["cpu"])!).Should().Be("CPU");
+        ((string)method.Invoke(null, ["cpu"])!).Should().Be("CPU");
         ((string)method.Invoke(null, ["gpu"])!).Should().Be("GPU");
         ((string)method.Invoke(null, ["ram"])!).Should().Be("RAM");
         ((string)method.Invoke(null, ["net"])!).Should().Be("Network");
@@ -1441,7 +1441,7 @@ public class SettingsShellTests
             ("alerts.enabled", "false", "true"),
             ("alerts.alertcpufreq", "false", "true")
         };
-        string s1 = (string)method!.Invoke(null, [changes1])!;
+        string s1 = (string)method.Invoke(null, [changes1])!;
         s1.Should().Contain("CPU throttle enabled");
 
         // 2. Alert enabled: empty summaries (line 1006)
@@ -1485,7 +1485,7 @@ public class SettingsShellTests
 
         // AMD with valid TDP (lines 873-874)
         var amdGpu = (Name: "AMD Radeon RX 7900 XTX", Vendor: "AMD", IsDedicated: true, VramBytes: (long?)16000000000L, DriverVersion: "24.1.1");
-        string? resAmd = (string?)method!.Invoke(null, [amdGpu, 300f]);
+        string? resAmd = (string?)method.Invoke(null, [amdGpu, 300f]);
         resAmd.Should().Be("300 W");
 
         // AMD without TDP
@@ -1497,5 +1497,59 @@ public class SettingsShellTests
         string? resIntel = (string?)method.Invoke(null, [intelGpu, 225f]);
         resIntel.Should().BeNull();
     }
+
+    [WpfFact]
+    public async Task SettingsShell_HandleImportWindowsUsage_Validations_And_ErrorPaths()
+    {
+        var cfg = new AppSettings();
+        string tempPath = Path.Combine(Path.GetTempPath(), "net_history_" + Guid.NewGuid().ToString("N") + ".dat");
+        try
+        {
+            var history = new TrafficHistoryFile(tempPath);
+            TrafficHistoryStore.Initialize(history);
+            using var netLogger = new NetUsageLogger(cfg, history);
+            var shell = new SettingsShell(cfg, netLogger);
+
+            var method = typeof(SettingsShell).GetMethod("HandleImportWindowsUsage", BindingFlags.NonPublic | BindingFlags.Instance);
+            method.Should().NotBeNull();
+
+            // 1. Missing payload or start/end dates
+            using var emptyDoc = JsonDocument.Parse("{}");
+            var task1 = (Task)method.Invoke(shell, [emptyDoc.RootElement])!;
+            await task1;
+
+            using var missingDateDoc = JsonDocument.Parse("{\"payload\":{}}");
+            var task2 = (Task)method.Invoke(shell, [missingDateDoc.RootElement])!;
+            await task2;
+
+            // 2. Invalid start date
+            using var badStartDoc = JsonDocument.Parse("{\"payload\":{\"startDate\":\"bad-date\",\"endDate\":\"01-08-2026\"}}");
+            var task3 = (Task)method.Invoke(shell, [badStartDoc.RootElement])!;
+            await task3;
+
+            // 3. Invalid end date
+            using var badEndDoc = JsonDocument.Parse("{\"payload\":{\"startDate\":\"01-08-2026\",\"endDate\":\"bad-date\"}}");
+            var task4 = (Task)method.Invoke(shell, [badEndDoc.RootElement])!;
+            await task4;
+
+            // 4. Valid dates format
+            using var validDoc = JsonDocument.Parse("{\"payload\":{\"startDate\":\"01-08-2026\",\"endDate\":\"05-08-2026\"}}");
+            var task5 = (Task)method.Invoke(shell, [validDoc.RootElement])!;
+            await task5;
+
+            // 5. PostWindowsImportResult direct invocation
+            var postResultMethod = typeof(SettingsShell).GetMethod("PostWindowsImportResult", BindingFlags.NonPublic | BindingFlags.Instance);
+            postResultMethod.Should().NotBeNull();
+            postResultMethod.Invoke(shell, [true, 2, 2048L, 1024L, "Success"]);
+            postResultMethod.Invoke(shell, [false, 0, 0L, 0L, "Failed"]);
+
+            shell.Close();
+        }
+        finally
+        {
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+        }
+    }
 }
+
 

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using FluentAssertions;
 using LocalTelemetry.Core.Hardware;
@@ -281,5 +282,171 @@ public class WindowsNetworkUsageProviderTests
         long validSeconds = DateTimeOffset.UtcNow.AddDays(-20).ToUnixTimeSeconds();
         ((DateTime?)parseDateMethod.Invoke(null, [(int)validSeconds])).Should().NotBeNull();
         ((DateTime?)parseDateMethod.Invoke(null, [validSeconds])).Should().NotBeNull();
+
+        // 3. Out-of-range dates (before 2000 or in future)
+        long oldFileTime = new DateTime(1995, 1, 1, 0, 0, 0, DateTimeKind.Utc).ToFileTimeUtc();
+        ((DateTime?)parseTimeMethod.Invoke(null, [oldFileTime])).Should().BeNull();
+
+        long futureFileTime = DateTime.UtcNow.AddDays(30).ToFileTimeUtc();
+        ((DateTime?)parseTimeMethod.Invoke(null, [futureFileTime])).Should().BeNull();
+
+        long oldSeconds = new DateTimeOffset(1995, 1, 1, 0, 0, 0, TimeSpan.Zero).ToUnixTimeSeconds();
+        ((DateTime?)parseDateMethod.Invoke(null, [oldSeconds])).Should().BeNull();
+
+        long futureSeconds = DateTimeOffset.UtcNow.AddDays(30).ToUnixTimeSeconds();
+        ((DateTime?)parseDateMethod.Invoke(null, [futureSeconds])).Should().BeNull();
+    }
+
+    [Fact]
+    public void WindowsNetworkUsageProvider_ClampImportRange_ValidatesBoundaries()
+    {
+        var clampMethod = typeof(WindowsNetworkUsageProvider).GetMethod(
+            "ClampImportRange", BindingFlags.NonPublic | BindingFlags.Static);
+        clampMethod.Should().NotBeNull();
+
+        DateTime today = DateTime.Today;
+        DateTime past100Days = today.AddDays(-100);
+        DateTime future10Days = today.AddDays(10);
+
+        var clampedObj = clampMethod.Invoke(null, [past100Days, future10Days]);
+        clampedObj.Should().NotBeNull();
+        var tuple = ((DateTime Start, DateTime End))clampedObj;
+
+        tuple.Start.Should().Be(today.AddDays(-60));
+        tuple.End.Should().Be(today);
+
+        DateTime inRangeStart = today.AddDays(-20);
+        DateTime inRangeEnd = today.AddDays(-5);
+        var inRangeObj = clampMethod.Invoke(null, [inRangeStart, inRangeEnd]);
+        var inRangeTuple = ((DateTime Start, DateTime End))inRangeObj!;
+
+        inRangeTuple.Start.Should().Be(inRangeStart);
+        inRangeTuple.End.Should().Be(inRangeEnd);
+    }
+
+    [Fact]
+    public void WindowsNetworkUsageProvider_MergeHistoricalRecord_InvalidDateFormats()
+    {
+        string tempPath = Path.Combine(Path.GetTempPath(), $"TrafficInvalid_{Guid.NewGuid():N}.dat");
+        try
+        {
+            var historyFile = new TrafficHistoryFile(tempPath);
+            var mergeRecord = typeof(WindowsNetworkUsageProvider).GetMethod(
+                "MergeHistoricalRecord", BindingFlags.NonPublic | BindingFlags.Static)!;
+
+            // Non-three-part strings
+            var twoParts = new WindowsNetworkUsageRecord { Date = "01-08", InterfaceType = "Ethernet" };
+            ((bool)mergeRecord.Invoke(null, [historyFile, twoParts, DateTime.Today])!).Should().BeFalse();
+
+            var fourParts = new WindowsNetworkUsageRecord { Date = "01-08-2026-00", InterfaceType = "Ethernet" };
+            ((bool)mergeRecord.Invoke(null, [historyFile, fourParts, DateTime.Today])!).Should().BeFalse();
+
+            // Non-numeric tokens
+            var badDay = new WindowsNetworkUsageRecord { Date = "xx-08-2026", InterfaceType = "Ethernet" };
+            ((bool)mergeRecord.Invoke(null, [historyFile, badDay, DateTime.Today])!).Should().BeFalse();
+
+            var badMonth = new WindowsNetworkUsageRecord { Date = "01-yy-2026", InterfaceType = "Ethernet" };
+            ((bool)mergeRecord.Invoke(null, [historyFile, badMonth, DateTime.Today])!).Should().BeFalse();
+
+            var badYear = new WindowsNetworkUsageRecord { Date = "01-08-zzzz", InterfaceType = "Ethernet" };
+            ((bool)mergeRecord.Invoke(null, [historyFile, badYear, DateTime.Today])!).Should().BeFalse();
+        }
+        finally
+        {
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+        }
+    }
+
+    [Fact]
+    public void WindowsNetworkUsageProvider_MergeRecords_FiltersZeroTraffic_And_Aggregates()
+    {
+        string tempPath = Path.Combine(Path.GetTempPath(), $"TrafficMerge_{Guid.NewGuid():N}.dat");
+        try
+        {
+            var historyFile = new TrafficHistoryFile(tempPath);
+            var mergeRecords = typeof(WindowsNetworkUsageProvider).GetMethod(
+                "MergeRecords", BindingFlags.NonPublic | BindingFlags.Static);
+            mergeRecords.Should().NotBeNull();
+
+            DateTime yesterday = DateTime.Today.AddDays(-1);
+            DateTime twoDaysAgo = DateTime.Today.AddDays(-2);
+
+            var zeroTraffic = new WindowsNetworkUsageRecord { Date = yesterday.ToString("dd-MM-yyyy"), InterfaceType = "Ethernet", DownBytes = 0, UpBytes = 0 };
+            var validTraffic1 = new WindowsNetworkUsageRecord { Date = yesterday.ToString("dd-MM-yyyy"), InterfaceType = "Ethernet", DownBytes = 4000, UpBytes = 2000 };
+            var validTraffic2 = new WindowsNetworkUsageRecord { Date = twoDaysAgo.ToString("dd-MM-yyyy"), InterfaceType = "WiFi", DownBytes = 6000, UpBytes = 3000 };
+            var invalidDateTraffic = new WindowsNetworkUsageRecord { Date = "invalid-date", InterfaceType = "Ethernet", DownBytes = 500, UpBytes = 250 };
+
+            var uniqueDays = new HashSet<string>();
+            var resultObj = mergeRecords.Invoke(null, [historyFile, new List<WindowsNetworkUsageRecord> { zeroTraffic, validTraffic1, validTraffic2, invalidDateTraffic }, uniqueDays]);
+            resultObj.Should().NotBeNull();
+
+            var tuple = ((long TotalDown, long TotalUp))resultObj;
+            tuple.TotalDown.Should().Be(10000);
+            tuple.TotalUp.Should().Be(5000);
+            uniqueDays.Should().HaveCount(2);
+        }
+        finally
+        {
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+        }
+    }
+
+    [Fact]
+    public void WindowsNetworkUsageProvider_ResolveAdapterInterfaceName_Coverage()
+    {
+        string unknownGuid = Guid.NewGuid().ToString("D");
+        WindowsNetworkUsageProvider.ResolveAdapterInterfaceName(unknownGuid, 6).Should().Be("Ethernet");
+        WindowsNetworkUsageProvider.ResolveAdapterInterfaceName(unknownGuid, 71).Should().Be("WiFi");
+        WindowsNetworkUsageProvider.ResolveAdapterInterfaceName(unknownGuid, 243).Should().Be("WiFi");
+        WindowsNetworkUsageProvider.ResolveAdapterInterfaceName(unknownGuid, 999).Should().Be("IanaType999");
+
+        // Real interface lookup if any present
+        var firstNic = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces().FirstOrDefault();
+        if (firstNic != null && !string.IsNullOrEmpty(firstNic.Name))
+        {
+            string cleanId = firstNic.Id?.Trim("{}".ToCharArray()) ?? string.Empty;
+            WindowsNetworkUsageProvider.ResolveAdapterInterfaceName(cleanId, 6).Should().Be(firstNic.Name);
+        }
+    }
+
+    [Fact]
+    public void WindowsNetworkUsageProvider_TryParseInstallTime_And_TryParseInstallDate_Coverage()
+    {
+        var parseTime = typeof(WindowsNetworkUsageProvider).GetMethod(
+            "TryParseInstallTime", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var parseDate = typeof(WindowsNetworkUsageProvider).GetMethod(
+            "TryParseInstallDate", BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        // TryParseInstallTime
+        parseTime.Invoke(null, [null]).Should().BeNull();
+        parseTime.Invoke(null, ["invalid"]).Should().BeNull();
+        parseTime.Invoke(null, [-1L]).Should().BeNull();
+        parseTime.Invoke(null, [0L]).Should().BeNull();
+        parseTime.Invoke(null, [new DateTime(1990, 1, 1, 0, 0, 0, DateTimeKind.Utc).ToFileTimeUtc()]).Should().BeNull();
+        parseTime.Invoke(null, [DateTime.UtcNow.AddYears(2).ToFileTimeUtc()]).Should().BeNull();
+
+        var validTime = DateTime.UtcNow.AddYears(-1);
+        var resTime = (DateTime?)parseTime.Invoke(null, [validTime.ToFileTimeUtc()]);
+        resTime.Should().NotBeNull();
+        resTime.Value.Year.Should().Be(validTime.Year);
+
+        // TryParseInstallDate
+        parseDate.Invoke(null, [null]).Should().BeNull();
+        parseDate.Invoke(null, ["invalid"]).Should().BeNull();
+        parseDate.Invoke(null, [-1]).Should().BeNull();
+        parseDate.Invoke(null, [0]).Should().BeNull();
+        parseDate.Invoke(null, [(int)DateTimeOffset.Parse("1990-01-01", CultureInfo.InvariantCulture).ToUnixTimeSeconds()]).Should().BeNull();
+        parseDate.Invoke(null, [DateTimeOffset.UtcNow.AddYears(2).ToUnixTimeSeconds()]).Should().BeNull();
+
+        var validSecondsInt = (int)DateTimeOffset.UtcNow.AddYears(-1).ToUnixTimeSeconds();
+        var resDateInt = (DateTime?)parseDate.Invoke(null, [validSecondsInt]);
+        resDateInt.Should().NotBeNull();
+        resDateInt.Value.Year.Should().Be(validTime.Year);
+
+        var validSecondsLong = DateTimeOffset.UtcNow.AddYears(-1).ToUnixTimeSeconds();
+        var resDateLong = (DateTime?)parseDate.Invoke(null, [validSecondsLong]);
+        resDateLong.Should().NotBeNull();
+        resDateLong.Value.Year.Should().Be(validTime.Year);
     }
 }
+

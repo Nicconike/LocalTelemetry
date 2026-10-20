@@ -47,7 +47,7 @@ $pawnUrl = "https://github.com/namazso/PawnIO.Setup/releases/latest/download/Paw
 Invoke-WebRequest -Uri $pawnUrl -OutFile "./publish/PawnIO_setup.exe"
 
 # 4. Locate ISCC.exe and Compile Inno Setup Windows Installer
-Write-Host "Compiling Inno Setup Windows installer..."
+Write-Host "Compiling Inno Setup Windows installer with Inno Setup 7..."
 $inno7Paths = @(
     "C:\Program Files\Inno Setup 7\ISCC.exe",
     "C:\Program Files (x86)\Inno Setup 7\ISCC.exe"
@@ -60,44 +60,11 @@ foreach ($p in $inno7Paths) {
     }
 }
 
-if (-not $iscc) {
-    Write-Host "Inno Setup 7 not found. Installing JRSoftware.InnoSetup.7 via winget..."
-    winget install --id JRSoftware.InnoSetup.7 --exact --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
-    foreach ($p in $inno7Paths) {
-        if (Test-Path $p) {
-            $iscc = $p
-            break
-        }
-    }
-    if (-not $iscc) {
-        $found = Get-ChildItem -Path "C:\Program Files*\Inno Setup 7" -Filter "ISCC.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($found) { $iscc = $found.FullName }
-    }
-}
-
-if (-not $iscc) {
-    Write-Warning "Inno Setup 7 not available; falling back to secondary paths..."
-    $fallbackPaths = @(
-        "C:\Program Files\Inno Setup 6\ISCC.exe",
-        "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
-    )
-    foreach ($p in $fallbackPaths) {
-        if (Test-Path $p) {
-            $iscc = $p
-            break
-        }
-    }
-    if (-not $iscc) {
-        $cmd = Get-Command iscc -ErrorAction SilentlyContinue
-        if ($cmd) { $iscc = $cmd.Source }
-    }
-}
-
 if (-not $iscc -or -not (Test-Path $iscc)) {
-    throw "ISCC.exe compiler not found on system."
+    throw "Inno Setup 7 compiler (ISCC.exe) not found. Inno Setup 7 must be installed prior to running build.ps1."
 }
 
-Write-Host "Using Inno Setup compiler: $iscc"
+Write-Host "Using Inno Setup 7 compiler: $iscc"
 
 & $iscc /DAppVersion=$Version /DAppVersionInfoVersion=$numVer setup.iss
 

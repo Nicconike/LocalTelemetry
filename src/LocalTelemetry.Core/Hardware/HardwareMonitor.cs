@@ -1569,15 +1569,7 @@ public sealed class HardwareMonitor : IDisposable
             try
             {
                 await Task.Delay(3000).ConfigureAwait(false);
-                if (_disposed) return;
-
-                ResetGpuMonitors("system power resume");
-                _lastPreferredNic = "~~unset~~";
-                EnsureNicCounters();
-
-                int ms = Math.Max(100, _cfg.Monitoring.PollIntervalMs);
-                _timer?.Change(ms, ms);
-                Log.Info("Polling resumed after power resume warm-up");
+                ExecutePowerResumeWarmUp();
             }
             catch (Exception ex)
             {
@@ -1588,6 +1580,19 @@ public sealed class HardwareMonitor : IDisposable
                 _isSuspended = false;
             }
         });
+    }
+
+    internal void ExecutePowerResumeWarmUp()
+    {
+        if (_disposed) return;
+
+        ResetGpuMonitors("system power resume");
+        _lastPreferredNic = "~~unset~~";
+        EnsureNicCounters();
+
+        int ms = Math.Max(100, _cfg.Monitoring.PollIntervalMs);
+        _timer?.Change(ms, ms);
+        Log.Info("Polling resumed after power resume warm-up");
     }
 
     private void OnNetworkTopologyChanged()

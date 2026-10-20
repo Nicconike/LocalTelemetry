@@ -41,16 +41,17 @@ jobs:
             - name: Run Vitest
               run: |
                   bun install --frozen-lockfile --ignore-scripts
-                  bun run test --reporter=default --reporter=junit --outputFile=test-report.junit.xml
-              working-directory: src/LocalTelemetry.App/Settings/wwwroot
+                  bun run test:coverage
+              working-directory: tests/LocalTelemetry.App.Tests/Settings/wwwroot
 
-            - name: Upload Test Results
-              if: always()
-              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+            - name: Upload Frontend Coverage
+              uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
               with:
-                  name: frontend-test-results
-                  path: src/LocalTelemetry.App/Settings/wwwroot/test-report.junit.xml
-                  retention-days: 14
+                  token: ${{ secrets.CODECOV_TOKEN }}
+                  slug: Nicconike/LocalTelemetry
+                  files: tests/LocalTelemetry.App.Tests/Settings/wwwroot/coverage/cobertura-coverage.xml
+                  flags: app
+                  disable_search: true
 
     test-windows:
         name: .NET Tests
@@ -93,13 +94,13 @@ jobs:
               run: dotnet build --configuration Debug
 
             - name: Test Core
-              run: dotnet test tests/LocalTelemetry.Core.Tests/LocalTelemetry.Core.Tests.csproj --configuration Debug --no-build --verbosity minimal --collect:"XPlat Code Coverage" --logger "junit;LogFileName=junit.xml" --results-directory TestResults/core -p:Platform=x64
+              run: dotnet test tests/LocalTelemetry.Core.Tests/LocalTelemetry.Core.Tests.csproj --configuration Debug --no-build --verbosity minimal --collect:"XPlat Code Coverage" --results-directory TestResults/core -p:Platform=x64
 
             - name: Test Notifier
-              run: dotnet test tests/LocalTelemetry.Notifier.Tests/LocalTelemetry.Notifier.Tests.csproj --configuration Debug --no-build --verbosity minimal --collect:"XPlat Code Coverage" --logger "junit;LogFileName=junit.xml" --results-directory TestResults/notifier -p:Platform=x64
+              run: dotnet test tests/LocalTelemetry.Notifier.Tests/LocalTelemetry.Notifier.Tests.csproj --configuration Debug --no-build --verbosity minimal --collect:"XPlat Code Coverage" --results-directory TestResults/notifier -p:Platform=x64
 
             - name: Test App
-              run: dotnet test tests/LocalTelemetry.App.Tests/LocalTelemetry.App.Tests.csproj --configuration Debug --no-build --verbosity minimal --collect:"XPlat Code Coverage" --logger "junit;LogFileName=junit.xml" --results-directory TestResults/app -p:Platform=x64
+              run: dotnet test tests/LocalTelemetry.App.Tests/LocalTelemetry.App.Tests.csproj --configuration Debug --no-build --verbosity minimal --collect:"XPlat Code Coverage" --results-directory TestResults/app -p:Platform=x64
 
             - name: Upload Core Coverage
               uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
@@ -127,26 +128,6 @@ jobs:
                   files: TestResults/app/**/coverage.cobertura.xml
                   flags: app
                   disable_search: true
-
-            - name: Upload Test Results
-              if: ${{ !cancelled() }}
-              uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
-              with:
-                  token: ${{ secrets.CODECOV_TOKEN }}
-                  slug: Nicconike/LocalTelemetry
-                  report_type: test_results
-                  files: |
-                      TestResults/core/junit.xml
-                      TestResults/notifier/junit.xml
-                      TestResults/app/junit.xml
-
-            - name: Upload Artifacts
-              if: always()
-              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-              with:
-                  name: dotnet-test-results
-                  path: TestResults/
-                  retention-days: 14
 
     ci:
         name: CI
