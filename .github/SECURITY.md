@@ -2,11 +2,11 @@
 
 ## Supported Versions
 
-| Version                         | Supported     |
-| ------------------------------- | ------------- |
-| Latest release                  | ✅             |
-| Pre-release / Release Candidate | ⚠️ Best effort |
-| Older releases                  | ❌             |
+| Version                         | Supported |
+| ------------------------------- | --------- |
+| Latest release                  | ✅        |
+| Pre-release / Release Candidate | ❌        |
+| Older releases                  | ❌        |
 
 ## Reporting a Vulnerability
 
@@ -35,9 +35,9 @@ Instead, please use one of the following methods:
 
 ## Security Considerations
 
-LocalTelemetry is a local-only desktop application. Key security properties:
+LocalTelemetry is a local desktop application. Key security properties:
 
-- **No network telemetry**: All hardware data stays on your machine. No data is transmitted externally.
-- **No analytics or tracking**: The application does not phone home.
-- **Admin privileges**: Required only for PawnIo driver installation (CPU MSR access). The app runs as `asInvoker` by default and elevates itself once on launch; the PawnIo driver install and service start then run silently in the background without further UAC prompts.
-- **WebView2 bridge**: URL navigation from the settings UI is restricted to `https://` and `http://` schemes only.
+- **No network telemetry**: All hardware monitoring data stays on your local machine. The application transmits no data externally.
+- **No analytics or tracking**: The application does not collect analytics or track user activity.
+- **Admin privileges**: Administrator privileges are required only for PawnIo driver installation (CPU MSR access). The application runs with standard user rights (`asInvoker`) by default. The application requests elevation once at launch. The PawnIo driver installs silently without further UAC prompts.
+- **WebView2 bridge**: The settings UI restricts URL navigation to `https://` and `http://` schemes only.

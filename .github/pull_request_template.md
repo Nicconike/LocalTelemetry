@@ -1,4 +1,4 @@
-## Summary
+# Summary
 
 <!-- Brief description of the changes in this PR -->
 
@@ -22,7 +22,7 @@
 
 Scope map: `core` → Core, `app` → App (includes `settings`/`tray` UI), `overlay` → Overlay, `monitor` → Monitor, `config` → Config, `ci` → CI (`.github/**`, `global.json`). Dependency bumps use `build(deps)` / `chore(deps)`.
 
-> The Project Automation workflow labels PRs/issues and assigns Kind, Scope & Sprint fields on Project #7 from the PR title and changed files. Dependabot PRs are auto-labeled: package bumps get `dependabot` + `dependencies` (Kind Build), GitHub Actions bumps get `dependabot` + `actions` + `scope:ci` (Kind CI); scope is derived from the files they touch.
+> The Project Automation workflow labels PRs and issues. The workflow assigns Kind, Scope, and Sprint fields on Project #7 from the title and modified files. Dependabot PRs receive automatic labels. Package updates receive `dependabot` and `dependencies` labels (Kind Build). GitHub Actions updates receive `dependabot`, `actions`, and `scope:ci` labels (Kind CI). The automation derives scope from modified files.
 
 ## Changes
 
@@ -35,6 +35,10 @@ Scope map: `core` → Core, `app` → App (includes `settings`/`tray` UI), `over
 ## Verification
 
 - [ ] Frontend builds (`cd src/LocalTelemetry.App/Settings/wwwroot && bun run build`)
-- [ ] Backend builds (`dotnet build`)
+- [ ] Frontend tests pass (`cd tests/LocalTelemetry.App.Tests/Settings/wwwroot && bun run test`)
+- [ ] Backend builds (`dotnet build --configuration Debug`)
+- [ ] Backend tests pass (`dotnet test --configuration Debug`)
+- [ ] Code formatting check passes (`dotnet format --verify-no-changes`)
+- [ ] No compiler or analyzer warning suppressions added (Zero Suppressions Policy)
 - [ ] No debug code or secrets in the diff
-- [ ] PR title follows [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
+- [ ] PR title & commit message follow [Conventional Commits](https://www.conventionalcommits.org)
