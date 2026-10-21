@@ -78,7 +78,107 @@ updates:
               patterns:
                   - "*"
 
-    # 4. GitHub Actions Workflows (.github/workflows/*.yml)
+    # 4. Svelte 5 / Vite Test Frontend Dependencies (Bun)
+    - package-ecosystem: "bun"
+      directory: "/tests/LocalTelemetry.App.Tests/Settings/wwwroot"
+      schedule:
+          interval: "monthly"
+          day: "monday"
+          time: "06:00"
+          timezone: "Asia/Kolkata" # GMT+5:30
+      open-pull-requests-limit: 5
+      rebase-strategy: "auto"
+      commit-message:
+          prefix: "build(deps)"
+          prefix-development: "build(deps-dev)"
+      labels:
+          - "dependencies"
+          - "dependabot"
+          - "frontend"
+      ignore:
+          - dependency-name: "*"
+            update-types: ["version-update:semver-patch"]
+      groups:
+          frontend-deps:
+              patterns:
+                  - "*"
+
+    # 5. Documentation Site Dependencies (Bun)
+    - package-ecosystem: "bun"
+      directory: "/docs"
+      schedule:
+          interval: "monthly"
+          day: "monday"
+          time: "06:00"
+          timezone: "Asia/Kolkata" # GMT+5:30
+      open-pull-requests-limit: 5
+      rebase-strategy: "auto"
+      commit-message:
+          prefix: "build(deps)"
+          prefix-development: "build(deps-dev)"
+      labels:
+          - "dependencies"
+          - "dependabot"
+          - "documentation"
+      ignore:
+          - dependency-name: "*"
+            update-types: ["version-update:semver-patch"]
+      groups:
+          docs-deps:
+              patterns:
+                  - "*"
+
+    # 6. Release Automation Dependencies (Bun)
+    - package-ecosystem: "bun"
+      directory: "/.github/release"
+      schedule:
+          interval: "monthly"
+          day: "monday"
+          time: "06:00"
+          timezone: "Asia/Kolkata" # GMT+5:30
+      open-pull-requests-limit: 5
+      rebase-strategy: "auto"
+      commit-message:
+          prefix: "ci(deps)"
+          prefix-development: "ci(deps-dev)"
+      labels:
+          - "dependencies"
+          - "dependabot"
+          - "scope:ci"
+      ignore:
+          - dependency-name: "*"
+            update-types: ["version-update:semver-patch"]
+      groups:
+          release-deps:
+              patterns:
+                  - "*"
+
+    # 7. Discord Webhook Dependencies (Bun)
+    - package-ecosystem: "bun"
+      directory: "/.discord"
+      schedule:
+          interval: "monthly"
+          day: "monday"
+          time: "06:00"
+          timezone: "Asia/Kolkata" # GMT+5:30
+      open-pull-requests-limit: 5
+      rebase-strategy: "auto"
+      commit-message:
+          prefix: "ci(deps)"
+          prefix-development: "ci(deps-dev)"
+      labels:
+          - "dependencies"
+          - "dependabot"
+          - "scope:ci"
+      ignore:
+          - dependency-name: "*"
+            update-types: ["version-update:semver-patch"]
+      groups:
+          discord-deps:
+              patterns:
+                  - "*"
+
+    # 8. GitHub Actions Workflows (.github/workflows/*.yml)
     - package-ecosystem: "github-actions"
       directory: "/"
       schedule:

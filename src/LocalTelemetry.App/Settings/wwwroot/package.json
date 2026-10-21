@@ -39,7 +39,7 @@
         "express": "^4.20.0",
         "devalue": "^5.9.3",
         "source-map-js": "^1.2.2",
-        "@vitest/mocker": "^4.1.11"
+        "@vitest/mocker": "^5.0.5"
     },
     "dependencies": {
         "@lucide/svelte": "^1.59.0",
