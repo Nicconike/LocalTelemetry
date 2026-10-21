@@ -89,7 +89,7 @@ public class AppTests
 
     private static App GetOrCreateApp()
     {
-        if (System.Windows.Application.Current is App current && current.Dispatcher == System.Windows.Threading.Dispatcher.CurrentDispatcher)
+        if (System.Windows.Application.Current is App current && current.Dispatcher == Dispatcher.CurrentDispatcher)
             return current;
 
         var appType = typeof(System.Windows.Application);
@@ -159,7 +159,7 @@ public class AppTests
         var actUnobserved = () => handleUnobserved!.Invoke(null, [null!, new UnobservedTaskExceptionEventArgs(new AggregateException(new InvalidOperationException("Test unobserved")))]);
         actUnobserved.Should().NotThrow();
 
-        var unobservedNull = (UnobservedTaskExceptionEventArgs)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(UnobservedTaskExceptionEventArgs));
+        var unobservedNull = (UnobservedTaskExceptionEventArgs)RuntimeHelpers.GetUninitializedObject(typeof(UnobservedTaskExceptionEventArgs));
         var actNull = () => handleUnobserved!.Invoke(null, [null!, unobservedNull]);
         actNull.Should().NotThrow();
     }
@@ -209,7 +209,7 @@ public class AppTests
         App.NotifierLauncherAction = _ => { };
 
         var onStartup = typeof(App).GetMethod("OnStartup", BindingFlags.NonPublic | BindingFlags.Instance);
-        var startupArgs = (StartupEventArgs)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(StartupEventArgs));
+        var startupArgs = (StartupEventArgs)RuntimeHelpers.GetUninitializedObject(typeof(StartupEventArgs));
 
         onStartup!.Invoke(app, [startupArgs]);
         elevatedCalled.Should().BeTrue();
@@ -235,7 +235,7 @@ public class AppTests
         {
             typeof(AppSettings).GetProperty("LastDirectoryError", BindingFlags.Static | BindingFlags.Public)!.SetValue(null, new InvalidOperationException("Test fallback warning"));
             var onStartup = typeof(App).GetMethod("OnStartup", BindingFlags.NonPublic | BindingFlags.Instance);
-            var startupArgs = (StartupEventArgs)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(StartupEventArgs));
+            var startupArgs = (StartupEventArgs)RuntimeHelpers.GetUninitializedObject(typeof(StartupEventArgs));
             typeof(StartupEventArgs).GetField("_args", BindingFlags.NonPublic | BindingFlags.Instance)?.SetValue(startupArgs, ElevatedArgs);
 
             var act = () => onStartup!.Invoke(app, [startupArgs]);
@@ -247,8 +247,8 @@ public class AppTests
             var monitorField = typeof(App).GetField("_monitor", BindingFlags.NonPublic | BindingFlags.Instance);
             if (monitorField?.GetValue(app) is HardwareMonitor monitor)
             {
-                try { monitor.Stop(); } catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException) { System.Diagnostics.Trace.WriteLine(ex.Message); }
-                try { monitor.Dispose(); } catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+                try { monitor.Stop(); } catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException) { Trace.WriteLine(ex.Message); }
+                try { monitor.Dispose(); } catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException) { Trace.WriteLine(ex.Message); }
             }
 
             (typeof(App).GetField("_overlay", BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(app) as TaskbarOverlay)?.Dispose();
@@ -279,7 +279,7 @@ public class AppTests
         try
         {
             var onStartup = typeof(App).GetMethod("OnStartup", BindingFlags.NonPublic | BindingFlags.Instance);
-            var startupArgs = (StartupEventArgs)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(StartupEventArgs));
+            var startupArgs = (StartupEventArgs)RuntimeHelpers.GetUninitializedObject(typeof(StartupEventArgs));
             typeof(StartupEventArgs).GetField("_args", BindingFlags.NonPublic | BindingFlags.Instance)?.SetValue(startupArgs, MinimizedArgs);
 
             var act = () => onStartup!.Invoke(app, [startupArgs]);
@@ -290,8 +290,8 @@ public class AppTests
             var monitorField = typeof(App).GetField("_monitor", BindingFlags.NonPublic | BindingFlags.Instance);
             if (monitorField?.GetValue(app) is HardwareMonitor monitor)
             {
-                try { monitor.Stop(); } catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException) { System.Diagnostics.Trace.WriteLine(ex.Message); }
-                try { monitor.Dispose(); } catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+                try { monitor.Stop(); } catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException) { Trace.WriteLine(ex.Message); }
+                try { monitor.Dispose(); } catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException) { Trace.WriteLine(ex.Message); }
             }
 
             (typeof(App).GetField("_overlay", BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(app) as TaskbarOverlay)?.Dispose();
@@ -477,7 +477,7 @@ public class AppTests
         var stopMethod = typeof(App).GetMethod("EnsureNotifierStopped", BindingFlags.NonPublic | BindingFlags.Instance);
         var procField = typeof(App).GetField("_notifierProcess", BindingFlags.NonPublic | BindingFlags.Instance)!;
         typeof(App).GetField("_notifierLaunched", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, true);
-        procField.SetValue(app, System.Diagnostics.Process.GetCurrentProcess());
+        procField.SetValue(app, Process.GetCurrentProcess());
 
         // Call stopMethod - should handle existing process safely
         var actStop = () => stopMethod!.Invoke(app, null);
@@ -804,9 +804,9 @@ public class AppTests
 
         foreach (var s in shells)
         {
-            try { s.Close(); } catch (InvalidOperationException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+            try { s.Close(); } catch (InvalidOperationException ex) { Trace.WriteLine(ex.Message); }
         }
-        System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+        Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.Background);
         logger.Dispose();
         App.SettingsShellFactory = null;
         App.SuppressSettingsWindowForTesting = true;
@@ -1135,7 +1135,7 @@ public class AppTests
 
         // 3. HandleDispatcherUnhandledException
         var handleDispatcher = typeof(App).GetMethod("HandleDispatcherUnhandledException", BindingFlags.NonPublic | BindingFlags.Static);
-        var dispArgs = (System.Windows.Threading.DispatcherUnhandledExceptionEventArgs)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(
+        var dispArgs = (System.Windows.Threading.DispatcherUnhandledExceptionEventArgs)RuntimeHelpers.GetUninitializedObject(
             typeof(System.Windows.Threading.DispatcherUnhandledExceptionEventArgs));
         typeof(System.Windows.Threading.DispatcherUnhandledExceptionEventArgs)
             .GetField("_exception", BindingFlags.NonPublic | BindingFlags.Instance)?

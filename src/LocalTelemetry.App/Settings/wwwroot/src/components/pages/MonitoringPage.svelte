@@ -78,7 +78,6 @@
                                     .cpuFreqMode === val}
                                 onclick={() => {
                                     $settings.monitoring.cpuFreqMode = val;
-                                    change();
                                 }}
                             >
                                 {val === "average"
@@ -98,7 +97,6 @@
                                     .cpuUsageMode === val}
                                 onclick={() => {
                                     $settings.monitoring.cpuUsageMode = val;
-                                    change();
                                 }}
                             >
                                 {val === "overall"
@@ -123,7 +121,6 @@
                             val}
                         onclick={() => {
                             $settings.monitoring.gpuUsageSource = val;
-                            change();
                         }}
                     >
                         {val === "wddm"

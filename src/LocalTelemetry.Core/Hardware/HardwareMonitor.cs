@@ -1500,7 +1500,7 @@ public sealed class HardwareMonitor : IDisposable
     /// <summary>Pauses the hardware polling timer.</summary>
     public void Stop()
     {
-        _timer?.Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
+        _timer?.Change(Timeout.Infinite, Timeout.Infinite);
     }
 
     /// <summary>Restarts the polling timer with a new interval.</summary>
@@ -1552,7 +1552,7 @@ public sealed class HardwareMonitor : IDisposable
         _isSuspended = true;
         try
         {
-            _timer?.Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
+            _timer?.Change(Timeout.Infinite, Timeout.Infinite);
             Log.Debug("Polling timer paused for suspend");
         }
         catch (Exception ex)

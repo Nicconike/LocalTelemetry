@@ -206,5 +206,67 @@ describe('AppearancePage.svelte', () => {
         expect(get(settings)!.overlay.userCustomizedGroupColors).toContain('cpu');
         expect(groupColorInput('All CPU')!.value.toLowerCase()).toBe('#123456');
     });
+
+    it('renders disk and battery color sections and supports reset buttons', async () => {
+        const payload = makePayload();
+        payload.monitoring.hasBattery = true;
+        payload.overlay.metricColors['cpu_pct'] = '#123456';
+        payload.overlay.userCustomizedMetricColors = ['cpu_pct'];
+        payload.overlay.groupColors['cpu'] = '#654321';
+        payload.overlay.userCustomizedGroupColors = ['cpu'];
+        payload.overlay.metricColors['disk_disk0_read'] = '#aabbcc';
+        payload.overlay.userCustomizedMetricColors = ['cpu_pct', 'disk_disk0_read'];
+
+        settings.set(payload);
+        systemInfo.set({
+            disks: [{ displayType: 'NVMe', busType: 'NVMe' }],
+            hasBattery: true
+        } as unknown as SystemInfo);
+
+        component = mount(AppearancePage, { target: document.body });
+        await tick();
+
+        expect(document.body.textContent).toContain('All Disks');
+        expect(document.body.textContent).toContain('All Battery');
+
+        // Test individual metric reset button for cpu_pct
+        const resetBtns = document.body.querySelectorAll<HTMLButtonElement>('.reset-btn.small');
+        expect(resetBtns.length).toBeGreaterThanOrEqual(2);
+        resetBtns[0].click();
+        await tick();
+
+        expect(get(settings)!.overlay.userCustomizedMetricColors).not.toContain('cpu_pct');
+
+        // Test individual metric reset button for disk_disk0_read
+        resetBtns[1].click();
+        await tick();
+
+        expect(get(settings)!.overlay.userCustomizedMetricColors).not.toContain('disk_disk0_read');
+
+        // Test group reset button
+        const groupResetBtn = document.body.querySelector('.reset-btn.group') as HTMLButtonElement | null;
+        expect(groupResetBtn).not.toBeNull();
+        groupResetBtn!.click();
+        await tick();
+
+        expect(get(settings)!.overlay.userCustomizedGroupColors).not.toContain('cpu');
+    });
+
+    it('validates invalid hex inputs on blur', async () => {
+        settings.set(makePayload());
+        systemInfo.set({ disks: [] } as unknown as SystemInfo);
+
+        component = mount(AppearancePage, { target: document.body });
+        await tick();
+
+        const hex = groupHexInput('All CPU');
+        expect(hex).not.toBeNull();
+        hex!.value = 'not-a-color';
+        hex!.dispatchEvent(new Event('blur'));
+        await tick();
+
+        expect(hex!.classList.contains('invalid')).toBe(true);
+    });
 });
+
 

@@ -560,11 +560,11 @@ public class SettingsShellTests
         if (titleBarMethod is not null)
         {
             var doubleClickArgs = new System.Windows.Input.MouseButtonEventArgs(
-                System.Windows.Input.Mouse.PrimaryDevice,
+                Mouse.PrimaryDevice,
                 0,
-                System.Windows.Input.MouseButton.Left)
+                MouseButton.Left)
             {
-                RoutedEvent = System.Windows.UIElement.MouseLeftButtonDownEvent
+                RoutedEvent = UIElement.MouseLeftButtonDownEvent
             };
             typeof(System.Windows.Input.MouseButtonEventArgs).GetProperty("ClickCount")?.SetValue(doubleClickArgs, 2);
 
@@ -659,17 +659,17 @@ public class SettingsShellTests
         try
         {
             // 1. target = "app"
-            using var docApp = System.Text.Json.JsonDocument.Parse("""{"payload": {"target": "app"}}""");
+            using var docApp = JsonDocument.Parse("""{"payload": {"target": "app"}}""");
             method.Invoke(null, [docApp.RootElement]);
             openedDir.Should().Be(AppSettings.ExeDir);
 
             // 2. target = "logs"
-            using var docLogs = System.Text.Json.JsonDocument.Parse("""{"payload": {"target": "logs"}}""");
+            using var docLogs = JsonDocument.Parse("""{"payload": {"target": "logs"}}""");
             method.Invoke(null, [docLogs.RootElement]);
             openedDir.Should().Be(AppSettings.LogsDir);
 
             // 3. target = "data"
-            using var docData = System.Text.Json.JsonDocument.Parse("""{"payload": {"target": "data"}}""");
+            using var docData = JsonDocument.Parse("""{"payload": {"target": "data"}}""");
             method.Invoke(null, [docData.RootElement]);
             openedDir.Should().Be(AppSettings.DataDir);
 
@@ -678,7 +678,7 @@ public class SettingsShellTests
             method.Invoke(null, [docData.RootElement]);
 
             // 5. Missing payload or target
-            using var docEmpty = System.Text.Json.JsonDocument.Parse("{}");
+            using var docEmpty = JsonDocument.Parse("{}");
             method.Invoke(null, [docEmpty.RootElement]);
         }
         finally
@@ -853,7 +853,7 @@ public class SettingsShellTests
         res.Should().NotBeNull();
 
         var safeGetGateways = typeof(SettingsShell).GetMethod("SafeGetGateways", BindingFlags.NonPublic | BindingFlags.Static);
-        foreach (var nic in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces())
+        foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
         {
             var gws = safeGetGateways!.Invoke(null, [nic]);
             gws.Should().NotBeNull();
@@ -885,10 +885,10 @@ public class SettingsShellTests
         var handleOpenFolder = typeof(SettingsShell).GetMethod("HandleOpenFolder", BindingFlags.NonPublic | BindingFlags.Static);
         handleOpenFolder.Should().NotBeNull();
 
-        using var docApp = System.Text.Json.JsonDocument.Parse("""{"payload":{"target":"app"}}""");
-        using var docData = System.Text.Json.JsonDocument.Parse("""{"payload":{"target":"data"}}""");
-        using var docLogs = System.Text.Json.JsonDocument.Parse("""{"payload":{"target":"logs"}}""");
-        using var docEmpty = System.Text.Json.JsonDocument.Parse("""{"payload":{}}""");
+        using var docApp = JsonDocument.Parse("""{"payload":{"target":"app"}}""");
+        using var docData = JsonDocument.Parse("""{"payload":{"target":"data"}}""");
+        using var docLogs = JsonDocument.Parse("""{"payload":{"target":"logs"}}""");
+        using var docEmpty = JsonDocument.Parse("""{"payload":{}}""");
 
         var actApp = () => handleOpenFolder.Invoke(null, [docApp.RootElement]);
         var actData = () => handleOpenFolder.Invoke(null, [docData.RootElement]);

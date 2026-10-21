@@ -45,7 +45,7 @@ public class HardwareMonitorTests
         snapshot.Should().NotBeNull();
         snapshot.CpuUsagePct.Should().BeGreaterThanOrEqualTo(0);
 
-        try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+        try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { Trace.WriteLine(ex.Message); }
     }
 
     [Fact]
@@ -516,7 +516,7 @@ public class HardwareMonitorTests
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.WriteLine($"NVML unavailable in test environment: {ex.Message}");
+            Trace.WriteLine($"NVML unavailable in test environment: {ex.Message}");
         }
     }
 
@@ -535,7 +535,7 @@ public class HardwareMonitorTests
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.WriteLine($"WDDM unavailable in test environment: {ex.Message}");
+            Trace.WriteLine($"WDDM unavailable in test environment: {ex.Message}");
         }
     }
 
@@ -576,7 +576,7 @@ public class HardwareMonitorTests
         }
         finally
         {
-            try { if (File.Exists(temp)) File.Delete(temp); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+            try { if (File.Exists(temp)) File.Delete(temp); } catch (IOException ex) { Trace.WriteLine(ex.Message); }
         }
     }
 

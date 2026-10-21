@@ -33,96 +33,119 @@ public sealed class TrafficHistoryFile
                 return;
             }
 
-            int lineCount = 0, parsed = 0, skipped = 0;
-            var seen = new HashSet<(int, int, int, string)>();
-            try
-            {
-                foreach (string line in File.ReadLines(_filePath))
-                {
-                    lineCount++;
-                    if (string.IsNullOrWhiteSpace(line)) { skipped++; continue; }
-
-                    try
-                    {
-                        using var doc = JsonDocument.Parse(line);
-                        var root = doc.RootElement;
-
-                        string? dateStr = root.TryGetProperty("date", out var d) ? d.GetString() : null;
-                        if (dateStr is null || dateStr.Length < 10) { skipped++; continue; }
-
-                        if (!TryParseDate(dateStr, out int year, out int month, out int day))
-                        { skipped++; continue; }
-
-                        long downBytes = 0, upBytes = 0;
-                        if (root.TryGetProperty("download_bytes", out var db) && root.TryGetProperty("upload_bytes", out var ub))
-                        {
-                            downBytes = db.GetInt64();
-                            upBytes = ub.GetInt64();
-                        }
-                        else if (root.TryGetProperty("down", out var dn) && root.TryGetProperty("up", out var up))
-                        {
-                            downBytes = dn.GetInt64();
-                            upBytes = up.GetInt64();
-                        }
-                        else
-                        {
-                            downBytes = root.TryGetProperty("down_bytes", out var dnb) ? dnb.GetInt64() : 0;
-                            upBytes = root.TryGetProperty("up_bytes", out var upb) ? upb.GetInt64() : 0;
-                        }
-
-                        string iface = root.TryGetProperty("interface", out var i) ? i.GetString() ?? "" : "";
-                        string source = root.TryGetProperty("source", out var s) ? s.GetString() ?? "LocalTelemetry" : "LocalTelemetry";
-                        if (string.Equals(source, "imported", StringComparison.OrdinalIgnoreCase) || string.Equals(source, "srum", StringComparison.OrdinalIgnoreCase))
-                        {
-                            source = "WindowsImport";
-                        }
-                        else if (string.Equals(source, "import", StringComparison.OrdinalIgnoreCase) || string.Equals(source, "dat", StringComparison.OrdinalIgnoreCase))
-                        {
-                            source = "DatImport";
-                        }
-
-                        var key = (year, month, day, iface);
-                        if (!seen.Add(key))
-                        {
-                            skipped++;
-                            continue;
-                        }
-
-                        _records.Add(new DailyRecord(year, month, day, downBytes, upBytes, iface, source));
-                        parsed++;
-                    }
-                    catch (Exception ex)
-                    {
-                        skipped++;
-                        Log($"Skipped malformed traffic history line {lineCount}: {ex.Message}");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Log($"Failed to read traffic history file: {ex.Message}");
-            }
-
-            _records.Sort((a, b) =>
-            {
-                int c = b.Year.CompareTo(a.Year);
-                if (c != 0) return c;
-                c = b.Month.CompareTo(a.Month);
-                if (c != 0) return c;
-                return b.Day.CompareTo(a.Day);
-            });
-
-            // Cleanup: remove empty-interface records superseded by a named-interface record for the same date
-            var superseded = new HashSet<(int, int, int)>();
-            foreach (var r in _records.Where(r => !string.IsNullOrEmpty(r.Interface)))
-                superseded.Add((r.Year, r.Month, r.Day));
-            _records.RemoveAll(r =>
-                string.IsNullOrEmpty(r.Interface) && superseded.Contains((r.Year, r.Month, r.Day)));
+            ReadAndParseRecords();
+            SortRecords(_records);
+            RemoveSupersededRecords(_records);
 
             int uniqueDays = _records.Select(r => (r.Year, r.Month, r.Day)).Distinct().Count();
             Count = _records.Count;
             Log($"Loaded {_records.Count} records across {uniqueDays} days of network usage history from {Path.GetFileName(_filePath)}");
         }
+    }
+
+    private void ReadAndParseRecords()
+    {
+        int lineCount = 0;
+        var seen = new HashSet<(int, int, int, string)>();
+        try
+        {
+            foreach (string line in File.ReadLines(_filePath))
+            {
+                lineCount++;
+                if (string.IsNullOrWhiteSpace(line)) continue;
+
+                try
+                {
+                    if (TryParseRecord(line, out var record, out var key) && seen.Add(key))
+                    {
+                        _records.Add(record);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log($"Skipped malformed traffic history line {lineCount}: {ex.Message}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"Failed to read traffic history file: {ex.Message}");
+        }
+    }
+
+    private static bool TryParseRecord(string line, out DailyRecord record, out (int, int, int, string) key)
+    {
+        record = default;
+        key = default;
+
+        using var doc = JsonDocument.Parse(line);
+        var root = doc.RootElement;
+
+        string? dateStr = root.TryGetProperty("date", out var d) ? d.GetString() : null;
+        if (dateStr is null || dateStr.Length < 10) return false;
+
+        if (!TryParseDate(dateStr, out int year, out int month, out int day)) return false;
+
+        var (downBytes, upBytes) = ParseByteCounts(root);
+        string iface = root.TryGetProperty("interface", out var i) ? i.GetString() ?? "" : "";
+        string rawSource = root.TryGetProperty("source", out var s) ? s.GetString() : null;
+        string source = NormalizeSource(rawSource);
+
+        key = (year, month, day, iface);
+        record = new DailyRecord(year, month, day, downBytes, upBytes, iface, source);
+        return true;
+    }
+
+    private static (long downBytes, long upBytes) ParseByteCounts(JsonElement root)
+    {
+        if (root.TryGetProperty("download_bytes", out var db) && root.TryGetProperty("upload_bytes", out var ub))
+        {
+            return (db.GetInt64(), ub.GetInt64());
+        }
+        if (root.TryGetProperty("down", out var dn) && root.TryGetProperty("up", out var up))
+        {
+            return (dn.GetInt64(), up.GetInt64());
+        }
+        long downBytes = root.TryGetProperty("down_bytes", out var dnb) ? dnb.GetInt64() : 0;
+        long upBytes = root.TryGetProperty("up_bytes", out var upb) ? upb.GetInt64() : 0;
+        return (downBytes, upBytes);
+    }
+
+    private static string NormalizeSource(string? source)
+    {
+        if (string.Equals(source, "imported", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(source, "srum", StringComparison.OrdinalIgnoreCase))
+        {
+            return "WindowsImport";
+        }
+        if (string.Equals(source, "import", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(source, "dat", StringComparison.OrdinalIgnoreCase))
+        {
+            return "DatImport";
+        }
+        return string.IsNullOrEmpty(source) ? "LocalTelemetry" : source;
+    }
+
+    private static void SortRecords(List<DailyRecord> records)
+    {
+        records.Sort((a, b) =>
+        {
+            int c = b.Year.CompareTo(a.Year);
+            if (c != 0) return c;
+            c = b.Month.CompareTo(a.Month);
+            if (c != 0) return c;
+            return b.Day.CompareTo(a.Day);
+        });
+    }
+
+    private static void RemoveSupersededRecords(List<DailyRecord> records)
+    {
+        var superseded = new HashSet<(int, int, int)>();
+        foreach (var r in records.Where(r => !string.IsNullOrEmpty(r.Interface)))
+        {
+            superseded.Add((r.Year, r.Month, r.Day));
+        }
+        records.RemoveAll(r => string.IsNullOrEmpty(r.Interface) && superseded.Contains((r.Year, r.Month, r.Day)));
     }
 
     private static bool TryParseDate(string s, out int year, out int month, out int day)

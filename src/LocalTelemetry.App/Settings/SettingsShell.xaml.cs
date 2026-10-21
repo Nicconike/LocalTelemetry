@@ -514,7 +514,7 @@ public sealed partial class SettingsShell : Window
     /// <summary>Debounced handler for <see cref="NetworkChange.NetworkAddressChanged"/>.</summary>
     private void OnNetworkAddressChanged(object? sender, EventArgs e)
     {
-        _nicDebounceTimer?.Change(1000, System.Threading.Timeout.Infinite);
+        _nicDebounceTimer?.Change(1000, Timeout.Infinite);
     }
 
     /// <summary>Checks if the active NIC list changed and sends an update to the frontend.</summary>
@@ -834,7 +834,7 @@ public sealed partial class SettingsShell : Window
             if (!File.Exists(assemblyPath))
                 assemblyPath = Environment.ProcessPath ?? assemblyPath;
             if (File.Exists(assemblyPath))
-                buildDate = File.GetLastWriteTime(assemblyPath).ToString("dd-MM-yyyy, hh:mm tt", System.Globalization.CultureInfo.InvariantCulture);
+                buildDate = File.GetLastWriteTime(assemblyPath).ToString("dd-MM-yyyy, hh:mm tt", CultureInfo.InvariantCulture);
         }
         catch (Exception ex) { Log.Error(ex, "Failed to determine application build timestamp"); }
 

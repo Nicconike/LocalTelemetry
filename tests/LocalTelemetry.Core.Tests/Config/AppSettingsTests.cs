@@ -183,7 +183,7 @@ public sealed class AppSettingsTests : IDisposable
     [Fact]
     public void Load_MigratesMissingGroupColorsOnly()
     {
-        var defaults = LocalTelemetry.Core.Models.BrandColorDefaults.BuildDefaultMetricColors();
+        var defaults = Core.Models.BrandColorDefaults.BuildDefaultMetricColors();
         var json = $$"""
         {
           "overlay": {
@@ -289,9 +289,9 @@ public sealed class AppSettingsTests : IDisposable
             GroupColors = new Dictionary<string, string> { ["cpu"] = "#00FF00" },
             DefaultMetricColors = new Dictionary<string, string> { ["cpu_pct"] = "#0000FF" },
             FollowWindowsTheme = false,
-            UserCustomizedMetricColors = new HashSet<string> { "cpu_pct" },
-            UserCustomizedGroupColors = new HashSet<string> { "cpu" },
-            Row1 = new List<string> { "cpu_pct", "gpu_pct" }
+            UserCustomizedMetricColors = ["cpu_pct"],
+            UserCustomizedGroupColors = ["cpu"],
+            Row1 = ["cpu_pct", "gpu_pct"]
         };
 
         overlay.Visible.Should().BeTrue();

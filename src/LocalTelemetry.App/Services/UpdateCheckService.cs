@@ -241,39 +241,34 @@ public sealed class UpdateCheckService(AppSettings cfg, HttpClient? httpClient =
         if (a.Prerelease is not null && b.Prerelease is null) return -1;
         if (a.Prerelease is null && b.Prerelease is null) return 0;
 
-        // Both are prereleases: compare dot-separated identifiers
-        var aParts = a.Prerelease!.Split('.');
-        var bParts = b.Prerelease!.Split('.');
+        return ComparePrereleaseSegments(a.Prerelease!, b.Prerelease!);
+    }
+
+    private static int ComparePrereleaseSegments(string aPrerelease, string bPrerelease)
+    {
+        var aParts = aPrerelease.Split('.');
+        var bParts = bPrerelease.Split('.');
         int minLen = Math.Min(aParts.Length, bParts.Length);
 
         for (int i = 0; i < minLen; i++)
         {
-            string aPart = aParts[i];
-            string bPart = bParts[i];
-
-            bool aIsNum = int.TryParse(aPart, out int aNum);
-            bool bIsNum = int.TryParse(bPart, out int bNum);
-
-            if (aIsNum && bIsNum)
-            {
-                if (aNum != bNum) return aNum.CompareTo(bNum);
-            }
-            else if (aIsNum)
-            {
-                return -1; // Numeric identifiers have lower precedence than non-numeric
-            }
-            else if (bIsNum)
-            {
-                return 1;
-            }
-            else
-            {
-                int cmp = string.Compare(aPart, bPart, StringComparison.OrdinalIgnoreCase);
-                if (cmp != 0) return cmp;
-            }
+            int cmp = CompareIdentifier(aParts[i], bParts[i]);
+            if (cmp != 0) return cmp;
         }
 
         return aParts.Length.CompareTo(bParts.Length);
+    }
+
+    private static int CompareIdentifier(string aPart, string bPart)
+    {
+        bool aIsNum = int.TryParse(aPart, out int aNum);
+        bool bIsNum = int.TryParse(bPart, out int bNum);
+
+        if (aIsNum && bIsNum) return aNum.CompareTo(bNum);
+        if (aIsNum) return -1; // Numeric identifiers have lower precedence than non-numeric
+        if (bIsNum) return 1;
+
+        return string.Compare(aPart, bPart, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string CleanVersionForParsing(string ver)

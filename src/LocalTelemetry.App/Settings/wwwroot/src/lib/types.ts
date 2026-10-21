@@ -25,6 +25,8 @@ export interface MonitoringDto {
     trackDisk: boolean;
     trackBattery: boolean;
     gpuUsageSource: string;
+    cpuFreqMode?: string;
+    cpuUsageMode?: string;
     logCpuMode: number;
     logGpuMode: number;
     logRamMode: number;

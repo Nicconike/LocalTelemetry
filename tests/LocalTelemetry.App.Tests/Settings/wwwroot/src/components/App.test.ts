@@ -112,6 +112,7 @@ describe('App.svelte', () => {
             unmount(component);
             component = undefined;
         }
+        delete (globalThis as any).window?.chrome;
     });
 
     it('navigates directly when there are no unsaved changes', async () => {
@@ -218,4 +219,147 @@ describe('App.svelte', () => {
         await tick();
         expect(bar!.classList.contains('visible')).toBe(false);
     });
+
+    it('initializes bridge messages and handles incoming webview events', async () => {
+        const postedMessages: any[] = [];
+        const wv = new EventTarget();
+        (wv as any).postMessage = (msg: any) => postedMessages.push(msg);
+        (globalThis as any).window.chrome = {
+            webview: wv,
+        };
+
+        const payload = makePayload();
+        component = mount(App, { target: document.body });
+        await tick();
+
+        expect(postedMessages.some(m => m.type === 'getSettings')).toBe(true);
+
+        // Simulate incoming settings message
+        wv.dispatchEvent(new MessageEvent('message', {
+            data: { type: 'settings', payload }
+        }));
+        await tick();
+        expect(get(settings)).toEqual(payload);
+
+        // Simulate incoming saved message
+        wv.dispatchEvent(new MessageEvent('message', {
+            data: { type: 'saved' }
+        }));
+        await tick();
+
+        // Simulate nics
+        wv.dispatchEvent(new MessageEvent('message', {
+            data: { type: 'nics', payload: ['Ethernet', 'WiFi'] }
+        }));
+        await tick();
+
+        // Simulate systemInfo
+        wv.dispatchEvent(new MessageEvent('message', {
+            data: { type: 'systemInfo', payload: { os: 'Windows 11' } }
+        }));
+        await tick();
+
+        // Simulate trafficHistoryAll
+        wv.dispatchEvent(new MessageEvent('message', {
+            data: {
+                type: 'trafficHistoryAll',
+                payload: { records: [{ date: '01-10-2026', interfaceName: 'Ethernet', downBytes: 100, upBytes: 50 }], todayDown: 100, todayUp: 50 }
+            }
+        }));
+        await tick();
+
+        // Simulate trafficToday
+        wv.dispatchEvent(new MessageEvent('message', {
+            data: { type: 'trafficToday', payload: { downBytes: 200, upBytes: 100 } }
+        }));
+        await tick();
+
+        // Simulate importDatResult
+        wv.dispatchEvent(new MessageEvent('message', {
+            data: { type: 'importDatResult', payload: { daysImported: 2 } }
+        }));
+        await tick();
+
+        // Simulate windowsUsageImportResult
+        wv.dispatchEvent(new MessageEvent('message', {
+            data: { type: 'windowsUsageImportResult', payload: { success: true, daysImported: 3 } }
+        }));
+        await tick();
+
+        delete (globalThis as any).window.chrome;
+    });
+
+    it('supports saving via Save Changes button and save & move modal action', async () => {
+        const wv = new EventTarget() as any;
+        wv.postMessage = vi.fn();
+        (globalThis as any).window.chrome = { webview: wv };
+
+        const payload = makePayload();
+        settings.set(structuredClone(payload));
+        pristineSettings.set(JSON.stringify(payload));
+
+        component = mount(App, { target: document.body });
+        await tick();
+
+        // Modify settings to make it dirty
+        settings.update(s => {
+            if (s) s.monitoring.intervalMs = 2500;
+            return s;
+        });
+        await tick();
+
+        const saveBtn = document.querySelector('.save-bar .btn-save') as HTMLButtonElement;
+        expect(saveBtn).not.toBeNull();
+        saveBtn.click();
+        await tick();
+
+        // Simulate saved event from bridge to finish saving
+        wv.dispatchEvent(new MessageEvent('message', {
+            data: { type: 'saved' }
+        }));
+        await tick();
+
+        // Re-dirty settings so navigation triggers the modal
+        settings.update(s => {
+            if (s) s.monitoring.intervalMs = 3000;
+            return s;
+        });
+        await tick();
+
+        // Try navigating while dirty to open nav modal
+        navButton('Monitoring').click();
+        await tick();
+
+        const saveAndMoveBtn = Array.from(document.querySelectorAll<HTMLButtonElement>('.nav-modal button')).find(
+            b => b.textContent?.trim() === 'Save'
+        );
+        expect(saveAndMoveBtn).toBeDefined();
+        saveAndMoveBtn!.click();
+        await tick();
+
+        // Simulate saved event after modal save
+        wv.dispatchEvent(new MessageEvent('message', {
+            data: { type: 'saved' }
+        }));
+        await tick();
+
+        expect(get(activePage)).toBe('monitoring');
+    });
+
+    it('navigates through all application pages', async () => {
+        const payload = makePayload();
+        settings.set(structuredClone(payload));
+        pristineSettings.set(JSON.stringify(payload));
+
+        component = mount(App, { target: document.body });
+        await tick();
+
+        const pages = ['Monitoring', 'Overlay', 'Layout', 'Network', 'Traffic', 'Alerts', 'System', 'Appearance', 'About', 'General'];
+        for (const p of pages) {
+            navButton(p).click();
+            await tick();
+            expect(get(activePage)).toBe(p.toLowerCase());
+        }
+    });
 });
+

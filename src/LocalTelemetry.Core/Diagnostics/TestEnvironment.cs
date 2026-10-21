@@ -13,8 +13,8 @@ public static class TestEnvironment
     public static bool IsTestHost()
     {
         string processName = Path.GetFileNameWithoutExtension(Environment.ProcessPath ?? string.Empty);
-        if (processName.StartsWith("testhost", System.StringComparison.OrdinalIgnoreCase)
-            || processName.Equals("vstest.console", System.StringComparison.OrdinalIgnoreCase))
+        if (processName.StartsWith("testhost", StringComparison.OrdinalIgnoreCase)
+            || processName.Equals("vstest.console", StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }

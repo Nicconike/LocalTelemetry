@@ -94,7 +94,18 @@ public static class HardwareInventory
             return currentState;
         }
 
-        LogFullHardwareDetails(systemLine, osVersion, formFactor, motherboardLine, gpuLines, diskLines, primaryDiskType, diskCount, memoryLine, batteryLine);
+        var logDetails = new HardwareLogDetails(
+            systemLine,
+            osVersion,
+            formFactor,
+            motherboardLine,
+            gpuLines,
+            diskLines,
+            primaryDiskType,
+            diskCount,
+            memoryLine,
+            batteryLine);
+        LogFullHardwareDetails(logDetails);
         SaveStateQuietly(stateFilePath, currentState);
         return currentState;
     }
@@ -253,30 +264,32 @@ public static class HardwareInventory
         }
     }
 
-    private static void LogFullHardwareDetails(
-        string systemLine,
-        string osVersion,
-        string formFactor,
-        string motherboardLine,
-        List<string> gpuLines,
-        List<string> diskLines,
-        string primaryDiskType,
-        int diskCount,
-        string memoryLine,
-        string batteryLine)
+    private sealed record HardwareLogDetails(
+        string SystemLine,
+        string OsVersion,
+        string FormFactor,
+        string MotherboardLine,
+        List<string> GpuLines,
+        List<string> DiskLines,
+        string PrimaryDiskType,
+        int DiskCount,
+        string MemoryLine,
+        string BatteryLine);
+
+    private static void LogFullHardwareDetails(HardwareLogDetails details)
     {
         Log.Info("Hardware configuration detected");
-        Log.Info($"Detected system {systemLine}, OS {osVersion}, form factor {formFactor}");
-        if (!string.IsNullOrWhiteSpace(motherboardLine))
-            Log.Info($"Detected motherboard {motherboardLine}");
+        Log.Info($"Detected system {details.SystemLine}, OS {details.OsVersion}, form factor {details.FormFactor}");
+        if (!string.IsNullOrWhiteSpace(details.MotherboardLine))
+            Log.Info($"Detected motherboard {details.MotherboardLine}");
         Log.Info("Detected processor (details redacted)");
-        foreach (var gpu in gpuLines)
+        foreach (var gpu in details.GpuLines)
             Log.Info($"Detected graphics adapter {gpu}");
-        Log.Info($"Detected {diskCount} physical drive(s), primary {primaryDiskType}");
-        foreach (var d in diskLines)
+        Log.Info($"Detected {details.DiskCount} physical drive(s), primary {details.PrimaryDiskType}");
+        foreach (var d in details.DiskLines)
             Log.Info($"Detected {d}");
-        Log.Info($"Detected memory {memoryLine}");
-        Log.Info($"Detected battery {batteryLine}");
+        Log.Info($"Detected memory {details.MemoryLine}");
+        Log.Info($"Detected battery {details.BatteryLine}");
     }
 
     private static void SaveStateQuietly(string? path, HardwareState state)

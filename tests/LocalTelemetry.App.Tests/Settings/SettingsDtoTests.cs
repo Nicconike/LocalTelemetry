@@ -117,7 +117,7 @@ public class SettingsDtoTests
                     ["cpu"] = "#FF0000",
                     ["gpu"] = "#00FF00",
                 },
-                UserCustomizedGroupColors = new HashSet<string> { "cpu" },
+                UserCustomizedGroupColors = ["cpu"],
             },
         };
 

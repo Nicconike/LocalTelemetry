@@ -12,7 +12,10 @@ import {
     requestHistoryData,
     requestHistoryMonths,
     importDatContent,
+    importWindowsUsage,
+    openFolder,
     openUrl,
+    checkForUpdates,
     logError,
     logWarn
 } from '../../../../../../src/LocalTelemetry.App/Settings/wwwroot/src/lib/bridge';
@@ -125,11 +128,44 @@ describe('bridge.ts', () => {
             payload: { content: 'dat_data' }
         });
 
+        importWindowsUsage('01-01-2026', '31-01-2026');
+        expect(mockPostMessage).toHaveBeenCalledWith({
+            type: 'importWindowsUsage',
+            payload: { startDate: '01-01-2026', endDate: '31-01-2026' }
+        });
+
+        openFolder('data');
+        expect(mockPostMessage).toHaveBeenCalledWith({
+            type: 'openFolder',
+            payload: { target: 'data' }
+        });
+
+        checkForUpdates(true);
+        expect(mockPostMessage).toHaveBeenCalledWith({
+            type: 'checkForUpdates',
+            payload: { force: true }
+        });
+
         openUrl('https://example.com');
         expect(mockPostMessage).toHaveBeenCalledWith({
             type: 'openUrl',
             payload: { url: 'https://example.com' }
         });
+    });
+
+    it('saveSettings handles serialization errors gracefully', () => {
+        const circular: Record<string, unknown> = {};
+        circular.self = circular;
+
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
+        saveSettings(circular);
+
+        expect(errorSpy).toHaveBeenCalled();
+        expect(mockPostMessage).toHaveBeenCalledWith({
+            type: 'saveSettings',
+            payload: circular
+        });
+        errorSpy.mockRestore();
     });
 
     it('returns early when chrome.webview is undefined', () => {

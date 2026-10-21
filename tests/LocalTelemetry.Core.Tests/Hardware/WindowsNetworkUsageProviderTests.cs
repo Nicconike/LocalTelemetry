@@ -37,7 +37,7 @@ public class WindowsNetworkUsageProviderTests
     [Fact]
     public void WindowsNetworkUsageProvider_ResolveAdapterInterfaceName_ResolvesCorrectly()
     {
-        var method = typeof(WindowsNetworkUsageProvider).GetMethod("ResolveAdapterInterfaceName", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        var method = typeof(WindowsNetworkUsageProvider).GetMethod("ResolveAdapterInterfaceName", BindingFlags.NonPublic | BindingFlags.Static);
         method.Should().NotBeNull();
 
         // Non-existent GUID tests fallback logic
@@ -51,7 +51,7 @@ public class WindowsNetworkUsageProviderTests
     [Fact]
     public async Task WindowsNetworkUsageProvider_ImportDateRangeAsync_And_MergeHistoricalRecord()
     {
-        var mergeRecord = typeof(WindowsNetworkUsageProvider).GetMethod("MergeHistoricalRecord", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        var mergeRecord = typeof(WindowsNetworkUsageProvider).GetMethod("MergeHistoricalRecord", BindingFlags.NonPublic | BindingFlags.Static);
 
         string tempPath = Path.Combine(Path.GetTempPath(), $"TrafficImport_{Guid.NewGuid():N}.dat");
         var historyFile = new TrafficHistoryFile(tempPath);

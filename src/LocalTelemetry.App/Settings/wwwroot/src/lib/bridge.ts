@@ -10,7 +10,7 @@ function formatErrorDetail(error?: unknown): string | undefined {
         return `${error.name}: ${error.message}\n${error.stack ?? ''}`;
     }
     if (error !== undefined && error !== null) {
-        return String(error);
+        return typeof error === 'object' ? JSON.stringify(error) : String(error);
     }
     return undefined;
 }

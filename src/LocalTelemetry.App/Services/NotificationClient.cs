@@ -56,6 +56,13 @@ public class NotificationClient : IDisposable
         await SendAsync(new NotificationMessage { Action = "Shutdown" }, timeoutMs: 500, maxRetries: 1, cancellationToken: cancellationToken);
     }
 
+    private enum AttemptResult
+    {
+        Success,
+        Retry,
+        Stop
+    }
+
     // Pipe Communication
     private async Task SendAsync(NotificationMessage msg, int? timeoutMs = null, int maxRetries = MaxRetries, CancellationToken cancellationToken = default)
     {
@@ -73,38 +80,9 @@ public class NotificationClient : IDisposable
         {
             for (int attempt = 0; attempt < maxRetries; attempt++)
             {
-                using var pipe = new NamedPipeClientStream(".", _pipeName, PipeDirection.Out, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
-                try
+                var result = await ExecuteAttemptAsync(msg, attempt, timeout, cancellationToken);
+                if (result != AttemptResult.Retry)
                 {
-                    await pipe.ConnectAsync(timeout, cancellationToken);
-
-                    string json = JsonSerializer.Serialize(msg) + "\n";
-                    byte[] bytes = Encoding.UTF8.GetBytes(json);
-                    await pipe.WriteAsync(bytes, cancellationToken);
-                    await pipe.FlushAsync(cancellationToken);
-                    return;
-                }
-                catch (TimeoutException)
-                {
-                    if (attempt == 0)
-                    {
-                        Log.Warn("Notification service connection timed out; retrying...");
-                        await Task.Delay(1000, cancellationToken);
-                    }
-                    else
-                    {
-                        Log.Error("Failed to connect to notification service (service may not be running)");
-                        return;
-                    }
-                }
-                catch (OperationCanceledException)
-                {
-                    return;
-                }
-                catch (Exception ex)
-                {
-                    if (msg.Action == "Shutdown" && ex is System.IO.IOException) return;
-                    Log.Error(ex, "Failed to transmit message to notification service");
                     return;
                 }
             }
@@ -112,6 +90,44 @@ public class NotificationClient : IDisposable
         finally
         {
             _lock.Release();
+        }
+    }
+
+    private async Task<AttemptResult> ExecuteAttemptAsync(NotificationMessage msg, int attempt, int timeout, CancellationToken cancellationToken)
+    {
+        using var pipe = new NamedPipeClientStream(".", _pipeName, PipeDirection.Out, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+        try
+        {
+            await pipe.ConnectAsync(timeout, cancellationToken);
+
+            string json = JsonSerializer.Serialize(msg) + "\n";
+            byte[] bytes = Encoding.UTF8.GetBytes(json);
+            await pipe.WriteAsync(bytes, cancellationToken);
+            await pipe.FlushAsync(cancellationToken);
+            return AttemptResult.Success;
+        }
+        catch (TimeoutException)
+        {
+            if (attempt == 0)
+            {
+                Log.Warn("Notification service connection timed out; retrying...");
+                await Task.Delay(1000, cancellationToken);
+                return AttemptResult.Retry;
+            }
+            Log.Error("Failed to connect to notification service (service may not be running)");
+            return AttemptResult.Stop;
+        }
+        catch (OperationCanceledException)
+        {
+            return AttemptResult.Stop;
+        }
+        catch (Exception ex)
+        {
+            if (msg.Action != "Shutdown" || ex is not System.IO.IOException)
+            {
+                Log.Error(ex, "Failed to transmit message to notification service");
+            }
+            return AttemptResult.Stop;
         }
     }
 

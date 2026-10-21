@@ -19,35 +19,53 @@ public static class DatImporter
         string? line;
         while ((line = reader.ReadLine()) is not null)
         {
-            if (string.IsNullOrWhiteSpace(line)) continue;
-
-            ReadOnlySpan<char> span = line.AsSpan();
-            if (span.Length < 16) continue;
-
-            if (span[4] != '/' || span[7] != '/') continue;
-            if (!int.TryParse(span[..4], NumberStyles.None, CultureInfo.InvariantCulture, out int year)) continue;
-            if (!int.TryParse(span[5..7], NumberStyles.None, CultureInfo.InvariantCulture, out int month)) continue;
-            if (!int.TryParse(span[8..10], NumberStyles.None, CultureInfo.InvariantCulture, out int day)) continue;
-
-            if (year < 2000 || year > 2100) continue;
-
-            int spaceIdx = span[10..].IndexOf(' ');
-            if (spaceIdx < 0) continue;
-            spaceIdx += 10;
-
-            var rest = span[(spaceIdx + 1)..];
-            int slashIdx = rest.IndexOf('/');
-            if (slashIdx < 0) continue;
-
-            if (!long.TryParse(rest[..slashIdx], NumberStyles.Integer, CultureInfo.InvariantCulture, out long upKB)) continue;
-            if (!long.TryParse(rest[(slashIdx + 1)..], NumberStyles.Integer, CultureInfo.InvariantCulture, out long downKB)) continue;
-
-            long upBytes = upKB * 1024;
-            long downBytes = downKB * 1024;
-
-            TrafficHistoryStore.SetDay(year, month, day, downBytes, upBytes, "Dat File", "DatImport");
-            uniqueDays.Add((year, month, day));
+            if (TryParseLine(line.AsSpan(), out int year, out int month, out int day, out long downBytes, out long upBytes))
+            {
+                TrafficHistoryStore.SetDay(year, month, day, downBytes, upBytes, "Dat File", "DatImport");
+                uniqueDays.Add((year, month, day));
+            }
         }
         return uniqueDays.Count;
+    }
+
+    private static bool TryParseLine(ReadOnlySpan<char> span, out int year, out int month, out int day, out long downBytes, out long upBytes)
+    {
+        year = month = day = 0;
+        downBytes = upBytes = 0;
+        if (span.Length < 16 || !TryParseDate(span, out year, out month, out day))
+        {
+            return false;
+        }
+
+        return TryParseBandwidth(span, out downBytes, out upBytes);
+    }
+
+    private static bool TryParseDate(ReadOnlySpan<char> span, out int year, out int month, out int day)
+    {
+        year = month = day = 0;
+        if (span[4] != '/' || span[7] != '/') return false;
+        if (!int.TryParse(span[..4], NumberStyles.None, CultureInfo.InvariantCulture, out year)) return false;
+        if (!int.TryParse(span[5..7], NumberStyles.None, CultureInfo.InvariantCulture, out month)) return false;
+        if (!int.TryParse(span[8..10], NumberStyles.None, CultureInfo.InvariantCulture, out day)) return false;
+
+        return year >= 2000 && year <= 2100;
+    }
+
+    private static bool TryParseBandwidth(ReadOnlySpan<char> span, out long downBytes, out long upBytes)
+    {
+        downBytes = upBytes = 0;
+        int spaceIdx = span[10..].IndexOf(' ');
+        if (spaceIdx < 0) return false;
+
+        var rest = span[(spaceIdx + 11)..];
+        int slashIdx = rest.IndexOf('/');
+        if (slashIdx < 0) return false;
+
+        if (!long.TryParse(rest[..slashIdx], NumberStyles.Integer, CultureInfo.InvariantCulture, out long upKb)) return false;
+        if (!long.TryParse(rest[(slashIdx + 1)..], NumberStyles.Integer, CultureInfo.InvariantCulture, out long downKb)) return false;
+
+        upBytes = upKb * 1024;
+        downBytes = downKb * 1024;
+        return true;
     }
 }

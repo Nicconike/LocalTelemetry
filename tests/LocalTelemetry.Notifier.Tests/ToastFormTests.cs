@@ -26,24 +26,24 @@ public class ToastFormTests
 
         var accentBar = toast.Controls[0] as Panel;
         accentBar.Should().NotBeNull();
-        accentBar!.BackColor.Should().Be(Color.FromArgb(245, 158, 11));
+        accentBar.BackColor.Should().Be(Color.FromArgb(245, 158, 11));
 
         var titleLabel = toast.Controls[1] as Label;
         titleLabel.Should().NotBeNull();
-        titleLabel!.Text.Should().Be("Test Title");
+        titleLabel.Text.Should().Be("Test Title");
 
         var bodyLabel = toast.Controls[2] as Label;
         bodyLabel.Should().NotBeNull();
-        bodyLabel!.Text.Should().Be("Test Body Message");
+        bodyLabel.Text.Should().Be("Test Body Message");
 
         // Verify non-activating focus-safe window styles
         var showWithoutActProp = typeof(ToastForm).GetProperty("ShowWithoutActivation", BindingFlags.NonPublic | BindingFlags.Instance);
         showWithoutActProp.Should().NotBeNull();
-        showWithoutActProp!.GetValue(toast).Should().Be(true);
+        showWithoutActProp.GetValue(toast).Should().Be(true);
 
         var createParamsProp = typeof(ToastForm).GetProperty("CreateParams", BindingFlags.NonPublic | BindingFlags.Instance);
         createParamsProp.Should().NotBeNull();
-        var cp = (CreateParams)createParamsProp!.GetValue(toast)!;
+        var cp = (CreateParams)createParamsProp.GetValue(toast)!;
         (cp.ExStyle & 0x08000000).Should().NotBe(0, "WS_EX_NOACTIVATE should be set");
         (cp.ExStyle & 0x00000080).Should().NotBe(0, "WS_EX_TOOLWINDOW should be set");
     }
@@ -79,7 +79,7 @@ public class ToastFormTests
             null);
 
         onPaintMethod.Should().NotBeNull();
-        onPaintMethod!.Invoke(toast, [this, paintArgs]);
+        onPaintMethod.Invoke(toast, [this, paintArgs]);
     }
 
     [WpfFact]
@@ -88,7 +88,7 @@ public class ToastFormTests
         using var toast = new ToastForm("Title", "Body");
         var closeTimerField = typeof(ToastForm).GetField("_closeTimer", BindingFlags.NonPublic | BindingFlags.Instance);
         closeTimerField.Should().NotBeNull();
-        var timer = (System.Windows.Forms.Timer)closeTimerField!.GetValue(toast)!;
+        var timer = (System.Windows.Forms.Timer)closeTimerField.GetValue(toast)!;
 
         // Fire Tick event handler via reflection to execute line 64-67
         var onTickMethod = typeof(System.Windows.Forms.Timer).GetMethod("OnTick", BindingFlags.NonPublic | BindingFlags.Instance);
@@ -109,13 +109,13 @@ public class ToastFormTests
             [typeof(object), typeof(EventArgs)],
             null);
         onLoadMethod.Should().NotBeNull();
-        onLoadMethod!.Invoke(toast, [this, EventArgs.Empty]);
+        onLoadMethod.Invoke(toast, [this, EventArgs.Empty]);
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
         while (sw.ElapsedMilliseconds < 350)
         {
-            System.Windows.Forms.Application.DoEvents();
-            System.Threading.Thread.Yield();
+            Application.DoEvents();
+            Thread.Yield();
         }
         toast.Should().NotBeNull();
     }

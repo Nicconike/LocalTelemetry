@@ -418,7 +418,7 @@ public class ProgramTests
             }
             catch (IOException ex)
             {
-                System.Diagnostics.Trace.WriteLine($"Cleanup of directory failed: {ex.Message}");
+                Trace.WriteLine($"Cleanup of directory failed: {ex.Message}");
             }
         }
     }

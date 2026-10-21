@@ -1,4 +1,4 @@
-import { clamp, formatBytes, formatTrafficBytes, deepClone, debounce } from '../../../../../../src/LocalTelemetry.App/Settings/wwwroot/src/lib/utils';
+import { clamp, formatBytes, formatTrafficBytes, deepClone, debounce, formatDate } from '../../../../../../src/LocalTelemetry.App/Settings/wwwroot/src/lib/utils';
 
 describe('utils.ts', () => {
     it('clamp should constrain numbers within range', () => {
@@ -45,5 +45,16 @@ describe('utils.ts', () => {
         vi.advanceTimersByTime(150);
         expect(fn).toHaveBeenCalledWith('test');
         vi.useRealTimers();
+    });
+
+    it('formatDate should format dates in DD-MM-YYYY format', () => {
+        expect(formatDate(null)).toBe('-');
+        expect(formatDate(undefined)).toBe('-');
+        expect(formatDate('')).toBe('-');
+        expect(formatDate('1-2-2026')).toBe('01-02-2026');
+        expect(formatDate('2026-02-01')).toBe('01-02-2026');
+        expect(formatDate('2026/2/1')).toBe('01-02-2026');
+        expect(formatDate('October 21, 2026')).toBe('21-10-2026');
+        expect(formatDate('not-a-date-value')).toBe('not-a-date-value');
     });
 });

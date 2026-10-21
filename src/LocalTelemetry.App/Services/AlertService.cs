@@ -53,99 +53,99 @@ public sealed class AlertService(
     private void EvaluateCpuAlerts(TelemetrySnapshot snap, bool useFahrenheit)
     {
         if (_cfg.Alerts.AlertCpuTemp)
-            EvaluateThreshold(Metrics.CpuTemp, "CPU Temperature", snap.CpuTempPackageC, _cfg.Alerts.CpuTempMaxC,
+            EvaluateThreshold(new(Metrics.CpuTemp, "CPU Temperature", snap.CpuTempPackageC, _cfg.Alerts.CpuTempMaxC,
                 unit: useFahrenheit ? "°F" : "°C",
                 displayValue: Metrics.TempString(snap.CpuTempPackageC, useFahrenheit),
                 displayThreshold: Metrics.TempString(_cfg.Alerts.CpuTempMaxC, useFahrenheit),
                 hysteresis: 6f,
-                escalationDelta: 5f);
+                escalationDelta: 5f));
 
         if (_cfg.Alerts.AlertCpuUsage)
-            EvaluateThreshold(Metrics.CpuPct, "CPU Usage", snap.CpuUsagePct, _cfg.Alerts.CpuUsageMaxPct,
+            EvaluateThreshold(new(Metrics.CpuPct, "CPU Usage", snap.CpuUsagePct, _cfg.Alerts.CpuUsageMaxPct,
                 unit: "%",
                 displayValue: $"{snap.CpuUsagePct:F0}%",
                 displayThreshold: $"{_cfg.Alerts.CpuUsageMaxPct:F0}%",
                 hysteresis: 8f,
-                escalationDelta: 5f);
+                escalationDelta: 5f));
 
         if (_cfg.Alerts.AlertCpuFreq)
-            EvaluateThreshold(Metrics.CpuFreq, "CPU Frequency", snap.CpuFreqGhz * 1000f, _cfg.Alerts.CpuFreqMinMhz,
+            EvaluateThreshold(new(Metrics.CpuFreq, "CPU Frequency", snap.CpuFreqGhz * 1000f, _cfg.Alerts.CpuFreqMinMhz,
                 unit: "MHz",
                 displayValue: $"{snap.CpuFreqGhz:F2} GHz",
                 displayThreshold: $"{_cfg.Alerts.CpuFreqMinMhz / 1000f:F2} GHz",
                 lowAlert: true,
-                hysteresis: 200f);
+                hysteresis: 200f));
 
         if (_cfg.Alerts.AlertCpuPower)
-            EvaluateThreshold(Metrics.CpuPower, "CPU Package Power", snap.CpuPackagePowerW, _cfg.Alerts.CpuPowerMaxW,
+            EvaluateThreshold(new(Metrics.CpuPower, "CPU Package Power", snap.CpuPackagePowerW, _cfg.Alerts.CpuPowerMaxW,
                 unit: "W",
                 displayValue: $"{snap.CpuPackagePowerW:F0} W",
                 displayThreshold: $"{_cfg.Alerts.CpuPowerMaxW:F0} W",
                 hysteresis: 10f,
-                escalationDelta: 15f);
+                escalationDelta: 15f));
     }
 
     private void EvaluateGpuAlerts(TelemetrySnapshot snap, bool useFahrenheit)
     {
         if (_cfg.Alerts.AlertGpuTemp)
-            EvaluateThreshold(Metrics.GpuTemp, "GPU Temperature", snap.GpuTempC, _cfg.Alerts.GpuTempMaxC,
+            EvaluateThreshold(new(Metrics.GpuTemp, "GPU Temperature", snap.GpuTempC, _cfg.Alerts.GpuTempMaxC,
                 unit: useFahrenheit ? "°F" : "°C",
                 displayValue: Metrics.TempString(snap.GpuTempC, useFahrenheit),
                 displayThreshold: Metrics.TempString(_cfg.Alerts.GpuTempMaxC, useFahrenheit),
                 hysteresis: 6f,
-                escalationDelta: 5f);
+                escalationDelta: 5f));
 
         if (_cfg.Alerts.AlertGpuUsage)
-            EvaluateThreshold(Metrics.GpuPct, "GPU Usage", snap.GpuUsagePct, _cfg.Alerts.GpuUsageMaxPct,
+            EvaluateThreshold(new(Metrics.GpuPct, "GPU Usage", snap.GpuUsagePct, _cfg.Alerts.GpuUsageMaxPct,
                 unit: "%",
                 displayValue: $"{snap.GpuUsagePct:F0}%",
                 displayThreshold: $"{_cfg.Alerts.GpuUsageMaxPct:F0}%",
                 hysteresis: 8f,
-                escalationDelta: 5f);
+                escalationDelta: 5f));
 
         if (_cfg.Alerts.AlertGpuVram)
-            EvaluateThreshold(Metrics.GpuVram, "GPU VRAM", snap.GpuVramUsedMb, _cfg.Alerts.GpuVramMaxMb,
+            EvaluateThreshold(new(Metrics.GpuVram, "GPU VRAM", snap.GpuVramUsedMb, _cfg.Alerts.GpuVramMaxMb,
                 unit: "MB",
                 displayValue: $"{snap.GpuVramUsedMb:F0} MB",
                 displayThreshold: $"{_cfg.Alerts.GpuVramMaxMb:F0} MB",
                 hysteresis: 512f,
-                escalationDelta: 512f);
+                escalationDelta: 512f));
 
         if (_cfg.Alerts.AlertGpuFreq)
-            EvaluateThreshold(Metrics.GpuFreq, "GPU Frequency", snap.GpuFreqMHz, _cfg.Alerts.GpuFreqMinMhz,
+            EvaluateThreshold(new(Metrics.GpuFreq, "GPU Frequency", snap.GpuFreqMHz, _cfg.Alerts.GpuFreqMinMhz,
                 unit: "MHz",
                 displayValue: $"{snap.GpuFreqMHz:F0} MHz",
                 displayThreshold: $"{_cfg.Alerts.GpuFreqMinMhz:F0} MHz",
                 lowAlert: true,
-                hysteresis: 150f);
+                hysteresis: 150f));
 
         if (_cfg.Alerts.AlertGpuPower)
-            EvaluateThreshold(Metrics.GpuPower, "GPU Power", snap.GpuPowerW, _cfg.Alerts.GpuPowerMaxW,
+            EvaluateThreshold(new(Metrics.GpuPower, "GPU Power", snap.GpuPowerW, _cfg.Alerts.GpuPowerMaxW,
                 unit: "W",
                 displayValue: $"{snap.GpuPowerW:F0} W",
                 displayThreshold: $"{_cfg.Alerts.GpuPowerMaxW:F0} W",
                 hysteresis: 15f,
-                escalationDelta: 20f);
+                escalationDelta: 20f));
     }
 
     private void EvaluateRamAndMiscAlerts(TelemetrySnapshot snap)
     {
         if (_cfg.Alerts.AlertRamUsage)
-            EvaluateThreshold(Metrics.RamPct, "RAM Usage", snap.RamUsagePct, _cfg.Alerts.RamUsageMaxPct,
+            EvaluateThreshold(new(Metrics.RamPct, "RAM Usage", snap.RamUsagePct, _cfg.Alerts.RamUsageMaxPct,
                 unit: "%",
                 displayValue: $"{snap.RamUsagePct:F0}%",
                 displayThreshold: $"{_cfg.Alerts.RamUsageMaxPct:F0}%",
                 hysteresis: 5f,
-                escalationDelta: 4f);
+                escalationDelta: 4f));
 
         if (_cfg.Alerts.AlertBatteryLow && snap.BatteryPct > 0 && !snap.BatteryIsCharging)
         {
-            EvaluateThreshold(Metrics.BatteryPct, "Battery Level", snap.BatteryPct, _cfg.Alerts.BatteryLowPct,
+            EvaluateThreshold(new(Metrics.BatteryPct, "Battery Level", snap.BatteryPct, _cfg.Alerts.BatteryLowPct,
                 unit: "%",
                 displayValue: $"{snap.BatteryPct:F0}%",
                 displayThreshold: $"≤ {_cfg.Alerts.BatteryLowPct:F0}%",
                 lowAlert: true,
-                hysteresis: 5f);
+                hysteresis: 5f));
         }
     }
 
@@ -156,97 +156,151 @@ public sealed class AlertService(
         if (_cfg.Alerts.AlertNetDaily)
         {
             float todayGb = (float)_netLogger.GetTodayTotalGb();
-            EvaluateThreshold("net_daily", "Daily Internet Usage", todayGb, _cfg.Alerts.NetDailyMaxGb,
+            EvaluateThreshold(new("net_daily", "Daily Internet Usage", todayGb, _cfg.Alerts.NetDailyMaxGb,
                 unit: "GB",
                 displayValue: $"{todayGb:F1} GB",
                 displayThreshold: $"{_cfg.Alerts.NetDailyMaxGb:F1} GB",
-                hysteresis: 0f);
+                hysteresis: 0f));
         }
 
         if (_cfg.Alerts.AlertNetMonthly)
         {
             float monthGb = (float)_netLogger.GetMonthTotalGb();
-            EvaluateThreshold("net_monthly", "Monthly Internet Usage", monthGb, _cfg.Alerts.NetMonthlyMaxGb,
+            EvaluateThreshold(new("net_monthly", "Monthly Internet Usage", monthGb, _cfg.Alerts.NetMonthlyMaxGb,
                 unit: "GB",
                 displayValue: $"{monthGb:F1} GB",
                 displayThreshold: $"{_cfg.Alerts.NetMonthlyMaxGb:F1} GB",
-                hysteresis: 0f);
+                hysteresis: 0f));
+        }
+    }
+
+    private readonly record struct ThresholdEvaluationContext
+    {
+        public string MetricId { get; init; }
+        public string MetricName { get; init; }
+        public float Value { get; init; }
+        public float Threshold { get; init; }
+        public string Unit { get; init; }
+        public string DisplayValue { get; init; }
+        public string DisplayThreshold { get; init; }
+        public bool LowAlert { get; init; }
+        public float Hysteresis { get; init; }
+        public float EscalationDelta { get; init; }
+
+        public ThresholdEvaluationContext(
+            string metricId,
+            string metricName,
+            float value,
+            float threshold,
+            string unit,
+            string displayValue,
+            string displayThreshold,
+            bool lowAlert = false,
+            float hysteresis = 0f,
+            float escalationDelta = 0f)
+        {
+            MetricId = metricId;
+            MetricName = metricName;
+            Value = value;
+            Threshold = threshold;
+            Unit = unit;
+            DisplayValue = displayValue;
+            DisplayThreshold = displayThreshold;
+            LowAlert = lowAlert;
+            Hysteresis = hysteresis;
+            EscalationDelta = escalationDelta;
         }
     }
 
     // Firing Logic with Hysteresis & Escalation
-    private void EvaluateThreshold(
-        string metricId,
-        string metricName,
-        float value,
-        float threshold,
-        string unit,
-        string displayValue,
-        string displayThreshold,
-        bool lowAlert = false,
-        float hysteresis = 0f,
-        float escalationDelta = 0f)
+    private void EvaluateThreshold(in ThresholdEvaluationContext ctx)
     {
-        if (value <= 0f)
+        if (ctx.Value <= 0f)
         {
-            Log.Debug($"Alert check skipped for {metricId}, sensor unavailable (value={value:F1})");
+            Log.Debug($"Alert check skipped for {ctx.MetricId}, sensor unavailable (value={ctx.Value:F1})");
             return;
         }
 
-        bool isBreached = lowAlert ? value <= threshold : value >= threshold;
-        bool wasActive = _activeAlerts.Contains(metricId);
+        bool isBreached = ctx.LowAlert ? ctx.Value <= ctx.Threshold : ctx.Value >= ctx.Threshold;
+        bool wasActive = _activeAlerts.Contains(ctx.MetricId);
 
         if (isBreached)
         {
-            // Initial breach into warning state
-            if (!wasActive)
-            {
-                if (!CanFireAlert(metricId)) return;
-
-                _activeAlerts.Add(metricId);
-                _lastAlertedValue[metricId] = value;
-
-                string title = lowAlert switch
-                {
-                    true when metricId == Metrics.CpuFreq => "CPU Throttling",
-                    true when metricId == Metrics.BatteryPct => "Low Battery",
-                    _ => metricId.StartsWith("net_", StringComparison.Ordinal)
-                        ? "Network Limit Reached"
-                        : $"{metricName} High"
-                };
-
-                string body = lowAlert
-                    ? $"{metricName} low at {displayValue} (limit: {displayThreshold})"
-                    : $"{metricName} high at {displayValue} (limit: {displayThreshold})";
-
-                DispatchAlert(metricId, title, body, $"{metricName} reached {displayValue} (limit: {displayThreshold})");
-                return;
-            }
-
-            // Already active: check for significant escalation
-            if (escalationDelta > 0f && _lastAlertedValue.TryGetValue(metricId, out float lastVal))
-            {
-                bool isEscalated = lowAlert ? (lastVal - value) >= escalationDelta : (value - lastVal) >= escalationDelta;
-                if (isEscalated && CanFireAlert(metricId))
-                {
-                    _lastAlertedValue[metricId] = value;
-                    string title = $"{metricName} Critical";
-                    string body = $"Surged to {displayValue} (was {lastVal:F0} {unit}, limit: {displayThreshold})";
-                    DispatchAlert(metricId, title, body, $"{metricName} critical surge at {displayValue} (limit: {displayThreshold})");
-                }
-            }
+            HandleBreach(ctx, wasActive);
         }
         else if (wasActive)
         {
-            // Check if metric cooled down past the hysteresis buffer
-            bool isRecovered = lowAlert ? value >= (threshold + hysteresis) : value <= (threshold - hysteresis);
-            if (isRecovered)
-            {
-                _activeAlerts.Remove(metricId);
-                _lastAlertedValue.Remove(metricId);
-                Log.Info($"Alert normalized for {metricName}, dropped to {displayValue} (recovered below {displayThreshold})");
-            }
+            HandleRecovery(ctx);
         }
+    }
+
+    private void HandleBreach(in ThresholdEvaluationContext ctx, bool wasActive)
+    {
+        if (!wasActive)
+        {
+            if (!CanFireAlert(ctx.MetricId)) return;
+
+            _activeAlerts.Add(ctx.MetricId);
+            _lastAlertedValue[ctx.MetricId] = ctx.Value;
+
+            string title = GetAlertTitle(ctx.MetricId, ctx.MetricName, ctx.LowAlert);
+            string direction = ctx.LowAlert ? "low" : "high";
+            string body = $"{ctx.MetricName} {direction} at {ctx.DisplayValue} (limit: {ctx.DisplayThreshold})";
+
+            DispatchAlert(ctx.MetricId, title, body, $"{ctx.MetricName} reached {ctx.DisplayValue} (limit: {ctx.DisplayThreshold})");
+            return;
+        }
+
+        HandleEscalation(ctx);
+    }
+
+    private void HandleEscalation(in ThresholdEvaluationContext ctx)
+    {
+        if (ctx.EscalationDelta <= 0f || !_lastAlertedValue.TryGetValue(ctx.MetricId, out float lastVal))
+            return;
+
+        bool isEscalated = ctx.LowAlert
+            ? (lastVal - ctx.Value) >= ctx.EscalationDelta
+            : (ctx.Value - lastVal) >= ctx.EscalationDelta;
+
+        if (isEscalated && CanFireAlert(ctx.MetricId))
+        {
+            _lastAlertedValue[ctx.MetricId] = ctx.Value;
+            string title = $"{ctx.MetricName} Critical";
+            string body = $"Surged to {ctx.DisplayValue} (was {lastVal:F0} {ctx.Unit}, limit: {ctx.DisplayThreshold})";
+            DispatchAlert(ctx.MetricId, title, body, $"{ctx.MetricName} critical surge at {ctx.DisplayValue} (limit: {ctx.DisplayThreshold})");
+        }
+    }
+
+    private void HandleRecovery(in ThresholdEvaluationContext ctx)
+    {
+        bool isRecovered = ctx.LowAlert
+            ? ctx.Value >= (ctx.Threshold + ctx.Hysteresis)
+            : ctx.Value <= (ctx.Threshold - ctx.Hysteresis);
+
+        if (isRecovered)
+        {
+            _activeAlerts.Remove(ctx.MetricId);
+            _lastAlertedValue.Remove(ctx.MetricId);
+            Log.Info($"Alert normalized for {ctx.MetricName}, dropped to {ctx.DisplayValue} (recovered below {ctx.DisplayThreshold})");
+        }
+    }
+
+    private static string GetAlertTitle(string metricId, string metricName, bool lowAlert)
+    {
+        if (lowAlert)
+        {
+            return metricId switch
+            {
+                Metrics.CpuFreq => "CPU Throttling",
+                Metrics.BatteryPct => "Low Battery",
+                _ => $"{metricName} Low"
+            };
+        }
+
+        return metricId.StartsWith("net_", StringComparison.Ordinal)
+            ? "Network Limit Reached"
+            : $"{metricName} High";
     }
 
     private void DispatchAlert(string metricId, string title, string body, string logSummary)

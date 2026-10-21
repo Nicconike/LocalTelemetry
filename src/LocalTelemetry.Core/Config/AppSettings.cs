@@ -296,20 +296,20 @@ public sealed class OverlayConfig
     /// Independent of <see cref="MetricColors"/>: changing a group color stamps all metrics in the
     /// group, but changing a single metric color does not affect the group color.
     /// </summary>
-    public Dictionary<string, string> GroupColors { get; set; } = new();
+    public Dictionary<string, string> GroupColors { get; set; } = [];
 
     /// <summary>Hardware-detected default colors (never saved, rebuilt on each launch).</summary>
     [JsonIgnore]
-    public Dictionary<string, string> DefaultMetricColors { get; set; } = new();
+    public Dictionary<string, string> DefaultMetricColors { get; set; } = [];
 
     /// <summary>When true, widget background/text follows Windows taskbar theme.</summary>
     public bool FollowWindowsTheme { get; set; } = true;
 
     /// <summary>Metric IDs whose colors were customized by the user (skip in ApplyVendorColors).</summary>
-    public HashSet<string> UserCustomizedMetricColors { get; set; } = new();
+    public HashSet<string> UserCustomizedMetricColors { get; set; } = [];
 
     /// <summary>Group keys whose colors were customized by the user (skip in ApplyVendorColors).</summary>
-    public HashSet<string> UserCustomizedGroupColors { get; set; } = new();
+    public HashSet<string> UserCustomizedGroupColors { get; set; } = [];
 
     /// <summary>Combined metric ID list (even indices = top row, odd indices = bottom row).</summary>
     public List<string> Row1 { get; set; } = [Metrics.CpuPct, Metrics.CpuTemp, Metrics.GpuPct, Metrics.GpuTemp, Metrics.GpuVram, Metrics.NetTotal, Metrics.RamPct, Metrics.RamUsed, Metrics.NetDown, Metrics.NetUp];

@@ -127,29 +127,42 @@ public sealed partial class App : WpfApplication
         }
 
         Log.Debug("Running as administrator");
+        RegisterExceptionHandlers();
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
+        bool fileRunAtStartup = InitializeConfigurationAndLogging();
+        var historyFile = InitializeCoreServicesAndHistory(fileRunAtStartup);
+
+        StartUserInterface(e.Args);
+        StartBackgroundInitialization(historyFile);
+    }
+
+    private void RegisterExceptionHandlers()
+    {
         AppDomain.CurrentDomain.UnhandledException += HandleUnhandledException;
         TaskScheduler.UnobservedTaskException += HandleUnobservedTaskException;
         DispatcherUnhandledException += HandleDispatcherUnhandledException;
         SessionEnding += HandleSessionEnding;
+    }
 
-        ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
-
+    private bool InitializeConfigurationAndLogging()
+    {
         _startupUtc = DateTime.UtcNow;
         _uiCtx = SynchronizationContext.Current;
 
         string exeDir = AppContext.BaseDirectory;
         AppSettings.InitPaths(exeDir);
         _cfg = AppSettings.Load();
-        // Sync startup setting with actual Windows startup state (installer choice & task/registry)
         bool fileRunAtStartup = _cfg.RunAtStartup;
         _cfg.RunAtStartup = WindowHelpers.IsStartupEnabled();
+
         Log.Init(AppSettings.SystemLogPath, AppSettings.MetricsLogPath, _cfg.EnableFileLogging);
         Log.SystemLevel = Log.ParseLevel(_cfg.SystemLogLevel);
         if (AppSettings.LastDirectoryError is not null)
         {
             Log.Warn(AppSettings.LastDirectoryError, "Directory initialization fallback triggered");
         }
+
         _metricsWasEnabled = _cfg.EnableFileLogging;
         _lastRunAtStartup = _cfg.RunAtStartup;
         string appVer = UpdateCheckService.GetCurrentVersionString();
@@ -157,6 +170,11 @@ public sealed partial class App : WpfApplication
         string osName = SystemInfo.GetOsDisplayVersion();
         Log.SessionStart(appVer, IsAdministrator(), AppSettings.ConfigPath, mode, osName);
 
+        return fileRunAtStartup;
+    }
+
+    private TrafficHistoryFile InitializeCoreServicesAndHistory(bool fileRunAtStartup)
+    {
         _services = BuildContainer();
         _overlay = _services.GetRequiredService<TaskbarOverlay>();
         _tray = _services.GetRequiredService<TrayIconManager>();
@@ -167,7 +185,6 @@ public sealed partial class App : WpfApplication
         _notifClient = _services.GetRequiredService<NotificationClient>();
         Log.Info("Core services initialized");
 
-        // Load existing traffic history file (fast local file load)
         var historyFile = new TrafficHistoryFile(AppSettings.NetUsagePath);
         historyFile.Load();
 
@@ -177,7 +194,6 @@ public sealed partial class App : WpfApplication
         TrafficHistoryStore.Initialize(historyFile);
         Log.Debug("Traffic history store initialized");
 
-        // Persist startup state if the config file disagreed with actual Windows state
         if (fileRunAtStartup != _cfg.RunAtStartup)
         {
             _cfg.Save();
@@ -185,21 +201,27 @@ public sealed partial class App : WpfApplication
         }
 
         WireEvents();
+        return historyFile;
+    }
 
-        bool minimized = Array.Exists(e.Args, a => a == "--minimized") || _cfg.StartMinimized;
+    private void StartUserInterface(string[] args)
+    {
+        bool minimized = Array.Exists(args, a => a == "--minimized") || _cfg.StartMinimized;
 
         if (!SuppressOverlayForTesting && _cfg.Overlay.Visible)
-            _overlay.Show();
+            _overlay?.Show();
 
         if (!SuppressHardwareMonitorForTesting)
-            _monitor.Start();
+            _monitor?.Start();
 
         if (!minimized)
             OpenSettings();
 
         Log.Info($"Application started (overlay {(_cfg.Overlay.Visible ? "visible" : "hidden")}, mode {(minimized ? "minimized" : "normal")})");
+    }
 
-        // Asynchronous non-blocking background initialization
+    private void StartBackgroundInitialization(TrafficHistoryFile historyFile)
+    {
         _ = Task.Run(() =>
         {
             try
@@ -215,9 +237,7 @@ public sealed partial class App : WpfApplication
             }
 
             ApplyVendorColors(_cfg);
-
             LaunchNotifier();
-
             RunSrumPreImport(historyFile);
 
             if (_cfg.RunAtStartup)

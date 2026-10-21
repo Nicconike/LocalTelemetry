@@ -62,45 +62,16 @@ public sealed class NetUsageLogger : IDisposable
         if (!_cfg.NetUsage.Enabled) return;
 
         string activeNic = snap.NetInterfaceName;
-
-        double actualDt;
-        if (_lastSnapTime == default)
-            actualDt = _cfg.Monitoring.PollIntervalMs / 1000.0;
-        else
-            actualDt = (snap.Timestamp - _lastSnapTime).TotalSeconds;
-        _lastSnapTime = snap.Timestamp;
-
+        double actualDt = CalculateDeltaSeconds(snap.Timestamp);
         double deltaDown = snap.NetDownBps * actualDt;
         double deltaUp = snap.NetUpBps * actualDt;
-
-        var now = DateTime.Now;
-        var today = now.Date;
+        var today = DateTime.Now.Date;
 
         lock (_lock)
         {
             if (today != _lastDate)
             {
-                foreach (var kvp in _perInterface)
-                {
-                    long downBytes = (long)kvp.Value.down;
-                    long upBytes = (long)kvp.Value.up;
-                    if (downBytes > 0 || upBytes > 0)
-                        _historyFile.SetDay(_lastDate.Year, _lastDate.Month, _lastDate.Day, downBytes, upBytes, kvp.Key, "LocalTelemetry");
-                }
-                _historyFile.Save();
-                Diagnostics.Log.Info($"Rolled over network usage history to new day ({today:dd-MM-yyyy})");
-                _perInterface.Clear();
-                _lastDate = today;
-
-                // If today already has records (e.g. from SRUM or previous run), seed them into memory
-                var todayRecords = _historyFile.GetMonth(today.Year, today.Month).Where(r => r.Day == today.Day);
-                foreach (var r in todayRecords)
-                {
-                    if (!string.IsNullOrEmpty(r.Interface))
-                        _perInterface[r.Interface] = (r.DownBytes, r.UpBytes);
-                    else if (_perInterface.Count == 0)
-                        _perInterface[""] = (r.DownBytes, r.UpBytes);
-                }
+                HandleDayRollover(today);
             }
 
             if (!_perInterface.TryGetValue(activeNic, out var cur))
@@ -109,6 +80,44 @@ public sealed class NetUsageLogger : IDisposable
 
             var val = _perInterface[activeNic];
             _historyFile.SetDay(today.Year, today.Month, today.Day, (long)val.down, (long)val.up, activeNic, "LocalTelemetry");
+        }
+    }
+
+    private double CalculateDeltaSeconds(DateTime timestamp)
+    {
+        double dt = _lastSnapTime == default
+            ? _cfg.Monitoring.PollIntervalMs / 1000.0
+            : (timestamp - _lastSnapTime).TotalSeconds;
+        _lastSnapTime = timestamp;
+        return dt;
+    }
+
+    private void HandleDayRollover(DateTime today)
+    {
+        foreach (var kvp in _perInterface)
+        {
+            long downBytes = (long)kvp.Value.down;
+            long upBytes = (long)kvp.Value.up;
+            if (downBytes > 0 || upBytes > 0)
+                _historyFile.SetDay(_lastDate.Year, _lastDate.Month, _lastDate.Day, downBytes, upBytes, kvp.Key, "LocalTelemetry");
+        }
+        _historyFile.Save();
+        Diagnostics.Log.Info($"Rolled over network usage history to new day ({today:dd-MM-yyyy})");
+        _perInterface.Clear();
+        _lastDate = today;
+
+        SeedTodayRecords(today);
+    }
+
+    private void SeedTodayRecords(DateTime today)
+    {
+        var todayRecords = _historyFile.GetMonth(today.Year, today.Month).Where(r => r.Day == today.Day);
+        foreach (var r in todayRecords)
+        {
+            if (!string.IsNullOrEmpty(r.Interface))
+                _perInterface[r.Interface] = (r.DownBytes, r.UpBytes);
+            else if (_perInterface.Count == 0)
+                _perInterface[""] = (r.DownBytes, r.UpBytes);
         }
     }
 

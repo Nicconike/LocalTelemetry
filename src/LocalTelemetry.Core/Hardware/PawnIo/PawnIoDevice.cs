@@ -19,6 +19,7 @@ public sealed class PawnIoDevice : IPawnIoTransport
     private const uint IOCTL_PIO_EXECUTE_FN = 0xA1B22104;
     private const uint FILE_ATTRIBUTE_NORMAL = 0x00000080;
     private const string DevicePath = @"\\?\GLOBALROOT\Device\PawnIO";
+    private const string DefaultInstallerUrl = "https://github.com/namazso/PawnIO.Setup/releases/latest/download/PawnIO_setup.exe";
 
     private SafeFileHandle? _handle;
     private bool _disposed;
@@ -252,8 +253,7 @@ public sealed class PawnIoDevice : IPawnIoTransport
                 else
                 {
                     using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-                    setupBytes = client.GetByteArrayAsync(
-                        "https://github.com/namazso/PawnIO.Setup/releases/latest/download/PawnIO_setup.exe")
+                    setupBytes = client.GetByteArrayAsync(DefaultInstallerUrl)
                         .GetAwaiter().GetResult();
                 }
 
@@ -357,7 +357,8 @@ public sealed class PawnIoDevice : IPawnIoTransport
         try { Microsoft.Win32.Registry.LocalMachine.DeleteSubKeyTree(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO", false); } catch (Exception ex) { Log.Error(ex, "Remove HKLM uninstall key failed"); }
         try { Microsoft.Win32.Registry.LocalMachine.DeleteSubKeyTree(@"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO", false); } catch (Exception ex) { Log.Error(ex, "Remove WOW uninstall key failed"); }
 
-        try { if (Directory.Exists(@"C:\Program Files\PawnIO")) Directory.Delete(@"C:\Program Files\PawnIO", true); } catch (Exception ex) { Log.Error(ex, "Delete Program Files cleanup failed"); }
+        string programFilesPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "PawnIO");
+        try { if (Directory.Exists(programFilesPath)) Directory.Delete(programFilesPath, true); } catch (Exception ex) { Log.Error(ex, "Delete Program Files cleanup failed"); }
     }
 
     private static void RunSc(string args)

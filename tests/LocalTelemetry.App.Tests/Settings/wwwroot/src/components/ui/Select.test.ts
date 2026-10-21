@@ -33,7 +33,7 @@ describe('Select.svelte', () => {
 
         const select = document.querySelector('select') as HTMLSelectElement;
         expect(select).not.toBeNull();
-        expect(select.options.length).toBe(2);
+        expect(select.options).toHaveLength(2);
         expect(document.body.textContent).toContain('Test Select');
     });
 });

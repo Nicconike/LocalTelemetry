@@ -132,73 +132,84 @@ public sealed class WddmGpuMonitor : IDisposable
             int status = PdhCollectQueryData(_query);
             if (status != 0)
             {
-                _consecutiveErrors++;
-                if (_consecutiveErrors >= 5 && DateTime.UtcNow - _lastResetTime >= ResetCooldown)
-                {
-                    _lastResetTime = DateTime.UtcNow;
-                    Reset();
-                }
+                HandleQueryError();
                 return 0f;
             }
             _consecutiveErrors = 0;
 
             // Second collection required for a valid rate delta
-            if (!_primed) { _primed = true; return 0f; }
-
-            // 1. Probe for required buffer size
-            uint bufSize = 0;
-            uint itemCount = 0;
-            status = PdhGetFormattedCounterArray(
-                _counter, PdhFmtDouble, ref bufSize, ref itemCount, IntPtr.Zero);
-
-            if (itemCount == 0 || status != PdhMoreData) return 0f;
-
-            // 2. Grow reusable unmanaged buffer only when needed
-            EnsureBuffer((int)bufSize);
-
-            // 3. Fetch all formatted values in a single PDH call
-            status = PdhGetFormattedCounterArray(
-                _counter, PdhFmtDouble, ref bufSize, ref itemCount, _buffer);
-            if (status != 0) return 0f;
-
-            // 4. Walk items: sum utilisation per unique engine, return max.
-            //    Instance format: pid_{PID}_luid_{LUID}_phys_{N}_eng_{N}_engtype_{Type}
-            //    Engine identity = everything after "pid_{digits}_".
-            //    Same engine shared by multiple processes → sum their usage.
-            //    Task Manager shows the busiest engine → take max across engines.
-            _engineSums.Clear();
-            float maxPct = 0f;
-
-            for (uint i = 0; i < itemCount; i++)
+            if (!_primed)
             {
-                // Read struct fields directly from the unmanaged buffer.
-                // Avoids Marshal.PtrToStructure and its per-call boxing allocation.
-                // Layout (x64): IntPtr szName(8) | uint CStatus(4) | pad(4) | double Value(8)
-                int offset = (int)i * ItemStride;
-                uint cStatus = unchecked((uint)Marshal.ReadInt32(_buffer, offset + CStatusOffset));
-                if (cStatus != 0) continue;
-
-                double value = BitConverter.Int64BitsToDouble(
-                    Marshal.ReadInt64(_buffer, offset + ValueOffset));
-                if (value <= 0.0) continue;
-
-                IntPtr namePtr = Marshal.ReadIntPtr(_buffer, offset + NameOffset);
-                int engineKey = ComputeEngineKey(namePtr);
-
-                _engineSums.TryGetValue(engineKey, out float sum);
-                sum += (float)value;
-                _engineSums[engineKey] = sum;
-
-                if (sum > maxPct) maxPct = sum;
+                _primed = true;
+                return 0f;
             }
 
-            return Math.Clamp(maxPct, 0f, 100f);
+            if (!FetchCounterArray(out uint itemCount))
+            {
+                return 0f;
+            }
+
+            return CalculateMaxEngineUsage(itemCount);
         }
         catch (Exception ex)
         {
             Log.Error(ex, "Failed to query WDDM GPU utilization");
             return 0f;
         }
+    }
+
+    private void HandleQueryError()
+    {
+        _consecutiveErrors++;
+        if (_consecutiveErrors >= 5 && DateTime.UtcNow - _lastResetTime >= ResetCooldown)
+        {
+            _lastResetTime = DateTime.UtcNow;
+            Reset();
+        }
+    }
+
+    private bool FetchCounterArray(out uint itemCount)
+    {
+        itemCount = 0;
+        uint bufSize = 0;
+        int status = PdhGetFormattedCounterArray(
+            _counter, PdhFmtDouble, ref bufSize, ref itemCount, IntPtr.Zero);
+
+        if (itemCount == 0 || status != PdhMoreData) return false;
+
+        EnsureBuffer((int)bufSize);
+
+        status = PdhGetFormattedCounterArray(
+            _counter, PdhFmtDouble, ref bufSize, ref itemCount, _buffer);
+        return status == 0;
+    }
+
+    private float CalculateMaxEngineUsage(uint itemCount)
+    {
+        _engineSums.Clear();
+        float maxPct = 0f;
+
+        for (uint i = 0; i < itemCount; i++)
+        {
+            int offset = (int)i * ItemStride;
+            uint cStatus = unchecked((uint)Marshal.ReadInt32(_buffer, offset + CStatusOffset));
+            if (cStatus != 0) continue;
+
+            double value = BitConverter.Int64BitsToDouble(
+                Marshal.ReadInt64(_buffer, offset + ValueOffset));
+            if (value <= 0.0) continue;
+
+            IntPtr namePtr = Marshal.ReadIntPtr(_buffer, offset + NameOffset);
+            int engineKey = ComputeEngineKey(namePtr);
+
+            _engineSums.TryGetValue(engineKey, out float sum);
+            sum += (float)value;
+            _engineSums[engineKey] = sum;
+
+            if (sum > maxPct) maxPct = sum;
+        }
+
+        return Math.Clamp(maxPct, 0f, 100f);
     }
 
     // Engine key extraction

@@ -566,19 +566,19 @@ public class TaskbarOverlayTests
             typeof(TaskbarOverlay).GetField("_dpi", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(overlay, 0.1f);
             var posTick = typeof(TaskbarOverlay).GetMethod("PosTick", BindingFlags.NonPublic | BindingFlags.Instance);
             posTick!.Invoke(overlay, null);
-            System.Windows.Forms.Application.DoEvents();
+            Application.DoEvents();
 
             // PosTick with dimension mismatch
             typeof(TaskbarOverlay).GetField("_overlayWidth", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(overlay, 1);
             posTick.Invoke(overlay, null);
-            System.Windows.Forms.Application.DoEvents();
+            Application.DoEvents();
 
             // 3. WatchTick with tray window change
             TaskbarEmbedder.ExplorerTrayWndOverride = () => (IntPtr)12345;
             typeof(TaskbarOverlay).GetField("_lastTrayHwnd", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(overlay, (IntPtr)999999);
             var watchTick = typeof(TaskbarOverlay).GetMethod("WatchTick", BindingFlags.NonPublic | BindingFlags.Instance);
             watchTick!.Invoke(overlay, null);
-            System.Windows.Forms.Application.DoEvents();
+            Application.DoEvents();
 
             // 4. ThemeTick with flipped theme flag
             bool currentIsLight = (bool)typeof(TaskbarOverlay).GetField("_isLightTheme", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(overlay)!;
@@ -592,7 +592,7 @@ public class TaskbarOverlayTests
             actDimensions.Should().NotThrow();
 
             // Pump message loop to execute posted delegates
-            System.Windows.Forms.Application.DoEvents();
+            Application.DoEvents();
         }
         finally
         {
@@ -662,7 +662,7 @@ public class TaskbarOverlayTests
             // 2. UpdateSnapshot posts to UI thread
             var snap = new TelemetrySnapshot { CpuUsagePct = 45f, RamUsagePct = 65f };
             overlay.UpdateSnapshot(snap);
-            System.Windows.Forms.Application.DoEvents();
+            Application.DoEvents();
 
             // 3. Hide (unhooks, hides, detaches)
             overlay.Hide();

@@ -146,107 +146,24 @@ public sealed class NvGpuMonitor : IDisposable
     {
         lock (_syncLock)
         {
-            if (!_initialized || _device == IntPtr.Zero)
-            {
-                if (DateTime.UtcNow - _lastFailureTime >= ReinitCooldown)
-                {
-                    Init();
-                    if (!_initialized || _device == IntPtr.Zero) return null;
-                    Diagnostics.Log.Info("NVIDIA GPU monitor successfully re-initialized");
-                }
-                else
-                {
-                    return null;
-                }
-            }
+            if (!EnsureReady()) return null;
 
             try
             {
                 var data = new NvGpuData();
                 int metricsRead = 0;
 
-                int ret = _native.GetTemperature(_device, 0, out uint temp);
-                if (ret == 0)
+                if (!ReadTemperature(ref data, ref metricsRead) ||
+                    !ReadUtilization(ref data, ref metricsRead) ||
+                    !ReadMemory(ref data, ref metricsRead) ||
+                    !ReadClocksAndPower(ref data, ref metricsRead))
                 {
-                    data.TempC = temp;
-                    metricsRead++;
-                }
-                else if (IsDeviceLostError(ret))
-                {
-                    HandleDeviceLost(ret);
-                    return null;
-                }
-
-                ret = _native.GetUtilizationRates(_device, out uint gpuUtil, out _);
-                if (ret == 0)
-                {
-                    data.UsagePct = gpuUtil;
-                    metricsRead++;
-                }
-                else if (IsDeviceLostError(ret))
-                {
-                    HandleDeviceLost(ret);
-                    return null;
-                }
-
-                ret = _native.GetMemoryInfo(_device, out ulong total, out _, out ulong used);
-                if (ret == 0 && total > 0)
-                {
-                    data.VramTotalMb = total / (1024f * 1024f);
-                    data.VramUsedMb = used / (1024f * 1024f);
-                    metricsRead++;
-                }
-                else if (IsDeviceLostError(ret))
-                {
-                    HandleDeviceLost(ret);
-                    return null;
-                }
-
-                ret = _native.GetClockInfo(_device, 0, out uint clock);
-                if (ret == 0)
-                {
-                    data.CoreClockMHz = clock;
-                    metricsRead++;
-                }
-                else if (IsDeviceLostError(ret))
-                {
-                    HandleDeviceLost(ret);
-                    return null;
-                }
-
-                ret = _native.GetPowerUsage(_device, out uint powerMw);
-                if (ret == 0)
-                {
-                    data.PowerDrawW = powerMw / 1000f;
-                    metricsRead++;
-                }
-                else if (IsDeviceLostError(ret))
-                {
-                    HandleDeviceLost(ret);
-                    return null;
-                }
-
-                ret = _native.GetPowerManagementLimit(_device, out uint powerLimitMw);
-                if (ret == 0)
-                {
-                    data.TdpW = powerLimitMw / 1000f;
-                    metricsRead++;
-                }
-                else if (IsDeviceLostError(ret))
-                {
-                    HandleDeviceLost(ret);
                     return null;
                 }
 
                 if (metricsRead == 0)
                 {
-                    _consecutiveUnknownFailures++;
-                    if (_consecutiveUnknownFailures >= 3)
-                    {
-                        _consecutiveUnknownFailures = 0;
-                        HandleDeviceLost(999);
-                    }
-                    return null;
+                    return HandleNoMetricsRead();
                 }
 
                 _consecutiveUnknownFailures = 0;
@@ -259,6 +176,121 @@ public sealed class NvGpuMonitor : IDisposable
                 return null;
             }
         }
+    }
+
+    private bool EnsureReady()
+    {
+        if (_initialized && _device != IntPtr.Zero)
+            return true;
+
+        if (DateTime.UtcNow - _lastFailureTime < ReinitCooldown)
+            return false;
+
+        Init();
+        if (!_initialized || _device == IntPtr.Zero)
+            return false;
+
+        Diagnostics.Log.Info("NVIDIA GPU monitor successfully re-initialized");
+        return true;
+    }
+
+    private bool ReadTemperature(ref NvGpuData data, ref int metricsRead)
+    {
+        int ret = _native.GetTemperature(_device, 0, out uint temp);
+        if (ret == 0)
+        {
+            data.TempC = temp;
+            metricsRead++;
+            return true;
+        }
+        return CheckDeviceError(ret);
+    }
+
+    private bool ReadUtilization(ref NvGpuData data, ref int metricsRead)
+    {
+        int ret = _native.GetUtilizationRates(_device, out uint gpuUtil, out _);
+        if (ret == 0)
+        {
+            data.UsagePct = gpuUtil;
+            metricsRead++;
+            return true;
+        }
+        return CheckDeviceError(ret);
+    }
+
+    private bool ReadMemory(ref NvGpuData data, ref int metricsRead)
+    {
+        int ret = _native.GetMemoryInfo(_device, out ulong total, out _, out ulong used);
+        if (ret == 0)
+        {
+            if (total > 0)
+            {
+                data.VramTotalMb = total / (1024f * 1024f);
+                data.VramUsedMb = used / (1024f * 1024f);
+                metricsRead++;
+            }
+            return true;
+        }
+        return CheckDeviceError(ret);
+    }
+
+    private bool ReadClocksAndPower(ref NvGpuData data, ref int metricsRead)
+    {
+        int ret = _native.GetClockInfo(_device, 0, out uint clock);
+        if (ret == 0)
+        {
+            data.CoreClockMHz = clock;
+            metricsRead++;
+        }
+        else if (!CheckDeviceError(ret))
+        {
+            return false;
+        }
+
+        ret = _native.GetPowerUsage(_device, out uint powerMw);
+        if (ret == 0)
+        {
+            data.PowerDrawW = powerMw / 1000f;
+            metricsRead++;
+        }
+        else if (!CheckDeviceError(ret))
+        {
+            return false;
+        }
+
+        ret = _native.GetPowerManagementLimit(_device, out uint powerLimitMw);
+        if (ret == 0)
+        {
+            data.TdpW = powerLimitMw / 1000f;
+            metricsRead++;
+        }
+        else if (!CheckDeviceError(ret))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool CheckDeviceError(int ret)
+    {
+        if (IsDeviceLostError(ret))
+        {
+            HandleDeviceLost(ret);
+            return false;
+        }
+        return true;
+    }
+
+    private NvGpuData? HandleNoMetricsRead()
+    {
+        _consecutiveUnknownFailures++;
+        if (_consecutiveUnknownFailures >= 3)
+        {
+            _consecutiveUnknownFailures = 0;
+            HandleDeviceLost(999);
+        }
+        return null;
     }
 
     /// <summary>Releases NVML resources and resets availability.</summary>

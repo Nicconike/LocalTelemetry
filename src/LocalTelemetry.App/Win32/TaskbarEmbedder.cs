@@ -274,7 +274,7 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
 
     private static (Rectangle Rect, uint Edge)? ResolveFromScreenWorkingArea()
     {
-        var scr = System.Windows.Forms.Screen.PrimaryScreen;
+        var scr = Screen.PrimaryScreen;
         if (scr is null || scr.Bounds.Width <= 0 || scr.Bounds.Height <= 0)
             return null;
 
