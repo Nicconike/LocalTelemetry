@@ -27,7 +27,7 @@
     "cookie": "^0.7.0",
     "cross-spawn": "^7.0.6",
     "devalue": "^5.9.3",
-    "dompurify": "^3.4.16",
+    "dompurify": "^3.4.17",
     "esbuild": "^0.25.0",
     "express": "^4.20.0",
     "fast-uri": "^3.1.8",
