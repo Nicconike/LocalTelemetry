@@ -186,5 +186,60 @@ public class WddmGpuMonitorTests
             }
         }
     }
+
+    [Fact]
+    public void WddmGpuMonitor_CalculateMaxEngineUsage_CalculatesSumsAndMax()
+    {
+        using var monitor = new WddmGpuMonitor();
+
+        // Allocate a buffer for 4 items:
+        // Item 0: Status 0, Value 30.0, Name "pid_100_eng_0_engtype_3D"
+        // Item 1: Status 0, Value 25.0, Name "pid_200_eng_0_engtype_3D" (Same engine -> sums to 55.0)
+        // Item 2: Status 1 (error), Value 40.0 -> skipped
+        // Item 3: Status 0, Value -10.0 (negative) -> skipped
+        const int itemCount = 4;
+        const int itemStride = 24;
+        IntPtr buffer = Marshal.AllocHGlobal(itemCount * itemStride);
+        IntPtr name1 = Marshal.StringToHGlobalUni("pid_100_eng_0_engtype_3D");
+        IntPtr name2 = Marshal.StringToHGlobalUni("pid_200_eng_0_engtype_3D");
+
+        try
+        {
+            // Item 0
+            Marshal.WriteIntPtr(buffer, 0, name1);
+            Marshal.WriteInt32(buffer, 8, 0); // cStatus = 0
+            Marshal.WriteInt64(buffer, 16, BitConverter.DoubleToInt64Bits(30.0));
+
+            // Item 1
+            Marshal.WriteIntPtr(buffer, 24, name2);
+            Marshal.WriteInt32(buffer, 32, 0); // cStatus = 0
+            Marshal.WriteInt64(buffer, 40, BitConverter.DoubleToInt64Bits(25.0));
+
+            // Item 2 (error status)
+            Marshal.WriteIntPtr(buffer, 48, name1);
+            Marshal.WriteInt32(buffer, 56, 1); // cStatus = 1
+            Marshal.WriteInt64(buffer, 64, BitConverter.DoubleToInt64Bits(40.0));
+
+            // Item 3 (negative value)
+            Marshal.WriteIntPtr(buffer, 72, name1);
+            Marshal.WriteInt32(buffer, 80, 0);
+            Marshal.WriteInt64(buffer, 88, BitConverter.DoubleToInt64Bits(-10.0));
+
+            typeof(WddmGpuMonitor).GetField("_buffer", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(monitor, buffer);
+
+            var calcMethod = typeof(WddmGpuMonitor).GetMethod("CalculateMaxEngineUsage", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            float maxUsage = (float)calcMethod.Invoke(monitor, [(uint)itemCount])!;
+
+            // Should sum items 0 and 1 (30.0 + 25.0 = 55.0)
+            maxUsage.Should().Be(55.0f);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(name1);
+            Marshal.FreeHGlobal(name2);
+            Marshal.FreeHGlobal(buffer);
+            typeof(WddmGpuMonitor).GetField("_buffer", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(monitor, IntPtr.Zero);
+        }
+    }
 }
 

@@ -245,11 +245,6 @@ public sealed class PawnIoDevice : IPawnIoTransport
                 {
                     setupBytes = InstallerDownloader();
                 }
-                else if (TestEnvironment.IsTestHost())
-                {
-                    Log.Error("PawnIO installer download blocked in test host");
-                    return false;
-                }
                 else
                 {
                     using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
@@ -304,18 +299,11 @@ public sealed class PawnIoDevice : IPawnIoTransport
     }
 
     /// <summary>
-    /// Guards every real elevated launch. Elevated operations are skipped entirely when
-    /// running under a test host, or when the current process is not already elevated, so
-    /// a UAC prompt can never be triggered here.
+    /// Guards elevated execution. Elevated operations are skipped when
+    /// the current process is not already elevated, so a UAC prompt is never triggered.
     /// </summary>
     private static bool CanRunElevatedOperation()
     {
-        if (TestEnvironment.IsTestHost())
-        {
-            Log.Error("PawnIO elevated launch blocked in test host");
-            return false;
-        }
-
         if (!IsProcessElevated())
         {
             Log.Warn("Process is not elevated; skipping PawnIO operation to prevent UAC prompt");

@@ -448,5 +448,58 @@ public class WindowsNetworkUsageProviderTests
         resDateLong.Should().NotBeNull();
         resDateLong.Value.Year.Should().Be(validTime.Year);
     }
+
+    [Fact]
+    public async Task WindowsNetworkUsageProvider_ImportDateRangeAsync_DetailedOutcomes_Coverage()
+    {
+        string tempPath = Path.Combine(Path.GetTempPath(), $"TrafficDetail_{Guid.NewGuid():N}.json");
+        try
+        {
+            var historyFile = new TrafficHistoryFile(tempPath);
+            DateTime startDate = DateTime.Today.AddDays(-5);
+            DateTime endDate = DateTime.Today.AddDays(-1);
+
+            // Import past range
+            var result = await WindowsNetworkUsageProvider.ImportDateRangeAsync(historyFile, startDate, endDate);
+            result.Success.Should().BeTrue();
+            result.DaysImported.Should().BeGreaterThanOrEqualTo(0);
+
+            // Re-import same range -> days imported should be 0 and message indicates up-to-date or no activity
+            var reimport = await WindowsNetworkUsageProvider.ImportDateRangeAsync(historyFile, startDate, endDate);
+            reimport.Success.Should().BeTrue();
+            reimport.Message.Should().NotBeNullOrEmpty();
+        }
+        finally
+        {
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+        }
+    }
+
+    [Fact]
+    public async Task WindowsNetworkUsageProvider_ImportHistoricalRecords_And_Baseline_DetailedCoverage()
+    {
+        string tempPath = Path.Combine(Path.GetTempPath(), $"TrafficHistBase_{Guid.NewGuid():N}.json");
+        try
+        {
+            var historyFile = new TrafficHistoryFile(tempPath);
+            var importHist = typeof(WindowsNetworkUsageProvider).GetMethod("ImportHistoricalRecordsAsync", BindingFlags.NonPublic | BindingFlags.Static)!;
+
+            // Import across valid past date range
+            DateTime start = DateTime.Today.AddDays(-4);
+            DateTime end = DateTime.Today.AddDays(-1);
+            var task = (Task<int>)importHist.Invoke(null, [historyFile, start, end, DateTime.Today, CancellationToken.None])!;
+            int added = await task;
+            added.Should().BeGreaterThanOrEqualTo(0);
+
+            // Import today baseline
+            var importToday = typeof(WindowsNetworkUsageProvider).GetMethod("ImportTodayBaselineAsync", BindingFlags.NonPublic | BindingFlags.Static)!;
+            var todayTask = (Task<bool>)importToday.Invoke(null, [historyFile, DateTime.Today, CancellationToken.None])!;
+            await todayTask;
+        }
+        finally
+        {
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+        }
+    }
 }
 

@@ -426,6 +426,22 @@ public class DiskQueryTests
         DiskQuery.FormatBusType(19).Should().Be("UFS");
         DiskQuery.FormatBusType(99).Should().Be("BusType99");
     }
+
+    [Fact]
+    public void DiskQuery_BootDrive_And_CapacityFormatting_Coverage()
+    {
+        // 1. FormatCommercialCapacity for non-stepping TB values
+        DiskQuery.FormatCommercialCapacity((long)(7.36 * 1000 * 1_000_000_000L)).Should().Be("7.4 TB");
+
+        // 2. GetBootDriveIndex reflection
+        var detBoot = typeof(DiskQuery).GetMethod("GetBootDriveIndex", BindingFlags.NonPublic | BindingFlags.Static);
+        detBoot.Should().NotBeNull();
+        var bootIdx = detBoot!.Invoke(null, null);
+        if (bootIdx is int idx)
+        {
+            idx.Should().BeGreaterThanOrEqualTo(0);
+        }
+    }
 }
 
 

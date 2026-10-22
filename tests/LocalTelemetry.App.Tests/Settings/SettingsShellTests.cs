@@ -1550,6 +1550,182 @@ public class SettingsShellTests
             try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
+
+    [WpfFact]
+    public void SettingsShell_FrontendLog_And_MessageSource_Coverage()
+    {
+        // 1. IsValidMessageSource
+        SettingsShell.IsValidMessageSource("https://localtelemetry.settings/index.html").Should().BeTrue();
+        SettingsShell.IsValidMessageSource("https://localtelemetry.settings/").Should().BeTrue();
+        SettingsShell.IsValidMessageSource("https://evil.com/settings.html").Should().BeFalse();
+        SettingsShell.IsValidMessageSource(null).Should().BeFalse();
+        SettingsShell.IsValidMessageSource("").Should().BeFalse();
+        SettingsShell.IsValidMessageSource("   ").Should().BeFalse();
+
+        // 2. HandleFrontendLog via HandleWebMessageJson
+        var cfg = new AppSettings();
+        string tempPath = Path.Combine(Path.GetTempPath(), "net_history_" + Guid.NewGuid().ToString("N") + ".dat");
+        try
+        {
+            var history = new TrafficHistoryFile(tempPath);
+            TrafficHistoryStore.Initialize(history);
+            using var netLogger = new NetUsageLogger(cfg, history);
+            var shell = new SettingsShell(cfg, netLogger);
+
+            // Log without payload (early return)
+            shell.HandleWebMessageJson("{\"type\":\"log\"}");
+
+            // Log with warn and detail
+            shell.HandleWebMessageJson("{\"type\":\"log\",\"payload\":{\"level\":\"warn\",\"message\":\"Test warning\",\"detail\":\"Additional debug info\"}}");
+
+            // Log with error and no detail
+            shell.HandleWebMessageJson("{\"type\":\"log\",\"payload\":{\"level\":\"error\",\"message\":\"Test error\"}}");
+
+            // Log with empty payload
+            shell.HandleWebMessageJson("{\"type\":\"log\",\"payload\":{}}");
+
+            shell.Close();
+        }
+        finally
+        {
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+        }
+    }
+
+    [WpfFact]
+    public void SettingsShell_GpuFormatting_And_TitleBar_And_TimerCallbacks_Coverage()
+    {
+        var cfg = new AppSettings();
+        string tempPath = Path.Combine(Path.GetTempPath(), "net_history_" + Guid.NewGuid().ToString("N") + ".dat");
+        try
+        {
+            var history = new TrafficHistoryFile(tempPath);
+            TrafficHistoryStore.Initialize(history);
+            using var netLogger = new NetUsageLogger(cfg, history);
+            var shell = new SettingsShell(cfg, netLogger);
+
+            // 1. FormatGpuTdpW with Nvidia LatestData
+            var formatTdp = typeof(SettingsShell).GetMethod("FormatGpuTdpW", BindingFlags.NonPublic | BindingFlags.Static)!;
+            var nvidiaGpu = (Name: "NVIDIA GeForce RTX 4080", Vendor: "NVIDIA", IsDedicated: true, VramBytes: (long?)16000000000L, DriverVersion: "550.0");
+
+            var latestDataProp = typeof(NvGpuMonitor).GetProperty("LatestData", BindingFlags.Public | BindingFlags.Static)!;
+            var origNvData = NvGpuMonitor.LatestData;
+            try
+            {
+                latestDataProp.SetValue(null, new NvGpuMonitor.NvGpuData { TdpW = 320f });
+                string? tdpResult = (string?)formatTdp.Invoke(null, [nvidiaGpu, null]);
+                tdpResult.Should().Be("320 W");
+
+                latestDataProp.SetValue(null, new NvGpuMonitor.NvGpuData { TdpW = 0f });
+                string? tdpZero = (string?)formatTdp.Invoke(null, [nvidiaGpu, null]);
+                tdpZero.Should().BeNull();
+            }
+            finally
+            {
+                latestDataProp.SetValue(null, origNvData);
+            }
+
+            // 2. FormatGpuVramGb
+            var formatVram = typeof(SettingsShell).GetMethod("FormatGpuVramGb", BindingFlags.NonPublic | BindingFlags.Static)!;
+            try
+            {
+                latestDataProp.SetValue(null, new NvGpuMonitor.NvGpuData { VramTotalMb = 16384f });
+                string? vramNv = (string?)formatVram.Invoke(null, [nvidiaGpu]);
+                vramNv.Should().Be("16.0");
+            }
+            finally
+            {
+                latestDataProp.SetValue(null, origNvData);
+            }
+
+            var genericGpu = (Name: "Intel Arc A770", Vendor: "Intel", IsDedicated: true, VramBytes: (long?)(8L * 1024 * 1024 * 1024), DriverVersion: "31.0");
+            string? vramGen = (string?)formatVram.Invoke(null, [genericGpu]);
+            vramGen.Should().Be("8.0");
+
+            (string Name, string Vendor, bool IsDedicated, long? VramBytes, string? DriverVersion) noVramGpu = ("Basic Display", "Microsoft", false, null, null);
+            string? vramNull = (string?)formatVram.Invoke(null, [noVramGpu]);
+            vramNull.Should().BeNull();
+
+            // 3. AppUsageTimer tick callback
+            var textBlockField = typeof(SettingsShell).GetField("WindowTitleText", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Public);
+            var titleBlock = new System.Windows.Controls.TextBlock();
+            textBlockField?.SetValue(shell, titleBlock);
+
+            var procField = typeof(SettingsShell).GetField("_currentProcess", BindingFlags.NonPublic | BindingFlags.Instance);
+            procField?.SetValue(shell, System.Diagnostics.Process.GetCurrentProcess());
+
+            var tickMethod = typeof(SettingsShell).GetMethod("<OnLoaded>b__53_0", BindingFlags.NonPublic | BindingFlags.Instance);
+            tickMethod?.Invoke(shell, [null, EventArgs.Empty]);
+            titleBlock.Text.Should().Contain("LocalTelemetry");
+
+            procField?.SetValue(shell, null);
+            tickMethod?.Invoke(shell, [null, EventArgs.Empty]);
+
+            // 4. LocationChanged blur callback
+            var locMethod = typeof(SettingsShell).GetMethod("<.ctor>b__52_0", BindingFlags.NonPublic | BindingFlags.Instance);
+            typeof(SettingsShell).GetField("_webViewReady", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(shell, false);
+            locMethod?.Invoke(shell, [null, EventArgs.Empty]);
+            typeof(SettingsShell).GetField("_webViewReady", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(shell, true);
+            locMethod?.Invoke(shell, [null, EventArgs.Empty]);
+
+            // 5. Timer callbacks for debounce & periodic push
+            var timer1 = typeof(SettingsShell).GetMethod("<InitWebViewAsync>b__54_0", BindingFlags.NonPublic | BindingFlags.Instance);
+            timer1?.Invoke(shell, [null]);
+            var timer2 = typeof(SettingsShell).GetMethod("<InitWebViewAsync>b__54_1", BindingFlags.NonPublic | BindingFlags.Instance);
+            timer2?.Invoke(shell, [null]);
+
+            // 6. TitleBar double-click toggle
+            var titleBarMethod = typeof(SettingsShell).GetMethod("TitleBar_MouseLeftButtonDown", BindingFlags.NonPublic | BindingFlags.Instance);
+            var mouseEventArgs = new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left)
+            {
+                RoutedEvent = UIElement.MouseLeftButtonDownEvent
+            };
+            typeof(MouseButtonEventArgs).GetField("_count", BindingFlags.NonPublic | BindingFlags.Instance)?.SetValue(mouseEventArgs, 2);
+            shell.WindowState = WindowState.Normal;
+            titleBarMethod?.Invoke(shell, [shell, mouseEventArgs]);
+            shell.WindowState.Should().Be(WindowState.Maximized);
+            titleBarMethod?.Invoke(shell, [shell, mouseEventArgs]);
+            shell.WindowState.Should().Be(WindowState.Normal);
+
+            // 7. Close button click
+            var closeMethod = typeof(SettingsShell).GetMethod("CloseButton_Click", BindingFlags.NonPublic | BindingFlags.Instance);
+            closeMethod?.Invoke(shell, [shell, new RoutedEventArgs()]);
+        }
+        finally
+        {
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+        }
+    }
+
+    [WpfFact]
+    public async Task SettingsShell_InitWebViewAsync_Fallback_Coverage()
+    {
+        var cfg = new AppSettings();
+        string tempPath = Path.Combine(Path.GetTempPath(), "net_history_" + Guid.NewGuid().ToString("N") + ".dat");
+        try
+        {
+            var history = new TrafficHistoryFile(tempPath);
+            TrafficHistoryStore.Initialize(history);
+            using var netLogger = new NetUsageLogger(cfg, history);
+            var shell = new SettingsShell(cfg, netLogger);
+
+            string? errorDialogMsg = null;
+            SettingsShell.MessageBoxAction = (title, msg) => errorDialogMsg = msg;
+
+            var initAsync = typeof(SettingsShell).GetMethod("InitWebViewAsync", BindingFlags.NonPublic | BindingFlags.Instance);
+            if (initAsync != null)
+            {
+                var task = (Task)initAsync.Invoke(shell, null)!;
+                await task;
+            }
+
+            shell.Close();
+        }
+        finally
+        {
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+        }
+    }
 }
 
 

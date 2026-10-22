@@ -380,6 +380,30 @@ describe('AppearancePage.svelte', () => {
         expect(get(settings)!.overlay.userCustomizedGroupColors).toHaveLength(0);
         expect(get(settings)!.overlay.metricColors['cpu_pct']).toBe(BRAND.cpu_pct);
     });
+
+    it('renders battery color group when monitoring hasBattery is true and resets color when not in userCustomized', async () => {
+        const payload = makePayload();
+        payload.monitoring.hasBattery = true;
+        // Set color different from default, but userCustomizedMetricColors is empty
+        payload.overlay.metricColors['battery_pct'] = '#998877';
+        payload.overlay.defaultMetricColors['battery_pct'] = BRAND.battery_pct;
+        payload.overlay.userCustomizedMetricColors = [];
+        settings.set(payload);
+
+        component = mount(AppearancePage, { target: document.body });
+        await tick();
+
+        expect(document.body.textContent).toContain('Battery');
+
+        // Find small reset button for battery_pct
+        const resetBtns = Array.from(document.body.querySelectorAll<HTMLButtonElement>('button.reset-btn.small'));
+        expect(resetBtns.length).toBeGreaterThan(0);
+
+        resetBtns[0].click();
+        await tick();
+
+        expect(get(settings)!.overlay.metricColors['battery_pct']).toBe(BRAND.battery_pct);
+    });
 });
 
 

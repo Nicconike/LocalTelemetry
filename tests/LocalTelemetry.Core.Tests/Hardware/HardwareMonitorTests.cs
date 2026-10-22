@@ -1916,6 +1916,142 @@ public class HardwareMonitorTests
         float rate = (float)computeBatteryRate.Invoke(monitor, [60000L])!;
         rate.Should().BeGreaterThan(0f);
     }
+
+    [Fact]
+    public void HardwareMonitor_RaplAndCpuSensors_Coverage()
+    {
+        var cfg = new AppSettings();
+        cfg.Monitoring.EnableNet = false;
+        var sysInfoMock = Substitute.For<ISystemInfo>();
+        var pawnIoMock = Substitute.For<IPawnIoManager>();
+        var transportMock = Substitute.For<IPawnIoTransport>();
+
+        // Rapl units: pUnits = 3, eUnits = 14
+        ulong raplUnitMsr = 3u | (14u << 8);
+        transportMock.Execute(Arg.Any<string>(), Arg.Is<ulong[]>(x => x.Length == 1 && x[0] == 0x606), 1)
+            .Returns([raplUnitMsr]);
+
+        // TDP raw SKU: 65W
+        transportMock.Execute(Arg.Any<string>(), Arg.Is<ulong[]>(x => x.Length == 1 && x[0] == 0x614), 1)
+            .Returns([65u]);
+
+        // Energy status: prime with 1000, then 2000
+        ulong energyStatus = 1000UL;
+        transportMock.Execute(Arg.Any<string>(), Arg.Is<ulong[]>(x => x.Length == 1 && x[0] == 0x611), 1)
+            .Returns(_ => [energyStatus]);
+
+        using var monitor = new HardwareMonitor(cfg, sysInfoMock, pawnIoMock);
+        SetField(monitor, "_pawnIoDevice", transportMock);
+
+        // 1. ReadRaplPowerUnit
+        var readRapl = typeof(HardwareMonitor).GetMethod("ReadRaplPowerUnit", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        readRapl.Invoke(monitor, null);
+
+        // 2. ReadCpuTdp
+        var readTdp = typeof(HardwareMonitor).GetMethod("ReadCpuTdp", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var tdp = (uint?)readTdp.Invoke(monitor, null);
+        tdp.Should().NotBeNull();
+
+        // 3. ReadCpuPowerRapl: prime -> 0, second read with delta -> calculates watts
+        var readPower = typeof(HardwareMonitor).GetMethod("ReadCpuPowerRapl", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        ((float)readPower.Invoke(monitor, null)!).Should().Be(0f);
+
+        SetField(monitor, "_prevEnergyTime", DateTime.UtcNow.AddSeconds(-1.0));
+        energyStatus = 500000UL;
+        float watts = (float)readPower.Invoke(monitor, null)!;
+        watts.Should().BeGreaterThan(0f);
+
+        // 4. ReadCpuPowerRapl when transport throws
+        transportMock.Execute(Arg.Any<string>(), Arg.Is<ulong[]>(x => x.Length == 1 && x[0] == 0x611), 1)
+            .Returns(_ => throw new InvalidOperationException("PawnIO driver disconnected"));
+        ((float)readPower.Invoke(monitor, null)!).Should().Be(0f);
+    }
+
+    [Fact]
+    public void HardwareMonitor_CpuFreqMsr_And_CpuPct_Coverage()
+    {
+        var cfg = new AppSettings();
+        cfg.Monitoring.EnableNet = false;
+        var sysInfoMock = Substitute.For<ISystemInfo>();
+        var pawnIoMock = Substitute.For<IPawnIoManager>();
+        var transportMock = Substitute.For<IPawnIoTransport>();
+
+        // APERF / MPERF returns
+        ulong aperfVal = 1000UL;
+        ulong mperfVal = 1000UL;
+        transportMock.Execute(Arg.Any<string>(), Arg.Is<ulong[]>(x => x.Length == 1 && x[0] == 0xE8), 1)
+            .Returns(_ => [aperfVal]);
+        transportMock.Execute(Arg.Any<string>(), Arg.Is<ulong[]>(x => x.Length == 1 && x[0] == 0xE7), 1)
+            .Returns(_ => [mperfVal]);
+
+        using var monitor = new HardwareMonitor(cfg, sysInfoMock, pawnIoMock);
+        SetField(monitor, "_pawnIoDevice", transportMock);
+        SetField(monitor, "_maxCpuMhz", 3600u);
+
+        var readFreqMsr = typeof(HardwareMonitor).GetMethod("ReadCpuFreqMsr", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        // Prime
+        ((float)readFreqMsr.Invoke(monitor, null)!).Should().Be(0f);
+
+        // Second sample with ratio
+        aperfVal = 2000UL;
+        mperfVal = 1800UL;
+        float freq = (float)readFreqMsr.Invoke(monitor, null)!;
+        freq.Should().BeGreaterThan(0f);
+
+        // ReadCpuPct
+        var readCpuPct = typeof(HardwareMonitor).GetMethod("ReadCpuPct", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        float pct1 = (float)readCpuPct.Invoke(monitor, null)!;
+        float pct2 = (float)readCpuPct.Invoke(monitor, null)!;
+        pct2.Should().BeInRange(0f, 100f);
+    }
+
+    [Fact]
+    public void HardwareMonitor_GpuQueries_And_BatteryDescriptions_Coverage()
+    {
+        var cfg = new AppSettings();
+        cfg.Monitoring.EnableNet = false;
+        var sysInfoMock = Substitute.For<ISystemInfo>();
+        var pawnIoMock = Substitute.For<IPawnIoManager>();
+
+        using var monitor = new HardwareMonitor(cfg, sysInfoMock, pawnIoMock);
+
+        // Gpu helpers with explicit NvGpuData snapshot
+        var nvData = new NvGpuMonitor.NvGpuData
+        {
+            TempC = 58f,
+            UsagePct = 75f,
+            VramUsedMb = 4096f,
+            CoreClockMHz = 2400f,
+            PowerDrawW = 180f
+        };
+
+        var readGpuTemp = typeof(HardwareMonitor).GetMethod("ReadGpuTemp", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        ((float)readGpuTemp.Invoke(monitor, [nvData])!).Should().Be(58f);
+
+        var readGpuPct = typeof(HardwareMonitor).GetMethod("ReadGpuPct", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        ((float)readGpuPct.Invoke(monitor, [nvData])!).Should().Be(75f);
+
+        var readGpuVram = typeof(HardwareMonitor).GetMethod("ReadGpuVramUsedMb", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        ((float)readGpuVram.Invoke(monitor, [nvData])!).Should().Be(4096f);
+
+        var readGpuFreq = typeof(HardwareMonitor).GetMethod("ReadGpuFreqMHz", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        ((float)readGpuFreq.Invoke(monitor, [nvData])!).Should().Be(2400f);
+
+        var readGpuPower = typeof(HardwareMonitor).GetMethod("ReadGpuPowerW", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        ((float)readGpuPower.Invoke(monitor, [nvData])!).Should().Be(180f);
+
+        // GetBatteryStateDescription
+        var getBatDesc = typeof(HardwareMonitor).GetMethod("GetBatteryStateDescription", BindingFlags.NonPublic | BindingFlags.Static)!;
+        ((string)getBatDesc.Invoke(null, [true, true])!).Should().Be("charging");
+        ((string)getBatDesc.Invoke(null, [false, true])!).Should().Be("charged");
+        ((string)getBatDesc.Invoke(null, [false, false])!).Should().Be("discharging");
+
+        // ExtractDiskIndex
+        var extractDisk = typeof(HardwareMonitor).GetMethod("ExtractDiskIndex", BindingFlags.NonPublic | BindingFlags.Static)!;
+        ((string)extractDisk.Invoke(null, ["0 C:"])!).Should().Be("0");
+        ((string)extractDisk.Invoke(null, ["12 D:"])!).Should().Be("12");
+        ((string)extractDisk.Invoke(null, ["_Total"])!).Should().BeEmpty();
+    }
 }
 
 

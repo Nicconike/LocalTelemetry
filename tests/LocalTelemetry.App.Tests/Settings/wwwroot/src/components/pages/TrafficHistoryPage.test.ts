@@ -190,7 +190,8 @@ describe('TrafficHistoryPage.svelte', () => {
 
         const file = new File(['15-10-2026 Ethernet 1000 500\n'], 'backup.dat', { type: 'text/plain' });
         Object.defineProperty(fileInput, 'files', {
-            value: [file]
+            value: [file],
+            configurable: true
         });
 
         fileInput.dispatchEvent(new Event('change'));
@@ -199,5 +200,29 @@ describe('TrafficHistoryPage.svelte', () => {
         importResult.set({ daysImported: 1, error: null } as any);
         await tick();
         expect(document.body.textContent).toContain('Imported 1 day(s)');
+
+        // Test import result error
+        importResult.set({ daysImported: 0, error: 'Database corrupt' } as any);
+        await tick();
+        expect(document.body.textContent).toContain('Database corrupt');
+
+        // Test empty file selection
+        Object.defineProperty(fileInput, 'files', {
+            value: [],
+            configurable: true
+        });
+        fileInput.dispatchEvent(new Event('change'));
+        await tick();
+
+        // Test windows import result with 0 days imported and empty message
+        windowsImportResult.set({
+            success: true,
+            daysImported: 0,
+            downBytes: 0,
+            upBytes: 0,
+            message: ''
+        });
+        await tick();
+        expect(document.body.textContent).toContain('Selected date range is already up to date in LocalTelemetry.');
     });
 });

@@ -66,7 +66,7 @@ flowchart TD
         SignedCommit["<b>Signed Release Commit</b><br/>github-commit-plugin via REST API"]
         GHRelease["<b>GitHub Release</b><br/>Publishes installer, ZIP & SHA256"]
         WinGet["<b>WinGet Submission</b><br/>Official wingetcreate CLI"]
-        Attestation["<b>SLSA Provenance</b><br/>actions/attest Level 3 build proof"]
+        Attestation["<b>SLSA Provenance</b><br/>Build provenance & release asset upload"]
 
         TriggerRelease --> SemRel
         SemRel --> BuildPkg
@@ -142,7 +142,8 @@ The release pipeline is defined in [`.github/workflows/release.yml`](https://git
    - **WinGet Package Submission (`wingetcreate`)**:
      - Submits updated metadata to the official Microsoft WinGet Community Repository using Microsoft's official `wingetcreate` CLI utility.
 4. **Cryptographic Provenance Attestations**:
-   - Generates SLSA Level 3 build provenance attestations for `LocalTelemetrySetup.exe` and `LocalTelemetry-win-x64.zip` via `actions/attest`.
+   - Generates SLSA Level 3 build provenance attestations for `LocalTelemetrySetup.exe` and `LocalTelemetry-win-x64.zip` via `actions/attest-build-provenance`.
+   - Uploads the signed provenance attestation bundle directly to GitHub Release assets using the GitHub CLI (`gh release upload`).
 
 ---
 
@@ -161,7 +162,7 @@ The documentation site deployment pipeline is defined in [`.github/workflows/doc
 1. When a new release is published, the workflow triggers automatically.
 2. The `actions/checkout` step clones the repository with `fetch-depth: 0` to retrieve all Git tags.
 3. The build script `docs/scripts/build-versions.mjs` scans all tags matching `v*` with version `>= v1.0.0-rc.1`.
-4. The script extracts immutable markdown documentation from the tagged commit tree into `docs/v<version>/`.
+4. The script extracts immutable markdown documentation from the tagged commit tree into `docs/v<version>/`. It skips versions that are already generated to optimize build performance.
 5. It disables edit links (`editLink: false`), rewrites internal cross-references to the versioned path, and updates `docs/.vitepress/versions.mjs`.
 6. Bun builds the full VitePress static site containing both the latest docs and all locked release versions.
 7. The workflow uploads the artifact and deploys the site to GitHub Pages.

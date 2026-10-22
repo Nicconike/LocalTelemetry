@@ -284,4 +284,81 @@ public class NvGpuMonitorTests
             mon.IsAvailable.Should().BeTrue();
         }
     }
+
+    [Fact]
+    public void NvGpuMonitor_Constructor_And_Reset_WhenNativeThrows_HandlesGracefully()
+    {
+        // 1. Constructor throws
+        var throwingNative = Substitute.For<INvGpuNative>();
+        throwingNative.Init().Returns(_ => throw new InvalidOperationException("DLL not found"));
+
+        using var monitor = new NvGpuMonitor(throwingNative);
+        monitor.IsAvailable.Should().BeFalse();
+
+        // 2. Reset when Shutdown throws
+        var mock = Substitute.For<INvGpuNative>();
+        mock.Init().Returns(0);
+        mock.GetDeviceHandleByIndex(0, out Arg.Any<IntPtr>()).Returns(x => { x[1] = (IntPtr)0x1000; return 0; });
+        mock.Shutdown().Returns(_ => throw new InvalidOperationException("NVML error"));
+
+        using var mon2 = new NvGpuMonitor(mock);
+        mon2.IsAvailable.Should().BeTrue();
+        var resetAct = () => mon2.Reset();
+        resetAct.Should().NotThrow();
+
+        // 3. Reset when Init throws
+        mock.Init().Returns(_ => throw new InvalidOperationException("Init failed"));
+        resetAct.Should().NotThrow();
+        mon2.IsAvailable.Should().BeFalse();
+    }
+
+    [Fact]
+    public void NvGpuMonitor_Query_SensorErrors_And_ZeroMemory_Coverage()
+    {
+        var mock = Substitute.For<INvGpuNative>();
+        mock.Init().Returns(0);
+        mock.GetDeviceHandleByIndex(0, out Arg.Any<IntPtr>()).Returns(x => { x[1] = (IntPtr)0x1000; return 0; });
+
+        // Non-device-lost errors (999) for temperature and utilization
+        mock.GetTemperature((IntPtr)0x1000, 0, out Arg.Any<uint>()).Returns(999);
+        mock.GetUtilizationRates((IntPtr)0x1000, out Arg.Any<uint>(), out Arg.Any<uint>()).Returns(999);
+
+        // Memory info with total = 0
+        mock.GetMemoryInfo((IntPtr)0x1000, out Arg.Any<ulong>(), out Arg.Any<ulong>(), out Arg.Any<ulong>()).Returns(x =>
+        {
+            x[1] = 0UL;
+            x[2] = 0UL;
+            x[3] = 0UL;
+            return 0;
+        });
+
+        // Clock, power usage, power limit errors
+        mock.GetClockInfo((IntPtr)0x1000, 0, out Arg.Any<uint>()).Returns(999);
+        mock.GetPowerUsage((IntPtr)0x1000, out Arg.Any<uint>()).Returns(999);
+        mock.GetPowerManagementLimit((IntPtr)0x1000, out Arg.Any<uint>()).Returns(999);
+
+        using var monitor = new NvGpuMonitor(mock);
+        monitor.IsAvailable.Should().BeTrue();
+
+        // Query when no metrics can be read returns null
+        monitor.Query().Should().BeNull();
+
+        // Query when native throws an unexpected exception
+        mock.GetTemperature((IntPtr)0x1000, 0, out Arg.Any<uint>()).Returns(_ => throw new InvalidOperationException("Access denied"));
+        monitor.Query().Should().BeNull();
+    }
+
+    [Fact]
+    public void NvGpuMonitor_EnsureReady_WhenWithinCooldown_ReturnsFalseImmediately()
+    {
+        var mock = Substitute.For<INvGpuNative>();
+        mock.Init().Returns(-1);
+
+        using var monitor = new NvGpuMonitor(mock);
+        monitor.IsAvailable.Should().BeFalse();
+
+        // EnsureReady within 5s cooldown returns false without attempting Init
+        monitor.Query().Should().BeNull();
+        mock.Received(1).Init(); // Only the constructor call
+    }
 }

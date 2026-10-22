@@ -13,6 +13,7 @@
         "@commitlint/config-conventional": "^21.2.3",
         "@sveltejs/vite-plugin-svelte": "^7.3.1",
         "@vitest/coverage-v8": "^5.0.5",
+        "commitlint-plugin-function-rules": "4.0.1",
         "happy-dom": "^21.0.3",
         "svelte": "^5.57.2",
         "typescript": "^7.0.2",
@@ -234,6 +235,8 @@
     "cliui": ["cliui@9.0.1", "", { "dependencies": { "string-width": "^7.2.0", "strip-ansi": "^7.1.0", "wrap-ansi": "^9.0.0" } }, "sha512-k7ndgKhwoQveBL+/1tqGJYNz097I7WOvwbmmU2AR5+magtbjPWQTS1C5vzGkBC8Ym8UWRzfKUzUUqFLypY4Q+w=="],
 
     "clsx": ["clsx@2.1.1", "", {}, "sha512-eYm0QWBtUrBWZWG0d386OGAw16Z995PiOVo2B7bjWSbHedGl5e0ZWaq65kOGgUSNesEIDkB9ISbTg/JK9dhCZA=="],
+
+    "commitlint-plugin-function-rules": ["commitlint-plugin-function-rules@4.0.1", "", { "peerDependencies": { "@commitlint/lint": ">=19 <20" } }, "sha512-q3zniafaRo41x0eatCCe1ai9Tge4ArK4Mc5rVXTCtj6D9s0unxYpCnFiyLVOpKyz8za78qlZacCHTErvHnU+dw=="],
 
     "conventional-changelog-angular": ["conventional-changelog-angular@9.2.1", "", { "dependencies": { "@conventional-changelog/template": "^1.2.1" } }, "sha512-oWSL6ZhnXbYraOFTK3PgRAQJ8fADDAEv5K6AdeyQPLvjFmhG8+ejL0jZZp/R7vTmGJaBvZEE+sE7dB4bCv7sAw=="],
 

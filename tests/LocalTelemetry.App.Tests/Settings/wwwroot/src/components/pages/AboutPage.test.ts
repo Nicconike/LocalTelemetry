@@ -154,4 +154,33 @@ describe('AboutPage.svelte', () => {
 
         expect(document.body.textContent).toContain('Up to date');
     });
+
+    it('formats build date across various date and time formats', async () => {
+        // 1. Date only DD-MM-YYYY
+        systemInfo.set({ buildDate: '23-10-2026' } as any);
+        component = mount(AboutPage, { target: document.body });
+        await tick();
+        expect(document.body.textContent).toContain('23-10-2026');
+        unmount(component);
+
+        // 2. Date only YYYY-MM-DD
+        systemInfo.set({ buildDate: '2026-10-23' } as any);
+        component = mount(AboutPage, { target: document.body });
+        await tick();
+        expect(document.body.textContent).toContain('23-10-2026');
+        unmount(component);
+
+        // 3. 24-hour time without AM/PM
+        systemInfo.set({ buildDate: '23-10-2026, 15:30' } as any);
+        component = mount(AboutPage, { target: document.body });
+        await tick();
+        expect(document.body.textContent).toContain('03:30 PM');
+        unmount(component);
+
+        // 4. Raw fallback string
+        systemInfo.set({ buildDate: 'CustomBuildTimeStamp' } as any);
+        component = mount(AboutPage, { target: document.body });
+        await tick();
+        expect(document.body.textContent).toContain('CustomBuildTimeStamp');
+    });
 });

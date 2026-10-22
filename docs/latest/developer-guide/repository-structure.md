@@ -36,7 +36,7 @@ LocalTelemetry/
 ├── src/                         # Production source code (.NET 10 + Svelte 5)
 │   ├── LocalTelemetry.Core/     # Hardware polling engine, PawnIO, SystemInfo, Config
 │   │   ├── Config/              # AppSettings.cs, schema migration & atomic persistence
-│   │   ├── Diagnostics/         # Log.cs structured logger & TestEnvironment.cs testing flags
+│   │   ├── Diagnostics/         # Log.cs structured logger & file rotation
 │   │   ├── Hardware/            # Sensor pollers (NVML, ADL, ControlLib, WDDM, PDH, DiskQuery, HardwareInventory, HardwareLifecycleManager)
 │   │   │   └── PawnIo/          # Kernel driver transport, Intel MSR & AMD Ryzen SMU readers
 │   │   └── Models/              # Metrics.cs, TelemetrySnapshot, OverlayDeploymentState, UpdateCheckResult

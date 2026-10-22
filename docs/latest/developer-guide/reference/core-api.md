@@ -292,39 +292,7 @@ public sealed record UpdateCheckResult
 
 ---
 
-## :flask-conical: Diagnostics & Testing Environment
-
-### `TestEnvironment`
-
-- **Namespace:** `LocalTelemetry.Core.Diagnostics`
-
-Detects whether the current process is running inside an automated test harness to prevent driver mutations or elevation prompts during testing.
-
-```csharp
-namespace LocalTelemetry.Core.Diagnostics;
-
-public static class TestEnvironment
-{
-    /// <summary>Returns true when running inside a test runner process.</summary>
-    public static bool IsTestHost();
-}
-```
-
-#### Test Host Evaluation Criteria
-
-The `IsTestHost()` method returns `true` if:
-
-1. `Environment.ProcessPath` begins with `"testhost"` (case-insensitive) or matches `"vstest.console"`.
-2. Any loaded assembly in `AppDomain.CurrentDomain` matches:
-   - `xunit.core`
-   - `xunit.execution`
-   - `xunit.assert`
-   - `Microsoft.VisualStudio.TestPlatform.TestFramework`
-   - `nunit.framework`
-
----
-
-## :logs: Logging Architecture
+## :logs: Logging & Diagnostics Architecture
 
 ### `Log`
 

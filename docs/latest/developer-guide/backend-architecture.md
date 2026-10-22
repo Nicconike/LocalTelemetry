@@ -122,12 +122,6 @@ flowchart TD
   - **Network Topology Changes (`NetworkAddressChanged` / `NetworkAvailabilityChanged`):** Automatically detects adapter connections, disconnections, and IP address renewals.
   - **PnP Device Changes (`WM_DEVICECHANGE`):** Refreshes storage drive mappings upon USB or NVMe disk hotplugging.
 
-### :test-tube: TestEnvironment (Headless CI & Testing Support)
-
-- Implemented in `TestEnvironment.cs`.
-- Detects whether code is executing inside an automated test harness (xUnit, Vitest, or CI runners).
-- Provides `IsTestHost()` to prevent driver downloads, kernel service mutations, and UAC elevation prompts during automated test runs.
-
 ### :database: MetricSnapshot & TelemetrySnapshot (State Models)
 
 - Represents the complete, immutable point-in-time state of all polled hardware sensors.

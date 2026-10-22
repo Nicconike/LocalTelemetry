@@ -1883,6 +1883,178 @@ public class SystemInfoTests
         var getSmbiosBatWord = typeof(SystemInfo).GetMethod("GetSmbiosBatteryWord", BindingFlags.NonPublic | BindingFlags.Static)!;
         getSmbiosBatWord.Invoke(null, [0x0A]).Should().NotBeNull();
     }
+
+    [Fact]
+    public void SystemInfo_SmbiosType39_And_Type17_DetailedParsing_Coverage()
+    {
+        var smbiosCacheField = typeof(SystemInfo).GetField("_smbiosCache", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var originalSmbios = smbiosCacheField.GetValue(null);
+
+        try
+        {
+            // 1. Build synthetic SMBIOS containing Type 39 (PSU), Type 17 (Memory), and Type 127 (End)
+            var psuBytes = new List<byte>
+            {
+                // Type 39 Header (len 0x0C)
+                39, 0x0C, 0x01, 0x00,
+                // 0x04: Power Unit Group
+                1,
+                // 0x05: Location Str Idx
+                0,
+                // 0x06: Mfr Str Idx (string 1)
+                1,
+                // 0x07: Serial Str Idx
+                0,
+                // 0x08: Model Str Idx (string 2)
+                2,
+                // 0x09: Asset Tag Str Idx
+                0,
+                // 0x0A: Max capacity LSB (65000 mW = 0xFDE8 -> LSB 0xE8)
+                0xE8,
+                // 0x0B: Max capacity MSB (0xFD)
+                0xFD
+            };
+            // Type 39 Strings: "Corsair\0RM850x\0\0"
+            psuBytes.AddRange(Encoding.ASCII.GetBytes("Corsair\0RM850x\0\0"));
+
+            // Type 17 Header (len 0x14)
+            psuBytes.AddRange([17, 0x14, 0x02, 0x00]);
+            for (int i = 4; i < 0x12; i++) psuBytes.Add(0);
+            psuBytes.Add(0x22); // 0x12: Memory type DDR5 (0x22)
+            psuBytes.Add(0);    // 0x13
+            psuBytes.AddRange([0, 0]); // Double null strings
+
+            // Type 127 Header (len 4)
+            psuBytes.AddRange([127, 4, 0x03, 0x00, 0, 0]);
+
+            byte[] fullSmbios = psuBytes.ToArray();
+            smbiosCacheField.SetValue(null, fullSmbios);
+
+            SystemInfo.GetPsuName().Should().Be("Corsair RM850x");
+            SystemInfo.GetPsuMaxCapacity().Should().Be("65 W");
+
+            var findSmbios17 = typeof(SystemInfo).GetMethod("FindSmbiosType17MemoryType", BindingFlags.NonPublic | BindingFlags.Static)!;
+            ((int)findSmbios17.Invoke(null, [fullSmbios])!).Should().Be(0x22);
+
+            // 2. Only manufacturer (model string idx = 0)
+            byte[] mfrOnly = (byte[])fullSmbios.Clone();
+            mfrOnly[8] = 0; // Model str idx = 0
+            smbiosCacheField.SetValue(null, mfrOnly);
+            SystemInfo.GetPsuName().Should().Be("Corsair");
+
+            // 3. Only model (mfr string idx = 0)
+            byte[] modelOnly = (byte[])fullSmbios.Clone();
+            modelOnly[6] = 0; // Mfr str idx = 0
+            smbiosCacheField.SetValue(null, modelOnly);
+            SystemInfo.GetPsuName().Should().Be("RM850x");
+
+            // 4. Both empty
+            byte[] bothEmpty = (byte[])fullSmbios.Clone();
+            bothEmpty[6] = 0;
+            bothEmpty[8] = 0;
+            smbiosCacheField.SetValue(null, bothEmpty);
+            SystemInfo.GetPsuName().Should().BeEmpty();
+
+            // 5. Unknown capacity 0x8000
+            byte[] unknownCap = (byte[])fullSmbios.Clone();
+            unknownCap[0x0A] = 0x00;
+            unknownCap[0x0B] = 0x80;
+            smbiosCacheField.SetValue(null, unknownCap);
+            SystemInfo.GetPsuMaxCapacity().Should().BeEmpty();
+
+            // 6. Empty raw array
+            smbiosCacheField.SetValue(null, Array.Empty<byte>());
+            SystemInfo.GetPsuName().Should().BeEmpty();
+            SystemInfo.GetPsuMaxCapacity().Should().BeEmpty();
+            ((int)findSmbios17.Invoke(null, [Array.Empty<byte>()])!).Should().Be(0);
+
+            // 7. Truncated raw array (len < 4)
+            ((int)findSmbios17.Invoke(null, [new byte[] { 17, 2, 0, 0 }])!).Should().Be(0);
+        }
+        finally
+        {
+            smbiosCacheField.SetValue(null, originalSmbios);
+        }
+    }
+
+    [Fact]
+    public void SystemInfo_DetailedInternalQueries_And_Fallbacks_Coverage()
+    {
+        // 1. ReadMsrRatioMhz branches
+        var pawnIoMock = Substitute.For<IPawnIoTransport>();
+
+        // Empty result
+        pawnIoMock.Execute("ioctl_read_msr", Arg.Any<ulong[]>(), 1).Returns(Array.Empty<ulong>());
+        SystemInfo.ReadMsrRatioMhz(pawnIoMock, 0x1AD).Should().Be(0);
+
+        // Ratio 0x00
+        pawnIoMock.Execute("ioctl_read_msr", Arg.Any<ulong[]>(), 1).Returns([0x00UL]);
+        SystemInfo.ReadMsrRatioMhz(pawnIoMock, 0x1AD).Should().Be(0);
+
+        // Ratio 0xFF
+        pawnIoMock.Execute("ioctl_read_msr", Arg.Any<ulong[]>(), 1).Returns([0xFFUL]);
+        SystemInfo.ReadMsrRatioMhz(pawnIoMock, 0x1AD).Should().Be(0);
+
+        // Ratio 0x05 (500 MHz <= 1000)
+        pawnIoMock.Execute("ioctl_read_msr", Arg.Any<ulong[]>(), 1).Returns([0x05UL]);
+        SystemInfo.ReadMsrRatioMhz(pawnIoMock, 0x1AD).Should().Be(0);
+
+        // Ratio 0x24 (36 * 100 = 3600 MHz > 1000)
+        pawnIoMock.Execute("ioctl_read_msr", Arg.Any<ulong[]>(), 1).Returns([0x24UL]);
+        SystemInfo.ReadMsrRatioMhz(pawnIoMock, 0x1AD).Should().Be(3600);
+
+        // 2. IsWirelessAdapter branches
+        SystemInfo.IsWirelessAdapter("Intel(R) Wi-Fi 6E AX211 160MHz").Should().BeTrue();
+        SystemInfo.IsWirelessAdapter("Killer(R) WiFi 6 AX1650w").Should().BeTrue();
+        SystemInfo.IsWirelessAdapter("Qualcomm Atheros Wireless Network Adapter").Should().BeTrue();
+        SystemInfo.IsWirelessAdapter("Realtek 8821CE Wireless LAN 802.11ac").Should().BeTrue();
+        SystemInfo.IsWirelessAdapter("Broadcom 802.11n Network Adapter").Should().BeTrue();
+        SystemInfo.IsWirelessAdapter("Realtek PCIe 2.5GbE Family Controller").Should().BeFalse();
+
+        // 3. IsDiscreteGpu reflection branches
+        var isDiscreteGpu = typeof(SystemInfo).GetMethod("IsDiscreteGpu", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var dummyDevInfo = new NativeMethods.SpDevinfoData();
+
+        ((bool)isDiscreteGpu.Invoke(null, ["Intel(R) Arc(TM) A770 Graphics", "Intel", IntPtr.Zero, dummyDevInfo])!).Should().BeTrue();
+        ((bool)isDiscreteGpu.Invoke(null, ["AMD Radeon RX 7900 XTX", "AMD", IntPtr.Zero, dummyDevInfo])!).Should().BeTrue();
+        ((bool)isDiscreteGpu.Invoke(null, ["Radeon PRO W6800", "AMD", IntPtr.Zero, dummyDevInfo])!).Should().BeTrue();
+        ((bool)isDiscreteGpu.Invoke(null, ["AMD Radeon VII", "AMD", IntPtr.Zero, dummyDevInfo])!).Should().BeTrue();
+        ((bool)isDiscreteGpu.Invoke(null, ["Radeon Pro WX 3200", "AMD", IntPtr.Zero, dummyDevInfo])!).Should().BeTrue();
+        ((bool)isDiscreteGpu.Invoke(null, ["AMD Radeon(TM) Graphics", "AMD", IntPtr.Zero, dummyDevInfo])!).Should().BeFalse();
+        ((bool)isDiscreteGpu.Invoke(null, ["Intel(R) Iris(R) Xe Graphics", "Intel", IntPtr.Zero, dummyDevInfo])!).Should().BeFalse();
+
+        // 4. GetGpuRegistryData with unknown device
+        var getGpuReg = typeof(SystemInfo).GetMethod("GetGpuRegistryData", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var regResult = ((long? Vram, string? Ver))getGpuReg.Invoke(null, ["NonExistentGpu_Device_Description_12345"])!;
+        regResult.Vram.Should().BeNull();
+        regResult.Ver.Should().BeNull();
+
+        // 5. GetBiosRegValue with unknown key
+        var getBiosReg = typeof(SystemInfo).GetMethod("GetBiosRegValue", BindingFlags.NonPublic | BindingFlags.Static)!;
+        ((string)getBiosReg.Invoke(null, ["NonExistentBiosKey_12345"])!).Should().BeEmpty();
+
+        // 6. CPU ID and NT Power max Mhz queries
+        var queryCpuid = typeof(SystemInfo).GetMethod("QueryCpuMaxSpeedCpuid", BindingFlags.NonPublic | BindingFlags.Static)!;
+        int cpuidMhz = (int)queryCpuid.Invoke(null, null)!;
+        cpuidMhz.Should().BeGreaterThanOrEqualTo(0);
+
+        var queryNtPower = typeof(SystemInfo).GetMethod("QueryNtPowerMaxMhz", BindingFlags.NonPublic | BindingFlags.Static)!;
+        int ntPowerMhz = (int)queryNtPower.Invoke(null, null)!;
+        ntPowerMhz.Should().BeGreaterThanOrEqualTo(0);
+
+        // 7. GetOsDisplayVersion resets cache
+        var osCacheField = typeof(SystemInfo).GetField("_osVersionCache", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var origOsCache = osCacheField.GetValue(null);
+        try
+        {
+            osCacheField.SetValue(null, null);
+            SystemInfo.GetOsDisplayVersion().Should().NotBeNull();
+        }
+        finally
+        {
+            osCacheField.SetValue(null, origOsCache);
+        }
+    }
 }
 
 
