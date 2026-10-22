@@ -1840,6 +1840,82 @@ public class HardwareMonitorTests
         ((string)extractDiskIndexMethod.Invoke(null, ["_Total"])!).Should().BeEmpty();
         ((string)extractDiskIndexMethod.Invoke(null, [""])!).Should().BeEmpty();
     }
+
+    [Fact]
+    public void HardwareMonitor_LifecycleEvents_And_PowerManagement_Coverage()
+    {
+        var cfg = new AppSettings();
+        cfg.Monitoring.EnableNet = false;
+        var lifecycleMock = Substitute.For<IHardwareLifecycleManager>();
+        var sysInfoMock = Substitute.For<ISystemInfo>();
+        sysInfoMock.GetCpuVendor().Returns("Intel");
+        var pawnIoMock = Substitute.For<IPawnIoManager>();
+
+        using var monitor = new HardwareMonitor(cfg, sysInfoMock, pawnIoMock, lifecycleMock);
+
+        // 1. Display or driver changed event
+        lifecycleMock.DisplayOrDriverChanged += Raise.Event<Action>();
+
+        // 2. Power suspended event
+        lifecycleMock.PowerSuspended += Raise.Event<Action>();
+
+        // When suspended, display changed returns early
+        lifecycleMock.DisplayOrDriverChanged += Raise.Event<Action>();
+        lifecycleMock.NetworkTopologyChanged += Raise.Event<Action>();
+        lifecycleMock.DevicePnPChanged += Raise.Event<Action>();
+
+        // 3. Power resumed event
+        lifecycleMock.PowerResumed += Raise.Event<Action>();
+        monitor.ExecutePowerResumeWarmUp();
+
+        // 4. Timer control methods
+        monitor.Start();
+        monitor.Stop();
+        monitor.Restart(250);
+
+        // 5. ResetGpuMonitors reflection
+        var resetGpuMethod = typeof(HardwareMonitor).GetMethod("ResetGpuMonitors", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var actReset = () => resetGpuMethod.Invoke(monitor, ["test_reason"]);
+        actReset.Should().NotThrow();
+    }
+
+    [Fact]
+    public void HardwareMonitor_StaticHelpers_CompleteBranchCoverage()
+    {
+        // FormatActiveGpuAdapterLog
+        var formatGpu = typeof(HardwareMonitor).GetMethod("FormatActiveGpuAdapterLog", BindingFlags.NonPublic | BindingFlags.Static)!;
+        ((string)formatGpu.Invoke(null, ["GeForce RTX 4090", "NVIDIA"])!).Should().Be("GeForce RTX 4090 (NVIDIA)");
+        ((string)formatGpu.Invoke(null, ["", "AMD"])!).Should().Be("AMD");
+        ((string)formatGpu.Invoke(null, ["", ""])!).Should().Be("None");
+
+        // DetectGpuVendor
+        var detectGpu = typeof(HardwareMonitor).GetMethod("DetectGpuVendor", BindingFlags.NonPublic | BindingFlags.Static)!;
+        ((string?)detectGpu.Invoke(null, ["PCI\\VEN_10DE&DEV_1234", "Display Adapter"])).Should().Be("NVIDIA");
+        ((string?)detectGpu.Invoke(null, ["PCI\\VEN_1002&DEV_5678", "Display Adapter"])).Should().Be("AMD");
+        ((string?)detectGpu.Invoke(null, ["PCI\\VEN_8086&DEV_9ABC", "Display Adapter"])).Should().Be("Intel");
+        ((string?)detectGpu.Invoke(null, ["PCI\\VEN_0000", "Custom Display Adapter"])).Should().BeNull();
+
+        // ComputeBatteryRateFromCapacityDelta edge cases
+        var cfg = new AppSettings();
+        cfg.Monitoring.EnableNet = false;
+        var sysInfoMock = Substitute.For<ISystemInfo>();
+        var pawnIoMock = Substitute.For<IPawnIoManager>();
+        using var monitor = new HardwareMonitor(cfg, sysInfoMock, pawnIoMock);
+
+        var computeBatteryRate = typeof(HardwareMonitor).GetMethod("ComputeBatteryRateFromCapacityDelta", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        // <= 0 returns 0f
+        ((float)computeBatteryRate.Invoke(monitor, [0L])!).Should().Be(0f);
+        ((float)computeBatteryRate.Invoke(monitor, [-100L])!).Should().Be(0f);
+        ((float)computeBatteryRate.Invoke(monitor, [(object?)null])!).Should().Be(0f);
+
+        // First poll primes
+        ((float)computeBatteryRate.Invoke(monitor, [50000L])!).Should().Be(0f);
+
+        // Second poll computes rate
+        SetField(monitor, "_lastBatteryPollTime", DateTime.UtcNow.AddHours(-1.0));
+        float rate = (float)computeBatteryRate.Invoke(monitor, [60000L])!;
+        rate.Should().BeGreaterThan(0f);
+    }
 }
 
 

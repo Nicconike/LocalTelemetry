@@ -158,4 +158,70 @@ public class AmdGpuMonitorTests
         monitor.IsAvailable.Should().BeTrue();
         nativeMock.Received(2).Create();
     }
+
+    [Fact]
+    public void AmdGpuMonitor_NativeSensorErrors_ReturnZeroMetrics()
+    {
+        var nativeMock = Substitute.For<IAmdAdlNative>();
+        nativeMock.Create().Returns(0);
+        nativeMock.GetAdapterInfo(out Arg.Any<int>(), out Arg.Any<string>()!).Returns(x =>
+        {
+            x[0] = 0;
+            x[1] = "AMD Radeon RX 7900 XTX";
+            return 0;
+        });
+
+        // Configure sensor reads to return failure status
+        nativeMock.GetTemperature(0, out Arg.Any<int>()).Returns(-1);
+        nativeMock.GetActivity(0, out Arg.Any<int>(), out Arg.Any<int>()).Returns(-1);
+        nativeMock.GetMemoryInfo(0, out Arg.Any<long>(), out Arg.Any<long>()).Returns(-1);
+        nativeMock.GetPowerLimit(0, out Arg.Any<int>(), out Arg.Any<int>()).Returns(-1);
+
+        using var monitor = new AmdGpuMonitor(nativeMock);
+        monitor.IsAvailable.Should().BeTrue();
+
+        monitor.GetTempC().Should().Be(0f);
+        monitor.GetUsagePct().Should().Be(0f);
+        monitor.GetClockMHz().Should().Be(0f);
+        monitor.GetVram().Should().Be((0f, 0f));
+        monitor.GetPowerLimitW().Should().Be(0f);
+        monitor.GetPowerDrawW().Should().Be(0f);
+    }
+
+    [Fact]
+    public void AmdGpuMonitor_Reset_WhenNativeThrows_HandlesGracefully()
+    {
+        var nativeMock = Substitute.For<IAmdAdlNative>();
+        nativeMock.Create().Returns(0);
+        nativeMock.GetAdapterInfo(out Arg.Any<int>(), out Arg.Any<string>()!).Returns(x =>
+        {
+            x[0] = 0;
+            x[1] = "AMD Radeon RX 7900 XTX";
+            return 0;
+        });
+
+        using var monitor = new AmdGpuMonitor(nativeMock);
+        monitor.IsAvailable.Should().BeTrue();
+
+        // Destroy throws during reset
+        nativeMock.Destroy().Returns(_ => throw new InvalidOperationException("Destroy failure"));
+        var actReset = () => monitor.Reset();
+        actReset.Should().NotThrow();
+
+        // Init throws during reset
+        nativeMock.Create().Returns(_ => throw new InvalidOperationException("Init failure"));
+        var actReset2 = () => monitor.Reset();
+        actReset2.Should().NotThrow();
+        monitor.IsAvailable.Should().BeFalse();
+    }
+
+    [Fact]
+    public void AmdGpuMonitor_Constructor_WhenInitThrows_HandlesGracefully()
+    {
+        var nativeMock = Substitute.For<IAmdAdlNative>();
+        nativeMock.Create().Returns(_ => throw new InvalidOperationException("Native create crashed"));
+
+        using var monitor = new AmdGpuMonitor(nativeMock);
+        monitor.IsAvailable.Should().BeFalse();
+    }
 }

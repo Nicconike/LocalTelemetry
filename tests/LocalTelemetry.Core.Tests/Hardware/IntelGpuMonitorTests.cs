@@ -180,4 +180,72 @@ public class IntelGpuMonitorTests
         monitor.GetClockMHz().Should().Be(0f);
         monitor.GetVram().Should().Be((0f, 0f));
     }
+
+    [Fact]
+    public void IntelGpuMonitor_WhenUnavailable_MethodsReturnZero()
+    {
+        var nativeMock = Substitute.For<IIntelGpuNative>();
+        nativeMock.Init(out Arg.Any<IntPtr>()).Returns(-1);
+
+        using var monitor = new IntelGpuMonitor(nativeMock);
+        monitor.IsAvailable.Should().BeFalse();
+
+        monitor.GetTempC().Should().Be(0f);
+        monitor.GetClockMHz().Should().Be(0f);
+        monitor.GetVram().Should().Be((0f, 0f));
+    }
+
+    [Fact]
+    public void IntelGpuMonitor_Reset_WhenNativeThrows_HandlesGracefully()
+    {
+        var nativeMock = Substitute.For<IIntelGpuNative>();
+        nativeMock.Init(out Arg.Any<IntPtr>()).Returns(x => { x[0] = (IntPtr)0x1000; return 0; });
+        nativeMock.EnumerateDevices((IntPtr)0x1000, out Arg.Any<IntPtr[]>()!).Returns(x =>
+        {
+            x[1] = new IntPtr[] { (IntPtr)0x2000 };
+            return 0;
+        });
+
+        using var monitor = new IntelGpuMonitor(nativeMock);
+        monitor.IsAvailable.Should().BeTrue();
+
+        // Close throws
+        nativeMock.Close(Arg.Any<IntPtr>()).Returns(_ => throw new InvalidOperationException("Close failed"));
+        var actReset1 = () => monitor.Reset();
+        actReset1.Should().NotThrow();
+
+        // Init throws
+        nativeMock.Init(out Arg.Any<IntPtr>()).Returns(_ => throw new InvalidOperationException("Init crashed"));
+        var actReset2 = () => monitor.Reset();
+        actReset2.Should().NotThrow();
+        monitor.IsAvailable.Should().BeFalse();
+    }
+
+    [Fact]
+    public void IntelGpuMonitor_Constructor_WhenInitThrows_HandlesGracefully()
+    {
+        var nativeMock = Substitute.For<IIntelGpuNative>();
+        nativeMock.Init(out Arg.Any<IntPtr>()).Returns(_ => throw new InvalidOperationException("Init crashed"));
+
+        using var monitor = new IntelGpuMonitor(nativeMock);
+        monitor.IsAvailable.Should().BeFalse();
+    }
+
+    [Fact]
+    public void IntelGpuMonitor_Dispose_MultipleCalls_AreIdempotent()
+    {
+        var nativeMock = Substitute.For<IIntelGpuNative>();
+        nativeMock.Init(out Arg.Any<IntPtr>()).Returns(x => { x[0] = (IntPtr)0x1000; return 0; });
+        nativeMock.EnumerateDevices((IntPtr)0x1000, out Arg.Any<IntPtr[]>()!).Returns(x =>
+        {
+            x[1] = new IntPtr[] { (IntPtr)0x2000 };
+            return 0;
+        });
+
+        var monitor = new IntelGpuMonitor(nativeMock);
+        monitor.Dispose();
+        monitor.Dispose();
+
+        nativeMock.Received(1).Close((IntPtr)0x1000);
+    }
 }

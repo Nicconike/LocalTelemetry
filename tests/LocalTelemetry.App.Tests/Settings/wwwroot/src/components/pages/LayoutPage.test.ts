@@ -167,4 +167,45 @@ describe('LayoutPage.svelte', () => {
 
         expect(document.body.querySelectorAll('.metric-row')).toHaveLength(3);
     });
+
+    it('handles drag-and-drop edge cases including drop on same item and boundary values', async () => {
+        component = mount(LayoutPage, { target: document.body });
+        await tick();
+
+        const metricRows = document.body.querySelectorAll('.metric-row') as NodeListOf<HTMLElement>;
+        const dataTransfer = { effectAllowed: '', dropEffect: '', setData: () => { }, getData: () => '0' };
+        const createDragEvent = (type: string) => {
+            const ev = new Event(type, { bubbles: true, cancelable: true });
+            Object.defineProperty(ev, 'dataTransfer', { value: dataTransfer });
+            return ev;
+        };
+
+        // Drag start row 0, then drop onto row 0 (same index)
+        metricRows[0].dispatchEvent(createDragEvent('dragstart'));
+        metricRows[0].dispatchEvent(createDragEvent('drop'));
+        await tick();
+
+        expect(document.body.querySelectorAll('.metric-row')).toHaveLength(3);
+    });
+
+    it('handles busType fallback labels and unknown metric formatting', async () => {
+        settings.set({
+            monitoring: { hasBattery: false },
+            overlay: { row1: ['unknown_sensor_metric'] },
+        } as any);
+        systemInfo.set({
+            disks: [
+                { busType: 'BUSTYPE_NVME' },
+                { busType: '' },
+                { busType: 'SATA' }
+            ]
+        } as any);
+
+        component = mount(LayoutPage, { target: document.body });
+        await tick();
+
+        expect(document.body.textContent).toContain('unknown_sensor_metric');
+        expect(document.body.textContent).toContain('DISK');
+        expect(document.body.textContent).toContain('SATA');
+    });
 });

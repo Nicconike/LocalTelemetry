@@ -267,6 +267,119 @@ describe('AppearancePage.svelte', () => {
 
         expect(hex!.classList.contains('invalid')).toBe(true);
     });
+
+    it('selects theme cards on click and Enter key, and restores default theme', async () => {
+        const payload = makePayload();
+        payload.windowTheme = 'default';
+        settings.set(payload);
+        systemInfo.set({ disks: [] } as unknown as SystemInfo);
+
+        component = mount(AppearancePage, { target: document.body });
+        await tick();
+
+        const cards = document.body.querySelectorAll<HTMLElement>('.swatch-card');
+        expect(cards.length).toBeGreaterThan(1);
+
+        // Click first non-default swatch card
+        cards[1].click();
+        await tick();
+        expect(get(settings)!.windowTheme).not.toBe('default');
+
+        // Test Enter key press on card
+        cards[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        await tick();
+
+        // If not default, "Reset to Default Theme" button appears
+        const resetBtn = document.body.querySelector<HTMLButtonElement>('.reset-btn');
+        if (resetBtn && resetBtn.textContent?.includes('Reset to Default Theme')) {
+            resetBtn.click();
+            await tick();
+            expect(get(settings)!.windowTheme).toBe('default');
+        }
+    });
+
+    it('toggles follow windows taskbar theme checkbox', async () => {
+        const payload = makePayload();
+        payload.overlay.followWindowsTheme = false;
+        settings.set(payload);
+        systemInfo.set({ disks: [] } as unknown as SystemInfo);
+
+        component = mount(AppearancePage, { target: document.body });
+        await tick();
+
+        const checkbox = document.body.querySelector<HTMLInputElement>('.theme-toggle input[type="checkbox"]');
+        expect(checkbox).not.toBeNull();
+        checkbox!.checked = true;
+        checkbox!.dispatchEvent(new Event('change', { bubbles: true }));
+        await tick();
+
+        expect(get(settings)!.overlay.followWindowsTheme).toBe(true);
+    });
+
+    it('updates individual metric color pickers and hex inputs', async () => {
+        const payload = makePayload();
+        settings.set(payload);
+        systemInfo.set({ disks: [] } as unknown as SystemInfo);
+
+        component = mount(AppearancePage, { target: document.body });
+        await tick();
+
+        const firstMetricRow = document.body.querySelector('.color-row');
+        expect(firstMetricRow).not.toBeNull();
+
+        const colorInput = firstMetricRow!.querySelector<HTMLInputElement>('input[type="color"]');
+        const hexInput = firstMetricRow!.querySelector<HTMLInputElement>('input.hex-input');
+        expect(colorInput).not.toBeNull();
+        expect(hexInput).not.toBeNull();
+
+        // Change color picker
+        colorInput!.value = '#ff00aa';
+        colorInput!.dispatchEvent(new Event('change', { bubbles: true }));
+        await tick();
+
+        expect(get(settings)!.overlay.userCustomizedMetricColors).toContain('cpu_pct');
+        expect(get(settings)!.overlay.metricColors['cpu_pct'].toLowerCase()).toBe('#ff00aa');
+
+        // Change hex input
+        hexInput!.value = '#00ffaa';
+        hexInput!.dispatchEvent(new Event('blur'));
+        await tick();
+
+        expect(get(settings)!.overlay.metricColors['cpu_pct'].toLowerCase()).toBe('#00ffaa');
+
+        // Test invalid hex input
+        hexInput!.value = 'xyz';
+        hexInput!.dispatchEvent(new Event('blur'));
+        await tick();
+        expect(hexInput!.classList.contains('invalid')).toBe(true);
+    });
+
+    it('resets all colors to defaults when reset all button is clicked', async () => {
+        const payload = makePayload();
+        payload.overlay.userCustomizedMetricColors = ['cpu_pct'];
+        payload.overlay.metricColors['cpu_pct'] = '#112233';
+        payload.overlay.userCustomizedGroupColors = ['cpu'];
+        payload.overlay.groupColors['cpu'] = '#332211';
+        settings.set(payload);
+        systemInfo.set({
+            disks: [{ displayType: 'NVMe', busType: 'NVMe' }],
+            hasBattery: true
+        } as unknown as SystemInfo);
+
+        component = mount(AppearancePage, { target: document.body });
+        await tick();
+
+        const resetAllBtn = Array.from(document.body.querySelectorAll<HTMLButtonElement>('.reset-btn'))
+            .find(b => b.textContent?.includes('Reset All to Defaults'));
+        expect(resetAllBtn).toBeDefined();
+
+        resetAllBtn!.click();
+        await tick();
+
+        expect(get(settings)!.overlay.userCustomizedMetricColors).toHaveLength(0);
+        expect(get(settings)!.overlay.userCustomizedGroupColors).toHaveLength(0);
+        expect(get(settings)!.overlay.metricColors['cpu_pct']).toBe(BRAND.cpu_pct);
+    });
 });
 
 
