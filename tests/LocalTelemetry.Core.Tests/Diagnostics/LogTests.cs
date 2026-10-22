@@ -500,10 +500,10 @@ public sealed class LogTests : IDisposable
 
         // 4. SessionStart / SessionEnd error handling when stream throws
         var originalWriter = typeof(Log).GetField("_sysWriter", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null);
+        var throwStream = new ThrowOnWriteOnlyStream();
+        var throwWriter = new StreamWriter(throwStream) { AutoFlush = true };
         try
         {
-            using var throwStream = new ThrowOnWriteOnlyStream();
-            using var throwWriter = new StreamWriter(throwStream) { AutoFlush = true };
             typeof(Log).GetField("_sysWriter", BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, throwWriter);
 
             Log.SessionStart("1.0.0", true, "config.json", "Test");
@@ -516,6 +516,9 @@ public sealed class LogTests : IDisposable
         finally
         {
             typeof(Log).GetField("_sysWriter", BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, originalWriter);
+            throwStream.ShouldThrow = false;
+            throwWriter.Dispose();
+            throwStream.Dispose();
         }
     }
 
@@ -548,6 +551,7 @@ public sealed class LogTests : IDisposable
 
     private sealed class ThrowOnWriteOnlyStream : Stream
     {
+        public bool ShouldThrow { get; set; } = true;
         public override bool CanRead => false;
         public override bool CanSeek => false;
         public override bool CanWrite => true;
@@ -557,6 +561,13 @@ public sealed class LogTests : IDisposable
         public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
         public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
         public override void SetLength(long value) => throw new NotSupportedException();
-        public override void Write(byte[] buffer, int offset, int count) => throw new IOException("Simulated disk error");
+        public override void Write(byte[] buffer, int offset, int count)
+        {
+            if (ShouldThrow) throw new IOException("Simulated disk error");
+        }
+        public override void Write(ReadOnlySpan<byte> buffer)
+        {
+            if (ShouldThrow) throw new IOException("Simulated disk error");
+        }
     }
 }

@@ -10,6 +10,9 @@ on:
             - "src/LocalTelemetry.App/**"
             - "src/LocalTelemetry.Core/**"
             - "src/LocalTelemetry.Notifier/**"
+            - "Directory.Build.props"
+            - "global.json"
+            - "LocalTelemetry.sln"
 
 permissions:
     contents: read

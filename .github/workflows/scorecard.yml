@@ -5,6 +5,14 @@ on:
     branch_protection_rule:
     push:
         branches: [master]
+        paths:
+            - ".github/**"
+            - "src/**"
+            - "tests/**"
+            - "Directory.Build.props"
+            - "global.json"
+            - "LocalTelemetry.sln"
+            - "setup.iss"
 
 permissions:
     contents: read

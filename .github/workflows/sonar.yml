@@ -3,8 +3,22 @@ name: SonarQube Analysis
 on:
     push:
         branches: [master]
+        paths:
+            - "src/**"
+            - "tests/**"
+            - "Directory.Build.props"
+            - "global.json"
+            - "LocalTelemetry.sln"
+            - ".github/workflows/sonar.yml"
     pull_request:
         types: [opened, synchronize, reopened]
+        paths:
+            - "src/**"
+            - "tests/**"
+            - "Directory.Build.props"
+            - "global.json"
+            - "LocalTelemetry.sln"
+            - ".github/workflows/sonar.yml"
 
 permissions:
     contents: read

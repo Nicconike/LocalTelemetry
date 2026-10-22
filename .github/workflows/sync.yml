@@ -3,6 +3,14 @@ name: Sync PRs
 on:
     push:
         branches: [master]
+        paths:
+            - ".github/**"
+            - "src/**"
+            - "tests/**"
+            - "Directory.Build.props"
+            - "global.json"
+            - "LocalTelemetry.sln"
+            - "setup.iss"
     pull_request_target:
         types: [opened, synchronize, reopened]
     workflow_run:

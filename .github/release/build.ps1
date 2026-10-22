@@ -64,7 +64,15 @@ if (-not $iscc -or -not (Test-Path $iscc)) {
     throw "Inno Setup 7 compiler (ISCC.exe) not found. Inno Setup 7 must be installed prior to running build.ps1."
 }
 
-Write-Host "Using Inno Setup 7 compiler: $iscc"
+Write-Host "Updating setup.iss version definitions"
+$setupIssFile = "setup.iss"
+if (Test-Path $setupIssFile) {
+    (Get-Content $setupIssFile -Raw) `
+        -replace '(?m)^#define AppVersion\s+".*"$', "#define AppVersion `"$Version`"" `
+        -replace '(?m)^#define AppVersionInfoVersion\s+".*"$', "#define AppVersionInfoVersion `"$numVer`"" |
+        Set-Content $setupIssFile -Encoding utf8
+    Write-Host "Updated $setupIssFile with version $Version ($numVer)."
+}
 
 & $iscc /DAppVersion=$Version /DAppVersionInfoVersion=$numVer setup.iss
 

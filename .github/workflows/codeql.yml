@@ -3,8 +3,20 @@ name: CodeQL
 on:
     push:
         branches: [master]
+        paths:
+            - "src/**"
+            - "Directory.Build.props"
+            - "global.json"
+            - "LocalTelemetry.sln"
+            - ".github/workflows/codeql.yml"
     pull_request:
         branches: [master]
+        paths:
+            - "src/**"
+            - "Directory.Build.props"
+            - "global.json"
+            - "LocalTelemetry.sln"
+            - ".github/workflows/codeql.yml"
 
 permissions:
     contents: read

@@ -94,6 +94,7 @@ export async function prepare(pluginConfig: PluginConfig, context: PluginContext
         'bucket/localtelemetry.json',
         'docs/package.json',
         'packaging/winget/localtelemetry.yaml',
+        'setup.iss',
         'src/LocalTelemetry.App/Settings/wwwroot/package.json',
     ];
 
