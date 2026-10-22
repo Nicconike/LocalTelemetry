@@ -217,6 +217,9 @@ public sealed class PawnIoDevice : IPawnIoTransport
     /// </summary>
     internal static Action? CleanupHandler { get; set; }
 
+    /// <summary>Test seam: replaces the process elevation check.</summary>
+    internal static Func<bool>? ElevationChecker { get; set; }
+
     /// <summary>
     /// Downloads and runs the PawnIO setup installer with silent flags.
     /// Cleans up any stale installation first.
@@ -224,6 +227,9 @@ public sealed class PawnIoDevice : IPawnIoTransport
     /// <returns><see langword="true"/> if installation succeeded or already installed.</returns>
     public static bool TryInstall()
     {
+        if (ProcessRunner is null && !CanRunElevatedOperation())
+            return false;
+
         CleanupStaleInstall();
 
         try
@@ -293,6 +299,9 @@ public sealed class PawnIoDevice : IPawnIoTransport
 
     private static bool IsProcessElevated()
     {
+        if (ElevationChecker is not null)
+            return ElevationChecker();
+
         using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
         return new System.Security.Principal.WindowsPrincipal(identity)
             .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
@@ -338,6 +347,9 @@ public sealed class PawnIoDevice : IPawnIoTransport
             CleanupHandler();
             return;
         }
+
+        if (ProcessRunner is null && !CanRunElevatedOperation())
+            return;
 
         try { RunSc("stop PawnIO"); } catch (Exception ex) { Log.Error(ex, "Stop service cleanup failed"); }
         try { RunSc("delete PawnIO"); } catch (Exception ex) { Log.Error(ex, "Delete service cleanup failed"); }

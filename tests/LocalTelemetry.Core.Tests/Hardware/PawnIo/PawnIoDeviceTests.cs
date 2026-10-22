@@ -117,17 +117,19 @@ public class PawnIoDeviceTests
     }
 
     [Fact]
-    public void PawnIoDevice_TryInstall_BlockedInTestHostWhenNoDownloader()
+    public void PawnIoDevice_TryInstall_NonElevated_FailsClosed()
     {
         PawnIoDevice.CleanupHandler = () => { };
         PawnIoDevice.InstallerDownloader = null;
         PawnIoDevice.ProcessRunner = null;
+        PawnIoDevice.ElevationChecker = () => false;
         try
         {
             PawnIoDevice.TryInstall().Should().BeFalse();
         }
         finally
         {
+            PawnIoDevice.ElevationChecker = null;
             PawnIoDevice.InstallerDownloader = () => [];
             PawnIoDevice.ProcessRunner = _ => -1;
         }
@@ -156,12 +158,14 @@ public class PawnIoDeviceTests
         PawnIoDevice.CleanupHandler = () => { };
         PawnIoDevice.InstallerDownloader = () => [1, 2, 3];
         PawnIoDevice.ProcessRunner = null;
+        PawnIoDevice.ElevationChecker = () => false;
         try
         {
             PawnIoDevice.TryInstall().Should().BeFalse();
         }
         finally
         {
+            PawnIoDevice.ElevationChecker = null;
             PawnIoDevice.InstallerDownloader = () => [];
             PawnIoDevice.ProcessRunner = _ => -1;
         }
@@ -171,12 +175,14 @@ public class PawnIoDeviceTests
     public void PawnIoDevice_StartDriverService_WithoutProcessRunner_FailsClosed()
     {
         PawnIoDevice.ProcessRunner = null;
+        PawnIoDevice.ElevationChecker = () => false;
         try
         {
             PawnIoDevice.StartDriverService().Should().BeFalse();
         }
         finally
         {
+            PawnIoDevice.ElevationChecker = null;
             PawnIoDevice.ProcessRunner = _ => -1;
         }
     }
@@ -188,12 +194,14 @@ public class PawnIoDeviceTests
         method.Should().NotBeNull();
 
         PawnIoDevice.ProcessRunner = null;
+        PawnIoDevice.ElevationChecker = () => false;
         try
         {
-            method.Invoke(null, ["stop PawnIO"]);
+            method!.Invoke(null, ["stop PawnIO"]);
         }
         finally
         {
+            PawnIoDevice.ElevationChecker = null;
             PawnIoDevice.ProcessRunner = _ => -1;
         }
     }
@@ -347,10 +355,35 @@ public class PawnIoDeviceTests
     {
         var isElevated = typeof(PawnIoDevice).GetMethod("IsProcessElevated", BindingFlags.NonPublic | BindingFlags.Static);
         isElevated.Should().NotBeNull();
-        isElevated.Invoke(null, null).Should().NotBeNull();
 
         var canRun = typeof(PawnIoDevice).GetMethod("CanRunElevatedOperation", BindingFlags.NonPublic | BindingFlags.Static);
         canRun.Should().NotBeNull();
-        ((bool)canRun.Invoke(null, null)!).Should().BeFalse();
+
+        // 1. Unmocked check against current process identity
+        isElevated!.Invoke(null, null).Should().NotBeNull();
+
+        // 2. Mocked non-elevated check
+        PawnIoDevice.ElevationChecker = () => false;
+        try
+        {
+            ((bool)isElevated.Invoke(null, null)!).Should().BeFalse();
+            ((bool)canRun!.Invoke(null, null)!).Should().BeFalse();
+        }
+        finally
+        {
+            PawnIoDevice.ElevationChecker = null;
+        }
+
+        // 3. Mocked elevated check
+        PawnIoDevice.ElevationChecker = () => true;
+        try
+        {
+            ((bool)isElevated.Invoke(null, null)!).Should().BeTrue();
+            ((bool)canRun!.Invoke(null, null)!).Should().BeTrue();
+        }
+        finally
+        {
+            PawnIoDevice.ElevationChecker = null;
+        }
     }
 }
