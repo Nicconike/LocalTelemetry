@@ -1231,6 +1231,59 @@ public class AppTests
             App.MessageBoxAction = originalMsg;
         }
     }
+
+    [WpfFact]
+    public void App_LaunchTaskManager_And_WireEvents_Coverage()
+    {
+        var app = GetOrCreateApp();
+
+        // 1. LaunchTaskManager with ProcessLauncher and with exception handling
+        var originalTaskMgrAction = App.TaskManagerLauncherAction;
+        var originalTaskMgrProc = App.TaskManagerProcessLauncher;
+        try
+        {
+            App.TaskManagerLauncherAction = null;
+            bool launchedProcess = false;
+            App.TaskManagerProcessLauncher = _ => launchedProcess = true;
+
+            var launchTaskMgr = typeof(App).GetMethod("LaunchTaskManager", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            launchTaskMgr.Invoke(app, null);
+            launchedProcess.Should().BeTrue();
+
+            // Exception handling path
+            App.TaskManagerProcessLauncher = _ => throw new InvalidOperationException("Failed to start taskmgr");
+            var actThrow = () => launchTaskMgr.Invoke(app, null);
+            actThrow.Should().NotThrow();
+        }
+        finally
+        {
+            App.TaskManagerLauncherAction = originalTaskMgrAction;
+            App.TaskManagerProcessLauncher = originalTaskMgrProc;
+        }
+
+        // 2. WireEvents early return when instances are null
+        var wireEvents = typeof(App).GetMethod("WireEvents", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        typeof(App).GetField("_tray", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, null);
+        var actWire = () => wireEvents.Invoke(app, null);
+        actWire.Should().NotThrow();
+
+        // 3. EnsureNotifierLaunched when NotifierLauncherAction is null and executable does not exist
+        var origNotifierAction = App.NotifierLauncherAction;
+        try
+        {
+            var cfg = (AppSettings)typeof(App).GetField("_cfg", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(app)!;
+            App.NotifierLauncherAction = null;
+            typeof(App).GetField("_notifierLaunched", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, false);
+            cfg.Alerts.Enabled = true;
+            cfg.Alerts.ShowToastNotif = true;
+
+            app.EnsureNotifierLaunched();
+        }
+        finally
+        {
+            App.NotifierLauncherAction = origNotifierAction;
+        }
+    }
 }
 
 

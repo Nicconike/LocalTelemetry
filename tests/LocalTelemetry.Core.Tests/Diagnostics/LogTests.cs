@@ -549,15 +549,190 @@ public sealed class LogTests : IDisposable
         }
     }
 
+    [Fact]
+    public void Log_RotateSystemLog_Exception_Coverage()
+    {
+        var rotateMethod = typeof(Log).GetMethod("RotateSystemLog", BindingFlags.NonPublic | BindingFlags.Static);
+        rotateMethod.Should().NotBeNull();
+
+        // 2. Lock file exclusively with length >= MaxSystemLogBytes so File.Move throws IOException
+        long origMax = Log.MaxSystemLogBytes;
+        try
+        {
+            Log.MaxSystemLogBytes = 1;
+            string conflictDir = Path.Combine(_tempDir, "rotate_conflict");
+            Directory.CreateDirectory(conflictDir);
+            string fakeLog = Path.Combine(conflictDir, "app.log");
+            File.WriteAllText(fakeLog, "content exceeding length");
+            using (var lockStream = File.Open(fakeLog, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            {
+                Log.LastRotationError = null;
+                rotateMethod.Invoke(null, [fakeLog]);
+                Log.LastRotationError.Should().NotBeNull();
+            }
+        }
+        finally
+        {
+            Log.MaxSystemLogBytes = origMax;
+        }
+    }
+
+    [Fact]
+    public void Log_CloseWriters_Exception_Coverage()
+    {
+        var origSys = typeof(Log).GetField("_sysWriter", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null);
+        var origMetric = typeof(Log).GetField("_metricWriter", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null);
+
+        var throwStreamSys = new ThrowOnWriteOnlyStream { ShouldThrow = false, ThrowOnFlush = true };
+        var throwStreamMetric = new ThrowOnWriteOnlyStream { ShouldThrow = false, ThrowOnFlush = true };
+
+        try
+        {
+            typeof(Log).GetField("_sysWriter", BindingFlags.NonPublic | BindingFlags.Static)!
+                .SetValue(null, new StreamWriter(throwStreamSys));
+            typeof(Log).GetField("_metricWriter", BindingFlags.NonPublic | BindingFlags.Static)!
+                .SetValue(null, new StreamWriter(throwStreamMetric));
+
+            Log.LastWriteError = null;
+            Log.LastMetricError = null;
+
+            var closeMethod = typeof(Log).GetMethod("CloseWriters", BindingFlags.NonPublic | BindingFlags.Static);
+            closeMethod!.Invoke(null, null);
+
+            Log.LastWriteError.Should().NotBeNull();
+            Log.LastMetricError.Should().NotBeNull();
+        }
+        finally
+        {
+            typeof(Log).GetField("_sysWriter", BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, origSys);
+            typeof(Log).GetField("_metricWriter", BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, origMetric);
+        }
+    }
+
+    [Fact]
+    public void Log_Write_Exception_Coverage()
+    {
+        var origSys = typeof(Log).GetField("_sysWriter", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null);
+        var throwStream = new ThrowOnWriteOnlyStream { ShouldThrow = true };
+        var throwWriter = new StreamWriter(throwStream) { AutoFlush = true };
+
+        try
+        {
+            typeof(Log).GetField("_sysWriter", BindingFlags.NonPublic | BindingFlags.Static)!
+                .SetValue(null, throwWriter);
+
+            Log.LastWriteError = null;
+            Log.Error("Write failure test message");
+            Log.LastWriteError.Should().NotBeNull();
+        }
+        finally
+        {
+            typeof(Log).GetField("_sysWriter", BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, origSys);
+            throwStream.ShouldThrow = false;
+            throwWriter.Dispose();
+            throwStream.Dispose();
+        }
+    }
+
+    [Fact]
+    public void Log_CheckMidnightRollover_Exceptions_Coverage()
+    {
+        var origSys = typeof(Log).GetField("_sysWriter", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null);
+        var origMetric = typeof(Log).GetField("_metricWriter", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null);
+        var currentDateField = typeof(Log).GetField("_currentDate", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var origDate = currentDateField.GetValue(null);
+
+        var throwStreamSys = new ThrowOnWriteOnlyStream { ShouldThrow = true };
+        var throwStreamMetric = new ThrowOnWriteOnlyStream { ShouldThrow = false, ThrowOnFlush = true };
+
+        try
+        {
+            typeof(Log).GetField("_sysWriter", BindingFlags.NonPublic | BindingFlags.Static)!
+                .SetValue(null, new StreamWriter(throwStreamSys) { AutoFlush = true });
+            typeof(Log).GetField("_metricWriter", BindingFlags.NonPublic | BindingFlags.Static)!
+                .SetValue(null, new StreamWriter(throwStreamMetric));
+
+            currentDateField.SetValue(null, DateOnly.FromDateTime(DateTime.Today.AddDays(-2)));
+
+            Log.LastWriteError = null;
+            Log.LastMetricError = null;
+
+            var rolloverMethod = typeof(Log).GetMethod("CheckMidnightRollover", BindingFlags.NonPublic | BindingFlags.Static);
+            rolloverMethod!.Invoke(null, null);
+
+            Log.LastWriteError.Should().NotBeNull();
+            Log.LastMetricError.Should().NotBeNull();
+        }
+        finally
+        {
+            typeof(Log).GetField("_sysWriter", BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, origSys);
+            typeof(Log).GetField("_metricWriter", BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, origMetric);
+            currentDateField.SetValue(null, origDate);
+        }
+    }
+
+    [Fact]
+    public void Log_CheckLiveSystemLogRoll_Exceptions_Coverage()
+    {
+        var origSys = typeof(Log).GetField("_sysWriter", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null);
+        var origPath = typeof(Log).GetField("_systemLogPath", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null);
+        var origMax = Log.MaxSystemLogBytes;
+
+        var checkMethod = typeof(Log).GetMethod("CheckLiveSystemLogRoll", BindingFlags.NonPublic | BindingFlags.Static);
+
+        try
+        {
+            // Case 1: BaseStream.Length throws
+            var throwStream = new ThrowOnWriteOnlyStream { ShouldThrow = false, ThrowOnLength = true };
+            typeof(Log).GetField("_sysWriter", BindingFlags.NonPublic | BindingFlags.Static)!
+                .SetValue(null, new StreamWriter(throwStream));
+            typeof(Log).GetField("_systemLogPath", BindingFlags.NonPublic | BindingFlags.Static)!
+                .SetValue(null, Path.Combine(_tempDir, "test.log"));
+
+            Log.LastRotationError = null;
+            checkMethod!.Invoke(null, null);
+            Log.LastRotationError.Should().NotBeNull();
+
+            // Case 2: Length exceeds limit, but re-opening StreamWriter fails
+            Log.MaxSystemLogBytes = 1;
+            string testFile = Path.Combine(_tempDir, "test_roll.log");
+            File.WriteAllText(testFile, "initial content exceeding limit");
+            using (var fileStream = new FileStream(testFile, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite))
+            {
+                var writer = new StreamWriter(fileStream);
+                typeof(Log).GetField("_sysWriter", BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, writer);
+                typeof(Log).GetField("_systemLogPath", BindingFlags.NonPublic | BindingFlags.Static)!
+                    .SetValue(null, @"Z:\NonExistentDriveDirectory\sub\sys.log");
+
+                Log.LastInitError = null;
+                checkMethod.Invoke(null, null);
+                Log.LastInitError.Should().NotBeNull();
+            }
+        }
+        finally
+        {
+            typeof(Log).GetField("_sysWriter", BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, origSys);
+            typeof(Log).GetField("_systemLogPath", BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, origPath);
+            Log.MaxSystemLogBytes = origMax;
+        }
+    }
+
     private sealed class ThrowOnWriteOnlyStream : Stream
     {
         public bool ShouldThrow { get; set; } = true;
+        public bool ThrowOnLength { get; set; }
+        public bool ThrowOnFlush { get; set; }
+        public bool ThrowOnDispose { get; set; }
+
         public override bool CanRead => false;
         public override bool CanSeek => false;
         public override bool CanWrite => true;
-        public override long Length => 0;
+        public override long Length => ThrowOnLength ? throw new IOException("Length error") : 0;
         public override long Position { get => 0; set => throw new NotSupportedException(); }
-        public override void Flush() { }
+        public override void Flush()
+        {
+            if (ThrowOnFlush) throw new IOException("Flush error");
+        }
         public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
         public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
         public override void SetLength(long value) => throw new NotSupportedException();
@@ -568,6 +743,11 @@ public sealed class LogTests : IDisposable
         public override void Write(ReadOnlySpan<byte> buffer)
         {
             if (ShouldThrow) throw new IOException("Simulated disk error");
+        }
+        protected override void Dispose(bool disposing)
+        {
+            if (ThrowOnDispose) throw new IOException("Dispose error");
+            base.Dispose(disposing);
         }
     }
 }

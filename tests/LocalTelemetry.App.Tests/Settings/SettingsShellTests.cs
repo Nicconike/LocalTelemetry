@@ -1757,6 +1757,51 @@ public class SettingsShellTests
             var malformed = JsonDocument.Parse("{}").RootElement;
             await (Task)method.Invoke(shell, [malformed])!;
 
+            // 4. TrafficHistoryStore uninitialized error path
+            typeof(TrafficHistoryStore).GetField("_instance", BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, null);
+            await (Task)method.Invoke(shell, [validRange])!;
+            TrafficHistoryStore.Initialize(history);
+
+            shell.Close();
+        }
+        finally
+        {
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+        }
+    }
+
+    [WpfFact]
+    public void SettingsShell_FrontendLog_And_OpenFolder_Coverage()
+    {
+        var cfg = new AppSettings();
+        string tempPath = Path.Combine(Path.GetTempPath(), "net_history_" + Guid.NewGuid().ToString("N") + ".dat");
+        try
+        {
+            var history = new TrafficHistoryFile(tempPath);
+            TrafficHistoryStore.Initialize(history);
+            using var netLogger = new NetUsageLogger(cfg, history);
+            var shell = new SettingsShell(cfg, netLogger);
+
+            // 1. Log message - Warn level with detail
+            shell.HandleWebMessageJson("{\"type\":\"log\",\"payload\":{\"level\":\"warn\",\"message\":\"Warn test\",\"detail\":\"Detail test\"}}");
+
+            // 2. Log message - Error level without detail
+            shell.HandleWebMessageJson("{\"type\":\"log\",\"payload\":{\"level\":\"error\",\"message\":\"Error test\"}}");
+
+            // 3. Log message - Missing payload property
+            shell.HandleWebMessageJson("{\"type\":\"log\"}");
+
+            // 4. OpenFolder - valid folders
+            shell.HandleWebMessageJson("{\"type\":\"openFolder\",\"payload\":{\"folder\":\"logs\"}}");
+            shell.HandleWebMessageJson("{\"type\":\"openFolder\",\"payload\":{\"folder\":\"data\"}}");
+            shell.HandleWebMessageJson("{\"type\":\"openFolder\",\"payload\":{\"folder\":\"app\"}}");
+            shell.HandleWebMessageJson("{\"type\":\"openFolder\",\"payload\":{\"folder\":\"unknown\"}}");
+            shell.HandleWebMessageJson("{\"type\":\"openFolder\",\"payload\":{}}");
+
+            // 5. CheckForUpdates message
+            shell.HandleWebMessageJson("{\"type\":\"checkForUpdates\",\"payload\":{\"force\":true}}");
+            shell.HandleWebMessageJson("{\"type\":\"checkForUpdates\",\"payload\":{}}");
+
             shell.Close();
         }
         finally

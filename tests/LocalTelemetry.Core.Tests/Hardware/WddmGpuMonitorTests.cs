@@ -94,10 +94,29 @@ public class WddmGpuMonitorTests
         using var monitor = new WddmGpuMonitor();
         if (monitor.IsAvailable)
         {
+            // Reset when available executes Init and debug log
+            monitor.Reset();
+            monitor.IsAvailable.Should().BeTrue();
+
+            var primedField = typeof(WddmGpuMonitor).GetField("_primed", BindingFlags.NonPublic | BindingFlags.Instance);
+            primedField!.SetValue(monitor, true);
+
+            // FetchCounterArray failure path (counter handle = Zero)
+            var counterField = typeof(WddmGpuMonitor).GetField("_counter", BindingFlags.NonPublic | BindingFlags.Instance);
+            var origCounter = counterField!.GetValue(monitor);
+            counterField.SetValue(monitor, IntPtr.Zero);
+            monitor.GetUsagePct().Should().Be(0f);
+            counterField.SetValue(monitor, origCounter);
+
+            // Exception in CalculateMaxEngineUsage (_engineSums is null)
             var field = typeof(WddmGpuMonitor).GetField("_engineSums", BindingFlags.NonPublic | BindingFlags.Instance);
             field!.SetValue(monitor, null);
             monitor.GetUsagePct().Should().Be(0f);
         }
+
+        // Calling Reset after Dispose triggers early return
+        monitor.Dispose();
+        monitor.Reset();
     }
 
     [Fact]

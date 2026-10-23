@@ -2052,6 +2052,75 @@ public class HardwareMonitorTests
         ((string)extractDisk.Invoke(null, ["12 D:"])!).Should().Be("12");
         ((string)extractDisk.Invoke(null, ["_Total"])!).Should().BeEmpty();
     }
+
+    [Fact]
+    public void HardwareMonitor_PowerAndLifecycle_Events_Coverage()
+    {
+        var cfg = new AppSettings();
+        cfg.Monitoring.EnableNet = false;
+        var sysInfoMock = Substitute.For<ISystemInfo>();
+        var pawnIoMock = Substitute.For<IPawnIoManager>();
+
+        using var monitor = new HardwareMonitor(cfg, sysInfoMock, pawnIoMock);
+
+        // 1. ResetGpuMonitors
+        var resetGpuMonitors = typeof(HardwareMonitor).GetMethod("ResetGpuMonitors", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var actReset = () => resetGpuMonitors.Invoke(monitor, ["test_reason"]);
+        actReset.Should().NotThrow();
+
+        // 2. OnPowerSuspended
+        var onPowerSuspended = typeof(HardwareMonitor).GetMethod("OnPowerSuspended", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var actSuspend = () => onPowerSuspended.Invoke(monitor, null);
+        actSuspend.Should().NotThrow();
+
+        // 3. ExecutePowerResumeWarmUp
+        var actWarmup = () => monitor.ExecutePowerResumeWarmUp();
+        actWarmup.Should().NotThrow();
+
+        // 4. OnNetworkTopologyChanged
+        var onNetworkChanged = typeof(HardwareMonitor).GetMethod("OnNetworkTopologyChanged", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var actNetChange = () => onNetworkChanged.Invoke(monitor, null);
+        actNetChange.Should().NotThrow();
+
+        // 5. OnDevicePnPChanged
+        var onPnpChanged = typeof(HardwareMonitor).GetMethod("OnDevicePnPChanged", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var actPnp = () => onPnpChanged.Invoke(monitor, null);
+        actPnp.Should().NotThrow();
+    }
+
+    [Fact]
+    public void HardwareMonitor_IsVirtualAdapter_ComprehensiveBranches()
+    {
+        void AssertVirtual(string name, string desc, bool expected)
+        {
+            var nic = Substitute.For<NetworkInterface>();
+            nic.Name.Returns(name);
+            nic.Description.Returns(desc);
+            HardwareMonitor.IsVirtualAdapter(nic).Should().Be(expected);
+        }
+
+        // Test all descriptions
+        AssertVirtual("Eth0", "Hyper-V Virtual Adapter", true);
+        AssertVirtual("Eth0", "Microsoft vEthernet Adapter", true);
+        AssertVirtual("Eth0", "VMware Virtual Network Adapter", true);
+        AssertVirtual("Eth0", "VirtualBox Host-Only Ethernet Adapter", true);
+        AssertVirtual("Eth0", "WSL Network Device", true);
+        AssertVirtual("Eth0", "TAP-Windows Adapter V9", true);
+        AssertVirtual("Eth0", "Tunnel Interface", true);
+        AssertVirtual("Eth0", "Software Loopback Interface", true);
+        AssertVirtual("Eth0", "WAN Miniport (IP)", true);
+        AssertVirtual("Eth0", "WFP Native MAC Layer LightWeight Filter", true);
+        AssertVirtual("Eth0", "filter-driver adapter", true);
+        AssertVirtual("Eth0", "generic virtual card", true);
+
+        // Test all names
+        AssertVirtual("vEthernet (Default Switch)", "Generic NIC", true);
+        AssertVirtual("WSL", "Generic NIC", true);
+        AssertVirtual("Local Area Connection* 1", "Generic NIC", true);
+
+        // Test physical adapter
+        AssertVirtual("Ethernet", "Intel(R) Ethernet Controller I225-V", false);
+    }
 }
 
 

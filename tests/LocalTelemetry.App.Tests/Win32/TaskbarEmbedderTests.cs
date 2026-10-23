@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Reflection;
 using FluentAssertions;
 using LocalTelemetry.App.Win32;
@@ -921,6 +922,37 @@ public class TaskbarEmbedderTests
             resSetPosFail.Should().BeFalse();
             embedder.State.Should().Be(OverlayDeploymentState.Failed);
         }
+    }
+
+    [Fact]
+    public void TaskbarEmbedder_ResolveFromTrayWindow_And_ScreenWorkingArea_Coverage()
+    {
+        var resolveTray = typeof(TaskbarEmbedder).GetMethod("ResolveFromTrayWindow", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var resolveScreen = typeof(TaskbarEmbedder).GetMethod("ResolveFromScreenWorkingArea", BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        var trayRes = resolveTray.Invoke(null, null);
+        if (trayRes is not null)
+        {
+            var (rect, edge) = (((Rectangle, uint))trayRes);
+            rect.Width.Should().BeGreaterThan(0);
+        }
+
+        var screenRes = resolveScreen.Invoke(null, null);
+        screenRes.Should().NotBeNull();
+        var (sRect, sEdge) = (((Rectangle, uint))screenRes!);
+        sRect.Width.Should().BeGreaterThan(0);
+        sRect.Height.Should().BeGreaterThan(0);
+
+        // Cached widgets button query
+        typeof(TaskbarEmbedder).GetField("_cachedWidgetRightEdge", BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, 150);
+        typeof(TaskbarEmbedder).GetField("_lastWidgetQueryTicks", BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, Stopwatch.GetTimestamp());
+
+        var queryWidgets = typeof(TaskbarEmbedder).GetMethod("QueryWidgetsButtonRightEdge", BindingFlags.NonPublic | BindingFlags.Static)!;
+        int cachedRight = (int)queryWidgets.Invoke(null, [IntPtr.Zero])!;
+        cachedRight.Should().Be(150);
+
+        // Reset static fields
+        typeof(TaskbarEmbedder).GetField("_cachedWidgetRightEdge", BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, -1);
     }
 }
 

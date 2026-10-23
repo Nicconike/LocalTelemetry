@@ -567,4 +567,62 @@ public class WindowsNetworkUsageProviderTests
         var cancelAct = async () => await WindowsNetworkUsageProvider.GetUsageAsync(DateTime.Today.AddDays(-10), DateTime.Today, cts.Token);
         await cancelAct.Should().ThrowAsync<OperationCanceledException>();
     }
+
+    [Fact]
+    public void WindowsNetworkUsageProvider_TryParseInstallTime_And_InstallDate_EdgeCases()
+    {
+        var parseInstallTime = typeof(WindowsNetworkUsageProvider).GetMethod("TryParseInstallTime", BindingFlags.NonPublic | BindingFlags.Static);
+        var parseInstallDate = typeof(WindowsNetworkUsageProvider).GetMethod("TryParseInstallDate", BindingFlags.NonPublic | BindingFlags.Static);
+
+        // TryParseInstallTime
+        ((DateTime?)parseInstallTime!.Invoke(null, [-1L])).Should().BeNull();
+        ((DateTime?)parseInstallTime.Invoke(null, [0L])).Should().BeNull();
+        ((DateTime?)parseInstallTime.Invoke(null, ["invalid"])).Should().BeNull();
+        // FileTime for 1995 (year < 2000)
+        long fileTime1995 = new DateTime(1995, 1, 1).ToFileTimeUtc();
+        ((DateTime?)parseInstallTime.Invoke(null, [fileTime1995])).Should().BeNull();
+        // Valid FileTime for 2021
+        long fileTime2021 = new DateTime(2021, 5, 1).ToFileTimeUtc();
+        ((DateTime?)parseInstallTime.Invoke(null, [fileTime2021])).Should().Be(new DateTime(2021, 5, 1));
+
+        // TryParseInstallDate
+        ((DateTime?)parseInstallDate!.Invoke(null, [-5])).Should().BeNull();
+        ((DateTime?)parseInstallDate.Invoke(null, [0])).Should().BeNull();
+        ((DateTime?)parseInstallDate.Invoke(null, [-5L])).Should().BeNull();
+        ((DateTime?)parseInstallDate.Invoke(null, [0L])).Should().BeNull();
+        ((DateTime?)parseInstallDate.Invoke(null, ["not-a-number"])).Should().BeNull();
+        // Unix timestamp for 1990
+        ((DateTime?)parseInstallDate.Invoke(null, [631152000])).Should().BeNull();
+        // Unix timestamp for 2022-01-01
+        long unix2022 = new DateTimeOffset(2022, 1, 1, 0, 0, 0, TimeSpan.Zero).ToUnixTimeSeconds();
+        ((DateTime?)parseInstallDate.Invoke(null, [unix2022])).Should().Be(new DateTime(2022, 1, 1));
+        ((DateTime?)parseInstallDate.Invoke(null, [(int)unix2022])).Should().Be(new DateTime(2022, 1, 1));
+    }
+
+    [Fact]
+    public void WindowsNetworkUsageProvider_ClampImportRange_EdgeCases()
+    {
+        var clampMethod = typeof(WindowsNetworkUsageProvider).GetMethod("ClampImportRange", BindingFlags.NonPublic | BindingFlags.Static);
+        clampMethod.Should().NotBeNull();
+
+        // 1. Future end date gets clamped to DateTime.Today
+        var futureEnd = DateTime.Today.AddDays(5);
+        var resFuture = clampMethod!.Invoke(null, [DateTime.Today.AddDays(-10), futureEnd]);
+        var (start1, end1) = ((DateTime, DateTime))resFuture!;
+        end1.Should().Be(DateTime.Today);
+
+        // 2. Start date earlier than 60 days ago gets clamped
+        var oldStart = DateTime.Today.AddDays(-100);
+        var resOld = clampMethod.Invoke(null, [oldStart, DateTime.Today.AddDays(-5)]);
+        var (start2, end2) = ((DateTime, DateTime))resOld!;
+        start2.Should().Be(DateTime.Today.AddDays(-60));
+
+        // 3. Normal range inside bounds stays unchanged
+        var normalStart = DateTime.Today.AddDays(-15);
+        var normalEnd = DateTime.Today.AddDays(-2);
+        var resNormal = clampMethod.Invoke(null, [normalStart, normalEnd]);
+        var (start3, end3) = ((DateTime, DateTime))resNormal!;
+        start3.Should().Be(normalStart);
+        end3.Should().Be(normalEnd);
+    }
 }
