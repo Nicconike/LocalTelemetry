@@ -1,7 +1,7 @@
 import { mount, unmount, tick } from 'svelte';
 import { get } from 'svelte/store';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { settings, pristineSettings, activePage } from '../../../../../../src/LocalTelemetry.App/Settings/wwwroot/src/lib/store';
+import { settings, pristineSettings, activePage, allTrafficHistory, saveStatus } from '../../../../../../src/LocalTelemetry.App/Settings/wwwroot/src/lib/store';
 import type { SettingsDto } from '../../../../../../src/LocalTelemetry.App/Settings/wwwroot/src/lib/types';
 import App from '../../../../../../src/LocalTelemetry.App/Settings/wwwroot/src/components/App.svelte';
 
@@ -360,6 +360,160 @@ describe('App.svelte', () => {
             await tick();
             expect(get(activePage)).toBe(p.toLowerCase());
         }
+    });
+
+    it('handles modal Escape key, discard button, and invalid pristine settings', async () => {
+        const payload = makePayload();
+        settings.set(structuredClone(payload));
+        pristineSettings.set(JSON.stringify(payload));
+
+        component = mount(App, { target: document.body });
+        await tick();
+
+        // Make dirty
+        settings.update(s => {
+            if (s) s.monitoring.intervalMs = 4000;
+            return s;
+        });
+        await tick();
+
+        // Navigate while dirty to show modal
+        navButton('Monitoring').click();
+        await tick();
+
+        const modal = document.querySelector('.nav-modal') as HTMLElement;
+        expect(modal).not.toBeNull();
+
+        // Press Escape inside modal dialog
+        modal.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        await tick();
+        expect(document.querySelector('.nav-modal')).toBeNull();
+
+        // Navigate while dirty again
+        navButton('Monitoring').click();
+        await tick();
+        const overlay = document.querySelector('.nav-modal-overlay') as HTMLElement;
+        expect(overlay).not.toBeNull();
+
+        // Press Escape on overlay
+        overlay.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        await tick();
+        expect(document.querySelector('.nav-modal-overlay')).toBeNull();
+
+        // Navigate while dirty and test modal keydown non-Escape and click
+        navButton('Monitoring').click();
+        await tick();
+        const navOverlay = document.querySelector('.nav-modal-overlay') as HTMLElement;
+        const navModal = document.querySelector('.nav-modal') as HTMLElement;
+        expect(navModal).not.toBeNull();
+
+        navOverlay.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+        navModal.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+        navModal.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await tick();
+
+        // Click Save button in modal (covers onSaveAndMove)
+        const modalSaveBtn = document.querySelector('.nav-modal .btn-save') as HTMLButtonElement;
+        expect(modalSaveBtn).not.toBeNull();
+        modalSaveBtn.click();
+        await tick();
+        expect(document.querySelector('.nav-modal')).toBeNull();
+
+        // Navigate while dirty again and test discard & move
+        settings.update(s => {
+            if (s) s.monitoring.intervalMs = 7777;
+            return s;
+        });
+        await tick();
+        navButton('Overlay').click();
+        await tick();
+        const discardBtn = document.querySelector('.nav-modal .btn-discard') as HTMLButtonElement;
+        discardBtn.click();
+        await tick();
+        expect(get(activePage)).toBe('overlay');
+
+        // Test bottom bar discard with invalid JSON
+        pristineSettings.set('invalid json');
+        settings.update(s => {
+            if (s) s.monitoring.intervalMs = 9999;
+            return s;
+        });
+        await tick();
+        const barDiscardBtn = document.querySelector('.btn-discard') as HTMLButtonElement;
+        if (barDiscardBtn) {
+            barDiscardBtn.click();
+            await tick();
+        }
+    });
+
+    it('receives IPC events with null payloads gracefully', async () => {
+        const wv = new EventTarget() as any;
+        wv.postMessage = vi.fn();
+        (globalThis as any).window.chrome = { webview: wv };
+
+        const payload = makePayload();
+        settings.set(structuredClone(payload));
+        pristineSettings.set(JSON.stringify(payload));
+
+        component = mount(App, { target: document.body });
+        await tick();
+
+        // Dispatch IPC messages with null or missing payload fields
+        wv.dispatchEvent(new MessageEvent('message', { data: { type: 'nics', payload: null } }));
+        wv.dispatchEvent(new MessageEvent('message', { data: { type: 'systemInfo', payload: null } }));
+        wv.dispatchEvent(new MessageEvent('message', { data: { type: 'trafficMonths', payload: null } }));
+        wv.dispatchEvent(new MessageEvent('message', { data: { type: 'trafficHistoryAll', payload: {} } }));
+        wv.dispatchEvent(new MessageEvent('message', { data: { type: 'trafficToday', payload: {} } }));
+        wv.dispatchEvent(new MessageEvent('message', { data: { type: 'importDatResult', payload: null } }));
+        wv.dispatchEvent(new MessageEvent('message', { data: { type: 'windowsUsageImportResult', payload: null } }));
+        await tick();
+
+        // Dispatch trafficToday when multiple records exist for today
+        const today = new Date();
+        const todayStr = `${String(today.getDate()).padStart(2, '0')}-${String(today.getMonth() + 1).padStart(2, '0')}-${today.getFullYear()}`;
+        allTrafficHistory.set([
+            { date: todayStr, downBytes: 10, upBytes: 10, interfaceName: 'Ethernet', source: 'A' },
+            { date: todayStr, downBytes: 20, upBytes: 20, interfaceName: 'WiFi', source: 'B' }
+        ]);
+        wv.dispatchEvent(new MessageEvent('message', { data: { type: 'trafficToday', payload: { downBytes: 30, upBytes: 30 } } }));
+        await tick();
+
+        // Dispatch navigate event with current page or empty page (should be ignored)
+        window.dispatchEvent(new CustomEvent('navigate', { detail: 'monitoring' }));
+        window.dispatchEvent(new CustomEvent('navigate', { detail: '' }));
+        await tick();
+
+        // Test Saving button state and repeated click while saving
+        settings.update(s => {
+            if (s) s.monitoring.intervalMs = 999;
+            return s;
+        });
+        await tick();
+        const saveBtn = document.querySelector('.btn-save') as HTMLButtonElement;
+        saveBtn.click();
+        await tick();
+        expect(document.body.textContent).toContain('Saving changes…');
+
+        // Repeated click while saving (covers if (saving) return)
+        saveBtn.click();
+        await tick();
+
+        // Discard when pristineSettings is empty
+        pristineSettings.set('');
+        const discardBtn = document.querySelector('.btn-discard') as HTMLButtonElement;
+        discardBtn?.click();
+        await tick();
+
+        // Switch activePage to unknown_page to cover the final empty else branch of the page routing
+        activePage.set('unknown_page');
+        saveStatus.set('idle');
+        await tick();
+        expect(document.querySelector('.content')?.children.length).toBe(0);
+
+        // Set saveStatus to saved when clean to cover auto-save class
+        saveStatus.set('saved');
+        await tick();
+        expect(document.querySelector('.save-bar.auto-save')).not.toBeNull();
     });
 });
 

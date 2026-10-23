@@ -66,6 +66,11 @@ describe('bridge.ts', () => {
             type: 'saveSettings',
             payload
         });
+
+        saveSettings(null);
+        expect(mockPostMessage).toHaveBeenCalledWith({
+            type: 'saveSettings'
+        });
     });
 
     it('onMessage subscribes, handles events, handles errors and unsubscribes', () => {
@@ -199,6 +204,48 @@ describe('bridge.ts', () => {
                 level: 'warn',
                 message: 'Warning occurred',
                 detail: 'simple string'
+            }
+        });
+
+        const errorNoStack = new Error('no stack error');
+        Object.defineProperty(errorNoStack, 'stack', { value: undefined });
+        logError('Error without stack', errorNoStack);
+        expect(mockPostMessage).toHaveBeenCalledWith({
+            type: 'log',
+            payload: {
+                level: 'error',
+                message: 'Error without stack',
+                detail: 'Error: no stack error\n'
+            }
+        });
+
+        logError('Error with null detail', null);
+        expect(mockPostMessage).toHaveBeenCalledWith({
+            type: 'log',
+            payload: {
+                level: 'error',
+                message: 'Error with null detail',
+                detail: undefined
+            }
+        });
+
+        logWarn('Warning with number', 42);
+        expect(mockPostMessage).toHaveBeenCalledWith({
+            type: 'log',
+            payload: {
+                level: 'warn',
+                message: 'Warning with number',
+                detail: '42'
+            }
+        });
+
+        logWarn('Warning with object', { status: 500 });
+        expect(mockPostMessage).toHaveBeenCalledWith({
+            type: 'log',
+            payload: {
+                level: 'warn',
+                message: 'Warning with object',
+                detail: '{"status":500}'
             }
         });
 

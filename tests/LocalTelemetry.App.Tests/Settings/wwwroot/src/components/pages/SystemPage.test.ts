@@ -124,6 +124,20 @@ describe('SystemPage.svelte', () => {
                     boot: false,
                     sizeGb: 250,
                     busType: ''
+                },
+                {
+                    model: 'Bare Drive',
+                    boot: false
+                },
+                {
+                    model: 'Bus Only Drive',
+                    boot: false,
+                    busType: 'SATA'
+                },
+                {
+                    model: 'Display Type Only Drive',
+                    boot: false,
+                    displayType: 'External SSD'
                 }
             ],
             nics: ['Intel I226-V 2.5GbE', 'Intel Wi-Fi 7 BE200']
@@ -178,5 +192,133 @@ describe('SystemPage.svelte', () => {
         expect(document.body.textContent).toContain('SMP');
         expect(document.body.textContent).toContain('UX8406-BAT');
         expect(document.body.textContent).toContain('75000 mWh');
+    });
+
+    it('renders storage bus types and handles missing memory, cpu, and gpu optional fields', async () => {
+        systemInfo.set({
+            os: 'Windows 11 Home',
+            deviceName: 'MIN-PC',
+            cpu: 'Intel Processor N100',
+            installedRamGb: 16,
+            ramGb: 0,
+            gpus: [
+                {
+                    name: 'Intel UHD Graphics',
+                    dedicated: false,
+                }
+            ],
+            disks: [
+                { model: 'Disk SATA', sizeGb: 500, busType: 'SATA' },
+                { model: 'Disk SAS', sizeGb: 600, busType: 'SAS' },
+                { model: 'Disk ATAPI', sizeGb: 20, busType: 'ATAPI' },
+                { model: 'Disk RAID', sizeGb: 2000, busType: 'RAID' },
+                { model: 'Disk iSCSI', sizeGb: 4000, busType: 'iSCSI' },
+                { model: 'Disk Virtual', sizeGb: 100, busType: 'FileBackedVirtual' },
+                { model: 'Disk SD', sizeGb: 64, busType: 'SD' },
+                { model: 'Disk MMC', sizeGb: 32, busType: 'MMC' },
+                { model: 'Disk Max', sizeGb: 50, busType: 'BusTypeMax' },
+                { model: 'Disk Plain', sizeGb: 10 }
+            ],
+            nics: []
+        } as any);
+
+        component = mount(SystemPage, { target: document.body });
+        await tick();
+
+        expect(document.body.textContent).toContain('16.0 GB');
+        expect(document.body.textContent).toContain('[SATA]');
+        expect(document.body.textContent).toContain('[SAS]');
+        expect(document.body.textContent).toContain('[ATAPI]');
+        expect(document.body.textContent).toContain('[RAID]');
+        expect(document.body.textContent).toContain('[ISCSI]');
+        expect(document.body.textContent).toContain('[FILEBACKEDVIRTUAL]');
+        expect(document.body.textContent).toContain('[SD]');
+        expect(document.body.textContent).toContain('[MMC]');
+    });
+
+    it('renders laptop without battery optional fields, and covers memory and disk edge branches', async () => {
+        systemInfo.set({
+            os: 'Windows 11 Pro',
+            systemType: 'Laptop',
+            cpu: 'Core Ultra 7',
+            installedRamGb: 0,
+            ramGb: 16,
+            ramModules: [{ sizeGb: 16, speed: '' }],
+            disks: [
+                {
+                    model: 'Only Formatted Disk',
+                    formattedSize: '512 GB',
+                    displayType: 'SSD',
+                },
+                {
+                    model: 'Only SizeGb and BusType Disk',
+                    sizeGb: 256,
+                    busType: 'NVMe',
+                },
+                {
+                    model: 'Completely Bare Disk',
+                },
+                {
+                    model: undefined,
+                }
+            ],
+            gpus: [
+                {
+                    name: 'Bare GPU',
+                    dedicated: false,
+                    vramGb: 0,
+                    driver: '',
+                    tdpW: 0,
+                }
+            ],
+            nics: []
+        } as any);
+
+        component = mount(SystemPage, { target: document.body });
+        await tick();
+
+        expect(document.body.textContent).toContain('Laptop');
+        expect(document.body.textContent).toContain('16 GB');
+        expect(document.body.textContent).toContain('(512 GB)');
+        expect(document.body.textContent).toContain('[SSD]');
+        expect(document.body.textContent).toContain('(256 GB)');
+        expect(document.body.textContent).toContain('[NVME]');
+        expect(document.body.textContent).toContain('Completely Bare Disk');
+    });
+
+    it('covers motherboard mfr and model variations and systemType fallback', async () => {
+        // Case 1: motherboardMfr only (no model), empty systemType (defaults to Desktop)
+        systemInfo.set({
+            os: 'Windows 11',
+            systemType: '',
+            motherboardMfr: 'MSI',
+            motherboardModel: '',
+            cpu: 'AMD Ryzen 5',
+            disks: [],
+            gpus: [],
+            nics: []
+        } as any);
+
+        component = mount(SystemPage, { target: document.body });
+        await tick();
+
+        expect(document.body.textContent).toContain('Desktop');
+        expect(document.body.textContent).toContain('MSI');
+
+        // Case 2: motherboardModel only (no mfr)
+        systemInfo.set({
+            os: 'Windows 11',
+            systemType: 'Workstation',
+            motherboardMfr: '',
+            motherboardModel: 'B650M-PLUS',
+            cpu: 'AMD Ryzen 7',
+            disks: [],
+            gpus: [],
+            nics: []
+        } as any);
+        await tick();
+
+        expect(document.body.textContent).toContain('Workstation');
+        expect(document.body.textContent).toContain('B650M-PLUS');
     });
 });

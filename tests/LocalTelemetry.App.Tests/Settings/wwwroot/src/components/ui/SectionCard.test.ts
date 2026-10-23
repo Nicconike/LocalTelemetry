@@ -29,4 +29,15 @@ describe('SectionCard.svelte', () => {
         expect(document.body.textContent).toContain('Startup Settings');
         expect(document.body.textContent).toContain('Configure Windows startup behavior');
     });
+
+    it('renders card without title', async () => {
+        component = mount(SectionCard, {
+            target: document.body,
+            props: {},
+        });
+        await tick();
+
+        expect(document.querySelector('.card')).not.toBeNull();
+        expect(document.querySelector('.card-head')).toBeNull();
+    });
 });

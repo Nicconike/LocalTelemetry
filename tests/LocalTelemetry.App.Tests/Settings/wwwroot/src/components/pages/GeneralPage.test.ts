@@ -55,4 +55,12 @@ describe('GeneralPage.svelte', () => {
         expect(trayInput.disabled).toBe(true);
         expect(document.body.textContent).toContain('Cannot disable: Overlay is hidden');
     });
+
+    it('renders empty when settings is null', async () => {
+        settings.set(null as any);
+        component = mount(GeneralPage, { target: document.body });
+        await tick();
+
+        expect(document.querySelector('.page')).toBeNull();
+    });
 });

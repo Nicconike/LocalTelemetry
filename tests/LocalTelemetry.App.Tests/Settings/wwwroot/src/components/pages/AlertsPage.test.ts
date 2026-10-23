@@ -111,4 +111,25 @@ describe('AlertsPage.svelte', () => {
         expect(document.body.textContent).toContain('Battery');
         expect(document.body.textContent).toContain('Battery Low');
     });
+
+    it('returns early when turning master toggle off or when alerts is null', async () => {
+        const payload = makeAlertPayload();
+        payload.alerts.enabled = true;
+        settings.set(payload as any);
+
+        component = mount(AlertsPage, { target: document.body });
+        await tick();
+
+        const masterToggle = document.querySelector('input[type="checkbox"]') as HTMLInputElement;
+        masterToggle.click();
+        await tick();
+
+        let currentAlerts: any;
+        settings.subscribe((s) => (currentAlerts = s?.alerts))();
+        expect(currentAlerts.enabled).toBe(false);
+
+        settings.set(null as any);
+        await tick();
+        expect(document.querySelector('.page')).toBeNull();
+    });
 });

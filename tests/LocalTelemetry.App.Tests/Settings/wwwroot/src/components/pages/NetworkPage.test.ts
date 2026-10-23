@@ -34,4 +34,23 @@ describe('NetworkPage.svelte', () => {
 
         expect(document.body.textContent).toContain('Network');
     });
+
+    it('renders correctly when nics is null or undefined', async () => {
+        nics.set(null as any);
+        component = mount(NetworkPage, { target: document.body });
+        await tick();
+
+        expect(document.body.textContent).toContain('Network');
+        const select = document.querySelector('select') as HTMLSelectElement;
+        expect(select.options.length).toBe(1);
+        expect(select.options[0].text).toContain('Auto');
+    });
+
+    it('renders empty when settings is null', async () => {
+        settings.set(null as any);
+        component = mount(NetworkPage, { target: document.body });
+        await tick();
+
+        expect(document.querySelector('.page')).toBeNull();
+    });
 });

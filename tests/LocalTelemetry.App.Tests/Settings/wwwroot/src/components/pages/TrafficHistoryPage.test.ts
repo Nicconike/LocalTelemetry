@@ -124,8 +124,13 @@ describe('TrafficHistoryPage.svelte', () => {
         expect(document.body.textContent).toContain('WiFi');
         expect(document.body.textContent).toContain('Windows');
 
-        // Click day 1 again to deselect
-        dayCells[0].click();
+        // Click day 2 (.DAT Import)
+        dayCells[1].click();
+        await tick();
+        expect(document.body.textContent).toContain('.DAT Import');
+
+        // Click day 2 again to deselect
+        dayCells[1].click();
         await tick();
 
         expect(document.body.textContent).not.toContain('Breakdown');
@@ -286,5 +291,181 @@ describe('TrafficHistoryPage.svelte', () => {
         expect(readSpy).toHaveBeenCalled();
         expect(importDatSpy).toHaveBeenCalled();
         readSpy.mockRestore();
+    });
+
+    it('navigates calendar months past year boundaries and toggles selected day', async () => {
+        allTrafficHistory.set([]);
+        const reqHistorySpy = vi.spyOn(bridge, 'requestTrafficHistoryAll').mockImplementation(() => { });
+
+        component = mount(TrafficHistoryPage, { target: document.body });
+        await tick();
+
+        expect(reqHistorySpy).toHaveBeenCalled();
+
+        // Month navigation buttons
+        const navBtns = document.body.querySelectorAll<HTMLButtonElement>('.month-nav .nav-btn');
+        const prevBtn = navBtns[0];
+        const nextBtn = navBtns[1];
+        expect(prevBtn).toBeDefined();
+        expect(nextBtn).toBeDefined();
+
+        // Click prev 12 times to wrap around years
+        for (let i = 0; i < 13; i++) {
+            prevBtn.click();
+        }
+        await tick();
+
+        // Click next 13 times to wrap forward across years
+        for (let i = 0; i < 13; i++) {
+            nextBtn.click();
+        }
+        await tick();
+
+        // Click an active day in calendar
+        const dayCell = Array.from(document.body.querySelectorAll('.day-cell:not(.empty)')).find(
+            (c) => c.querySelector('.day-num')
+        ) as HTMLElement | undefined;
+        if (dayCell) {
+            dayCell.click();
+            await tick();
+            // Click again to deselect
+            dayCell.click();
+            await tick();
+        }
+    });
+
+    it('validates date formats including invalid format, out of range year, and future dates', async () => {
+        const importUsageSpy = vi.spyOn(bridge, 'importWindowsUsage').mockImplementation(() => { });
+
+        component = mount(TrafficHistoryPage, { target: document.body });
+        await tick();
+
+        const startDateInput = document.body.querySelector<HTMLInputElement>('#win-start-date')!;
+        const endDateInput = document.body.querySelector<HTMLInputElement>('#win-end-date')!;
+
+        // Empty date
+        startDateInput.value = '';
+        startDateInput.dispatchEvent(new Event('input', { bubbles: true }));
+        await tick();
+        expect(document.body.textContent).toContain('Date is required');
+
+        // Year out of range
+        startDateInput.value = '1995-05-10';
+        startDateInput.dispatchEvent(new Event('input', { bubbles: true }));
+        await tick();
+        expect(document.body.textContent).toContain('Invalid date');
+
+        // Future start date
+        startDateInput.value = '2099-01-01';
+        startDateInput.dispatchEvent(new Event('input', { bubbles: true }));
+        await tick();
+        expect(document.body.textContent).toContain('Start date cannot be in the future');
+
+        // Future end date
+        startDateInput.value = '2026-01-01';
+        startDateInput.dispatchEvent(new Event('input', { bubbles: true }));
+        endDateInput.value = '2099-01-01';
+        endDateInput.dispatchEvent(new Event('input', { bubbles: true }));
+        await tick();
+        expect(document.body.textContent).toContain('End date cannot be in the future');
+
+        // Attempting to import with error present disables button and does not call IPC
+        const importBtn = Array.from(document.body.querySelectorAll<HTMLButtonElement>('button')).find(
+            (b) => b.textContent?.includes('Import from Windows')
+        );
+        expect(importBtn).toBeDefined();
+        expect(importBtn?.disabled).toBe(true);
+        importBtn?.click();
+        await tick();
+        expect(importUsageSpy).not.toHaveBeenCalled();
+
+        // Invalid calendar date e.g. Feb 31 (switch type to text to avoid browser date sanitization)
+        startDateInput.type = 'text';
+        startDateInput.value = '2024-02-31';
+        startDateInput.dispatchEvent(new Event('input', { bubbles: true }));
+        await tick();
+        expect(document.body.textContent).toContain('Invalid calendar date');
+
+        // Regex format mismatch
+        startDateInput.value = 'invalid-date-format';
+        startDateInput.dispatchEvent(new Event('input', { bubbles: true }));
+        await tick();
+        expect(document.body.textContent).toContain('Invalid date (use DD-MM-YYYY)');
+        startDateInput.type = 'date';
+    });
+
+    it('covers tier classes, breakdown source labels, interface fallbacks, and Sunday calendar offset', async () => {
+        allTrafficHistory.set([
+            {
+                date: '01-03-2026', // March 1 2026 was a Sunday (firstCol = 6)
+                interfaceName: 'EthFallback',
+                source: 'WindowsImport',
+                downBytes: 40_000_000_000,
+                upBytes: 40_000_000_000 // total = 80 GB -> tier-med
+            },
+            {
+                date: '02-03-2026',
+                interfaceName: '',
+                source: 'CustomVPN',
+                downBytes: 90_000_000_000,
+                upBytes: 90_000_000_000 // total = 180 GB -> tier-high
+            },
+            {
+                date: '03-03-2026',
+                interfaceName: 'WiFi',
+                source: 'DatImport',
+                downBytes: 0,
+                upBytes: 0 // total = 0 -> tier-none
+            }
+        ]);
+
+        component = mount(TrafficHistoryPage, { target: document.body });
+        await tick();
+
+        // Navigate month backward/forward until month is March 2026
+        const [prevBtn, nextBtn] = Array.from(document.body.querySelectorAll<HTMLButtonElement>('.nav-btn'));
+        while (!document.body.querySelector('.month-label')?.textContent?.includes('March 2026')) {
+            prevBtn.click();
+            await tick();
+        }
+
+        // Sunday offset creates 6 empty cells before day 1
+        const emptyCells = document.body.querySelectorAll('.day-cell.empty');
+        expect(emptyCells.length).toBeGreaterThanOrEqual(6);
+
+        // Click day 1 (tier-med)
+        const day1 = Array.from(document.body.querySelectorAll<HTMLElement>('.day-cell:not(.empty)')).find(
+            (c) => c.querySelector('.day-num')?.textContent?.trim() === '1'
+        );
+        expect(day1).toBeDefined();
+        expect(day1?.classList.contains('tier-med')).toBe(true);
+        day1?.click();
+        await tick();
+
+        // Check breakdown details with interface fallback 'EthFallback' and 'Windows' source badge
+        expect(document.body.textContent).toContain('EthFallback');
+        expect(document.body.textContent).toContain('Windows');
+
+        // Click day 2 (tier-high)
+        const day2 = Array.from(document.body.querySelectorAll<HTMLElement>('.day-cell:not(.empty)')).find(
+            (c) => c.querySelector('.day-num')?.textContent?.trim() === '2'
+        );
+        expect(day2?.classList.contains('tier-high')).toBe(true);
+        day2?.click();
+        await tick();
+
+        // Check breakdown with missing interface ('?') and CustomVPN source badge
+        expect(document.body.textContent).toContain('?');
+        expect(document.body.textContent).toContain('CustomVPN');
+
+        // Test windowsImportResult auto-dismiss timer (6000ms)
+        vi.useFakeTimers();
+        windowsImportResult.set({ success: true, daysImported: 5, downBytes: 1024, upBytes: 2048 });
+        await tick();
+        expect(document.body.textContent).toContain('Imported 5 day(s)');
+        vi.advanceTimersByTime(6500);
+        await tick();
+        expect(get(windowsImportResult)).toBeNull();
+        vi.useRealTimers();
     });
 });

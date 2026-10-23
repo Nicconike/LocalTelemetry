@@ -28,4 +28,48 @@ describe('Sidebar.svelte', () => {
         expect(document.body.textContent).toContain('Monitoring');
         expect(document.body.textContent).toContain('About');
     });
+
+    it('navigates when clicking a navigation item', async () => {
+        let dispatchedPage = '';
+        component = mount(Sidebar, {
+            target: document.body,
+            events: {
+                navigate: (e: any) => {
+                    dispatchedPage = e.detail;
+                }
+            }
+        });
+        await tick();
+
+        const aboutBtn = Array.from(document.querySelectorAll<HTMLButtonElement>('.nav-item')).find((b) =>
+            b.textContent?.includes('About')
+        );
+        expect(aboutBtn).toBeDefined();
+        aboutBtn?.click();
+        await tick();
+
+        expect(dispatchedPage).toBe('about');
+    });
+
+    it('updates active state when activePage changes and handles click without listener', async () => {
+        component = mount(Sidebar, { target: document.body });
+        await tick();
+
+        activePage.set('network');
+        await tick();
+
+        const networkBtn = Array.from(document.querySelectorAll<HTMLButtonElement>('.nav-item')).find((b) =>
+            b.textContent?.includes('Network')
+        );
+        expect(networkBtn?.classList.contains('active')).toBe(true);
+        expect(networkBtn?.getAttribute('aria-current')).toBe('page');
+
+        networkBtn?.click();
+        await tick();
+
+        activePage.set('none');
+        await tick();
+        const activeItems = document.querySelectorAll('.nav-item.active');
+        expect(activeItems).toHaveLength(0);
+    });
 });

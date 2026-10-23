@@ -53,4 +53,22 @@ describe('Toggle.svelte', () => {
         expect(descSpan).not.toBeNull();
         expect(descSpan?.textContent).toBe('Display network speed in bits/s');
     });
+
+    it('renders description without label and handles disabled state', async () => {
+        component = mount(Toggle, {
+            target: document.body,
+            props: {
+                description: 'Only description here',
+                checked: true,
+                disabled: true,
+            },
+        });
+        await tick();
+
+        const input = document.querySelector('input[type="checkbox"]') as HTMLInputElement;
+        expect(input).not.toBeNull();
+        expect(input.disabled).toBe(true);
+        expect(document.querySelector('.lbl')).toBeNull();
+        expect(document.querySelector('.desc')?.textContent).toBe('Only description here');
+    });
 });

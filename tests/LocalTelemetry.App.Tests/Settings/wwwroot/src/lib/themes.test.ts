@@ -31,10 +31,27 @@ describe('themes.ts', () => {
         applyThemeVars('midnight');
         const bg = document.documentElement.style.getPropertyValue('--color-bg');
         expect(bg).toBe('#0a0e17');
+        expect(document.documentElement.dataset.theme).toBe('dark');
+
+        applyThemeVars('default-light');
+        const lightBg = document.documentElement.style.getPropertyValue('--color-bg');
+        expect(lightBg).toBe('#f5f4f0');
+        expect(document.documentElement.dataset.theme).toBe('light');
 
         applyThemeVars('unknown_theme_xyz');
         const fallbackBg = document.documentElement.style.getPropertyValue('--color-bg');
         expect(fallbackBg).toBe('#171614');
+        expect(document.documentElement.dataset.theme).toBe('dark');
+
+        // Test theme with missing variables to cover default fallback branch
+        themes.push({
+            value: 'partial-theme',
+            label: 'Partial Theme',
+            vars: {} as any
+        });
+        applyThemeVars('partial-theme');
+        expect(document.documentElement.style.getPropertyValue('--color-bg')).toBe('#171614');
+        themes.pop();
     });
 
     it('every theme should define brand and primary colors', () => {

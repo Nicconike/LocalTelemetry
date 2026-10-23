@@ -159,5 +159,59 @@ describe('MonitoringPage.svelte', () => {
         settings.subscribe((val) => (s = val))();
         expect(s.enableFileLogging).toBe(true);
         expect(s.monitoring.logCpuMode).toBe(1);
+
+        // Toggle again when modes are already non-zero
+        s.enableFileLogging = false;
+        s.monitoring.logCpuMode = 2;
+        s.monitoring.logGpuMode = 2;
+        s.monitoring.logRamMode = 2;
+        s.monitoring.logNetMode = 2;
+        s.monitoring.logDiskMode = 2;
+        s.monitoring.logBatteryMode = 2;
+        settings.set(s);
+        await tick();
+
+        fileLogToggle.click();
+        await tick();
+        // Toggle off to cover false branch of if ($settings.enableFileLogging)
+        fileLogToggle.click();
+        await tick();
+    });
+
+    it('renders battery category when hasBattery is true and auto-enables track flag on mode change', async () => {
+        const payload = makeMonitoringPayload();
+        (payload.monitoring as any).hasBattery = true;
+        payload.monitoring.trackBattery = false;
+        payload.monitoring.logBatteryMode = 0;
+        settings.set(payload as any);
+
+        component = mount(MonitoringPage, { target: document.body });
+        await tick();
+
+        const batteryCard = Array.from(document.body.querySelectorAll('.log-card')).find(
+            (c) => c.querySelector('.log-label')?.textContent?.trim() === 'Battery'
+        );
+        expect(batteryCard).toBeDefined();
+
+        const fullBtn = Array.from(batteryCard!.querySelectorAll<HTMLButtonElement>('.btn-mode')).find(
+            (b) => b.textContent?.trim() === 'Full'
+        );
+        expect(fullBtn).toBeDefined();
+
+        fullBtn?.click();
+        await tick();
+
+        let s: any;
+        settings.subscribe((val) => (s = val))();
+        expect(s.monitoring.logBatteryMode).toBe(2);
+        expect(s.monitoring.trackBattery).toBe(true);
+    });
+
+    it('renders empty when settings is null', async () => {
+        settings.set(null as any);
+        component = mount(MonitoringPage, { target: document.body });
+        await tick();
+
+        expect(document.querySelector('.page')).toBeNull();
     });
 });

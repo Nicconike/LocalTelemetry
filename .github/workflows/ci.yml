@@ -79,6 +79,7 @@ jobs:
                   files: tests/LocalTelemetry.App.Tests/Settings/wwwroot/coverage/cobertura-coverage.xml
                   flags: app
                   disable_search: true
+                  plugins: noop
 
     test-windows:
         name: .NET Tests
@@ -139,6 +140,7 @@ jobs:
                   files: TestResults/core/**/coverage.cobertura.xml
                   flags: core
                   disable_search: true
+                  plugins: noop
 
             - name: Upload Notifier Coverage
               uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
@@ -148,6 +150,7 @@ jobs:
                   files: TestResults/notifier/**/coverage.cobertura.xml
                   flags: notifier
                   disable_search: true
+                  plugins: noop
 
             - name: Upload App Coverage
               uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
@@ -157,3 +160,4 @@ jobs:
                   files: TestResults/app/**/coverage.cobertura.xml
                   flags: app
                   disable_search: true
+                  plugins: noop
