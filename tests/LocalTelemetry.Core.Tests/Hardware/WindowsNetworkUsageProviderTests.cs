@@ -501,5 +501,70 @@ public class WindowsNetworkUsageProviderTests
             try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
-}
 
+    [Fact]
+    public async Task WindowsNetworkUsageProvider_ImportAndSaveHistoryAsync_EmptyHistory_And_Cancellation()
+    {
+        string tempPath = Path.Combine(Path.GetTempPath(), $"TrafficImportSave_{Guid.NewGuid():N}.json");
+        try
+        {
+            var historyFile = new TrafficHistoryFile(tempPath);
+
+            // 1. Initial run without historical data
+            var act = async () => await WindowsNetworkUsageProvider.ImportAndSaveHistoryAsync(historyFile, CancellationToken.None);
+            await act.Should().NotThrowAsync();
+
+            // 2. Cancellation handling
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+            var actCancel = async () => await WindowsNetworkUsageProvider.ImportAndSaveHistoryAsync(historyFile, cts.Token);
+            await actCancel.Should().NotThrowAsync();
+        }
+        finally
+        {
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+        }
+    }
+
+    [Fact]
+    public async Task WindowsNetworkUsageProvider_RefreshTodayUsageAsync_Coverage()
+    {
+        string tempPath = Path.Combine(Path.GetTempPath(), $"TrafficRefresh_{Guid.NewGuid():N}.json");
+        try
+        {
+            var historyFile = new TrafficHistoryFile(tempPath);
+
+            // Normal refresh
+            var act = async () => await WindowsNetworkUsageProvider.RefreshTodayUsageAsync(historyFile, CancellationToken.None);
+            await act.Should().NotThrowAsync();
+
+            // Cancelled refresh
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+            var actCancel = async () => await WindowsNetworkUsageProvider.RefreshTodayUsageAsync(historyFile, cts.Token);
+            await actCancel.Should().NotThrowAsync();
+        }
+        finally
+        {
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+        }
+    }
+
+    [Fact]
+    public async Task WindowsNetworkUsageProvider_GetUsageAsync_CancellationAndPastDate_Coverage()
+    {
+        // 1. Single-day query
+        var singleDay = await WindowsNetworkUsageProvider.GetUsageAsync(DateTime.Today, DateTime.Today, CancellationToken.None);
+        singleDay.Should().NotBeNull();
+
+        // 2. Multi-day historical chunks query
+        var multiDay = await WindowsNetworkUsageProvider.GetUsageAsync(DateTime.Today.AddDays(-3), DateTime.Today, CancellationToken.None);
+        multiDay.Should().NotBeNull();
+
+        // 3. Pre-cancelled query handles cancellation safely
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var cancelAct = async () => await WindowsNetworkUsageProvider.GetUsageAsync(DateTime.Today.AddDays(-10), DateTime.Today, cts.Token);
+        await cancelAct.Should().ThrowAsync<OperationCanceledException>();
+    }
+}

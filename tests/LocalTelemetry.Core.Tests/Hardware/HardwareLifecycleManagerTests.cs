@@ -262,5 +262,12 @@ public class HardwareLifecycleManagerTests
             var act = () => onSessionEnding.Invoke(null, [null, e]);
             act.Should().NotThrow();
         }
+
+        // Test exception catch blocks when EventArgs is null
+        var actEndingNull = () => onSessionEnding.Invoke(null, [null, null]);
+        actEndingNull.Should().NotThrow();
+
+        var actSwitchNull = () => onSessionSwitch.Invoke(null, [null, null]);
+        actSwitchNull.Should().NotThrow();
     }
 }

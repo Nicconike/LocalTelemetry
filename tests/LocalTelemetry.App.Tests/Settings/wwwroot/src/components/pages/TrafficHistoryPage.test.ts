@@ -1,4 +1,5 @@
 import { mount, unmount, tick } from 'svelte';
+import { get } from 'svelte/store';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
     allTrafficHistory,
@@ -224,5 +225,66 @@ describe('TrafficHistoryPage.svelte', () => {
         });
         await tick();
         expect(document.body.textContent).toContain('Selected date range is already up to date in LocalTelemetry.');
+    });
+
+    it('handles date input oninput to clear windowsImportResult and displays dateRangeError when start is after end', async () => {
+        component = mount(TrafficHistoryPage, { target: document.body });
+        await tick();
+
+        windowsImportResult.set({
+            success: true,
+            daysImported: 2,
+            downBytes: 100,
+            upBytes: 100,
+            message: 'Imported'
+        });
+        await tick();
+
+        const endDateInput = document.body.querySelector<HTMLInputElement>('#win-end-date');
+        expect(endDateInput).not.toBeNull();
+
+        // Trigger oninput on end date -> clears windowsImportResult
+        endDateInput!.dispatchEvent(new Event('input', { bubbles: true }));
+        await tick();
+        expect(get(windowsImportResult)).toBeNull();
+
+        // Set start date after end date to trigger dateRangeError
+        const startDateInput = document.body.querySelector<HTMLInputElement>('#win-start-date');
+        expect(startDateInput).not.toBeNull();
+
+        startDateInput!.value = '2026-10-25';
+        startDateInput!.dispatchEvent(new Event('input', { bubbles: true }));
+        endDateInput!.value = '2026-10-20';
+        endDateInput!.dispatchEvent(new Event('input', { bubbles: true }));
+        await tick();
+
+        expect(document.body.querySelector('.validation-error')).not.toBeNull();
+    });
+
+    it('handles valid .dat file selection and imports content', async () => {
+        const importDatSpy = vi.spyOn(bridge, 'importDatContent').mockImplementation(() => { });
+        const readSpy = vi.spyOn(FileReader.prototype, 'readAsText').mockImplementation(function (this: FileReader) {
+            Object.defineProperty(this, 'result', { value: '1,01-10-2026,Ethernet,100,50', configurable: true });
+            this.onload?.({ target: this } as any);
+        });
+
+        component = mount(TrafficHistoryPage, { target: document.body });
+        await tick();
+
+        const fileInput = document.body.querySelector<HTMLInputElement>('#dat-file-input');
+        expect(fileInput).not.toBeNull();
+
+        const file = new File(['1,01-10-2026,Ethernet,100,50'], 'backup.dat', { type: 'text/plain' });
+        Object.defineProperty(fileInput, 'files', {
+            value: [file],
+            configurable: true
+        });
+
+        fileInput!.dispatchEvent(new Event('change', { bubbles: true }));
+        await tick();
+
+        expect(readSpy).toHaveBeenCalled();
+        expect(importDatSpy).toHaveBeenCalled();
+        readSpy.mockRestore();
     });
 });

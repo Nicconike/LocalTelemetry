@@ -121,4 +121,20 @@ public class NotificationClientTests
         var act = () => client.Dispose();
         act.Should().NotThrow();
     }
+
+    [Fact]
+    public async Task NotificationClient_ExecuteAttemptAsync_UnexpectedException_HandlesGracefully()
+    {
+        using var client = new NotificationClient();
+        var method = typeof(NotificationClient).GetMethod("ExecuteAttemptAsync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        method.Should().NotBeNull();
+
+        var msgType = typeof(NotificationClient).GetNestedType("NotificationMessage", System.Reflection.BindingFlags.NonPublic)!;
+        var msg = Activator.CreateInstance(msgType)!;
+        msgType.GetProperty("Action")?.SetValue(msg, "ShowToast");
+
+        // Passing invalid negative timeout (-5) causes ConnectAsync to throw ArgumentOutOfRangeException, hitting catch (Exception ex)
+        var task = (Task)method!.Invoke(client, [msg, 0, -5, CancellationToken.None])!;
+        await task;
+    }
 }

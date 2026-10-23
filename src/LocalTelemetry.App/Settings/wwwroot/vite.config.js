@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
+import { codecovVitePlugin } from '@codecov/vite-plugin';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -19,7 +20,13 @@ function copyMasterAppIcon() {
 export default defineConfig({
     plugins: [
         svelte(),
-        copyMasterAppIcon()
+        copyMasterAppIcon(),
+        codecovVitePlugin({
+            enableBundleAnalysis: process.env.CODECOV_TOKEN !== undefined,
+            bundleName: 'settings-ui',
+            uploadToken: process.env.CODECOV_TOKEN,
+            gitService: 'github',
+        }),
     ],
     base: './',
     build: {

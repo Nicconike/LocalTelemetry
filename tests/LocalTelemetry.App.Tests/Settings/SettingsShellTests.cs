@@ -1726,6 +1726,42 @@ public class SettingsShellTests
             try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
+
+    [WpfFact]
+    public async Task SettingsShell_HandleImportWindowsUsage_DetailedCoverage()
+    {
+        var cfg = new AppSettings();
+        string tempPath = Path.Combine(Path.GetTempPath(), "net_history_" + Guid.NewGuid().ToString("N") + ".dat");
+        try
+        {
+            var history = new TrafficHistoryFile(tempPath);
+            TrafficHistoryStore.Initialize(history);
+            using var netLogger = new NetUsageLogger(cfg, history);
+            var shell = new SettingsShell(cfg, netLogger);
+
+            var method = typeof(SettingsShell).GetMethod("HandleImportWindowsUsage", BindingFlags.NonPublic | BindingFlags.Instance);
+            method.Should().NotBeNull();
+
+            // 1. Missing or invalid date formats
+            var invalidStart = JsonDocument.Parse("{\"startDate\":\"not-a-date\",\"endDate\":\"01-10-2026\"}").RootElement;
+            await (Task)method!.Invoke(shell, [invalidStart])!;
+
+            var invalidEnd = JsonDocument.Parse("{\"startDate\":\"01-10-2026\",\"endDate\":\"bad-end-date\"}").RootElement;
+            await (Task)method.Invoke(shell, [invalidEnd])!;
+
+            // 2. Valid dates with initialized store
+            var validRange = JsonDocument.Parse("{\"startDate\":\"01-10-2026\",\"endDate\":\"05-10-2026\"}").RootElement;
+            await (Task)method.Invoke(shell, [validRange])!;
+
+            // 3. Exception in parsing (missing root properties causing exception)
+            var malformed = JsonDocument.Parse("{}").RootElement;
+            await (Task)method.Invoke(shell, [malformed])!;
+
+            shell.Close();
+        }
+        finally
+        {
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+        }
+    }
 }
-
-

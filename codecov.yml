@@ -15,8 +15,12 @@ coverage:
                 threshold: 15%
                 if_ci_failed: error
 
+bundle_analysis:
+    warning_threshold: "5%"
+    status: informational
+
 comment:
-    layout: "header, diff, flags, components"
+    layout: "header, diff, flags, components, bundle_analysis"
     behavior: default
     require_changes: false
     require_base: true

@@ -14,6 +14,7 @@
         "commitlint": "commitlint"
     },
     "devDependencies": {
+        "@codecov/vite-plugin": "^2.0.1",
         "@commitlint/cli": "^21.2.3",
         "@commitlint/config-conventional": "^21.2.3",
         "@sveltejs/vite-plugin-svelte": "^7.3.1",
