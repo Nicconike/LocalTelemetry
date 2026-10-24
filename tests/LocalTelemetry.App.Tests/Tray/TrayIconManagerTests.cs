@@ -374,5 +374,33 @@ public class TrayIconManagerTests
         var actClose = () => onClosed?.Invoke(menu, [new ToolStripDropDownClosedEventArgs(ToolStripDropDownCloseReason.AppClicked)]);
         actClose.Should().NotThrow();
     }
+
+    [WpfFact]
+    public void TrayIconManager_ShowOverlayContextMenu_And_UpdateError_Coverage()
+    {
+        var priorSkipUi = TrayIconManager.SkipUiForTesting;
+        try
+        {
+            TrayIconManager.SkipUiForTesting = false;
+            using var tray = new TrayIconManager();
+
+            // Null menu branch
+            var menuField = typeof(TrayIconManager).GetField("_overlayContextMenu", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var origMenu = menuField.GetValue(tray);
+            menuField.SetValue(tray, null);
+            tray.ShowOverlayContextMenu(new Point(50, 50));
+            menuField.SetValue(tray, origMenu);
+
+            // ShowOverlayContextMenu with real menu when SkipUiForTesting is false
+            var actShow = () => tray.ShowOverlayContextMenu(new Point(100, 100));
+            actShow.Should().NotThrow();
+
+            tray.CloseOverlayContextMenu();
+        }
+        finally
+        {
+            TrayIconManager.SkipUiForTesting = priorSkipUi;
+        }
+    }
 }
 

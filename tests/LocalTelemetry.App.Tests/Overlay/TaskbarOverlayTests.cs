@@ -768,4 +768,40 @@ public class TaskbarOverlayTests
 
         overlay.Hide();
     }
+
+    [WpfFact]
+    public void TaskbarOverlay_Lifecycle_Theme_And_Mouse_Coverage()
+    {
+        var cfg = new AppSettings();
+        var embedder = new TaskbarEmbedder(cfg);
+        using var overlay = new TaskbarOverlay(cfg, embedder);
+
+        // 1. DeploymentState property getter
+        var state = overlay.DeploymentState;
+        state.Should().Be(embedder.State);
+
+        // 2. TryHandleOverlayClick with null/hidden handle
+        var tryClickMethod = typeof(TaskbarOverlay).GetMethod("TryHandleOverlayClick", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        object[] clickParams = [NativeMethods.WM_LBUTTONDOWN, IntPtr.Zero, IntPtr.Zero];
+        bool clicked = (bool)tryClickMethod.Invoke(overlay, clickParams)!;
+        clicked.Should().BeFalse();
+
+        // 3. ThemeTick
+        var origSkipTimers = TaskbarOverlay.SkipTimersForTesting;
+        try
+        {
+            TaskbarOverlay.SkipTimersForTesting = false;
+            var themeTick = typeof(TaskbarOverlay).GetMethod("ThemeTick", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var actThemeTick = () => themeTick.Invoke(overlay, null);
+            actThemeTick.Should().NotThrow();
+        }
+        finally
+        {
+            TaskbarOverlay.SkipTimersForTesting = origSkipTimers;
+        }
+
+        // 4. RecoverTaskbar
+        var actRecover = () => overlay.RecoverTaskbar("Unit test taskbar recovery");
+        actRecover.Should().NotThrow();
+    }
 }

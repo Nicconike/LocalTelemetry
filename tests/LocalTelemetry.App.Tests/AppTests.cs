@@ -1284,6 +1284,154 @@ public class AppTests
             App.NotifierLauncherAction = origNotifierAction;
         }
     }
+
+    [WpfFact]
+    public void App_HandleSnapshotReady_And_DoubleClicks_Coverage()
+    {
+        var app = GetOrCreateApp();
+        var origNetLogger = typeof(App).GetField("_netLogger", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(app);
+        var origAlerts = typeof(App).GetField("_alerts", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(app);
+        var origOverlay = typeof(App).GetField("_overlay", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(app);
+
+        string tempPath = Path.Combine(Path.GetTempPath(), "app_test_net_" + Guid.NewGuid().ToString("N") + ".dat");
+        try
+        {
+            var cfg = new AppSettings();
+            var history = new TrafficHistoryFile(tempPath);
+            var netLogger = new NetUsageLogger(cfg, history);
+            var embedder = new TaskbarEmbedder(cfg);
+            var overlay = new TaskbarOverlay(cfg, embedder);
+            var notif = new NotificationClient();
+            var alerts = new AlertService(cfg, overlay, notif, netLogger);
+
+            typeof(App).GetField("_netLogger", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, netLogger);
+            typeof(App).GetField("_alerts", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, alerts);
+            typeof(App).GetField("_overlay", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, overlay);
+
+            var handleSnap = typeof(App).GetMethod("HandleSnapshotReady", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var snap = new TelemetrySnapshot { CpuUsagePct = 25f };
+            var actSnap = () => handleSnap.Invoke(app, [snap]);
+            actSnap.Should().NotThrow();
+
+            // OpenSettings when SuppressSettingsWindowForTesting is true
+            var origSuppress = App.SuppressSettingsWindowForTesting;
+            try
+            {
+                App.SuppressSettingsWindowForTesting = true;
+                var openSettings = typeof(App).GetMethod("OpenSettings", BindingFlags.NonPublic | BindingFlags.Instance)!;
+                openSettings.Invoke(app, null);
+            }
+            finally
+            {
+                App.SuppressSettingsWindowForTesting = origSuppress;
+            }
+
+            overlay.Dispose();
+            notif.Dispose();
+        }
+        finally
+        {
+            typeof(App).GetField("_netLogger", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, origNetLogger);
+            typeof(App).GetField("_alerts", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, origAlerts);
+            typeof(App).GetField("_overlay", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, origOverlay);
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+        }
+    }
+
+    [Fact]
+    public void App_Lifecycle_Settings_And_Notifier_Coverage()
+    {
+        var app = GetOrCreateApp();
+
+        // 1. ToggleMetricsLogging
+        var toggleMetrics = typeof(App).GetMethod("ToggleMetricsLogging", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        toggleMetrics.Invoke(app, [true]);
+        toggleMetrics.Invoke(app, [true]); // duplicate no-op
+        toggleMetrics.Invoke(app, [false]);
+
+        // 2. EnsureNotifierStopped branches
+        var ensureNotifierStopped = typeof(App).GetMethod("EnsureNotifierStopped", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        typeof(App).GetField("_notifierLaunched", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, false);
+        typeof(App).GetField("_notifierProcess", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, null);
+        ensureNotifierStopped.Invoke(app, null); // early exit
+
+        // 3. HandleSettingsApplied with null overlay
+        var origOverlay = typeof(App).GetField("_overlay", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(app);
+        var origCfg = typeof(App).GetField("_cfg", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(app);
+        var handleSettingsApplied = typeof(App).GetMethod("HandleSettingsApplied", BindingFlags.NonPublic | BindingFlags.Instance)!;
+
+        try
+        {
+            var cfg = new AppSettings();
+            typeof(App).GetField("_cfg", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, cfg);
+            typeof(App).GetField("_overlay", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, null);
+
+            // Null overlay early return
+            var actNullOverlay = () => handleSettingsApplied.Invoke(app, null);
+            actNullOverlay.Should().NotThrow();
+
+            // Overlay present - toggle visible and run at startup
+            var embedder = new TaskbarEmbedder(cfg);
+            var overlay = new TaskbarOverlay(cfg, embedder);
+            typeof(App).GetField("_overlay", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, overlay);
+
+            cfg.Overlay.Visible = true;
+            cfg.RunAtStartup = true;
+            cfg.Monitoring.PollIntervalMs = 800;
+            handleSettingsApplied.Invoke(app, null);
+
+            cfg.Overlay.Visible = false;
+            cfg.RunAtStartup = false;
+            handleSettingsApplied.Invoke(app, null);
+
+            overlay.Dispose();
+        }
+        finally
+        {
+            typeof(App).GetField("_overlay", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, origOverlay);
+            typeof(App).GetField("_cfg", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, origCfg);
+        }
+    }
+
+    [Fact]
+    public void App_Notifier_And_OverlayWiring_Coverage()
+    {
+        var app = GetOrCreateApp();
+
+        // 1. LaunchNotifier with null launcher action (missing file branch)
+        var origLauncher = App.NotifierLauncherAction;
+        try
+        {
+            App.NotifierLauncherAction = null;
+            var launchNotifier = typeof(App).GetMethod("LaunchNotifier", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var actLaunch = () => launchNotifier.Invoke(app, null);
+            actLaunch.Should().NotThrow();
+
+            // LaunchNotifier with throwing launcher action
+            App.NotifierLauncherAction = _ => throw new InvalidOperationException("Launch failure test");
+            var actThrowLaunch = () => launchNotifier.Invoke(app, null);
+            actThrowLaunch.Should().NotThrow();
+        }
+        finally
+        {
+            App.NotifierLauncherAction = origLauncher;
+        }
+
+        // 2. LaunchTaskManager reflection invocation
+        var origTaskMgr = App.TaskManagerProcessLauncher;
+        try
+        {
+            bool taskMgrFired = false;
+            App.TaskManagerProcessLauncher = _ => taskMgrFired = true;
+            var launchTaskMgr = typeof(App).GetMethod("LaunchTaskManager", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            launchTaskMgr.Invoke(app, null);
+            taskMgrFired.Should().BeTrue();
+        }
+        finally
+        {
+            App.TaskManagerProcessLauncher = origTaskMgr;
+        }
+    }
 }
 
 

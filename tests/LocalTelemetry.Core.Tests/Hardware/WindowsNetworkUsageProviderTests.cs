@@ -625,4 +625,25 @@ public class WindowsNetworkUsageProviderTests
         start3.Should().Be(normalStart);
         end3.Should().Be(normalEnd);
     }
+
+    [Fact]
+    public async Task WindowsNetworkUsageProvider_GetUsageAsync_Direct_Coverage()
+    {
+        string tempPath = Path.Combine(Path.GetTempPath(), $"TrafficRefresh_{Guid.NewGuid():N}.dat");
+        var historyFile = new TrafficHistoryFile(tempPath);
+
+        try
+        {
+            // Execute RefreshTodayUsageAsync
+            await WindowsNetworkUsageProvider.RefreshTodayUsageAsync(historyFile, CancellationToken.None);
+
+            // Execute GetUsageAsync directly
+            var actUsage = async () => await WindowsNetworkUsageProvider.GetUsageAsync(DateTime.Today, DateTime.Now, CancellationToken.None);
+            await actUsage.Should().NotThrowAsync();
+        }
+        finally
+        {
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+        }
+    }
 }

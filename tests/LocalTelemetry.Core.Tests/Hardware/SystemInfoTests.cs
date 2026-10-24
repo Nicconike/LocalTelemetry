@@ -2055,6 +2055,328 @@ public class SystemInfoTests
             osCacheField.SetValue(null, origOsCache);
         }
     }
+
+    [Fact]
+    public void SystemInfo_CpuVendor_Environment_Variations()
+    {
+        string? origEnv = Environment.GetEnvironmentVariable("PROCESSOR_IDENTIFIER");
+        try
+        {
+            Environment.SetEnvironmentVariable("PROCESSOR_IDENTIFIER", "AMD64 Family 25 Model 80 Stepping 0, AuthenticAMD");
+            SystemInfo.GetCpuVendor().Should().Be("AMD");
+
+            Environment.SetEnvironmentVariable("PROCESSOR_IDENTIFIER", "Intel64 Family 6 Model 158 Stepping 10, GenuineIntel");
+            SystemInfo.GetCpuVendor().Should().Be("Intel");
+
+            Environment.SetEnvironmentVariable("PROCESSOR_IDENTIFIER", "ARM64 Family 8 Model 1 Revision 2, Qualcomm");
+            SystemInfo.GetCpuVendor().Should().BeEmpty();
+
+            Environment.SetEnvironmentVariable("PROCESSOR_IDENTIFIER", null);
+            SystemInfo.GetCpuVendor().Should().BeEmpty();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("PROCESSOR_IDENTIFIER", origEnv);
+        }
+    }
+
+    [Fact]
+    public void SystemInfo_Wmi_Error_Catch_Branches()
+    {
+        var queryWmiFirst = typeof(SystemInfo).GetMethod("QueryWmiFirst", BindingFlags.NonPublic | BindingFlags.Static)!;
+        ((string)queryWmiFirst.Invoke(null, ["SELECT InvalidProperty FROM InvalidClass_NonExistent_12345", "InvalidProperty"])!).Should().BeEmpty();
+
+        var queryWmiFirstInt = typeof(SystemInfo).GetMethod("QueryWmiFirstInt", BindingFlags.NonPublic | BindingFlags.Static)!;
+        ((int)queryWmiFirstInt.Invoke(null, ["SELECT InvalidProperty FROM InvalidClass_NonExistent_12345", "InvalidProperty"])!).Should().Be(0);
+
+        var queryRootWmiStr = typeof(SystemInfo).GetMethod("QueryRootWmiString", BindingFlags.NonPublic | BindingFlags.Static)!;
+        ((string)queryRootWmiStr.Invoke(null, ["InvalidClass_NonExistent_12345", "InvalidProperty"])!).Should().BeEmpty();
+
+        var queryRootWmiInt = typeof(SystemInfo).GetMethod("QueryRootWmiInt", BindingFlags.NonPublic | BindingFlags.Static)!;
+        ((int)queryRootWmiInt.Invoke(null, ["InvalidClass_NonExistent_12345", "InvalidProperty"])!).Should().Be(0);
+    }
+
+    [Fact]
+    public void SystemInfo_Smbios_Field_And_Advance_EdgeCases()
+    {
+        var readField = typeof(SystemInfo).GetMethod("ReadSmbiosType4Field", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var advanceMethod = typeof(SystemInfo).GetMethod("AdvanceToNextSmbiosStructure", BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        // 1. Buffer with wordVal == 0 and byteVal > 0 -> returns byteVal
+        byte[] buffer = new byte[32];
+        buffer[4] = 0; // word low
+        buffer[5] = 0; // word high
+        buffer[8] = 16; // byteVal
+        int val = (int)readField.Invoke(null, [buffer, 0, (byte)16, 4, 8])!;
+        val.Should().Be(16);
+
+        // 2. Buffer with both wordVal == 0 and byteVal == 0 -> returns 0
+        buffer[8] = 0;
+        int valZero = (int)readField.Invoke(null, [buffer, 0, (byte)16, 4, 8])!;
+        valZero.Should().Be(0);
+
+        // 3. Buffer with length smaller than offsets -> returns 0
+        int valShort = (int)readField.Invoke(null, [buffer, 0, (byte)2, 4, 8])!;
+        valShort.Should().Be(0);
+
+        // 4. AdvanceToNextSmbiosStructure on buffer with double zero
+        byte[] smbiosData = [1, 4, 0, 0, 0, 0, 2, 4];
+        int next = (int)advanceMethod.Invoke(null, [smbiosData, 2])!;
+        next.Should().Be(4);
+
+        // 5. AdvanceToNextSmbiosStructure on buffer without double zero reaches boundary
+        byte[] smbiosNoDoubleZero = [1, 2, 3, 4, 5];
+        int nextEnd = (int)advanceMethod.Invoke(null, [smbiosNoDoubleZero, 0])!;
+        nextEnd.Should().BeGreaterThanOrEqualTo(smbiosNoDoubleZero.Length);
+    }
+
+    [Fact]
+    public void SystemInfo_Battery_Validation_And_Query_Fallbacks()
+    {
+        // 1. IsValidBatteryString validation branches
+        SystemInfo.IsValidBatteryString(null).Should().BeFalse();
+        SystemInfo.IsValidBatteryString("").Should().BeFalse();
+        SystemInfo.IsValidBatteryString("   ").Should().BeFalse();
+        SystemInfo.IsValidBatteryString("Virtual Battery Pack").Should().BeFalse();
+        SystemInfo.IsValidBatteryString("CRB Battery").Should().BeFalse();
+        SystemInfo.IsValidBatteryString("CRB-DEV-001").Should().BeFalse();
+        SystemInfo.IsValidBatteryString("Fake").Should().BeFalse();
+        SystemInfo.IsValidBatteryString("None").Should().BeFalse();
+        SystemInfo.IsValidBatteryString("Unknown").Should().BeFalse();
+        SystemInfo.IsValidBatteryString("To be filled by O.E.M.").Should().BeFalse();
+        SystemInfo.IsValidBatteryString("-BAT0-").Should().BeFalse();
+        SystemInfo.IsValidBatteryString("Sunwoda").Should().BeTrue();
+        SystemInfo.IsValidBatteryString("LGC").Should().BeTrue();
+        SystemInfo.IsValidBatteryString("SMP").Should().BeTrue();
+        SystemInfo.IsValidBatteryString("Panasonic").Should().BeTrue();
+
+        // 2. QueryWin32BatteryName and QueryWin32BatteryManufacturer methods
+        var queryNameMethod = typeof(SystemInfo).GetMethod("QueryWin32BatteryName", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var win32Name = (string)queryNameMethod.Invoke(null, null)!;
+        win32Name.Should().NotBeNull();
+
+        var queryMfrMethod = typeof(SystemInfo).GetMethod("QueryWin32BatteryManufacturer", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var win32Mfr = (string)queryMfrMethod.Invoke(null, null)!;
+        win32Mfr.Should().NotBeNull();
+
+        // 3. Fallback execution with forced battery presence cache
+        var hasBatField = typeof(SystemInfo).GetField("_hasBatteryCache", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var mfrField = typeof(SystemInfo).GetField("_batteryManufacturerCache", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var devField = typeof(SystemInfo).GetField("_batteryDeviceNameCache", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var desField = typeof(SystemInfo).GetField("_batteryDesignCapacityCache", BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        var origHasBat = hasBatField.GetValue(null);
+        var origMfr = mfrField.GetValue(null);
+        var origDev = devField.GetValue(null);
+        var origDes = desField.GetValue(null);
+
+        try
+        {
+            // Case A: HasBattery is false -> all battery queries return empty
+            hasBatField.SetValue(null, false);
+            mfrField.SetValue(null, null);
+            devField.SetValue(null, null);
+            desField.SetValue(null, null);
+
+            SystemInfo.GetBatteryManufacturer().Should().BeEmpty();
+            SystemInfo.GetBatteryDeviceName().Should().BeEmpty();
+            SystemInfo.GetBatteryDesignCapacity().Should().BeEmpty();
+
+            // Case B: HasBattery is true -> runs multi-step resolution
+            hasBatField.SetValue(null, true);
+            mfrField.SetValue(null, null);
+            devField.SetValue(null, null);
+            desField.SetValue(null, null);
+
+            SystemInfo.GetBatteryManufacturer().Should().NotBeNull();
+            SystemInfo.GetBatteryDeviceName().Should().NotBeNull();
+            SystemInfo.GetBatteryDesignCapacity().Should().NotBeNull();
+        }
+        finally
+        {
+            hasBatField.SetValue(null, origHasBat);
+            mfrField.SetValue(null, origMfr);
+            devField.SetValue(null, origDev);
+            desField.SetValue(null, origDes);
+        }
+    }
+
+    [Fact]
+    public void SystemInfo_Ram_And_Motherboard_Fallbacks()
+    {
+        // 1. GetInstalledRamGb with empty or invalid module size
+        var ramCacheField = typeof(SystemInfo).GetField("_ramModulesCache", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var origRamCache = ramCacheField.GetValue(null);
+        try
+        {
+            // Set empty modules list to test fallback calculation
+            ramCacheField.SetValue(null, new List<Dictionary<string, object>>());
+            double gb = SystemInfo.GetInstalledRamGb();
+            gb.Should().BeGreaterThanOrEqualTo(0);
+
+            // Set module list with non-numeric sizeGb
+            var invalidModule = new Dictionary<string, object> { ["sizeGb"] = "NotANumber" };
+            ramCacheField.SetValue(null, new List<Dictionary<string, object>> { invalidModule });
+            double fallbackGb = SystemInfo.GetInstalledRamGb();
+            fallbackGb.Should().BeGreaterThanOrEqualTo(0);
+
+            // Test GetRamManufacturer fallback when manufacturer property is missing
+            var noMfrModule = new Dictionary<string, object> { ["speed"] = "3200 MT/s" };
+            ramCacheField.SetValue(null, new List<Dictionary<string, object>> { noMfrModule });
+            string mfr = SystemInfo.GetRamManufacturer();
+            mfr.Should().NotBeNull();
+
+            // Test GetRamSpeed fallback when speed property is missing
+            var noSpeedModule = new Dictionary<string, object> { ["manufacturer"] = "Corsair" };
+            ramCacheField.SetValue(null, new List<Dictionary<string, object>> { noSpeedModule });
+            string speed = SystemInfo.GetRamSpeed();
+            speed.Should().BeEmpty();
+        }
+        finally
+        {
+            ramCacheField.SetValue(null, origRamCache);
+        }
+
+        // 2. Motherboard and System fallback methods
+        SystemInfo.GetSystemManufacturer().Should().NotBeNull();
+        SystemInfo.GetSystemProductName().Should().NotBeNull();
+        SystemInfo.GetSystemModel().Should().NotBeNull();
+        SystemInfo.GetMotherboardManufacturer().Should().NotBeNull();
+        SystemInfo.GetMotherboardProductName().Should().NotBeNull();
+        SystemInfo.GetMotherboardVersion().Should().NotBeNull();
+        SystemInfo.GetMotherboardSerial().Should().NotBeNull();
+    }
+
+    [Fact]
+    public void SystemInfo_PowerSupply_And_Drive_Heuristics_Coverage()
+    {
+        // 1. Power supply SMBIOS getters
+        var psName = SystemInfo.GetPsuName();
+        psName.Should().NotBeNull();
+
+        var psCap = SystemInfo.GetPsuMaxCapacity();
+        psCap.Should().NotBeNull();
+
+        // 2. GetAllDisks, GetDiskModel, and GetDiskManufacturer execution
+        var disks = SystemInfo.GetAllDisks();
+        disks.Should().NotBeNull();
+
+        var diskModel = SystemInfo.GetDiskModel();
+        diskModel.Should().NotBeNull();
+
+        var diskMfr = SystemInfo.GetDiskManufacturer();
+        diskMfr.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void SystemInfo_DeriveSocketFromCpuBrand_And_CpuIdSocketLookupRaw_Exhaustive()
+    {
+        // 1. CpuIdSocketLookupRaw across all Intel and AMD CPUID family/model combinations
+        int[] eaxKeys =
+        [
+            (0x06 << 16) | 0xC6, (0x06 << 16) | 0xC4, (0x06 << 16) | 0xC7, (0x06 << 16) | 0xAC,
+            (0x06 << 16) | 0xBE, (0x06 << 16) | 0xBF, (0x06 << 16) | 0xBA, (0x06 << 16) | 0xBB,
+            (0x06 << 16) | 0xB7, (0x06 << 16) | 0x9A, (0x06 << 16) | 0xAA, (0x06 << 16) | 0xA5,
+            (0x06 << 16) | 0x8C, (0x06 << 16) | 0x8D, (0x06 << 16) | 0x9E, (0x06 << 16) | 0x8E,
+            (0x19 << 16) | 0x5E, (0x19 << 16) | 0x61, (0x19 << 16) | 0x64, (0x19 << 16) | 0x74,
+            (0x19 << 16) | 0x78, (0x19 << 16) | 0x50, (0x19 << 16) | 0x21, (0x19 << 16) | 0x11,
+            (0x19 << 16) | 0x71, (0x17 << 16) | 0x31, 0x00
+        ];
+
+        foreach (int eax in eaxKeys)
+        {
+            // Reverse-encode family and model into EAX register format:
+            // family at bits 8-11, extFamily at bits 20-27, model at bits 4-7, extModel at bits 16-19
+            int f = (eax >> 16) & 0xFF;
+            int m = eax & 0xFFFF;
+            int regEax;
+            if (f > 0x0F)
+            {
+                int extF = f - 0x0F;
+                int baseM = m & 0x0F;
+                int extM = (m >> 4) & 0x0F;
+                regEax = (extF << 20) | (extM << 16) | (0x0F << 8) | (baseM << 4);
+            }
+            else
+            {
+                int baseM = m & 0x0F;
+                int extM = (m >> 4) & 0x0F;
+                regEax = (extM << 16) | (f << 8) | (baseM << 4);
+            }
+            SystemInfo.CpuIdSocketLookupRaw(regEax).Should().NotBeNull();
+        }
+
+        // 2. DeriveSocketFromCpuBrand across all CPU brand families
+        string?[] testBrands =
+        [
+            null, "", "   ", "CPU",
+            "Intel Core Ultra 7 155H",
+            "Intel Core Ultra 7 155U",
+            "Intel Core Ultra 9 285K",
+            "Intel Core Ultra 7 258V",
+            "Intel Core i9-14900HX",
+            "Intel Core i7-13700H",
+            "Intel Core i7-14700K",
+            "Intel Core i7-10700H",
+            "Intel Core i7-10700U",
+            "Intel Core i7-10700K",
+            "Intel Core i7-8700H",
+            "Intel Core i7-8700K",
+            "Intel Core i7-4770K",
+            "Intel Core i7-4770",
+            "Intel Xeon W9-3495X",
+            "Intel Xeon Platinum 8380",
+            "Intel Unknown Model",
+            "AMD Ryzen Threadripper 7980X",
+            "AMD Ryzen Threadripper 3990X",
+            "AMD EPYC 9654",
+            "AMD EPYC 8534P",
+            "AMD EPYC 7763",
+            "AMD Ryzen 9 9950X",
+            "AMD Ryzen 7 8845HS",
+            "AMD Ryzen 7 7800X3D",
+            "AMD Ryzen 7 6800H",
+            "AMD Ryzen 7 5800H",
+            "AMD Ryzen 7 4800H",
+            "AMD Ryzen 5 3600",
+            "AMD Ryzen 5 3500U",
+            "AMD Ryzen 5 1600",
+            "AMD Ryzen 5 2500U",
+            "AMD Unknown Model",
+            "Snapdragon X Elite",
+            "Qualcomm Generic Chip"
+        ];
+
+        foreach (var brand in testBrands)
+        {
+            var socket = SystemInfo.DeriveSocketFromCpuBrand(brand);
+            socket.Should().NotBeNull();
+        }
+    }
+
+    [Fact]
+    public void SystemInfo_SmbiosCache_EmptyAndPopulated_Coverage()
+    {
+        var smbiosField = typeof(SystemInfo).GetField("_smbiosCache", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var origSmbios = smbiosField.GetValue(null);
+
+        try
+        {
+            // 1. Empty SMBIOS table branch
+            smbiosField.SetValue(null, Array.Empty<byte>());
+            SystemInfo.GetPsuName().Should().BeEmpty();
+            SystemInfo.GetPsuMaxCapacity().Should().BeEmpty();
+
+            // 2. Populated SMBIOS table branch
+            smbiosField.SetValue(null, BuildBlob());
+            SystemInfo.GetPsuName().Should().Be("Seasonic FOCUS GX-850");
+            SystemInfo.GetPsuMaxCapacity().Should().NotBeEmpty();
+        }
+        finally
+        {
+            smbiosField.SetValue(null, origSmbios);
+        }
+    }
 }
 
 

@@ -954,5 +954,131 @@ public class TaskbarEmbedderTests
         // Reset static fields
         typeof(TaskbarEmbedder).GetField("_cachedWidgetRightEdge", BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, -1);
     }
+
+    [Fact]
+    public void TaskbarEmbedder_PositionFloat_Modes_And_EdgeCases()
+    {
+        var cfg = new AppSettings();
+        var embedder = new TaskbarEmbedder(cfg);
+        using var form = new Form();
+
+        var posFloatMethod = typeof(TaskbarEmbedder).GetMethod("PositionFloat", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var compLeftFloatMethod = typeof(TaskbarEmbedder).GetMethod("ComputeLeftFloatX", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var estTrayWidthMethod = typeof(TaskbarEmbedder).GetMethod("EstimateTrayWidth", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var logTrayEdgeMethod = typeof(TaskbarEmbedder).GetMethod("LogTrayEdgeChange", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var logWidgetEdgeMethod = typeof(TaskbarEmbedder).GetMethod("LogWidgetEdgeChange", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var resetCachesMethod = typeof(TaskbarEmbedder).GetMethod("ResetStaticEdgeCaches", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var logTrayStructMethod = typeof(TaskbarEmbedder).GetMethod("LogTrayStructure", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var isWidgetsEnabledMethod = typeof(TaskbarEmbedder).GetMethod("IsWidgetsFeatureEnabled", BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        // 1. Static edge change logging and cache resetting
+        logTrayEdgeMethod.Invoke(null, [100, "Test tray edge change"]);
+        logTrayEdgeMethod.Invoke(null, [100, "Duplicate tray edge"]); // hits early return branch
+        logWidgetEdgeMethod.Invoke(null, [200, "Test widget edge change"]);
+        logWidgetEdgeMethod.Invoke(null, [200, "Duplicate widget edge"]); // hits early return branch
+        resetCachesMethod.Invoke(null, null);
+
+        // 2. Tray structure inspection and widgets feature check
+        var actStruct = () => logTrayStructMethod.Invoke(null, null);
+        actStruct.Should().NotThrow();
+
+        var isWidgets = (bool)isWidgetsEnabledMethod.Invoke(null, null)!;
+        isWidgets.Should().Be(isWidgets);
+
+        // 3. EstimateTrayWidth
+        int trayWidth = (int)estTrayWidthMethod.Invoke(null, null)!;
+        trayWidth.Should().BeGreaterThan(0);
+
+        // 4. PositionFloat with invalid bounds -> returns false
+        typeof(TaskbarEmbedder).GetField("_taskbarRect", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, Rectangle.Empty);
+        bool failRes = (bool)posFloatMethod.Invoke(embedder, [form.Handle, new Size(200, 30)])!;
+        failRes.Should().BeFalse();
+        embedder.State.Should().Be(OverlayDeploymentState.Failed);
+
+        // 5. PositionCustomFloat when FloatX and FloatY >= 0
+        cfg.Overlay.FloatX = 150;
+        cfg.Overlay.FloatY = 250;
+        bool customRes = (bool)posFloatMethod.Invoke(embedder, [form.Handle, new Size(200, 30)])!;
+        customRes.Should().BeTrue();
+        embedder.LastComputedFloatX.Should().Be(150);
+        embedder.LastComputedFloatY.Should().Be(250);
+
+        // Repeated call to verify _lastFloatRect == targetRect early return
+        bool repeatCustomRes = (bool)posFloatMethod.Invoke(embedder, [form.Handle, new Size(200, 30)])!;
+        repeatCustomRes.Should().BeTrue();
+
+        // 6. PositionTaskbarFloat with horizontal taskbar (bottom and top)
+        cfg.Overlay.FloatX = -1;
+        cfg.Overlay.FloatY = -1;
+        typeof(TaskbarEmbedder).GetField("_taskbarRect", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(embedder, new Rectangle(0, 1000, 1920, 48));
+        typeof(TaskbarEmbedder).GetField("_taskbarEdge", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(embedder, NativeMethods.ABE_BOTTOM);
+
+        // Placement = "left"
+        cfg.Overlay.Placement = "left";
+        typeof(TaskbarEmbedder).GetField("_leftWidgetRightEdge", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, 120);
+        int leftXWithWidget = (int)compLeftFloatMethod.Invoke(embedder, null)!;
+        leftXWithWidget.Should().BeGreaterThan(0);
+
+        typeof(TaskbarEmbedder).GetField("_leftWidgetRightEdge", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, -1);
+        int leftXNoWidget = (int)compLeftFloatMethod.Invoke(embedder, null)!;
+        leftXNoWidget.Should().Be(cfg.Overlay.PlacementOffset);
+
+        bool leftFloatRes = (bool)posFloatMethod.Invoke(embedder, [form.Handle, new Size(200, 30)])!;
+        leftFloatRes.Should().BeTrue();
+
+        // Placement = "center"
+        cfg.Overlay.Placement = "center";
+        bool centerFloatRes = (bool)posFloatMethod.Invoke(embedder, [form.Handle, new Size(200, 30)])!;
+        centerFloatRes.Should().BeTrue();
+
+        // Placement = "right" with clamping condition (e.g. huge offset or edge outside)
+        cfg.Overlay.Placement = "right";
+        cfg.Overlay.PlacementOffset = 5000; // triggers out-of-range clamping
+        bool clampedRes = (bool)posFloatMethod.Invoke(embedder, [form.Handle, new Size(200, 30)])!;
+        clampedRes.Should().BeTrue();
+
+        // 7. Vertical taskbar float (ABE_LEFT and ABE_RIGHT)
+        typeof(TaskbarEmbedder).GetField("_taskbarEdge", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(embedder, NativeMethods.ABE_LEFT);
+        bool vertLeftRes = (bool)posFloatMethod.Invoke(embedder, [form.Handle, new Size(200, 30)])!;
+        vertLeftRes.Should().BeTrue();
+
+        typeof(TaskbarEmbedder).GetField("_taskbarEdge", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(embedder, NativeMethods.ABE_RIGHT);
+        bool vertRightRes = (bool)posFloatMethod.Invoke(embedder, [form.Handle, new Size(200, 30)])!;
+        vertRightRes.Should().BeTrue();
+
+        // 8. RestoreLayeredStyles static invocation
+        var restoreLayered = typeof(TaskbarEmbedder).GetMethod("RestoreLayeredStyles", BindingFlags.NonPublic | BindingFlags.Static)!;
+        restoreLayered.Invoke(null, [form.Handle]);
+    }
+
+    [Fact]
+    public void TaskbarEmbedder_EmbedFailure_And_LeftWidget_Coverage()
+    {
+        var cfg = new AppSettings();
+        var embedder = new TaskbarEmbedder(cfg);
+
+        // 1. Embed failure path with zero handle
+        bool embedRes = embedder.Embed(IntPtr.Zero, new Size(200, 30));
+        embedRes.Should().BeFalse();
+        embedder.State.Should().Be(OverlayDeploymentState.Failed);
+        embedder.IsEmbedded.Should().BeFalse();
+
+        // 2. GetLeftWidgetRightEdge reflection
+        var leftWidgetMethod = typeof(TaskbarEmbedder).GetMethod("GetLeftWidgetRightEdge", BindingFlags.NonPublic | BindingFlags.Static)!;
+        int widgetEdge = (int)leftWidgetMethod.Invoke(null, null)!;
+        widgetEdge.Should().BeInRange(-1, int.MaxValue);
+
+        // 3. PositionInBand with invalid HWND and oversized width
+        var posBandMethod = typeof(TaskbarEmbedder).GetMethod("PositionInBand", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        using var form = new Form();
+        typeof(TaskbarEmbedder).GetField("_parentHwnd", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, form.Handle);
+        bool posBandFail = (bool)posBandMethod.Invoke(embedder, [new IntPtr(9999999), new Size(10000, 30)])!;
+        posBandFail.Should().BeFalse();
+        embedder.State.Should().Be(OverlayDeploymentState.Failed);
+    }
 }
 

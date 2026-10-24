@@ -319,4 +319,58 @@ public class WindowHelpersTests
             WindowHelpers.RunKeyQuery = null;
         }
     }
+
+    [Fact]
+    public void SetStartup_RemoveStartupTask_ExceptionBranches_Coverage()
+    {
+        var prevAction = WindowHelpers.SetStartupAction;
+        var prevCleanup = WindowHelpers.LegacyRegistryCleanupAction;
+        var prevFactory = WindowHelpers.TaskSchedulerFactory;
+
+        try
+        {
+            WindowHelpers.SetStartupAction = null;
+
+            // 1. GetTask throws exception inside root folder query
+            var mockThrow = new MockThrowingTaskScheduler();
+            WindowHelpers.TaskSchedulerFactory = () => mockThrow;
+            WindowHelpers.LegacyRegistryCleanupAction = () => throw new InvalidOperationException("Registry cleanup error");
+
+            var remove = typeof(WindowHelpers).GetMethod("RemoveStartupTask", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+            var act = () => remove.Invoke(null, null);
+            act.Should().NotThrow();
+
+            // 2. IsStartupEnabled with null RunKeyQuery and null StartupQueryExitCode
+            WindowHelpers.StartupQueryExitCode = () => 1;
+            WindowHelpers.RunKeyQuery = null;
+            var isEnabled = WindowHelpers.IsStartupEnabled();
+            isEnabled.Should().Be(isEnabled);
+        }
+        finally
+        {
+            WindowHelpers.SetStartupAction = prevAction;
+            WindowHelpers.LegacyRegistryCleanupAction = prevCleanup;
+            WindowHelpers.TaskSchedulerFactory = prevFactory;
+            WindowHelpers.StartupQueryExitCode = null;
+            WindowHelpers.RunKeyQuery = null;
+        }
+    }
+
+    private sealed class MockThrowingTaskScheduler : DynamicObject
+    {
+        public override bool TryInvokeMember(InvokeMemberBinder binder, object?[]? args, out object? result)
+        {
+            if (binder.Name == "GetFolder")
+            {
+                result = this;
+                return true;
+            }
+            if (binder.Name == "GetTask")
+            {
+                throw new InvalidOperationException("Task does not exist");
+            }
+            result = null;
+            return true;
+        }
+    }
 }

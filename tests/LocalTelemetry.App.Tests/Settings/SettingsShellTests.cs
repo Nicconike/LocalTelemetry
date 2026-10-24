@@ -1809,4 +1809,84 @@ public class SettingsShellTests
             try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
+
+    [WpfFact]
+    public void SettingsShell_SendSystemInfo_And_TrafficHistory_Coverage()
+    {
+        var cfg = new AppSettings();
+        string tempPath = Path.Combine(Path.GetTempPath(), "net_history_" + Guid.NewGuid().ToString("N") + ".dat");
+        try
+        {
+            var history = new TrafficHistoryFile(tempPath);
+            TrafficHistoryStore.Initialize(history);
+            using var netLogger = new NetUsageLogger(cfg, history);
+            var shell = new SettingsShell(cfg, netLogger);
+
+            var posted = new List<string>();
+            SettingsShell.PostJsonActionOverride = posted.Add;
+
+            var sendSysInfo = typeof(SettingsShell).GetMethod("SendSystemInfo", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            sendSysInfo.Invoke(shell, null);
+
+            var sendAllHist = typeof(SettingsShell).GetMethod("SendAllTrafficHistory", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            sendAllHist.Invoke(shell, null);
+
+            var sendMonths = typeof(SettingsShell).GetMethod("SendTrafficMonths", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            sendMonths.Invoke(shell, null);
+
+            typeof(SettingsShell).GetField("_webViewReady", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(shell, true);
+
+            var sendToday = typeof(SettingsShell).GetMethod("SendTrafficToday", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            sendToday.Invoke(shell, null);
+
+            var checkNics = typeof(SettingsShell).GetMethod("CheckAndSendNics", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            checkNics.Invoke(shell, null);
+
+            posted.Should().NotBeEmpty();
+            shell.Close();
+        }
+        finally
+        {
+            SettingsShell.PostJsonActionOverride = null;
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+        }
+    }
+
+    [WpfFact]
+    public void SettingsShell_HandleWebMessageJson_And_Logging_Coverage()
+    {
+        string tempPath = Path.Combine(Path.GetTempPath(), "settings_shell_msg_" + Guid.NewGuid().ToString("N") + ".dat");
+        try
+        {
+            var cfg = new AppSettings();
+            var history = new TrafficHistoryFile(tempPath);
+            using var netLogger = new NetUsageLogger(cfg, history);
+            var shell = new SettingsShell(cfg, netLogger);
+
+            // 1. Invalid JSON catch block
+            shell.HandleWebMessageJson("{invalid json");
+
+            // 2. checkForUpdates command with force=true and force=false
+            shell.HandleWebMessageJson("""{"type": "checkForUpdates", "payload": {"force": true}}""");
+            shell.HandleWebMessageJson("""{"type": "checkForUpdates", "payload": {"force": false}}""");
+
+            // 3. log command with levels: info, warn, error
+            shell.HandleWebMessageJson("""{"type": "log", "payload": {"level": "info", "message": "Test info message"}}""");
+            shell.HandleWebMessageJson("""{"type": "log", "payload": {"level": "warn", "message": "Test warn message"}}""");
+            shell.HandleWebMessageJson("""{"type": "log", "payload": {"level": "error", "message": "Test error message"}}""");
+
+            // 4. IsValidMessageSource reflection
+            var isValidMethod = typeof(SettingsShell).GetMethod("IsValidMessageSource", BindingFlags.NonPublic | BindingFlags.Static)!;
+            ((bool)isValidMethod.Invoke(null, ["https://localtelemetry.settings/index.html"])!).Should().BeTrue();
+            ((bool)isValidMethod.Invoke(null, ["https://evil.com/index.html"])!).Should().BeFalse();
+            ((bool)isValidMethod.Invoke(null, [""])!).Should().BeFalse();
+            ((bool)isValidMethod.Invoke(null, [(string?)null])!).Should().BeFalse();
+
+            shell.Close();
+        }
+        finally
+        {
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+        }
+    }
 }

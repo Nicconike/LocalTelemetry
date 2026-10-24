@@ -20,14 +20,14 @@
         "@sveltejs/vite-plugin-svelte": "^7.3.1",
         "@vitest/coverage-v8": "^5.0.5",
         "commitlint-plugin-function-rules": "4.0.1",
-        "happy-dom": "^21.0.3",
+        "happy-dom": "^21.0.4",
         "svelte": "^5.57.2",
         "typescript": "^7.0.2",
         "vite": "^8.3.4",
         "vitest": "^5.0.5"
     },
     "overrides": {
-        "fast-uri": "^3.1.8",
+        "fast-uri": "^3.1.9",
         "nanoid": "^3.3.18",
         "postcss": "^8.5.23",
         "js-yaml": "^4.3.2",
@@ -41,7 +41,8 @@
         "express": "^4.20.0",
         "devalue": "^5.9.3",
         "source-map-js": "^1.2.2",
-        "@vitest/mocker": "^5.0.5"
+        "@vitest/mocker": "^5.0.5",
+        "zod": "^4.6.7"
     },
     "dependencies": {
         "@lucide/svelte": "^1.59.0",

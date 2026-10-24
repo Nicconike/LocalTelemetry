@@ -2121,6 +2121,111 @@ public class HardwareMonitorTests
         // Test physical adapter
         AssertVirtual("Ethernet", "Intel(R) Ethernet Controller I225-V", false);
     }
+
+    [Fact]
+    public void HardwareMonitor_Network_Offline_Transitions_And_Init()
+    {
+        var cfg = BasicCfg();
+        cfg.Monitoring.EnableNet = true;
+        cfg.Monitoring.PreferredNic = "NonExistentAdapterId_12345";
+        using var monitor = CreateMonitor(cfg);
+
+        var ensureNicMethod = typeof(HardwareMonitor).GetMethod("EnsureNicCounters", BindingFlags.NonPublic | BindingFlags.Instance)!;
+
+        // 1. Initialise with non-existent preferred adapter
+        ensureNicMethod.Invoke(monitor, null);
+
+        // 2. Initialise with empty preference
+        cfg.Monitoring.PreferredNic = "";
+        ensureNicMethod.Invoke(monitor, null);
+
+        // 3. SelectActiveNic invocation
+        var selectNicMethod = typeof(HardwareMonitor).GetMethod("SelectActiveNic", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var result = selectNicMethod.Invoke(null, [""]);
+        result.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void HardwareMonitor_Lifecycle_Exception_Catch_Branches()
+    {
+        var cfg = BasicCfg();
+        using var monitor = CreateMonitor(cfg);
+
+        // 1. ResetGpuMonitors error path when monitor throws
+        var resetMethod = typeof(HardwareMonitor).GetMethod("ResetGpuMonitors", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var actReset = () => resetMethod.Invoke(monitor, ["Test Reason"]);
+        actReset.Should().NotThrow();
+
+        // 2. OnPowerSuspended error path when timer is disposed
+        var timerField = typeof(HardwareMonitor).GetField("_timer", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var origTimer = (Timer?)timerField.GetValue(monitor);
+        try
+        {
+            origTimer?.Dispose();
+            var onSuspended = typeof(HardwareMonitor).GetMethod("OnPowerSuspended", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var actSuspend = () => onSuspended.Invoke(monitor, null);
+            actSuspend.Should().NotThrow();
+        }
+        finally
+        {
+            // Restore timer so disposal does not fail
+            timerField.SetValue(monitor, new Timer(_ => { }, null, Timeout.Infinite, Timeout.Infinite));
+        }
+
+        // 3. Execute resume warm-up
+        monitor.ExecutePowerResumeWarmUp();
+    }
+
+    [Fact]
+    public void HardwareMonitor_ReadGpuPct_And_Sensor_Fallbacks()
+    {
+        var cfg = BasicCfg();
+        cfg.Monitoring.EnableGpu = true;
+        cfg.Monitoring.GpuUsageSource = "auto";
+        using var monitor = CreateMonitor(cfg);
+
+        // 1. ReadGpuPct executes cleanly
+        float gpuPct = InvokeFloat(monitor, "ReadGpuPct", (object?)null);
+        gpuPct.Should().BeInRange(0f, 100f);
+
+        // 2. ReadGpuTemp, ReadGpuVramUsedMb, ReadGpuFreqMHz, ReadGpuPowerW with null gpuData
+        InvokeFloat(monitor, "ReadGpuTemp", (object?)null).Should().BeGreaterThanOrEqualTo(0f);
+        Invoke(monitor, "ReadGpuVramUsedMb", (object?)null).Should().NotBeNull();
+        Invoke(monitor, "ReadGpuFreqMHz", (object?)null).Should().NotBeNull();
+        InvokeFloat(monitor, "ReadGpuPowerW", (object?)null).Should().BeGreaterThanOrEqualTo(0f);
+    }
+
+    [Fact]
+    public void HardwareMonitor_Battery_And_Event_Handlers_Coverage()
+    {
+        var cfg = BasicCfg();
+        cfg.Monitoring.EnableBattery = true;
+        using var monitor = CreateMonitor(cfg);
+
+        // 1. ReadBattery and QueryBatteryRateW
+        var readBatteryMethod = typeof(HardwareMonitor).GetMethod("ReadBattery", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var queryBatteryRateMethod = typeof(HardwareMonitor).GetMethod("QueryBatteryRateW", BindingFlags.NonPublic | BindingFlags.Instance)!;
+
+        var actBattery = () => readBatteryMethod.Invoke(monitor, null);
+        actBattery.Should().NotThrow();
+
+        var actRate = () => queryBatteryRateMethod.Invoke(monitor, null);
+        actRate.Should().NotThrow();
+
+        // 2. Hardware event callbacks
+        var onDisplayMethod = typeof(HardwareMonitor).GetMethod("OnDisplayOrDriverChanged", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var onNetTopoMethod = typeof(HardwareMonitor).GetMethod("OnNetworkTopologyChanged", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var onPnpMethod = typeof(HardwareMonitor).GetMethod("OnDevicePnPChanged", BindingFlags.NonPublic | BindingFlags.Instance)!;
+
+        var actDisplay = () => onDisplayMethod.Invoke(monitor, null);
+        actDisplay.Should().NotThrow();
+
+        var actNetTopo = () => onNetTopoMethod.Invoke(monitor, null);
+        actNetTopo.Should().NotThrow();
+
+        var actPnp = () => onPnpMethod.Invoke(monitor, null);
+        actPnp.Should().NotThrow();
+    }
 }
 
 

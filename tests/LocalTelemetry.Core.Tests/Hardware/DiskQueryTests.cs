@@ -442,6 +442,20 @@ public class DiskQueryTests
             idx.Should().BeGreaterThanOrEqualTo(0);
         }
     }
+
+    [Fact]
+    public void DiskQuery_BusType_And_MediaTypes_Coverage()
+    {
+        // 1. QueryMsftMediaTypes
+        var msftMethod = typeof(DiskQuery).GetMethod("QueryMsftMediaTypes", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var mediaDict = (Dictionary<string, string>)msftMethod.Invoke(null, null)!;
+        mediaDict.Should().NotBeNull();
+
+        // 2. QueryBusTypeIoctl with non-existent drive index (e.g. 9999)
+        var adapterMethod = typeof(DiskQuery).GetMethod("QueryBusTypeIoctl", BindingFlags.NonPublic | BindingFlags.Static)!;
+        string busType = (string)adapterMethod.Invoke(null, [9999])!;
+        busType.Should().BeEmpty();
+    }
 }
 
 

@@ -260,5 +260,13 @@ public class WddmGpuMonitorTests
             typeof(WddmGpuMonitor).GetField("_buffer", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(monitor, IntPtr.Zero);
         }
     }
+
+    [Fact]
+    public void WddmGpuMonitor_Reset_And_ReInit_Coverage()
+    {
+        using var monitor = new WddmGpuMonitor();
+        var actReset = () => monitor.Reset();
+        actReset.Should().NotThrow();
+    }
 }
 
