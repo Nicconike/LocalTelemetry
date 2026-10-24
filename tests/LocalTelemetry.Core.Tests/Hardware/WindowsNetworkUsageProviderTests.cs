@@ -516,7 +516,7 @@ public class WindowsNetworkUsageProviderTests
 
             // 2. Cancellation handling
             using var cts = new CancellationTokenSource();
-            cts.Cancel();
+            await cts.CancelAsync();
             var actCancel = async () => await WindowsNetworkUsageProvider.ImportAndSaveHistoryAsync(historyFile, cts.Token);
             await actCancel.Should().NotThrowAsync();
         }
@@ -540,7 +540,7 @@ public class WindowsNetworkUsageProviderTests
 
             // Cancelled refresh
             using var cts = new CancellationTokenSource();
-            cts.Cancel();
+            await cts.CancelAsync();
             var actCancel = async () => await WindowsNetworkUsageProvider.RefreshTodayUsageAsync(historyFile, cts.Token);
             await actCancel.Should().NotThrowAsync();
         }
@@ -563,7 +563,7 @@ public class WindowsNetworkUsageProviderTests
 
         // 3. Pre-cancelled query handles cancellation safely
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await cts.CancelAsync();
         var cancelAct = async () => await WindowsNetworkUsageProvider.GetUsageAsync(DateTime.Today.AddDays(-10), DateTime.Today, cts.Token);
         await cancelAct.Should().ThrowAsync<OperationCanceledException>();
     }
@@ -579,11 +579,11 @@ public class WindowsNetworkUsageProviderTests
         ((DateTime?)parseInstallTime.Invoke(null, [0L])).Should().BeNull();
         ((DateTime?)parseInstallTime.Invoke(null, ["invalid"])).Should().BeNull();
         // FileTime for 1995 (year < 2000)
-        long fileTime1995 = new DateTime(1995, 1, 1).ToFileTimeUtc();
+        long fileTime1995 = new DateTime(1995, 1, 1, 0, 0, 0, DateTimeKind.Utc).ToFileTimeUtc();
         ((DateTime?)parseInstallTime.Invoke(null, [fileTime1995])).Should().BeNull();
         // Valid FileTime for 2021
-        long fileTime2021 = new DateTime(2021, 5, 1).ToFileTimeUtc();
-        ((DateTime?)parseInstallTime.Invoke(null, [fileTime2021])).Should().Be(new DateTime(2021, 5, 1));
+        long fileTime2021 = new DateTime(2021, 5, 1, 0, 0, 0, DateTimeKind.Utc).ToFileTimeUtc();
+        ((DateTime?)parseInstallTime.Invoke(null, [fileTime2021])).Should().Be(new DateTime(2021, 5, 1, 0, 0, 0, DateTimeKind.Local).Date);
 
         // TryParseInstallDate
         ((DateTime?)parseInstallDate!.Invoke(null, [-5])).Should().BeNull();
@@ -595,8 +595,9 @@ public class WindowsNetworkUsageProviderTests
         ((DateTime?)parseInstallDate.Invoke(null, [631152000])).Should().BeNull();
         // Unix timestamp for 2022-01-01
         long unix2022 = new DateTimeOffset(2022, 1, 1, 0, 0, 0, TimeSpan.Zero).ToUnixTimeSeconds();
-        ((DateTime?)parseInstallDate.Invoke(null, [unix2022])).Should().Be(new DateTime(2022, 1, 1));
-        ((DateTime?)parseInstallDate.Invoke(null, [(int)unix2022])).Should().Be(new DateTime(2022, 1, 1));
+        DateTime expected2022 = new DateTimeOffset(2022, 1, 1, 0, 0, 0, TimeSpan.Zero).LocalDateTime.Date;
+        ((DateTime?)parseInstallDate.Invoke(null, [unix2022])).Should().Be(expected2022);
+        ((DateTime?)parseInstallDate.Invoke(null, [(int)unix2022])).Should().Be(expected2022);
     }
 
     [Fact]
@@ -607,14 +608,14 @@ public class WindowsNetworkUsageProviderTests
 
         // 1. Future end date gets clamped to DateTime.Today
         var futureEnd = DateTime.Today.AddDays(5);
-        var resFuture = clampMethod!.Invoke(null, [DateTime.Today.AddDays(-10), futureEnd]);
-        var (start1, end1) = ((DateTime, DateTime))resFuture!;
+        var resFuture = clampMethod.Invoke(null, [DateTime.Today.AddDays(-10), futureEnd]);
+        var (_, end1) = ((DateTime, DateTime))resFuture!;
         end1.Should().Be(DateTime.Today);
 
         // 2. Start date earlier than 60 days ago gets clamped
         var oldStart = DateTime.Today.AddDays(-100);
         var resOld = clampMethod.Invoke(null, [oldStart, DateTime.Today.AddDays(-5)]);
-        var (start2, end2) = ((DateTime, DateTime))resOld!;
+        var (start2, _) = ((DateTime, DateTime))resOld!;
         start2.Should().Be(DateTime.Today.AddDays(-60));
 
         // 3. Normal range inside bounds stays unchanged
@@ -712,7 +713,7 @@ public class WindowsNetworkUsageProviderTests
 
             // 1. ImportTodayBaselineAsync when history does NOT have today
             var baselineMethod = typeof(WindowsNetworkUsageProvider).GetMethod("ImportTodayBaselineAsync", BindingFlags.NonPublic | BindingFlags.Static)!;
-            bool updated = (bool)(await (Task<bool>)baselineMethod.Invoke(null, [historyFile, DateTime.Today, CancellationToken.None])!)!;
+            bool updated = await (Task<bool>)baselineMethod.Invoke(null, [historyFile, DateTime.Today, CancellationToken.None])!;
             updated.Should().BeTrue();
 
             // 2. RefreshTodayUsageAsync normal flow
@@ -732,7 +733,7 @@ public class WindowsNetworkUsageProviderTests
 
             // 6. ImportHistoricalRecordsAsync when history is already up to date
             var histMethod = typeof(WindowsNetworkUsageProvider).GetMethod("ImportHistoricalRecordsAsync", BindingFlags.NonPublic | BindingFlags.Static)!;
-            int count = (int)(await (Task<int>)histMethod.Invoke(null, [historyFile, DateTime.Today.AddDays(-2), DateTime.Today.AddDays(-1), DateTime.Today, CancellationToken.None])!)!;
+            int count = await (Task<int>)histMethod.Invoke(null, [historyFile, DateTime.Today.AddDays(-2), DateTime.Today.AddDays(-1), DateTime.Today, CancellationToken.None])!;
             count.Should().BeGreaterThanOrEqualTo(0);
         }
         finally

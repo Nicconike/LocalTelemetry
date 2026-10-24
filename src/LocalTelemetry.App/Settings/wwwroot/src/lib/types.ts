@@ -39,6 +39,7 @@ export interface OverlayDto {
     visible: boolean;
     doubleClickAction: string;
     position: string;
+    taskbarAlignment?: 'left' | 'center';
     offsetX: number;
     opacity: number;
     scale: number;

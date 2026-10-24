@@ -26,6 +26,10 @@ Processor vitals monitor your CPU's workload, package temperature, operating clo
   - `Overall (Task Manager)`: Global average CPU utilization across all threads, matching Windows Task Manager.
   - `Max Thread (Gaming)`: Utilization of the single most loaded core or thread, useful for identifying single-threaded CPU bottlenecks in games.
 
+::: info Sensor Architecture & Fallback
+On Intel systems, temperatures are read from MSR `0x1A2`/`0x1B1`. On AMD systems, temperatures are read from SMN registers (`0x00059800`) or the SMU power management table. If low-level driver calls fail, LocalTelemetry automatically falls back to Windows ACPI thermal zone queries via WMI (`root\wmi`).
+:::
+
 ---
 
 ## :gpu: GPU Metrics

@@ -354,16 +354,21 @@ public sealed class HardwareMonitor : IDisposable
 
     private void InitAmdSensors(IPawnIoTransport device)
     {
-        var ryzenBlob = _pawnIoManager.LoadResourceBytes("RyzenSMU.bin");
-        if (ryzenBlob is not null && _pawnIoManager.LoadModule(device, ryzenBlob))
+        var amdBlob = _pawnIoManager.LoadResourceBytes("AMDFamily17.bin");
+        if (amdBlob is not null && _pawnIoManager.LoadModule(device, amdBlob))
         {
             _amdMsr = new AmdMsrReader(device);
-            Log.Info(_amdMsr.IsAvailable ? "Sensor driver AMD Ryzen SMU ready" : "Sensor driver AMD Ryzen SMU unavailable");
+            Log.Info(_amdMsr.IsAvailable ? "Sensor driver AMD MSR & SMN ready" : "Sensor driver AMD MSR unavailable");
         }
-
-        var amdBlob = _pawnIoManager.LoadResourceBytes("AMDFamily17.bin");
-        if (amdBlob is not null)
-            _pawnIoManager.LoadModule(device, amdBlob);
+        else
+        {
+            var ryzenBlob = _pawnIoManager.LoadResourceBytes("RyzenSMU.bin");
+            if (ryzenBlob is not null && _pawnIoManager.LoadModule(device, ryzenBlob))
+            {
+                _amdMsr = new AmdMsrReader(device);
+                Log.Info(_amdMsr.IsAvailable ? "Sensor driver AMD Ryzen SMU ready" : "Sensor driver AMD Ryzen SMU unavailable");
+            }
+        }
     }
 
     private void InitNvGpu()
@@ -1187,6 +1192,10 @@ public sealed class HardwareMonitor : IDisposable
         }
         float temp = _intelMsr.ReadTemperature();
         if (temp > 0) return temp;
+
+        float wmiTemp = ReadWmiCpuTemp();
+        if (wmiTemp > 0) return wmiTemp;
+
         if (ShouldLogTick("cpu", 1) && Interlocked.CompareExchange(ref _onceCpuTempIntelMsrZero, 1, 0) == 0)
             Log.ErrorMetric("Intel MSR temperature reader returned zero");
         return 0f;
@@ -1196,20 +1205,50 @@ public sealed class HardwareMonitor : IDisposable
     {
         if (_amdMsr is null)
         {
-            if (ShouldLogTick("cpu", 1) && Interlocked.CompareExchange(ref _onceCpuTempAmdMsrNull, 1, 0) == 0)
-                Log.ErrorMetric("AMD Ryzen SMU temperature reader is not initialized");
-            return 0f;
+            return LogAndFallbackAmdTemp(ref _onceCpuTempAmdMsrNull, "AMD MSR temperature reader is not initialized");
         }
         if (!_amdMsr.IsAvailable)
         {
-            if (ShouldLogTick("cpu", 1) && Interlocked.CompareExchange(ref _onceCpuTempAmdMsrNotAvail, 1, 0) == 0)
-                Log.ErrorMetric("AMD Ryzen SMU temperature reader is not available");
-            return 0f;
+            return LogAndFallbackAmdTemp(ref _onceCpuTempAmdMsrNotAvail, "AMD MSR temperature reader is not available");
         }
+
         float temp = _amdMsr.ReadTemperature();
         if (temp > 0) return temp;
-        if (ShouldLogTick("cpu", 1) && Interlocked.CompareExchange(ref _onceCpuTempAmdMsrZero, 1, 0) == 0)
-            Log.ErrorMetric("AMD Ryzen SMU temperature reader returned zero");
+
+        return LogAndFallbackAmdTemp(ref _onceCpuTempAmdMsrZero, "AMD MSR temperature reader returned zero");
+    }
+
+    private float LogAndFallbackAmdTemp(ref int loggedFlag, string errorMessage)
+    {
+        float fallbackTemp = ReadWmiCpuTemp();
+        if (fallbackTemp > 0) return fallbackTemp;
+
+        if (ShouldLogTick("cpu", 1) && Interlocked.CompareExchange(ref loggedFlag, 1, 0) == 0)
+        {
+            Log.ErrorMetric(errorMessage);
+        }
+        return 0f;
+    }
+
+    private static float ReadWmiCpuTemp()
+    {
+        try
+        {
+            using var searcher = new System.Management.ManagementObjectSearcher(@"root\wmi", "SELECT CurrentTemperature FROM MSAcpi_ThermalZoneTemperature");
+            foreach (var obj in searcher.Get())
+            {
+                if (obj["CurrentTemperature"] is uint rawKelvin10 && rawKelvin10 > 2732)
+                {
+                    float celsius = (rawKelvin10 - 2732) / 10.0f;
+                    if (celsius is >= 15f and <= 125f)
+                        return celsius;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "WMI thermal zone temperature query unavailable");
+        }
         return 0f;
     }
 

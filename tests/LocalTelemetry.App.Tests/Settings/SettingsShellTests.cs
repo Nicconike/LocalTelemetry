@@ -1151,14 +1151,14 @@ public class SettingsShellTests
     {
         var method = typeof(SettingsShell).GetMethod("FormatGeneralOrLoggingChange", BindingFlags.NonPublic | BindingFlags.Static);
         method.Should().NotBeNull();
-        ((string?)method.Invoke(null, ["showsystemtrayicon", "true"])!).Should().Be("System tray icon shown");
-        ((string?)method.Invoke(null, ["showsystemtrayicon", "false"])!).Should().Be("System tray icon hidden");
-        ((string?)method.Invoke(null, ["runatstartup", "true"])!).Should().Be("Run at startup enabled");
-        ((string?)method.Invoke(null, ["startminimized", "true"])!).Should().Be("Start minimized enabled");
-        ((string?)method.Invoke(null, ["minimizetotrayonclose", "true"])!).Should().Be("Minimize to tray on close enabled");
-        ((string?)method.Invoke(null, ["datadirectory", "C:\\Data"])!).Should().Be("Data directory set to 'C:\\Data'");
-        ((string?)method.Invoke(null, ["enablefilelogging", "true"])!).Should().Be("Metrics logging enabled");
-        ((string?)method.Invoke(null, ["systemloglevel", "Debug"])!).Should().Be("System log level set to Debug");
+        ((string?)method.Invoke(null, ["showsystemtrayicon", "true"])).Should().Be("System tray icon shown");
+        ((string?)method.Invoke(null, ["showsystemtrayicon", "false"])).Should().Be("System tray icon hidden");
+        ((string?)method.Invoke(null, ["runatstartup", "true"])).Should().Be("Run at startup enabled");
+        ((string?)method.Invoke(null, ["startminimized", "true"])).Should().Be("Start minimized enabled");
+        ((string?)method.Invoke(null, ["minimizetotrayonclose", "true"])).Should().Be("Minimize to tray on close enabled");
+        ((string?)method.Invoke(null, ["datadirectory", "C:\\Data"])).Should().Be("Data directory set to 'C:\\Data'");
+        ((string?)method.Invoke(null, ["enablefilelogging", "true"])).Should().Be("Metrics logging enabled");
+        ((string?)method.Invoke(null, ["systemloglevel", "Debug"])).Should().Be("System log level set to Debug");
         ((string?)method.Invoke(null, ["unknown", "val"])).Should().BeNull();
     }
 
@@ -1167,11 +1167,11 @@ public class SettingsShellTests
     {
         var method = typeof(SettingsShell).GetMethod("FormatNetworkChange", BindingFlags.NonPublic | BindingFlags.Static);
         method.Should().NotBeNull();
-        ((string?)method.Invoke(null, ["network.selectedinterface", ""])!).Should().Be("Network adapter set to All Adapters");
-        ((string?)method.Invoke(null, ["network.selectedinterface", "Ethernet"])!).Should().Be("Network adapter set to 'Ethernet'");
-        ((string?)method.Invoke(null, ["network.unitformat", "auto"])!).Should().Be("Network unit format set to auto");
-        ((string?)method.Invoke(null, ["network.speedunit", "bytes"])!).Should().Be("Network speed unit set to bytes");
-        ((string?)method.Invoke(null, ["network.autoresetmonthly", "true"])!).Should().Be("Monthly network auto-reset enabled");
+        ((string?)method.Invoke(null, ["network.selectedinterface", ""])).Should().Be("Network adapter set to All Adapters");
+        ((string?)method.Invoke(null, ["network.selectedinterface", "Ethernet"])).Should().Be("Network adapter set to 'Ethernet'");
+        ((string?)method.Invoke(null, ["network.unitformat", "auto"])).Should().Be("Network unit format set to auto");
+        ((string?)method.Invoke(null, ["network.speedunit", "bytes"])).Should().Be("Network speed unit set to bytes");
+        ((string?)method.Invoke(null, ["network.autoresetmonthly", "true"])).Should().Be("Monthly network auto-reset enabled");
         ((string?)method.Invoke(null, ["network.unknown", "val"])).Should().BeNull();
     }
 
@@ -1180,34 +1180,34 @@ public class SettingsShellTests
     {
         var method = typeof(SettingsShell).GetMethod("FormatOverlayChange", BindingFlags.NonPublic | BindingFlags.Static);
         method.Should().NotBeNull();
-        ((string?)method.Invoke(null, ["overlay.visible", "overlay.visible", "false", "true"])!).Should().Be("Taskbar overlay turned on");
-        ((string?)method.Invoke(null, ["overlay.visible", "overlay.visible", "true", "false"])!).Should().Be("Taskbar overlay turned off");
-        ((string?)method.Invoke(null, ["overlay.placement", "overlay.placement", "", "Right"])!).Should().Be("Position changed to Right");
-        ((string?)method.Invoke(null, ["overlay.placementoffset", "overlay.placementoffset", "", "10"])!).Should().Be("Offset changed to 10 px");
-        ((string?)method.Invoke(null, ["overlay.opacity", "overlay.opacity", "", "80"])!).Should().Be("Opacity changed to 80%");
-        ((string?)method.Invoke(null, ["overlay.scalepct", "overlay.scalepct", "", "120"])!).Should().Be("Scale changed to 120%");
-        ((string?)method.Invoke(null, ["overlay.fontsizepx", "overlay.fontsizepx", "", "14"])!).Should().Be("Font size changed to 14 px");
-        ((string?)method.Invoke(null, ["overlay.fontbold", "overlay.fontbold", "", "true"])!).Should().Be("Bold font enabled");
-        ((string?)method.Invoke(null, ["overlay.labelcolor", "overlay.labelcolor", "", "#fff"])!).Should().Be("Label color changed to #fff");
-        ((string?)method.Invoke(null, ["overlay.valuecolor", "overlay.valuecolor", "", "#0f0"])!).Should().Be("Value color changed to #0f0");
-        ((string?)method.Invoke(null, ["overlay.bgcolor", "overlay.bgcolor", "", "#000"])!).Should().Be("Background color changed to #000");
-        ((string?)method.Invoke(null, ["overlay.showtoastnotif", "overlay.showtoastnotif", "", "true"])!).Should().Be("Toast notifications enabled");
-        ((string?)method.Invoke(null, ["overlay.flashoverlay", "overlay.flashoverlay", "", "true"])!).Should().Be("Flashing alerts enabled");
-        ((string?)method.Invoke(null, ["overlay.showlabels", "overlay.showlabels", "", "true"])!).Should().Be("Labels shown");
-        ((string?)method.Invoke(null, ["overlay.showlabels", "overlay.showlabels", "", "false"])!).Should().Be("Labels hidden");
-        ((string?)method.Invoke(null, ["overlay.doubleclickaction", "overlay.doubleclickaction", "", "taskmanager"])!).Should().Be("Double-click action set to Task Manager");
-        ((string?)method.Invoke(null, ["overlay.doubleclickaction", "overlay.doubleclickaction", "", "settings"])!).Should().Be("Double-click action set to Open Settings");
-        ((string?)method.Invoke(null, ["overlay.followwindowstheme", "overlay.followwindowstheme", "", "true"])!).Should().Be("Follow Windows theme enabled");
-        ((string?)method.Invoke(null, ["overlay.row1", "overlay.row1", "", "[\"cpu_pct\",\"gpu_temp\"]"])!).Should().Be("Metrics layout updated (2 metrics - CPU Usage, GPU Temperature)");
-        ((string?)method.Invoke(null, ["overlay.row1", "overlay.row1", "", ""])!).Should().Be("Metrics layout cleared (0 metrics)");
-        ((string?)method.Invoke(null, ["overlay.row1", "overlay.row1", "", "val"])!).Should().Be("Metrics layout updated (1 metric - val)");
-        ((string?)method.Invoke(null, ["overlay.row1", "overlay.row1", "[\"cpu_pct\"]", "[\"cpu_pct\",\"gpu_power\"]"])!).Should().Be("Added metric to overlay (GPU Power)");
-        ((string?)method.Invoke(null, ["overlay.row1", "overlay.row1", "[\"cpu_pct\",\"gpu_power\"]", "[\"cpu_pct\"]"])!).Should().Be("Removed metric from overlay (GPU Power)");
-        ((string?)method.Invoke(null, ["overlay.row1", "overlay.row1", "[\"cpu_pct\"]", "[\"gpu_power\"]"])!).Should().Be("Metrics layout updated (Added GPU Power, Removed CPU Usage)");
-        ((string?)method.Invoke(null, ["overlay.row1", "overlay.row1", "[\"cpu_pct\",\"gpu_temp\"]", "[\"gpu_temp\",\"cpu_pct\"]"])!).Should().Be("Metrics layout reordered");
-        ((string?)method.Invoke(null, ["overlay.metriccolors.cpu_pct", "overlay.metriccolors.cpu_pct", "#fff", "#000"])!).Should().Contain("CPU Usage");
-        ((string?)method.Invoke(null, ["overlay.groupcolors.cpu", "overlay.groupcolors.cpu", "#fff", "#000"])!).Should().Contain("Cpu");
-        ((string?)method.Invoke(null, ["overlay.usercustomized", "overlay.usercustomized", "", ""])!).Should().BeEmpty();
+        ((string?)method.Invoke(null, ["overlay.visible", "overlay.visible", "false", "true"])).Should().Be("Taskbar overlay turned on");
+        ((string?)method.Invoke(null, ["overlay.visible", "overlay.visible", "true", "false"])).Should().Be("Taskbar overlay turned off");
+        ((string?)method.Invoke(null, ["overlay.placement", "overlay.placement", "", "Right"])).Should().Be("Position changed to Right");
+        ((string?)method.Invoke(null, ["overlay.placementoffset", "overlay.placementoffset", "", "10"])).Should().Be("Offset changed to 10 px");
+        ((string?)method.Invoke(null, ["overlay.opacity", "overlay.opacity", "", "80"])).Should().Be("Opacity changed to 80%");
+        ((string?)method.Invoke(null, ["overlay.scalepct", "overlay.scalepct", "", "120"])).Should().Be("Scale changed to 120%");
+        ((string?)method.Invoke(null, ["overlay.fontsizepx", "overlay.fontsizepx", "", "14"])).Should().Be("Font size changed to 14 px");
+        ((string?)method.Invoke(null, ["overlay.fontbold", "overlay.fontbold", "", "true"])).Should().Be("Bold font enabled");
+        ((string?)method.Invoke(null, ["overlay.labelcolor", "overlay.labelcolor", "", "#fff"])).Should().Be("Label color changed to #fff");
+        ((string?)method.Invoke(null, ["overlay.valuecolor", "overlay.valuecolor", "", "#0f0"])).Should().Be("Value color changed to #0f0");
+        ((string?)method.Invoke(null, ["overlay.bgcolor", "overlay.bgcolor", "", "#000"])).Should().Be("Background color changed to #000");
+        ((string?)method.Invoke(null, ["overlay.showtoastnotif", "overlay.showtoastnotif", "", "true"])).Should().Be("Toast notifications enabled");
+        ((string?)method.Invoke(null, ["overlay.flashoverlay", "overlay.flashoverlay", "", "true"])).Should().Be("Flashing alerts enabled");
+        ((string?)method.Invoke(null, ["overlay.showlabels", "overlay.showlabels", "", "true"])).Should().Be("Labels shown");
+        ((string?)method.Invoke(null, ["overlay.showlabels", "overlay.showlabels", "", "false"])).Should().Be("Labels hidden");
+        ((string?)method.Invoke(null, ["overlay.doubleclickaction", "overlay.doubleclickaction", "", "taskmanager"])).Should().Be("Double-click action set to Task Manager");
+        ((string?)method.Invoke(null, ["overlay.doubleclickaction", "overlay.doubleclickaction", "", "settings"])).Should().Be("Double-click action set to Open Settings");
+        ((string?)method.Invoke(null, ["overlay.followwindowstheme", "overlay.followwindowstheme", "", "true"])).Should().Be("Follow Windows theme enabled");
+        ((string?)method.Invoke(null, ["overlay.row1", "overlay.row1", "", "[\"cpu_pct\",\"gpu_temp\"]"])).Should().Be("Metrics layout updated (2 metrics - CPU Usage, GPU Temperature)");
+        ((string?)method.Invoke(null, ["overlay.row1", "overlay.row1", "", ""])).Should().Be("Metrics layout cleared (0 metrics)");
+        ((string?)method.Invoke(null, ["overlay.row1", "overlay.row1", "", "val"])).Should().Be("Metrics layout updated (1 metric - val)");
+        ((string?)method.Invoke(null, ["overlay.row1", "overlay.row1", "[\"cpu_pct\"]", "[\"cpu_pct\",\"gpu_power\"]"])).Should().Be("Added metric to overlay (GPU Power)");
+        ((string?)method.Invoke(null, ["overlay.row1", "overlay.row1", "[\"cpu_pct\",\"gpu_power\"]", "[\"cpu_pct\"]"])).Should().Be("Removed metric from overlay (GPU Power)");
+        ((string?)method.Invoke(null, ["overlay.row1", "overlay.row1", "[\"cpu_pct\"]", "[\"gpu_power\"]"])).Should().Be("Metrics layout updated (Added GPU Power, Removed CPU Usage)");
+        ((string?)method.Invoke(null, ["overlay.row1", "overlay.row1", "[\"cpu_pct\",\"gpu_temp\"]", "[\"gpu_temp\",\"cpu_pct\"]"])).Should().Be("Metrics layout reordered");
+        ((string?)method.Invoke(null, ["overlay.metriccolors.cpu_pct", "overlay.metriccolors.cpu_pct", "#fff", "#000"])).Should().Contain("CPU Usage");
+        ((string?)method.Invoke(null, ["overlay.groupcolors.cpu", "overlay.groupcolors.cpu", "#fff", "#000"])).Should().Contain("Cpu");
+        ((string?)method.Invoke(null, ["overlay.usercustomized", "overlay.usercustomized", "", ""])).Should().BeEmpty();
         ((string?)method.Invoke(null, ["overlay.unknown", "overlay.unknown", "", ""])).Should().BeNull();
     }
 
@@ -1713,11 +1713,10 @@ public class SettingsShellTests
             SettingsShell.MessageBoxAction = (title, msg) => errorDialogMsg = msg;
 
             var initAsync = typeof(SettingsShell).GetMethod("InitWebViewAsync", BindingFlags.NonPublic | BindingFlags.Instance);
-            if (initAsync != null)
-            {
-                var task = (Task)initAsync.Invoke(shell, null)!;
-                await task;
-            }
+            initAsync.Should().NotBeNull();
+            var task = (Task)initAsync.Invoke(shell, null)!;
+            await task;
+            task.IsCompleted.Should().BeTrue();
 
             shell.Close();
         }
@@ -1744,7 +1743,7 @@ public class SettingsShellTests
 
             // 1. Missing or invalid date formats
             var invalidStart = JsonDocument.Parse("{\"startDate\":\"not-a-date\",\"endDate\":\"01-10-2026\"}").RootElement;
-            await (Task)method!.Invoke(shell, [invalidStart])!;
+            await (Task)method.Invoke(shell, [invalidStart])!;
 
             var invalidEnd = JsonDocument.Parse("{\"startDate\":\"01-10-2026\",\"endDate\":\"bad-end-date\"}").RootElement;
             await (Task)method.Invoke(shell, [invalidEnd])!;
@@ -1782,25 +1781,29 @@ public class SettingsShellTests
             using var netLogger = new NetUsageLogger(cfg, history);
             var shell = new SettingsShell(cfg, netLogger);
 
-            // 1. Log message - Warn level with detail
-            shell.HandleWebMessageJson("{\"type\":\"log\",\"payload\":{\"level\":\"warn\",\"message\":\"Warn test\",\"detail\":\"Detail test\"}}");
+            var actMessages = () =>
+            {
+                // 1. Log message - Warn level with detail
+                shell.HandleWebMessageJson("{\"type\":\"log\",\"payload\":{\"level\":\"warn\",\"message\":\"Warn test\",\"detail\":\"Detail test\"}}");
 
-            // 2. Log message - Error level without detail
-            shell.HandleWebMessageJson("{\"type\":\"log\",\"payload\":{\"level\":\"error\",\"message\":\"Error test\"}}");
+                // 2. Log message - Error level without detail
+                shell.HandleWebMessageJson("{\"type\":\"log\",\"payload\":{\"level\":\"error\",\"message\":\"Error test\"}}");
 
-            // 3. Log message - Missing payload property
-            shell.HandleWebMessageJson("{\"type\":\"log\"}");
+                // 3. Log message - Missing payload property
+                shell.HandleWebMessageJson("{\"type\":\"log\"}");
 
-            // 4. OpenFolder - valid folders
-            shell.HandleWebMessageJson("{\"type\":\"openFolder\",\"payload\":{\"folder\":\"logs\"}}");
-            shell.HandleWebMessageJson("{\"type\":\"openFolder\",\"payload\":{\"folder\":\"data\"}}");
-            shell.HandleWebMessageJson("{\"type\":\"openFolder\",\"payload\":{\"folder\":\"app\"}}");
-            shell.HandleWebMessageJson("{\"type\":\"openFolder\",\"payload\":{\"folder\":\"unknown\"}}");
-            shell.HandleWebMessageJson("{\"type\":\"openFolder\",\"payload\":{}}");
+                // 4. OpenFolder - valid folders
+                shell.HandleWebMessageJson("{\"type\":\"openFolder\",\"payload\":{\"folder\":\"logs\"}}");
+                shell.HandleWebMessageJson("{\"type\":\"openFolder\",\"payload\":{\"folder\":\"data\"}}");
+                shell.HandleWebMessageJson("{\"type\":\"openFolder\",\"payload\":{\"folder\":\"app\"}}");
+                shell.HandleWebMessageJson("{\"type\":\"openFolder\",\"payload\":{\"folder\":\"unknown\"}}");
+                shell.HandleWebMessageJson("{\"type\":\"openFolder\",\"payload\":{}}");
 
-            // 5. CheckForUpdates message
-            shell.HandleWebMessageJson("{\"type\":\"checkForUpdates\",\"payload\":{\"force\":true}}");
-            shell.HandleWebMessageJson("{\"type\":\"checkForUpdates\",\"payload\":{}}");
+                // 5. CheckForUpdates message
+                shell.HandleWebMessageJson("{\"type\":\"checkForUpdates\",\"payload\":{\"force\":true}}");
+                shell.HandleWebMessageJson("{\"type\":\"checkForUpdates\",\"payload\":{}}");
+            };
+            actMessages.Should().NotThrow();
 
             shell.Close();
         }

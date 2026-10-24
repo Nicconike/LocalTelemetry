@@ -19,7 +19,6 @@ public sealed class PawnIoDevice : IPawnIoTransport
     private const uint IOCTL_PIO_EXECUTE_FN = 0xA1B22104;
     private const uint FILE_ATTRIBUTE_NORMAL = 0x00000080;
     private const string DevicePath = @"\\?\GLOBALROOT\Device\PawnIO";
-    private const string DefaultInstallerUrl = "https://github.com/namazso/PawnIO.Setup/releases/latest/download/PawnIO_setup.exe";
 
     private SafeFileHandle? _handle;
     private bool _disposed;
@@ -220,6 +219,18 @@ public sealed class PawnIoDevice : IPawnIoTransport
     /// <summary>Test seam: replaces the process elevation check.</summary>
     internal static Func<bool>? ElevationChecker { get; set; }
 
+    private static Uri GetDefaultInstallerUri()
+    {
+        string? customUrl = Environment.GetEnvironmentVariable("PAWNIO_INSTALLER_URL");
+        if (!string.IsNullOrWhiteSpace(customUrl) && Uri.TryCreate(customUrl, UriKind.Absolute, out var customUri))
+            return customUri;
+
+        return new UriBuilder(Uri.UriSchemeHttps, "github.com")
+        {
+            Path = "namazso/PawnIO.Setup/releases/latest/download/PawnIO_setup.exe"
+        }.Uri;
+    }
+
     /// <summary>
     /// Downloads and runs the PawnIO setup installer with silent flags.
     /// Cleans up any stale installation first.
@@ -254,7 +265,7 @@ public sealed class PawnIoDevice : IPawnIoTransport
                 else
                 {
                     using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-                    setupBytes = client.GetByteArrayAsync(DefaultInstallerUrl)
+                    setupBytes = client.GetByteArrayAsync(GetDefaultInstallerUri())
                         .GetAwaiter().GetResult();
                 }
 

@@ -111,7 +111,7 @@ public sealed class UpdateCheckService(AppSettings cfg, HttpClient? httpClient =
                 ? releases.FirstOrDefault(r => !r.Draft)
                 : releases.FirstOrDefault(r => !r.Draft && !r.Prerelease);
 
-            if (targetRelease is null || string.IsNullOrWhiteSpace(targetRelease.TagName))
+            if (targetRelease is null)
             {
                 string desc = includePrereleases ? "No release version found" : "No stable release found";
                 Log.Warn($"{desc} (Include Prereleases: {includePrereleases})");
@@ -120,6 +120,17 @@ public sealed class UpdateCheckService(AppSettings cfg, HttpClient? httpClient =
                     IsUpdateAvailable = false,
                     CurrentVersion = currentVer,
                     ErrorMessage = desc
+                };
+            }
+
+            if (string.IsNullOrWhiteSpace(targetRelease.TagName))
+            {
+                Log.Warn("No release version found on target release");
+                return new UpdateCheckResult
+                {
+                    IsUpdateAvailable = false,
+                    CurrentVersion = currentVer,
+                    ErrorMessage = "No release version found"
                 };
             }
 

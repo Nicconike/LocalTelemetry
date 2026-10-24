@@ -132,13 +132,37 @@ In `IntelMsrReader.cs`, Intel processor temperatures are computed using package-
 3. **Current Package Temperature**:
    $$\text{Temperature (°C)} = \text{tjMax} - \text{digitalReadout}$$
 
-### :zap: AMD Ryzen SMU & Power Management Table (PM Table)
+### :zap: AMD Ryzen Temperature Resolution & Fallback Hierarchy
 
-In `AmdMsrReader.cs`, AMD Ryzen CPU temperature is read by resolving and walking the power management table:
+In `AmdMsrReader.cs` and `HardwareMonitor.cs`, AMD processor temperatures resolve across a 3-tier hierarchy:
 
-1. Calls `ioctl_resolve_pm_table` to locate the SMU PM table structure in memory.
-2. Invokes `ioctl_update_pm_table` to refresh telemetry data.
-3. Calls `ioctl_read_pm_table` across `PM_TABLE_ENTRY_COUNT = 128` entries, decoding valid temperature readings with `TryDecodeTemperature` and returning the highest active package temperature.
+1. **Primary: SMN Register 0x00059800 (`THM_TCON_CUR_TMP`)**:
+   - Supported across AMD Zen 1 through Zen 5 architectures using `AMDFamily17.bin`.
+   - Dispatches `ioctl_read_smn` targeting System Management Network (SMN) register `0x00059800`.
+   - Decodes temperature bitfields:
+
+     ```csharp
+     uint raw = (uint)(result[0] & 0xFFFFFFFF);
+     uint curTemp = (raw >> 21) & 0x7FF;
+     float temp = curTemp * 0.125f;
+     ```
+
+   - Validates that decoded temperature falls between `10°C` and `125°C`.
+
+2. **Secondary Fallback: SMU Power Management Table (PM Table)**:
+   - Falls back to `RyzenSMU.bin` on legacy Ryzen platforms or when SMN yields zero.
+   - Calls `ioctl_resolve_pm_table` to locate the SMU PM table structure in memory.
+   - Invokes `ioctl_update_pm_table` to refresh telemetry data.
+   - Iterates across `PM_TABLE_ENTRY_COUNT = 128` entries. Decodes valid entries using `TryDecodeTemperature` to return peak package temperature.
+
+3. **Tertiary Fallback: ACPI Thermal Zone WMI Query**:
+   - If kernel driver calls fail or return zero, `HardwareMonitor.cs` queries Windows Management Instrumentation (`root\wmi`).
+   - Queries `SELECT CurrentTemperature FROM MSAcpi_ThermalZoneTemperature`.
+   - Converts raw tenth-degree Kelvin values to Celsius:
+
+     $$\text{Temperature (°C)} = \frac{\text{rawKelvin10} - 2732}{10.0}$$
+
+   - Validates that computed temperature falls between `15°C` and `125°C`.
 
 ---
 

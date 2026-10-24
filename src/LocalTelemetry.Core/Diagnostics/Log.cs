@@ -20,6 +20,10 @@ public static class Log
     private static bool _metricsEnabled;
     private static DateOnly _currentDate = DateOnly.FromDateTime(DateTime.Today);
     private static bool _sessionEnded;
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _loggedMessages = new();
+
+    /// <summary>Resets the session deduplication cache. Primarily used for unit testing.</summary>
+    public static void ResetDeduplication() => _loggedMessages.Clear();
 
     /// <summary>Records the last error encountered during logger initialization, if any.</summary>
     public static Exception? LastInitError { get; internal set; }
@@ -51,6 +55,7 @@ public static class Log
             _metricsEnabled = enableMetrics;
             _currentDate = DateOnly.FromDateTime(DateTime.Today);
             _sessionEnded = false;
+            _loggedMessages.Clear();
 
             RotateSystemLog(systemLogPath);
             try { _sysWriter = new StreamWriter(systemLogPath, append: true) { AutoFlush = true }; }
@@ -286,6 +291,16 @@ public static class Log
         Level activeFilter = isMetrics ? MetricsLevel : SystemLevel;
 
         if (level > activeFilter || activeFilter == Level.Off) return;
+        string module = ModuleName(callerPath);
+        string cleanMessage = StripRedundantPrefixes(message, module);
+
+        // Deduplicate messages across all logging levels so identical messages, warnings, and failures are logged strictly once per session
+        bool isMetricData = isMetrics && level == Level.Info;
+        if (!isMetricData)
+        {
+            string dedupKey = $"{level}|{module}|{cleanMessage}|{ex?.GetType().FullName}";
+            if (!_loggedMessages.TryAdd(dedupKey, 0)) return;
+        }
 
         string levelStr = level switch
         {
@@ -295,9 +310,7 @@ public static class Log
             _ => "INFO"
         };
 
-        string module = ModuleName(callerPath);
         string timestamp = DateTime.Now.ToString("dd-MM-yyyy hh:mm:ss.fff tt");
-        string cleanMessage = StripRedundantPrefixes(message, module);
 
         string line = ex is null
             ? $"{timestamp} [{levelStr}] {module}: {cleanMessage}"

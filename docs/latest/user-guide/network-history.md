@@ -27,7 +27,7 @@ Real-time throughput display options and the master traffic logging engine are c
 - **Network Adapter**: Choose which network interface LocalTelemetry monitors:
   - `Auto (Best Match)` *(default)*: Dynamically tracks the active default gateway / internet adapter.
   - Specific Adapter: Pins monitoring to a specific physical connection (e.g. `Ethernet`, `Wi-Fi`).
-- **Enable Daily Traffic Logging**: Master toggle for bandwidth logging (`$settings.netUsage.enabled`). When enabled, LocalTelemetry accumulates daily byte deltas and writes them to `internet_usage.jsonl`. When disabled, live overlay speed monitoring continues, but daily history is not recorded.
+- **Record Daily Traffic History**: Master toggle for bandwidth tracking (`$settings.netUsage.enabled`). When enabled, LocalTelemetry accumulates daily byte deltas and writes them to `internet_usage.jsonl`. When disabled, live overlay speed monitoring continues, but daily history is not recorded.
 
 ---
 

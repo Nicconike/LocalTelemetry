@@ -6,10 +6,21 @@
     import Select from "../ui/Select.svelte";
     import SectionCard from "../ui/SectionCard.svelte";
 
-    const posOptions = [
-        { value: "left", label: "Left side" },
-        { value: "right", label: "Right side" },
-    ];
+    const isLeftAligned = $derived(
+        $settings?.overlay?.taskbarAlignment === "left",
+    );
+
+    const posOptions = $derived(
+        isLeftAligned
+            ? [
+                  { value: "right", label: "Before System Tray" },
+                  { value: "left", label: "Next to Apps" },
+              ]
+            : [
+                  { value: "left", label: "Left Side" },
+                  { value: "right", label: "Right Side" },
+              ],
+    );
 
     const dblClickOptions = [
         { value: "none", label: "None" },
@@ -31,7 +42,9 @@
                 bind:checked={$settings.overlay.visible}
                 label="Show Overlay"
                 disabled={!$settings.showSystemTrayIcon}
-                description={!$settings.showSystemTrayIcon ? "Cannot disable: System Tray Icon is hidden (at least one entry point must remain enabled)" : ""}
+                description={!$settings.showSystemTrayIcon
+                    ? "Cannot disable: System Tray Icon is hidden (at least one entry point must remain enabled)"
+                    : ""}
             />
             <Select
                 label="Double-click action"

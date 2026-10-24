@@ -170,6 +170,31 @@ Supplies the current application settings DTO to hydrate the Svelte store.
 - **Type:** `"settings"`
 - **Payload:** `SettingsDto`
 
+```typescript
+interface OverlayDto {
+    visible: boolean;
+    doubleClickAction: 'settings' | 'taskmanager' | 'none';
+    position: 'left' | 'right' | 'beside_apps';
+    taskbarAlignment?: 'left' | 'center'; // Dynamically detected Windows 11 alignment
+    offsetX: number;
+    opacity: number;
+    scale: number;
+    fontSize: number;
+    fontBold: boolean;
+    labelColor: string;
+    metricColors: Record<string, string>;
+    groupColors: Record<string, string>;
+    followWindowsTheme: boolean;
+    row1: string[];
+}
+
+interface UpdateConfigDto {
+    checkFrequency: 'manual' | 'weekly' | 'monthly';
+    includePrereleases: boolean; // default: false
+    lastCheckUtc: string;
+}
+```
+
 ### 2. `saved`
 
 Confirms persistence status of settings modifications.

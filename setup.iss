@@ -23,7 +23,9 @@ DefaultDirName={commonpf}\LocalTelemetry
 DefaultGroupName=LocalTelemetry
 OutputDir=.
 OutputBaseFilename=LocalTelemetrySetup
-Compression=lzma2
+Compression=lzma2/ultra64
+LZMADictionarySize=65536
+LZMANumFastBytes=273
 AppId={{LocalTelemetry_TaskbarApp}}
 SetupIconFile=src\LocalTelemetry.App\app.ico
 UninstallDisplayIcon={app}\LocalTelemetry.exe
@@ -49,14 +51,14 @@ Name: desktopicon; Description: "Create a &Desktop shortcut"; GroupDescription: 
 Name: startup; Description: "Run LocalTelemetry at Windows &startup"; GroupDescription: "System options:"
 
 [Files]
-Source: "publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "Uninstall.bat,*.xml"
+Source: "publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "Uninstall.bat,*.xml,*.pdb"
 
 [Icons]
 Name: "{group}\LocalTelemetry"; Filename: "{app}\LocalTelemetry.exe"; Tasks: startmenuicon
 Name: "{commondesktop}\LocalTelemetry"; Filename: "{app}\LocalTelemetry.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\LocalTelemetry.exe"; Description: "{cm:LaunchProgram,LocalTelemetry}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\LocalTelemetry.exe"; WorkingDir: "{app}"; Description: "{cm:LaunchProgram,LocalTelemetry}"; Flags: nowait postinstall skipifsilent runascurrentuser
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
@@ -362,6 +364,161 @@ begin
     end;
 end;
 
+function PromptUserDataCleanup(ProfileCount: Integer; out RemoveSettings, RemoveTraffic, RemoveLogs: Boolean): Boolean;
+var
+    Form: TSetupForm;
+    LblTitle, LblPrompt: TLabel;
+    ChkSettings, ChkTraffic, ChkLogs: TNewCheckBox;
+    BtnRemove, BtnSkip: TNewButton;
+begin
+    Result := False;
+    RemoveSettings := False;
+    RemoveTraffic := False;
+    RemoveLogs := False;
+
+    if UninstallSilent then
+        Exit;
+
+    Form := CreateCustomForm(ScaleX(490), ScaleY(240), False, False);
+    try
+        Form.Caption := 'LocalTelemetry Uninstall';
+        Form.Position := poScreenCenter;
+
+        LblTitle := TLabel.Create(Form);
+        LblTitle.Parent := Form;
+        LblTitle.Left := ScaleX(20);
+        LblTitle.Top := ScaleY(16);
+        LblTitle.Width := ScaleX(450);
+        LblTitle.Font.Size := 10;
+        LblTitle.Font.Style := [fsBold];
+        if ProfileCount > 1 then
+            LblTitle.Caption := 'Clean up application data for all ' + IntToStr(ProfileCount) + ' user profiles?'
+        else
+            LblTitle.Caption := 'Clean up application data and preferences?';
+
+        LblPrompt := TLabel.Create(Form);
+        LblPrompt.Parent := Form;
+        LblPrompt.Left := ScaleX(20);
+        LblPrompt.Top := ScaleY(44);
+        LblPrompt.Width := ScaleX(450);
+        LblPrompt.WordWrap := True;
+        LblPrompt.Caption := 'Select the items you want to permanently delete. Unchecked items will be kept:';
+
+        ChkSettings := TNewCheckBox.Create(Form);
+        ChkSettings.Parent := Form;
+        ChkSettings.Left := ScaleX(24);
+        ChkSettings.Top := ScaleY(80);
+        ChkSettings.Width := ScaleX(446);
+        ChkSettings.Caption := 'Application Settings (overlay layout, custom alerts, preferences)';
+        ChkSettings.Checked := True;
+
+        ChkTraffic := TNewCheckBox.Create(Form);
+        ChkTraffic.Parent := Form;
+        ChkTraffic.Left := ScaleX(24);
+        ChkTraffic.Top := ScaleY(110);
+        ChkTraffic.Width := ScaleX(446);
+        ChkTraffic.Caption := 'Traffic History (recorded daily and monthly bandwidth totals)';
+        ChkTraffic.Checked := False; // Preserved by default to prevent accidental data loss
+
+        ChkLogs := TNewCheckBox.Create(Form);
+        ChkLogs.Parent := Form;
+        ChkLogs.Left := ScaleX(24);
+        ChkLogs.Top := ScaleY(140);
+        ChkLogs.Width := ScaleX(446);
+        ChkLogs.Caption := 'Cache & Diagnostic Logs (WebView2 cache, temporary files, logs)';
+        ChkLogs.Checked := True;
+
+        BtnRemove := TNewButton.Create(Form);
+        BtnRemove.Parent := Form;
+        BtnRemove.Left := ScaleX(245);
+        BtnRemove.Top := ScaleY(190);
+        BtnRemove.Width := ScaleX(120);
+        BtnRemove.Height := ScaleY(28);
+        BtnRemove.Caption := 'Remove Selected';
+        BtnRemove.ModalResult := mrOk;
+        BtnRemove.Default := True;
+
+        BtnSkip := TNewButton.Create(Form);
+        BtnSkip.Parent := Form;
+        BtnSkip.Left := ScaleX(375);
+        BtnSkip.Top := ScaleY(190);
+        BtnSkip.Width := ScaleX(95);
+        BtnSkip.Height := ScaleY(28);
+        BtnSkip.Caption := 'Keep All';
+        BtnSkip.ModalResult := mrCancel;
+        BtnSkip.Cancel := True;
+
+        if Form.ShowModal = mrOk then
+        begin
+            RemoveSettings := ChkSettings.Checked;
+            RemoveTraffic := ChkTraffic.Checked;
+            RemoveLogs := ChkLogs.Checked;
+            Result := RemoveSettings or RemoveTraffic or RemoveLogs;
+        end;
+    finally
+        Form.Free;
+    end;
+end;
+
+function DeleteSelectedUserData(const Dir: string; RemoveSettings, RemoveTraffic, RemoveLogs: Boolean): Boolean;
+var
+    Attempt: Integer;
+begin
+    Result := True;
+    if not DirExists(Dir) then
+        Exit;
+
+    if RemoveSettings then
+    begin
+        DeleteFile(Dir + '\settings.json');
+        DeleteFile(Dir + '\hardware_state.json');
+        DeleteFile(Dir + '\settings.json.bak');
+        DeleteFile(Dir + '\hardware_state.json.bak');
+    end;
+
+    if RemoveTraffic then
+    begin
+        DeleteFile(Dir + '\internet_usage.jsonl');
+        DeleteFile(Dir + '\internet_usage.jsonl.bak');
+        DeleteFile(Dir + '\internet_usage.dat');
+    end;
+
+    if RemoveLogs then
+    begin
+        if DirExists(Dir + '\logs') then
+            DelTree(Dir + '\logs', True, True, True);
+        if DirExists(Dir + '\webview2_data') then
+            DelTree(Dir + '\webview2_data', True, True, True);
+        if DirExists(Dir + '\temp') then
+            DelTree(Dir + '\temp', True, True, True);
+    end;
+
+    // If all components were selected for removal, clean up the root directory
+    if RemoveSettings and RemoveTraffic and RemoveLogs then
+    begin
+        Result := False;
+        for Attempt := 1 to 3 do
+        begin
+            if not DirExists(Dir) then
+            begin
+                Result := True;
+                Exit;
+            end;
+            if DelTree(Dir, True, True, True) then
+            begin
+                Result := True;
+                Exit;
+            end;
+            Sleep(500);
+        end;
+    end
+    else
+    begin
+        // If directory is now empty, remove it cleanly
+        RemoveDir(Dir);
+    end;
+end;
+
 function DeleteUserData(const Dir: string): Boolean;
 var
     Attempt: Integer;
@@ -437,6 +594,7 @@ var
     DataDirs, PendingDataDirs: TStringList;
     Count, I: Integer;
     ResultCode: Integer;
+    RemoveSettings, RemoveTraffic, RemoveLogs, AnySelected: Boolean;
 begin
     if CurUninstallStep = usUninstall then
     begin
@@ -500,27 +658,28 @@ begin
             Count := CollectLocalTelemetryDataDirs(DataDirs);
             if Count > 0 then
             begin
-                if Count > 1 then
-                    PreservedMsg := 'Do you also want to remove all saved settings, traffic logs and local hardware monitoring history for all ' + IntToStr(Count) + ' user profiles on this system?'
-                else
-                    PreservedMsg := 'Do you also want to remove all saved settings, traffic logs and local hardware monitoring history?';
-
-                if MsgBox(PreservedMsg, mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
+                AnySelected := PromptUserDataCleanup(Count, RemoveSettings, RemoveTraffic, RemoveLogs);
+                if AnySelected then
                 begin
                     for I := 0 to DataDirs.Count - 1 do
-                        if not DeleteUserData(DataDirs[I]) then
+                        if not DeleteSelectedUserData(DataDirs[I], RemoveSettings, RemoveTraffic, RemoveLogs) then
                             PendingDataDirs.Add(DataDirs[I]);
-                    TempDir := GetShellFolderByCSIDL(CSIDL_LOCAL_APPDATA, False);
-                    if TempDir <> '' then
+
+                    if RemoveLogs then
                     begin
-                        TempDir := TempDir + '\Temp\PawnIo';
-                        if DirExists(TempDir) then
-                            DelTree(TempDir, True, True, True);
+                        TempDir := GetShellFolderByCSIDL(CSIDL_LOCAL_APPDATA, False);
+                        if TempDir <> '' then
+                        begin
+                            TempDir := TempDir + '\Temp\PawnIo';
+                            if DirExists(TempDir) then
+                                DelTree(TempDir, True, True, True);
+                        end;
                     end;
-                end
-                else
+                end;
+
+                if (not UninstallSilent) and (not (RemoveSettings and RemoveTraffic and RemoveLogs)) then
                 begin
-                    PreservedMsg := 'Your settings, logs and monitoring history have been preserved at:' + #13#10;
+                    PreservedMsg := 'Your preserved application data has been kept at:' + #13#10;
                     for I := 0 to DataDirs.Count - 1 do
                     begin
                         if I > 0 then
@@ -534,7 +693,7 @@ begin
             // Final retry for any user data folders that could not be deleted above
             for I := 0 to PendingDataDirs.Count - 1 do
                 if DirExists(PendingDataDirs[I]) then
-                    DeleteUserData(PendingDataDirs[I]);
+                    DeleteSelectedUserData(PendingDataDirs[I], RemoveSettings, RemoveTraffic, RemoveLogs);
         finally
             DataDirs.Free;
             PendingDataDirs.Free;
@@ -542,12 +701,3 @@ begin
         end;
     end;
 end;
-
-
-
-
-
-
-
-
-

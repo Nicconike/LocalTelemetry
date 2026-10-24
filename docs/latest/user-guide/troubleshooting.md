@@ -62,7 +62,7 @@ LocalTelemetry includes an automatic hardware stabilization delay. When your com
 
 - **Check Active Trackers**: Open **Settings &rarr; Monitoring** and ensure the **Network** toggle under **Active Trackers** is switched on. If toggled off, the background network polling loop is halted entirely.
 - **Select Active Network Interface**: Open **Settings &rarr; Network** and ensure the preferred adapter is set to `Auto (Best Match)` or your active connection (Ethernet or Wi-Fi) rather than an inactive virtual adapter (such as VPN, WSL, or VirtualBox virtual network cards).
-- **Verify Traffic Logging Toggle**: In **Settings &rarr; Network**, confirm that **Enable Daily Traffic Logging** is checked if you want bandwidth to be recorded into `internet_usage.jsonl` and visible on the Traffic calendar.
+- **Verify Traffic Logging Toggle**: In **Settings &rarr; Network**, confirm that **Record Daily Traffic History** is checked if you want bandwidth to be recorded into `internet_usage.jsonl` and visible on the Traffic calendar.
 
 ### :bell: Toast notifications are not appearing for threshold alerts
 

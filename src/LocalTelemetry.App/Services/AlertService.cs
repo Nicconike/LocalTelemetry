@@ -56,33 +56,41 @@ public sealed class AlertService(
             EvaluateThreshold(new(Metrics.CpuTemp, "CPU Temperature", snap.CpuTempPackageC, _cfg.Alerts.CpuTempMaxC,
                 unit: useFahrenheit ? "°F" : "°C",
                 displayValue: Metrics.TempString(snap.CpuTempPackageC, useFahrenheit),
-                displayThreshold: Metrics.TempString(_cfg.Alerts.CpuTempMaxC, useFahrenheit),
-                hysteresis: 6f,
-                escalationDelta: 5f));
+                displayThreshold: Metrics.TempString(_cfg.Alerts.CpuTempMaxC, useFahrenheit))
+            {
+                Hysteresis = 6f,
+                EscalationDelta = 5f
+            });
 
         if (_cfg.Alerts.AlertCpuUsage)
             EvaluateThreshold(new(Metrics.CpuPct, "CPU Usage", snap.CpuUsagePct, _cfg.Alerts.CpuUsageMaxPct,
                 unit: "%",
                 displayValue: $"{snap.CpuUsagePct:F0}%",
-                displayThreshold: $"{_cfg.Alerts.CpuUsageMaxPct:F0}%",
-                hysteresis: 8f,
-                escalationDelta: 5f));
+                displayThreshold: $"{_cfg.Alerts.CpuUsageMaxPct:F0}%")
+            {
+                Hysteresis = 8f,
+                EscalationDelta = 5f
+            });
 
         if (_cfg.Alerts.AlertCpuFreq)
             EvaluateThreshold(new(Metrics.CpuFreq, "CPU Frequency", snap.CpuFreqGhz * 1000f, _cfg.Alerts.CpuFreqMinMhz,
                 unit: "MHz",
                 displayValue: $"{snap.CpuFreqGhz:F2} GHz",
-                displayThreshold: $"{_cfg.Alerts.CpuFreqMinMhz / 1000f:F2} GHz",
-                lowAlert: true,
-                hysteresis: 200f));
+                displayThreshold: $"{_cfg.Alerts.CpuFreqMinMhz / 1000f:F2} GHz")
+            {
+                LowAlert = true,
+                Hysteresis = 200f
+            });
 
         if (_cfg.Alerts.AlertCpuPower)
             EvaluateThreshold(new(Metrics.CpuPower, "CPU Package Power", snap.CpuPackagePowerW, _cfg.Alerts.CpuPowerMaxW,
                 unit: "W",
                 displayValue: $"{snap.CpuPackagePowerW:F0} W",
-                displayThreshold: $"{_cfg.Alerts.CpuPowerMaxW:F0} W",
-                hysteresis: 10f,
-                escalationDelta: 15f));
+                displayThreshold: $"{_cfg.Alerts.CpuPowerMaxW:F0} W")
+            {
+                Hysteresis = 10f,
+                EscalationDelta = 15f
+            });
     }
 
     private void EvaluateGpuAlerts(TelemetrySnapshot snap, bool useFahrenheit)
@@ -91,41 +99,51 @@ public sealed class AlertService(
             EvaluateThreshold(new(Metrics.GpuTemp, "GPU Temperature", snap.GpuTempC, _cfg.Alerts.GpuTempMaxC,
                 unit: useFahrenheit ? "°F" : "°C",
                 displayValue: Metrics.TempString(snap.GpuTempC, useFahrenheit),
-                displayThreshold: Metrics.TempString(_cfg.Alerts.GpuTempMaxC, useFahrenheit),
-                hysteresis: 6f,
-                escalationDelta: 5f));
+                displayThreshold: Metrics.TempString(_cfg.Alerts.GpuTempMaxC, useFahrenheit))
+            {
+                Hysteresis = 6f,
+                EscalationDelta = 5f
+            });
 
         if (_cfg.Alerts.AlertGpuUsage)
             EvaluateThreshold(new(Metrics.GpuPct, "GPU Usage", snap.GpuUsagePct, _cfg.Alerts.GpuUsageMaxPct,
                 unit: "%",
                 displayValue: $"{snap.GpuUsagePct:F0}%",
-                displayThreshold: $"{_cfg.Alerts.GpuUsageMaxPct:F0}%",
-                hysteresis: 8f,
-                escalationDelta: 5f));
+                displayThreshold: $"{_cfg.Alerts.GpuUsageMaxPct:F0}%")
+            {
+                Hysteresis = 8f,
+                EscalationDelta = 5f
+            });
 
         if (_cfg.Alerts.AlertGpuVram)
             EvaluateThreshold(new(Metrics.GpuVram, "GPU VRAM", snap.GpuVramUsedMb, _cfg.Alerts.GpuVramMaxMb,
                 unit: "MB",
                 displayValue: $"{snap.GpuVramUsedMb:F0} MB",
-                displayThreshold: $"{_cfg.Alerts.GpuVramMaxMb:F0} MB",
-                hysteresis: 512f,
-                escalationDelta: 512f));
+                displayThreshold: $"{_cfg.Alerts.GpuVramMaxMb:F0} MB")
+            {
+                Hysteresis = 512f,
+                EscalationDelta = 512f
+            });
 
         if (_cfg.Alerts.AlertGpuFreq)
             EvaluateThreshold(new(Metrics.GpuFreq, "GPU Frequency", snap.GpuFreqMHz, _cfg.Alerts.GpuFreqMinMhz,
                 unit: "MHz",
                 displayValue: $"{snap.GpuFreqMHz:F0} MHz",
-                displayThreshold: $"{_cfg.Alerts.GpuFreqMinMhz:F0} MHz",
-                lowAlert: true,
-                hysteresis: 150f));
+                displayThreshold: $"{_cfg.Alerts.GpuFreqMinMhz:F0} MHz")
+            {
+                LowAlert = true,
+                Hysteresis = 150f
+            });
 
         if (_cfg.Alerts.AlertGpuPower)
             EvaluateThreshold(new(Metrics.GpuPower, "GPU Power", snap.GpuPowerW, _cfg.Alerts.GpuPowerMaxW,
                 unit: "W",
                 displayValue: $"{snap.GpuPowerW:F0} W",
-                displayThreshold: $"{_cfg.Alerts.GpuPowerMaxW:F0} W",
-                hysteresis: 15f,
-                escalationDelta: 20f));
+                displayThreshold: $"{_cfg.Alerts.GpuPowerMaxW:F0} W")
+            {
+                Hysteresis = 15f,
+                EscalationDelta = 20f
+            });
     }
 
     private void EvaluateRamAndMiscAlerts(TelemetrySnapshot snap)
@@ -134,18 +152,22 @@ public sealed class AlertService(
             EvaluateThreshold(new(Metrics.RamPct, "RAM Usage", snap.RamUsagePct, _cfg.Alerts.RamUsageMaxPct,
                 unit: "%",
                 displayValue: $"{snap.RamUsagePct:F0}%",
-                displayThreshold: $"{_cfg.Alerts.RamUsageMaxPct:F0}%",
-                hysteresis: 5f,
-                escalationDelta: 4f));
+                displayThreshold: $"{_cfg.Alerts.RamUsageMaxPct:F0}%")
+            {
+                Hysteresis = 5f,
+                EscalationDelta = 4f
+            });
 
         if (_cfg.Alerts.AlertBatteryLow && snap.BatteryPct > 0 && !snap.BatteryIsCharging)
         {
             EvaluateThreshold(new(Metrics.BatteryPct, "Battery Level", snap.BatteryPct, _cfg.Alerts.BatteryLowPct,
                 unit: "%",
                 displayValue: $"{snap.BatteryPct:F0}%",
-                displayThreshold: $"≤ {_cfg.Alerts.BatteryLowPct:F0}%",
-                lowAlert: true,
-                hysteresis: 5f));
+                displayThreshold: $"≤ {_cfg.Alerts.BatteryLowPct:F0}%")
+            {
+                LowAlert = true,
+                Hysteresis = 5f
+            });
         }
     }
 
@@ -159,8 +181,7 @@ public sealed class AlertService(
             EvaluateThreshold(new("net_daily", "Daily Internet Usage", todayGb, _cfg.Alerts.NetDailyMaxGb,
                 unit: "GB",
                 displayValue: $"{todayGb:F1} GB",
-                displayThreshold: $"{_cfg.Alerts.NetDailyMaxGb:F1} GB",
-                hysteresis: 0f));
+                displayThreshold: $"{_cfg.Alerts.NetDailyMaxGb:F1} GB"));
         }
 
         if (_cfg.Alerts.AlertNetMonthly)
@@ -169,8 +190,7 @@ public sealed class AlertService(
             EvaluateThreshold(new("net_monthly", "Monthly Internet Usage", monthGb, _cfg.Alerts.NetMonthlyMaxGb,
                 unit: "GB",
                 displayValue: $"{monthGb:F1} GB",
-                displayThreshold: $"{_cfg.Alerts.NetMonthlyMaxGb:F1} GB",
-                hysteresis: 0f));
+                displayThreshold: $"{_cfg.Alerts.NetMonthlyMaxGb:F1} GB"));
         }
     }
 
@@ -183,9 +203,9 @@ public sealed class AlertService(
         public string Unit { get; init; }
         public string DisplayValue { get; init; }
         public string DisplayThreshold { get; init; }
-        public bool LowAlert { get; init; }
-        public float Hysteresis { get; init; }
-        public float EscalationDelta { get; init; }
+        public bool LowAlert { get; init; } = false;
+        public float Hysteresis { get; init; } = 0f;
+        public float EscalationDelta { get; init; } = 0f;
 
         public ThresholdEvaluationContext(
             string metricId,
@@ -194,10 +214,7 @@ public sealed class AlertService(
             float threshold,
             string unit,
             string displayValue,
-            string displayThreshold,
-            bool lowAlert = false,
-            float hysteresis = 0f,
-            float escalationDelta = 0f)
+            string displayThreshold)
         {
             MetricId = metricId;
             MetricName = metricName;
@@ -206,9 +223,9 @@ public sealed class AlertService(
             Unit = unit;
             DisplayValue = displayValue;
             DisplayThreshold = displayThreshold;
-            LowAlert = lowAlert;
-            Hysteresis = hysteresis;
-            EscalationDelta = escalationDelta;
+            LowAlert = false;
+            Hysteresis = 0f;
+            EscalationDelta = 0f;
         }
     }
 

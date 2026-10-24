@@ -24,7 +24,9 @@ The settings panel is organized into 10 dedicated tabs matching the exact naviga
 ### :panel-bottom: Overlay
 
 - **Show Overlay**: Master toggle to show or hide the taskbar overlay. This toggle is disabled if the system tray icon is hidden to keep at least one entry point active.
-- **Position in taskbar**: Select `Left side` or `Right side` of the taskbar.
+- **Position in taskbar**: Adapts dynamically to Windows 11 taskbar alignment:
+  - **Centered Taskbar**: Select `Left side` (near Widgets) or `Right side` (adjacent to notification area).
+  - **Left-Aligned Taskbar**: Select `Next to Apps` (placed after active app icons) or `Before System Tray`.
 - **Offset from Edge**: Adjust horizontal pixel offset from the selected edge (`0px` to `200px`).
 - **Opacity**: Adjust overlay opacity (`20%` to `100%`).
 - **Scale**: Adjust overlay scaling multiplier (`80%` to `200%`).
@@ -63,7 +65,7 @@ The settings panel is organized into 10 dedicated tabs matching the exact naviga
 
 - **Show Speed in Bits/s**: Toggle displaying network download and upload throughput in bits per second (`b/s`, `Kb/s`, `Mb/s`, `Gb/s`) instead of bytes per second (`B/s`, `KB/s`, `MB/s`, `GB/s`).
 - **Network Adapter**: Select which network adapter is used for throughput monitoring (`Auto (Best Match)` or a specific physical adapter like `Ethernet` / `Wi-Fi`).
-- **Internet Traffic Logging**: Toggle automatic daily bandwidth tracking to record download and upload volumes into `internet_usage.jsonl`.
+- **Traffic History**: Toggle **Record Daily Traffic History** to record upload and download totals into `internet_usage.jsonl`.
 
 ![Network Settings Tab](/images/network-settings.png)
 *Network settings tab for selecting the preferred network adapter and enabling daily traffic logging.*
@@ -118,7 +120,7 @@ The settings panel is organized into 10 dedicated tabs matching the exact naviga
 
 ### :info: About
 
-- **Software Updates**: Check for newer releases via the GitHub Releases API on demand (**Check for Updates** button), configure update check frequency (**Weekly**, **Monthly**, or **Manual**), and toggle **Include pre-release & RC builds**. If an update is detected, a direct **Download** button links straight to the release.
+- **Software Updates**: Check for newer releases via the GitHub Releases API on demand (**Check for Updates** button), configure update check frequency (**Weekly**, **Monthly**, or **Manual**), and toggle **Include pre-release & RC builds** (disabled by default). If an update is detected, a direct **Download** button links straight to the release.
 - **Application Metadata**: Displays the active version (`vX.Y.Z`), deployment mode (`Standard` vs `Portable`), build date, target runtime (.NET 10), and platform (Windows x64).
 - **Application Directories**: Single-click "→" buttons open the application folders directly in Windows File Explorer:
   - **Standard Mode**: Quick access to the Installation Folder (`C:\Program Files\LocalTelemetry`), Settings & Data Folder (`%LOCALAPPDATA%\LocalTelemetry`), and Logs Folder (`%LOCALAPPDATA%\LocalTelemetry\logs`).

@@ -138,7 +138,7 @@ To inspect the low-level kernel driver architecture, MSR register mappings (`0x1
 - **In-App Update Checks**: You can check for newer releases directly inside **Settings -> About**:
   - Click **Check for Updates** to query the GitHub Releases API on demand.
   - Set **Check Frequency** to `Weekly`, `Monthly`, or `Manual`.
-  - Toggle **Include pre-release & RC builds** to receive Release Candidate versions.
+  - Toggle **Include pre-release & RC builds** (disabled by default) to receive Release Candidate versions.
   - When a new version is detected, click the green **Download** button to navigate directly to the release assets.
 
 ## :shredder: Uninstallation & Complete Driver Cleanup
@@ -161,11 +161,15 @@ To inspect the low-level kernel driver architecture, MSR register mappings (`0x1
     - Cleans up PawnIO uninstallation registry keys and removes `C:\Program Files\LocalTelemetry`.
 
 2. **User Data Removal Prompt**:
-    - The uninstaller prompts whether you want to delete or preserve your custom settings (`settings.json`), logs, and daily traffic history (`internet_usage.jsonl`) across all user profiles:
+    - The uninstaller presents a custom cleanup dialog to select items to delete across all user profiles:
     ![Uninstallation User Data Removal Prompt](/images/uninstall-settings.png)
-    *Option to clean up or preserve local user settings and bandwidth tracking logs upon uninstall.*
-    - **Selecting "No" (Default)**: Preserves your data and displays the exact folder path where your configuration and traffic database remain.
-    - **Selecting "Yes"**: Completely removes `%LOCALAPPDATA%\LocalTelemetry` and temporary driver files from all user profiles on the computer.
+    *Selective cleanup dialog with independent toggles for configuration, traffic records, and diagnostic caches.*
+    - **Application Settings** (`settings.json`, `hardware_state.json`): Checked by default.
+    - **Traffic History** (`internet_usage.jsonl`, `internet_usage.dat`): **Unchecked by default** to prevent accidental loss of recorded network bandwidth history.
+    - **Cache & Diagnostic Logs** (`logs/`, `webview2_data/`, `temp/`): Checked by default.
+    - **Remove Selected** (Default button): Permanently deletes selected items. It cleans up empty data directories.
+    - **Keep All**: Preserves all data. The uninstaller displays the exact folder paths where your configuration and bandwidth database remain.
+    - **Silent Uninstallation**: In silent mode (`/SILENT` or `/VERYSILENT`), the dialog is skipped. All user data remains safely preserved by default.
 
 ### :folder-x: Portable Mode Removal
 

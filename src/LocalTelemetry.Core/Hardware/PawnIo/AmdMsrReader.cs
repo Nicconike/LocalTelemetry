@@ -10,6 +10,8 @@ namespace LocalTelemetry.Core.Hardware.PawnIo;
 public sealed class AmdMsrReader : IDisposable
 {
     private const int PM_TABLE_ENTRY_COUNT = 128;
+    private const uint SMN_THM_TCON_CUR_TMP = 0x00059800;
+    private static readonly ulong[] SmnCurTmpInput = [SMN_THM_TCON_CUR_TMP];
 
     private IPawnIoTransport? _device;
     private bool _disposed;
@@ -27,10 +29,41 @@ public sealed class AmdMsrReader : IDisposable
     }
 
     /// <summary>
-    /// Reads the highest AMD CPU temperature by walking the power management table.
+    /// Reads AMD CPU temperature via SMN register on Zen architectures, falling back
+    /// to walking the power management table on legacy Ryzen platforms.
     /// </summary>
     /// <returns>Temperature in °C or 0 if unavailable.</returns>
     public float ReadTemperature()
+    {
+        if (_device is null) return 0f;
+
+        // Primary: SMN register 0x00059800 (THM_TCON_CUR_TMP) across Zen 1-5
+        float smnTemp = ReadTemperatureSmn();
+        if (smnTemp > 0) return smnTemp;
+
+        // Fallback: SMU PM table walking
+        return ReadTemperaturePmTable();
+    }
+
+    private float ReadTemperatureSmn()
+    {
+        if (_device is null) return 0f;
+
+        var result = _device.Execute("ioctl_read_smn", SmnCurTmpInput, 1);
+        if (result.Length < 1 || result[0] == 0)
+            return 0f;
+
+        uint raw = (uint)(result[0] & 0xFFFFFFFF);
+        uint curTemp = (raw >> 21) & 0x7FF;
+        float temp = curTemp * 0.125f;
+
+        if (temp is >= 10f and <= 125f)
+            return temp;
+
+        return 0f;
+    }
+
+    private float ReadTemperaturePmTable()
     {
         if (_device is null) return 0f;
 

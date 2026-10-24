@@ -27,7 +27,7 @@
 
         <SectionCard
             title="Network Adapter"
-            description="Select which network adapter is used for throughput monitoring and daily traffic logging."
+            description="Select which network adapter is used for throughput monitoring and traffic history recording."
         >
             <Select
                 label="Adapter"
@@ -37,12 +37,12 @@
         </SectionCard>
 
         <SectionCard
-            title="Internet Traffic Logging"
-            description="Automatically tracks daily upload/download totals from the selected adapter. Data is stored persistently."
+            title="Traffic History"
+            description="Automatically records daily upload and download totals from the selected adapter."
         >
             <Toggle
                 bind:checked={$settings.netUsage.enabled}
-                label="Enable Daily Traffic Logging"
+                label="Record Daily Traffic History"
             />
         </SectionCard>
     </div>

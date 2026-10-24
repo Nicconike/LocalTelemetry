@@ -108,8 +108,11 @@ public sealed class OverlayDto
     /// <summary>Action to perform on double-click ("settings" or "taskmanager").</summary>
     public string DoubleClickAction { get; set; } = "settings";
 
-    /// <summary>Overlay position relative to the taskbar ("left" or "right").</summary>
+    /// <summary>Overlay position relative to the taskbar ("left", "right", or "beside_apps").</summary>
     public string Position { get; set; } = "left";
+
+    /// <summary>Detected Windows 11 taskbar alignment ("left" or "center").</summary>
+    public string TaskbarAlignment { get; set; } = "center";
 
     /// <summary>Horizontal offset from the chosen position edge.</summary>
     public int OffsetX { get; set; } = 0;
@@ -325,6 +328,7 @@ public static class SettingsDtoMapping
                 Visible = src.Overlay.Visible,
                 DoubleClickAction = src.Overlay.DoubleClickAction,
                 Position = MapPlacementToPosition(src.Overlay.Placement),
+                TaskbarAlignment = Win32.TaskbarEmbedder.IsTaskbarCentered() ? "center" : "left",
                 OffsetX = src.Overlay.PlacementOffset,
                 Opacity = src.Overlay.Opacity,
                 Scale = src.Overlay.ScalePct,
@@ -492,9 +496,11 @@ public static class SettingsDtoMapping
 
     private const string PositionLeft = "left";
     private const string PositionRight = "right";
+    private const string PositionBesideApps = "beside_apps";
 
     private static string MapPlacementToPosition(string placement) => placement switch
     {
+        PositionBesideApps => PositionBesideApps,
         PositionLeft => PositionLeft,
         "center" => PositionLeft,
         PositionRight => PositionRight,
@@ -503,6 +509,7 @@ public static class SettingsDtoMapping
 
     private static string MapPositionToPlacement(string position) => position switch
     {
+        PositionBesideApps => PositionBesideApps,
         PositionLeft => PositionLeft,
         _ => PositionRight,
     };

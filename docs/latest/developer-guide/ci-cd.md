@@ -106,10 +106,11 @@ Validates commit messages against Conventional Commits rules defined in `commitl
 ### 3. Windows Integration & Tests (`test-windows`)
 
 - Compiles the Svelte 5 frontend into `src/LocalTelemetry.App/Settings/wwwroot/dist/`.
+- Uploads bundle size metrics to Codecov Bundle Analysis using `@codecov/vite-plugin`.
 - Restores and caches NuGet packages.
 - Verifies code formatting with `dotnet format --verify-no-changes`.
 - Executes xUnit tests across `LocalTelemetry.Core.Tests`, `LocalTelemetry.App.Tests`, and `LocalTelemetry.Notifier.Tests`.
-- Collects test coverage with Coverlet and uploads results to Codecov.
+- Collects test coverage with Coverlet and uploads coverage across 4 targets (`app`, `core`, `notifier`, and frontend).
 
 ---
 

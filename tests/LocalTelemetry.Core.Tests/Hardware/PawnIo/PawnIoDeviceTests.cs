@@ -197,7 +197,7 @@ public class PawnIoDeviceTests
         PawnIoDevice.ElevationChecker = () => false;
         try
         {
-            method!.Invoke(null, ["stop PawnIO"]);
+            method.Invoke(null, ["stop PawnIO"]);
         }
         finally
         {
@@ -360,14 +360,14 @@ public class PawnIoDeviceTests
         canRun.Should().NotBeNull();
 
         // 1. Unmocked check against current process identity
-        isElevated!.Invoke(null, null).Should().NotBeNull();
+        isElevated.Invoke(null, null).Should().NotBeNull();
 
         // 2. Mocked non-elevated check
         PawnIoDevice.ElevationChecker = () => false;
         try
         {
             ((bool)isElevated.Invoke(null, null)!).Should().BeFalse();
-            ((bool)canRun!.Invoke(null, null)!).Should().BeFalse();
+            ((bool)canRun.Invoke(null, null)!).Should().BeFalse();
         }
         finally
         {
@@ -379,7 +379,7 @@ public class PawnIoDeviceTests
         try
         {
             ((bool)isElevated.Invoke(null, null)!).Should().BeTrue();
-            ((bool)canRun!.Invoke(null, null)!).Should().BeTrue();
+            ((bool)canRun.Invoke(null, null)!).Should().BeTrue();
         }
         finally
         {
@@ -392,7 +392,7 @@ public class PawnIoDeviceTests
     {
         var enablePriv = typeof(PawnIoDevice).GetMethod("EnableBackupPrivilege", BindingFlags.NonPublic | BindingFlags.Static);
         enablePriv.Should().NotBeNull();
-        var act = () => enablePriv!.Invoke(null, null);
+        var act = () => enablePriv.Invoke(null, null);
         act.Should().NotThrow();
     }
 
@@ -405,7 +405,8 @@ public class PawnIoDeviceTests
         PawnIoDevice.ElevationChecker = () => false;
         try
         {
-            PawnIoDevice.CleanupStaleInstall();
+            var actNonElevated = () => PawnIoDevice.CleanupStaleInstall();
+            actNonElevated.Should().NotThrow();
         }
         finally
         {
@@ -413,11 +414,18 @@ public class PawnIoDeviceTests
         }
 
         // 2. Elevated with ProcessRunner mock
-        PawnIoDevice.ProcessRunner = _ => 0;
+        int runnerInvocations = 0;
+        PawnIoDevice.ProcessRunner = _ =>
+        {
+            runnerInvocations++;
+            return 0;
+        };
         PawnIoDevice.ElevationChecker = () => true;
         try
         {
-            PawnIoDevice.CleanupStaleInstall();
+            var actElevated = () => PawnIoDevice.CleanupStaleInstall();
+            actElevated.Should().NotThrow();
+            runnerInvocations.Should().BeGreaterThan(0);
         }
         finally
         {

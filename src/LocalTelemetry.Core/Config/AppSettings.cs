@@ -405,7 +405,7 @@ public sealed class UpdateConfig
     public string CheckFrequency { get; set; } = "manual";
 
     /// <summary>Whether to include pre-release and Release Candidate (RC) builds when checking for updates.</summary>
-    public bool IncludePrereleases { get; set; } = true;
+    public bool IncludePrereleases { get; set; } = false;
 
     /// <summary>UTC timestamp of the last update check.</summary>
     public DateTime LastCheckUtc { get; set; } = DateTime.MinValue;

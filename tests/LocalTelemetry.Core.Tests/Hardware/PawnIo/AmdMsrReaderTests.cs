@@ -37,4 +37,21 @@ public class AmdMsrReaderTests
         float temp = reader.ReadTemperature();
         temp.Should().Be(50.0f);
     }
+
+    [Fact]
+    public void AmdMsrReader_ReadTemperature_WithSmn_ParsesTemperature()
+    {
+        var transport = Substitute.For<IPawnIoTransport>();
+
+        // 56.0°C -> 56.0 / 0.125 = 448 (0x1C0)
+        // Shift left by 21 bits: 448 << 21 = 0x38000000
+        ulong rawSmn = 448UL << 21;
+        transport.Execute("ioctl_read_smn", Arg.Any<ulong[]>(), 1).Returns(new ulong[] { rawSmn });
+
+        using var reader = new AmdMsrReader(transport);
+        reader.IsAvailable.Should().BeTrue();
+
+        float temp = reader.ReadTemperature();
+        temp.Should().Be(56.0f);
+    }
 }

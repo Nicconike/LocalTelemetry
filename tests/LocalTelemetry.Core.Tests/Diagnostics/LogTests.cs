@@ -717,12 +717,45 @@ public sealed class LogTests : IDisposable
         }
     }
 
+    [Fact]
+    public void GlobalDeduplication_SuppressesRepeatedMessagesAcrossAllLevels()
+    {
+        Log.ResetDeduplication();
+
+        // Write identical messages multiple times
+        for (int i = 0; i < 5; i++)
+        {
+            Log.Error("Recurring ioctl error");
+            Log.Warn("Recurring memory warning");
+            Log.Info("Recurring state info");
+            Log.Debug("Recurring debug trace");
+            Log.ErrorMetric("Recurring metric failure");
+            Log.InfoMetric("Tick metric telemetry row");
+        }
+
+        Log.Shutdown();
+
+        string sysContent = File.ReadAllText(_sysLogPath);
+        string metricContent = File.ReadAllText(_metricLogPath);
+
+        // System log messages must appear exactly once
+        sysContent.Split("Recurring ioctl error").Length.Should().Be(2, "Recurring error must be logged strictly once");
+        sysContent.Split("Recurring memory warning").Length.Should().Be(2, "Recurring warning must be logged strictly once");
+        sysContent.Split("Recurring state info").Length.Should().Be(2, "Recurring info must be logged strictly once");
+        sysContent.Split("Recurring debug trace").Length.Should().Be(2, "Recurring debug must be logged strictly once");
+
+        // ErrorMetric must appear strictly once
+        metricContent.Split("Recurring metric failure").Length.Should().Be(2, "Recurring metric failure must be logged strictly once");
+
+        // InfoMetric (telemetry tick data) must NOT be suppressed
+        metricContent.Split("Tick metric telemetry row").Length.Should().Be(6, "InfoMetric telemetry rows must be recorded on each tick");
+    }
+
     private sealed class ThrowOnWriteOnlyStream : Stream
     {
         public bool ShouldThrow { get; set; } = true;
         public bool ThrowOnLength { get; set; }
         public bool ThrowOnFlush { get; set; }
-        public bool ThrowOnDispose { get; set; }
 
         public override bool CanRead => false;
         public override bool CanSeek => false;
@@ -743,11 +776,6 @@ public sealed class LogTests : IDisposable
         public override void Write(ReadOnlySpan<byte> buffer)
         {
             if (ShouldThrow) throw new IOException("Simulated disk error");
-        }
-        protected override void Dispose(bool disposing)
-        {
-            if (ThrowOnDispose) throw new IOException("Dispose error");
-            base.Dispose(disposing);
         }
     }
 }

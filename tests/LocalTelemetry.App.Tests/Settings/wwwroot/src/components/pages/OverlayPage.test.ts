@@ -67,4 +67,27 @@ describe('OverlayPage.svelte', () => {
 
         expect(document.querySelector('.page')).toBeNull();
     });
+
+    it('adapts position options based on taskbar alignment', async () => {
+        settings.set({
+            showSystemTrayIcon: true,
+            overlay: {
+                visible: true,
+                position: 'right',
+                taskbarAlignment: 'left',
+                doubleClickAction: 'none',
+                opacity: 100,
+                scale: 100,
+                fontSizePx: 18,
+                fontBold: false,
+                offsetX: 0,
+            },
+        } as any);
+
+        component = mount(OverlayPage, { target: document.body });
+        await tick();
+
+        expect(document.body.textContent).toContain('Next to Apps');
+        expect(document.body.textContent).toContain('Before System Tray');
+    });
 });

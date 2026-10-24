@@ -1,5 +1,6 @@
 using FluentAssertions;
 using LocalTelemetry.App.Settings;
+using LocalTelemetry.App.Win32;
 using LocalTelemetry.Core.Config;
 using Xunit;
 
@@ -227,5 +228,28 @@ public class SettingsDtoTests
         src2.Overlay.Placement = "unknown";
         var dto2 = SettingsDtoMapping.ToDto(src2);
         dto2.Overlay.Position.Should().Be("right");
+    }
+
+    [Fact]
+    public void SettingsDtoMapping_TaskbarAlignment_And_BesideApps_Roundtrip()
+    {
+        var src = new AppSettings();
+        src.Overlay.Placement = "beside_apps";
+
+        TaskbarEmbedder.IsTaskbarCenteredOverride = () => false;
+        try
+        {
+            var dto = SettingsDtoMapping.ToDto(src);
+            dto.Overlay.Position.Should().Be("beside_apps");
+            dto.Overlay.TaskbarAlignment.Should().Be("left");
+
+            var target = new AppSettings();
+            SettingsDtoMapping.ApplyTo(target, dto);
+            target.Overlay.Placement.Should().Be("beside_apps");
+        }
+        finally
+        {
+            TaskbarEmbedder.IsTaskbarCenteredOverride = null;
+        }
     }
 }

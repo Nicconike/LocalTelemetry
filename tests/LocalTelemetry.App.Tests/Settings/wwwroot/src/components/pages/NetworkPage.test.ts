@@ -33,6 +33,8 @@ describe('NetworkPage.svelte', () => {
         await tick();
 
         expect(document.body.textContent).toContain('Network');
+        expect(document.body.textContent).toContain('Traffic History');
+        expect(document.body.textContent).toContain('Record Daily Traffic History');
     });
 
     it('renders correctly when nics is null or undefined', async () => {
@@ -42,7 +44,7 @@ describe('NetworkPage.svelte', () => {
 
         expect(document.body.textContent).toContain('Network');
         const select = document.querySelector('select') as HTMLSelectElement;
-        expect(select.options.length).toBe(1);
+        expect(select.options).toHaveLength(1);
         expect(select.options[0].text).toContain('Auto');
     });
 

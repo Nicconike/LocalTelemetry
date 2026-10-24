@@ -333,8 +333,18 @@ public static class Log
     public static void InfoMetric(string message, [CallerFilePath] string? callerPath = null);
     public static void ErrorMetric(string message, [CallerFilePath] string? callerPath = null);
     public static void ErrorMetric(Exception ex, string message, [CallerFilePath] string? callerPath = null);
+
+    public static void ResetDeduplication();
 }
 ```
+
+#### Session Message Deduplication
+
+- To prevent log flooding during high-frequency polling failures, non-metric messages are deduplicated using a concurrent session cache.
+- Deduplication key: `{level}|{module}|{cleanMessage}|{exceptionType}`.
+- Duplicate warnings, errors, and info logs are emitted strictly once per application session.
+- Metric data logs (`InfoMetric`) bypass deduplication to record continuous periodic telemetry.
+- `ResetDeduplication()` clears the cache for automated test isolation.
 
 #### Diagnostic Constraints & Rotation Parameters
 

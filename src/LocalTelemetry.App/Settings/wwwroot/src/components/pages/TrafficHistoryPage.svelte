@@ -44,11 +44,17 @@
 
     function validateDateString(str) {
         if (!str || !str.trim()) return "Date is required.";
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(str)) return "Invalid date (use DD-MM-YYYY).";
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(str))
+            return "Invalid date (use DD-MM-YYYY).";
         const [y, m, d] = str.split("-").map(Number);
-        if (y < 2000 || y > 2100 || m < 1 || m > 12 || d < 1 || d > 31) return "Invalid date.";
+        if (y < 2000 || y > 2100 || m < 1 || m > 12 || d < 1 || d > 31)
+            return "Invalid date.";
         const dateObj = new Date(y, m - 1, d);
-        if (dateObj.getFullYear() !== y || dateObj.getMonth() !== m - 1 || dateObj.getDate() !== d) {
+        if (
+            dateObj.getFullYear() !== y ||
+            dateObj.getMonth() !== m - 1 ||
+            dateObj.getDate() !== d
+        ) {
             return "Invalid calendar date.";
         }
         return null;
@@ -58,7 +64,8 @@
         const err = validateDateString(winStartDate);
         if (err) return err;
         const todayStr = formatDateInput(new Date());
-        if (winStartDate > todayStr) return "Start date cannot be in the future.";
+        if (winStartDate > todayStr)
+            return "Start date cannot be in the future.";
         return null;
     });
 
@@ -73,7 +80,8 @@
     let dateRangeError = $derived.by(() => {
         if (startDateError) return startDateError;
         if (endDateError) return endDateError;
-        if (winStartDate > winEndDate) return "Start date cannot be after End date.";
+        if (winStartDate > winEndDate)
+            return "Start date cannot be after End date.";
         return null;
     });
 
@@ -231,7 +239,7 @@
 </script>
 
 <div class="page">
-    <h2>Traffic History</h2>
+    <h2>Traffic History Calendar</h2>
 
     <div class="today-card">
         <span class="today-label">Today</span>
@@ -357,9 +365,15 @@
                                     rec.interface ||
                                     "?"}{#if rec.source && rec.source !== "LocalTelemetry"}<span
                                         class="source-badge"
-                                        class:win-source={rec.source === "WindowsImport"}
-                                        class:dat-source={rec.source === "DatImport"}
-                                        >{rec.source === "WindowsImport" ? "Windows" : rec.source === "DatImport" ? ".DAT Import" : rec.source}</span
+                                        class:win-source={rec.source ===
+                                            "WindowsImport"}
+                                        class:dat-source={rec.source ===
+                                            "DatImport"}
+                                        >{rec.source === "WindowsImport"
+                                            ? "Windows"
+                                            : rec.source === "DatImport"
+                                              ? ".DAT Import"
+                                              : rec.source}</span
                                     >{/if}</span
                             >
                             <span class="breakdown-val"
@@ -380,14 +394,29 @@
         <div class="import-card">
             <div class="card-header">
                 <span class="card-title">Windows Network Usage</span>
-                <span class="card-desc">Import historical usage records tracked by Windows for missed periods</span>
+                <span class="card-desc"
+                    >Import historical usage records tracked by Windows for
+                    missed periods</span
+                >
             </div>
 
             <div class="preset-row">
                 <span class="preset-label">Presets:</span>
-                <button type="button" class="preset-btn" onclick={() => setPreset(7)}>Last 7 Days</button>
-                <button type="button" class="preset-btn" onclick={() => setPreset(14)}>Last 14 Days</button>
-                <button type="button" class="preset-btn" onclick={() => setPreset(30)}>Last 30 Days</button>
+                <button
+                    type="button"
+                    class="preset-btn"
+                    onclick={() => setPreset(7)}>Last 7 Days</button
+                >
+                <button
+                    type="button"
+                    class="preset-btn"
+                    onclick={() => setPreset(14)}>Last 14 Days</button
+                >
+                <button
+                    type="button"
+                    class="preset-btn"
+                    onclick={() => setPreset(30)}>Last 30 Days</button
+                >
             </div>
 
             <div class="date-picker-row">
@@ -421,7 +450,9 @@
                     disabled={isWindowsImporting || !!dateRangeError}
                     onclick={handleWindowsImport}
                 >
-                    {isWindowsImporting ? "Importing..." : "Import from Windows"}
+                    {isWindowsImporting
+                        ? "Importing..."
+                        : "Import from Windows"}
                 </button>
             </div>
 
@@ -430,15 +461,25 @@
             {/if}
 
             {#if $windowsImportResult}
-                <div class="import-status" class:error={!$windowsImportResult.success}>
+                <div
+                    class="import-status"
+                    class:error={!$windowsImportResult.success}
+                >
                     {#if $windowsImportResult.success}
                         {#if $windowsImportResult.daysImported > 0}
-                            Imported {$windowsImportResult.daysImported} day(s): ↓ {formatTrafficBytes($windowsImportResult.downBytes)}, ↑ {formatTrafficBytes($windowsImportResult.upBytes)}
+                            Imported {$windowsImportResult.daysImported} day(s):
+                            ↓ {formatTrafficBytes(
+                                $windowsImportResult.downBytes,
+                            )}, ↑ {formatTrafficBytes(
+                                $windowsImportResult.upBytes,
+                            )}
                         {:else}
-                            {$windowsImportResult.message || "Selected date range is already up to date in LocalTelemetry."}
+                            {$windowsImportResult.message ||
+                                "Selected date range is already up to date in LocalTelemetry."}
                         {/if}
                     {:else}
-                        {$windowsImportResult.message || "Failed to import Windows usage."}
+                        {$windowsImportResult.message ||
+                            "Failed to import Windows usage."}
                     {/if}
                 </div>
             {/if}
@@ -447,7 +488,9 @@
         <div class="import-card">
             <div class="card-header">
                 <span class="card-title">Traffic Database (.dat format)</span>
-                <span class="card-desc">Import external backup files (.dat plain-text format)</span>
+                <span class="card-desc"
+                    >Import external backup files (.dat plain-text format)</span
+                >
             </div>
             <div class="dat-row">
                 <input
@@ -466,9 +509,14 @@
                         e.target.value = "";
                     }}
                 />
-                <label for="dat-file-input" class="file-label">Select .dat file</label>
+                <label for="dat-file-input" class="file-label"
+                    >Select .dat file</label
+                >
                 {#if $importResult}
-                    <span class="import-status" class:error={$importResult.error}>
+                    <span
+                        class="import-status"
+                        class:error={$importResult.error}
+                    >
                         {#if $importResult.error}
                             {$importResult.error}
                         {:else}

@@ -867,13 +867,13 @@ public class AppTests
         // 1. Shutdown
         var shutdownArgs = (SessionEndingCancelEventArgs)RuntimeHelpers.GetUninitializedObject(typeof(SessionEndingCancelEventArgs));
         typeof(SessionEndingCancelEventArgs).GetField("_reason", BindingFlags.NonPublic | BindingFlags.Instance)?.SetValue(shutdownArgs, ReasonSessionEnding.Shutdown);
-        var actShutdown = () => sessionEnding.Invoke(app, [null!, shutdownArgs]);
+        var actShutdown = () => sessionEnding.Invoke(app, [null, shutdownArgs]);
         actShutdown.Should().NotThrow();
 
         // 2. Logoff
         var logoffArgs = (SessionEndingCancelEventArgs)RuntimeHelpers.GetUninitializedObject(typeof(SessionEndingCancelEventArgs));
         typeof(SessionEndingCancelEventArgs).GetField("_reason", BindingFlags.NonPublic | BindingFlags.Instance)?.SetValue(logoffArgs, ReasonSessionEnding.Logoff);
-        var actLogoff = () => sessionEnding.Invoke(app, [null!, logoffArgs]);
+        var actLogoff = () => sessionEnding.Invoke(app, [null, logoffArgs]);
         actLogoff.Should().NotThrow();
     }
 
@@ -1484,22 +1484,31 @@ public class AppTests
     public void App_ToggleMetricsLogging_And_TrayEvents_Coverage()
     {
         var app = GetOrCreateApp();
+        app.Should().NotBeNull();
 
         // 1. ToggleMetricsLogging reflection
-        var toggleMethod = typeof(App).GetMethod("ToggleMetricsLogging", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        toggleMethod.Invoke(app, [true]);
-        toggleMethod.Invoke(app, [false]);
+        var toggleMethod = typeof(App).GetMethod("ToggleMetricsLogging", BindingFlags.NonPublic | BindingFlags.Instance);
+        toggleMethod.Should().NotBeNull();
+        var actToggle = () =>
+        {
+            toggleMethod.Invoke(app, [true]);
+            toggleMethod.Invoke(app, [false]);
+        };
+        actToggle.Should().NotThrow();
 
         // 2. Tray TaskbarCreated and ShowContextMenuAction
         var overlayField = typeof(App).GetField("_overlay", BindingFlags.NonPublic | BindingFlags.Instance);
-        if (overlayField?.GetValue(app) is TaskbarOverlay overlay)
+        overlayField.Should().NotBeNull();
+        if (overlayField.GetValue(app) is TaskbarOverlay overlay)
         {
-            overlay.ShowContextMenuAction?.Invoke(new System.Drawing.Point(100, 100));
-            overlay.IsContextMenuOpen?.Invoke();
-            overlay.GetContextMenuBounds?.Invoke();
-            overlay.CloseContextMenuAction?.Invoke();
+            var actTray = () =>
+            {
+                overlay.ShowContextMenuAction?.Invoke(new System.Drawing.Point(100, 100));
+                overlay.IsContextMenuOpen?.Invoke();
+                overlay.GetContextMenuBounds?.Invoke();
+                overlay.CloseContextMenuAction?.Invoke();
+            };
+            actTray.Should().NotThrow();
         }
     }
 }
-
-

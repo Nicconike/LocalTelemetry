@@ -549,7 +549,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
         var oc = _cfg.Overlay;
         var mc = _cfg.Monitoring;
 
-        using var font = BuildFont();
+        var font = BuildFont();
         Color labelColor = _isLightTheme ? Color.Black : Color.White;
         var drawFlags = TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding;
 
@@ -841,7 +841,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
 
         using var bmp = new Bitmap(1, 1);
         using var g = Graphics.FromImage(bmp);
-        using var font = BuildFont();
+        var font = BuildFont();
 
         int colCount = (oc.Row1.Count + 1) / 2;
         bool hasRow2 = oc.Row1.Count > 1;

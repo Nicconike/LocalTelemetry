@@ -107,6 +107,49 @@ Implemented in [`TaskbarEmbedder.cs`](https://github.com/Nicconike/LocalTelemetr
 
 ---
 
+## :compass: Taskbar Alignment & Coordinate Mathematics
+
+LocalTelemetry dynamically adapts overlay placement based on Windows 11 taskbar alignment:
+
+### 1. Taskbar Alignment Detection (`IsTaskbarCentered`)
+
+Inspects user registry configuration:
+
+```csharp
+using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced");
+int val = Convert.ToInt32(key?.GetValue("TaskbarAl") ?? 1);
+return val == 1; // 1 = Centered, 0 = Left-aligned
+```
+
+### 2. Centered Taskbar Positioning
+
+On centered taskbars, the app icons occupy the center band:
+
+- **Left Placement (`left`)**: Anchors relative to the Windows Widgets button edge (`_leftWidgetRightEdge + PlacementOffset`).
+- **Right Placement (`right`)**: Anchors directly before the system notification area (`_trayLeftEdge - Width - PlacementOffset`).
+
+### 3. Left-Aligned Taskbar Positioning
+
+On left-aligned taskbars, app icons start from the Start button and expand toward the right:
+
+- **Application Band Boundary Detection (`GetAppListRightEdge`)**:
+  - Inspects UIAutomation elements for `Taskbar.TaskListButtonPanel` or native `MSTaskListWClass`.
+  - Determines the exact right boundary of running and pinned applications.
+- **Position Next to Apps (`beside_apps` or `left`)**:
+  - Positions the overlay immediately following the app list:
+
+    $$\text{X} = \text{clientAppRight} + \text{PlacementOffset}$$
+
+- **Position Before System Tray (`right`)**:
+  - Positions the overlay immediately before the system notification area:
+
+    $$\text{X} = \text{clientRightBoundary} - \text{Width} - \text{PlacementOffset}$$
+
+- **Boundary Clamping**:
+  - Clamps computed coordinates via `Math.Clamp(x, clientAppRight, maxRight)` to prevent visual overlap.
+
+---
+
 ## :cloud-backup: Deployment Lifecycle State Machine
 
 `TaskbarEmbedder.cs` tracks overlay attachment health using `OverlayDeploymentState`:

@@ -70,15 +70,8 @@ public sealed partial class App : WpfApplication
     internal static Action<ProcessStartInfo>? ElevateProcessStarter { get; set; }
     internal static Action<int>? ExitHandler { get; set; }
 
-    private static void ElevateAndExit(string[] args)
+    private static string BuildElevatedArguments(string[] args)
     {
-        if (ElevateAndExitAction is not null)
-        {
-            ElevateAndExitAction(args);
-            return;
-        }
-
-        string exe = Environment.ProcessPath!;
         var sb = new System.Text.StringBuilder();
         foreach (var a in args)
         {
@@ -88,11 +81,34 @@ public sealed partial class App : WpfApplication
         }
         if (sb.Length > 0) sb.Append(' ');
         sb.Append("--elevated");
+        return sb.ToString();
+    }
+
+    private static void ShowElevationError(Exception ex)
+    {
+        if (MessageBoxAction is not null)
+        {
+            MessageBoxAction("Elevation failed", ex.Message);
+            return;
+        }
+
+        System.Windows.MessageBox.Show(
+            $"LocalTelemetry requires administrator privileges.\n\n{ex.Message}",
+            "Elevation failed", MessageBoxButton.OK, MessageBoxImage.Error);
+    }
+
+    private static void ElevateAndExit(string[] args)
+    {
+        if (ElevateAndExitAction is not null)
+        {
+            ElevateAndExitAction(args);
+            return;
+        }
 
         var psi = new ProcessStartInfo
         {
-            FileName = exe,
-            Arguments = sb.ToString(),
+            FileName = Environment.ProcessPath!,
+            Arguments = BuildElevatedArguments(args),
             UseShellExecute = true,
             Verb = "runas",
         };
@@ -106,16 +122,7 @@ public sealed partial class App : WpfApplication
         }
         catch (Exception ex)
         {
-            if (MessageBoxAction is not null)
-            {
-                MessageBoxAction("Elevation failed", ex.Message);
-            }
-            else
-            {
-                System.Windows.MessageBox.Show(
-                    $"LocalTelemetry requires administrator privileges.\n\n{ex.Message}",
-                    "Elevation failed", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+            ShowElevationError(ex);
         }
 
         if (ExitHandler is not null)
@@ -161,7 +168,12 @@ public sealed partial class App : WpfApplication
 
         string exeDir = AppContext.BaseDirectory;
         AppSettings.InitPaths(exeDir);
+        bool isFreshConfig = !File.Exists(AppSettings.ConfigPath);
         _cfg = AppSettings.Load();
+        if (isFreshConfig && !TaskbarEmbedder.IsTaskbarCentered())
+        {
+            _cfg.Overlay.Placement = "right";
+        }
         bool fileRunAtStartup = _cfg.RunAtStartup;
         _cfg.RunAtStartup = WindowHelpers.IsStartupEnabled();
 

@@ -42,7 +42,7 @@ Explore the key configuration tabs in the settings dashboard to tailor LocalTele
 
 ### :proportions: Adjust Overlay Position & Scale
 
-- **Position & Offset**: Position the overlay on the `Left side` or `Right side` of your taskbar, and adjust the horizontal pixel distance from the chosen edge.
+- **Position & Offset**: Position the overlay dynamically (*Left Side* or *Right Side* on centered taskbars; *Next to Apps* or *Before System Tray* on left-aligned taskbars), and adjust horizontal offset.
 - **Scale & Opacity**: Adjust overlay scaling (`80%` to `200%`) and transparency (`20%` to `100%`) to match your desktop aesthetic.
 - **Double-Click Action**: Choose what happens when double-clicking the overlay (`None`, `Open Task Manager`, or `Open Settings`).
 
