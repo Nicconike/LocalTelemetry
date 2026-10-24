@@ -170,6 +170,40 @@ internal sealed class IntelGpuNativePInvoke : IIntelGpuNative
     private const int CtlResultSuccess = 0;
     private const CallingConvention Cdecl = CallingConvention.Cdecl;
 
+    internal delegate int InitDelegate(ref CtlInitArgs pInitDesc, out IntPtr phAPIHandle);
+    internal InitDelegate InitFunc { get; set; } = ctlInit;
+    internal Func<IntPtr, int> CloseFunc { get; set; } = ctlClose;
+    internal delegate int EnumerateDevicesDelegate(IntPtr hAPIHandle, ref uint pCount, IntPtr[]? phDevices);
+    internal EnumerateDevicesDelegate EnumerateDevicesFunc { get; set; } = ctlEnumerateDevices;
+    internal delegate int GetDevicePropertiesDelegate(IntPtr hDAhandle, ref CtlDeviceAdapterProperties pProperties);
+    internal GetDevicePropertiesDelegate GetDevicePropertiesFunc { get; set; } = ctlGetDeviceProperties;
+    internal delegate int EnumTemperatureSensorsDelegate(IntPtr hDAhandle, ref uint pCount, IntPtr[]? phTemperature);
+    internal EnumTemperatureSensorsDelegate EnumTemperatureSensorsFunc { get; set; } = ctlEnumTemperatureSensors;
+    internal delegate int TemperatureGetStateDelegate(IntPtr hTemperature, ref double pTemperature);
+    internal TemperatureGetStateDelegate TemperatureGetStateFunc { get; set; } = ctlTemperatureGetState;
+    internal delegate int EnumFrequencyDomainsDelegate(IntPtr hDAhandle, ref uint pCount, IntPtr[]? phFrequency);
+    internal EnumFrequencyDomainsDelegate EnumFrequencyDomainsFunc { get; set; } = ctlEnumFrequencyDomains;
+    internal delegate int FrequencyGetStateDelegate(IntPtr hFrequency, ref CtlFreqState pState);
+    internal FrequencyGetStateDelegate FrequencyGetStateFunc { get; set; } = ctlFrequencyGetState;
+    internal delegate int EnumMemoryModulesDelegate(IntPtr hDAhandle, ref uint pCount, IntPtr[]? phMemory);
+    internal EnumMemoryModulesDelegate EnumMemoryModulesFunc { get; set; } = ctlEnumMemoryModules;
+    internal delegate int MemoryGetStateDelegate(IntPtr hMemory, ref CtlMemState pState);
+    internal MemoryGetStateDelegate MemoryGetStateFunc { get; set; } = ctlMemoryGetState;
+
+    internal void ResetHooks()
+    {
+        InitFunc = ctlInit;
+        CloseFunc = ctlClose;
+        EnumerateDevicesFunc = ctlEnumerateDevices;
+        GetDevicePropertiesFunc = ctlGetDeviceProperties;
+        EnumTemperatureSensorsFunc = ctlEnumTemperatureSensors;
+        TemperatureGetStateFunc = ctlTemperatureGetState;
+        EnumFrequencyDomainsFunc = ctlEnumFrequencyDomains;
+        FrequencyGetStateFunc = ctlFrequencyGetState;
+        EnumMemoryModulesFunc = ctlEnumMemoryModules;
+        MemoryGetStateFunc = ctlMemoryGetState;
+    }
+
     public int Init(out IntPtr apiHandle)
     {
         apiHandle = IntPtr.Zero;
@@ -179,7 +213,7 @@ internal sealed class IntelGpuNativePInvoke : IIntelGpuNative
             initArgs.Size = (uint)Marshal.SizeOf<CtlInitArgs>();
             initArgs.Version = 0;
             initArgs.flags = 1;
-            return ctlInit(ref initArgs, out apiHandle);
+            return InitFunc(ref initArgs, out apiHandle);
         }
         catch (Exception ex)
         {
@@ -190,7 +224,7 @@ internal sealed class IntelGpuNativePInvoke : IIntelGpuNative
 
     public int Close(IntPtr apiHandle)
     {
-        try { return ctlClose(apiHandle); }
+        try { return CloseFunc(apiHandle); }
         catch (Exception ex)
         {
             Log.Debug(ex, "Failed to close Intel graphics control library handle (ctlClose)");
@@ -204,11 +238,11 @@ internal sealed class IntelGpuNativePInvoke : IIntelGpuNative
         try
         {
             uint count = 0;
-            int ret = ctlEnumerateDevices(apiHandle, ref count, null);
+            int ret = EnumerateDevicesFunc(apiHandle, ref count, null);
             if (ret == CtlResultSuccess && count > 0)
             {
                 devices = new IntPtr[count];
-                ret = ctlEnumerateDevices(apiHandle, ref count, devices);
+                ret = EnumerateDevicesFunc(apiHandle, ref count, devices);
                 return ret;
             }
             return ret != CtlResultSuccess ? ret : -1;
@@ -227,7 +261,7 @@ internal sealed class IntelGpuNativePInvoke : IIntelGpuNative
         {
             var props = default(CtlDeviceAdapterProperties);
             props.Size = (uint)Marshal.SizeOf<CtlDeviceAdapterProperties>();
-            int ret = ctlGetDeviceProperties(deviceHandle, ref props);
+            int ret = GetDevicePropertiesFunc(deviceHandle, ref props);
             if (ret == CtlResultSuccess) gpuName = props.name ?? string.Empty;
             return ret;
         }
@@ -244,11 +278,11 @@ internal sealed class IntelGpuNativePInvoke : IIntelGpuNative
         try
         {
             uint count = 0;
-            int ret = ctlEnumTemperatureSensors(deviceHandle, ref count, null);
+            int ret = EnumTemperatureSensorsFunc(deviceHandle, ref count, null);
             if (ret == CtlResultSuccess && count > 0)
             {
                 var temps = new IntPtr[count];
-                ret = ctlEnumTemperatureSensors(deviceHandle, ref count, temps);
+                ret = EnumTemperatureSensorsFunc(deviceHandle, ref count, temps);
                 if (ret == CtlResultSuccess) tempHandle = temps[0];
                 return ret;
             }
@@ -264,7 +298,7 @@ internal sealed class IntelGpuNativePInvoke : IIntelGpuNative
     public int GetTempC(IntPtr tempHandle, out double tempC)
     {
         tempC = 0;
-        try { return ctlTemperatureGetState(tempHandle, ref tempC); }
+        try { return TemperatureGetStateFunc(tempHandle, ref tempC); }
         catch (Exception ex)
         {
             Log.Debug(ex, "Failed to read Intel graphics temperature sensor state");
@@ -278,11 +312,11 @@ internal sealed class IntelGpuNativePInvoke : IIntelGpuNative
         try
         {
             uint count = 0;
-            int ret = ctlEnumFrequencyDomains(deviceHandle, ref count, null);
+            int ret = EnumFrequencyDomainsFunc(deviceHandle, ref count, null);
             if (ret == CtlResultSuccess && count > 0)
             {
                 var freqs = new IntPtr[count];
-                ret = ctlEnumFrequencyDomains(deviceHandle, ref count, freqs);
+                ret = EnumFrequencyDomainsFunc(deviceHandle, ref count, freqs);
                 if (ret == CtlResultSuccess) freqHandle = freqs[0];
                 return ret;
             }
@@ -302,7 +336,7 @@ internal sealed class IntelGpuNativePInvoke : IIntelGpuNative
         {
             var state = default(CtlFreqState);
             state.Size = (uint)Marshal.SizeOf<CtlFreqState>();
-            int ret = ctlFrequencyGetState(freqHandle, ref state);
+            int ret = FrequencyGetStateFunc(freqHandle, ref state);
             if (ret == CtlResultSuccess) clockMHz = state.actual;
             return ret;
         }
@@ -319,11 +353,11 @@ internal sealed class IntelGpuNativePInvoke : IIntelGpuNative
         try
         {
             uint count = 0;
-            int ret = ctlEnumMemoryModules(deviceHandle, ref count, null);
+            int ret = EnumMemoryModulesFunc(deviceHandle, ref count, null);
             if (ret == CtlResultSuccess && count > 0)
             {
                 var mems = new IntPtr[count];
-                ret = ctlEnumMemoryModules(deviceHandle, ref count, mems);
+                ret = EnumMemoryModulesFunc(deviceHandle, ref count, mems);
                 if (ret == CtlResultSuccess) memHandle = mems[0];
                 return ret;
             }
@@ -344,7 +378,7 @@ internal sealed class IntelGpuNativePInvoke : IIntelGpuNative
         {
             var state = default(CtlMemState);
             state.Size = (uint)Marshal.SizeOf<CtlMemState>();
-            int ret = ctlMemoryGetState(memHandle, ref state);
+            int ret = MemoryGetStateFunc(memHandle, ref state);
             if (ret == CtlResultSuccess)
             {
                 totalBytes = state.size;
@@ -390,7 +424,7 @@ internal sealed class IntelGpuNativePInvoke : IIntelGpuNative
     private static extern int ctlMemoryGetState(IntPtr hMemory, ref CtlMemState pState);
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct CtlInitArgs
+    internal struct CtlInitArgs
     {
         public uint Size;
         public byte Version;
@@ -401,7 +435,7 @@ internal sealed class IntelGpuNativePInvoke : IIntelGpuNative
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct CtlDeviceAdapterProperties
+    internal struct CtlDeviceAdapterProperties
     {
         public uint Size;
         public byte Version;
@@ -428,7 +462,7 @@ internal sealed class IntelGpuNativePInvoke : IIntelGpuNative
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct CtlFirmwareVersion
+    internal struct CtlFirmwareVersion
     {
         public ushort major;
         public ushort minor;
@@ -437,7 +471,7 @@ internal sealed class IntelGpuNativePInvoke : IIntelGpuNative
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct CtlAdapterBdf
+    internal struct CtlAdapterBdf
     {
         public uint bus;
         public uint device;
@@ -446,7 +480,7 @@ internal sealed class IntelGpuNativePInvoke : IIntelGpuNative
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct CtlFreqState
+    internal struct CtlFreqState
     {
         public uint Size;
         public byte Version;
@@ -459,7 +493,7 @@ internal sealed class IntelGpuNativePInvoke : IIntelGpuNative
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct CtlMemState
+    internal struct CtlMemState
     {
         public uint Size;
         public byte Version;

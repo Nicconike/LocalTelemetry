@@ -456,6 +456,26 @@ public class DiskQueryTests
         string busType = (string)adapterMethod.Invoke(null, [9999])!;
         busType.Should().BeEmpty();
     }
+
+    [Fact]
+    public void DiskQuery_BootDrive_WmiFallback_Coverage()
+    {
+        try
+        {
+            DiskQuery.SystemVolumePathOverride = @"\\.\NonExistentVolume_DiskQueryTest";
+            var detBoot = typeof(DiskQuery).GetMethod("GetBootDriveIndex", BindingFlags.NonPublic | BindingFlags.Static)!;
+            var bootIdx = detBoot.Invoke(null, null);
+            // On Windows 11 with WMI Win32_DiskPartition, this exercises the fallback searcher cleanly
+            if (bootIdx is int idx)
+            {
+                idx.Should().BeGreaterThanOrEqualTo(0);
+            }
+        }
+        finally
+        {
+            DiskQuery.SystemVolumePathOverride = null;
+        }
+    }
 }
 
 

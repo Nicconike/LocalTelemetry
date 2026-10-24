@@ -2,6 +2,11 @@ codecov:
     notify:
         after_n_builds: 4
 
+ignore:
+    - "**/*.xaml"
+    - "**/obj/**"
+    - "**/*.g.cs"
+
 coverage:
     status:
         project:

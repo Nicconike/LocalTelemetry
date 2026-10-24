@@ -460,32 +460,35 @@ public static class DiskQuery
         public uint AddressType;
     }
 
+    internal static string? SystemVolumePathOverride { get; set; }
+
     private static int? GetBootDriveIndex()
     {
         try
         {
             string? systemDrive = Path.GetPathRoot(Environment.SystemDirectory);
             if (string.IsNullOrEmpty(systemDrive)) return null;
-            string volumePath = @"\\.\" + systemDrive.TrimEnd('\\');
+            string volumePath = SystemVolumePathOverride ?? (@"\\.\" + systemDrive.TrimEnd('\\'));
             using var hVolume = NativeMethods.CreateFile(volumePath,
                 0, NativeMethods.FILE_SHARE_READ | NativeMethods.FILE_SHARE_WRITE,
                 IntPtr.Zero, NativeMethods.OPEN_EXISTING, 0, IntPtr.Zero);
             if (hVolume is null || hVolume.IsInvalid)
             {
                 Diagnostics.Log.Error("Could not open system volume to determine boot drive index");
-                return null;
-            }
-
-            byte[] extents = new byte[32];
-            if (NativeMethods.DeviceIoControl(hVolume, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS,
-                    null, 0, extents, 32, out uint ret, IntPtr.Zero) && ret >= 12)
-            {
-                int diskNumber = BitConverter.ToInt32(extents, 8);
-                return diskNumber;
             }
             else
             {
-                Diagnostics.Log.Error("Failed to query volume disk extents via IOCTL");
+                byte[] extents = new byte[32];
+                if (NativeMethods.DeviceIoControl(hVolume, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS,
+                        null, 0, extents, 32, out uint ret, IntPtr.Zero) && ret >= 12)
+                {
+                    int diskNumber = BitConverter.ToInt32(extents, 8);
+                    return diskNumber;
+                }
+                else
+                {
+                    Diagnostics.Log.Error("Failed to query volume disk extents via IOCTL");
+                }
             }
         }
         catch (Exception ex) { Diagnostics.Log.Error(ex, "Failed to determine boot drive index via volume extents"); }

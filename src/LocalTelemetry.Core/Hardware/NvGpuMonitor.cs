@@ -341,9 +341,45 @@ internal sealed class NvGpuNativePInvoke : INvGpuNative
 
     private const int NVML_SUCCESS = 0;
 
+    internal Func<int> NvmlInitFunc { get; set; } = nvmlInit;
+    internal Func<int> NvmlShutdownFunc { get; set; } = nvmlShutdown;
+    internal delegate int GetDeviceHandleByIndexDelegate(int index, out IntPtr device);
+    internal GetDeviceHandleByIndexDelegate GetDeviceHandleByIndexFunc { get; set; } = nvmlDeviceGetHandleByIndex;
+    internal delegate int GetDeviceNameDelegate(IntPtr device, byte[] name, int length);
+    internal GetDeviceNameDelegate GetDeviceNameFunc { get; set; } = nvmlDeviceGetName;
+    internal delegate int GetDriverVersionDelegate(byte[] version, int length);
+    internal GetDriverVersionDelegate GetDriverVersionFunc { get; set; } = nvmlSystemGetDriverVersion;
+    internal delegate int GetTemperatureDelegate(IntPtr device, int sensorType, ref uint temp);
+    internal GetTemperatureDelegate GetTemperatureFunc { get; set; } = nvmlDeviceGetTemperature;
+    internal delegate int GetUtilizationRatesDelegate(IntPtr device, ref NvmlUtilization util);
+    internal GetUtilizationRatesDelegate GetUtilizationRatesFunc { get; set; } = nvmlDeviceGetUtilizationRates;
+    internal delegate int GetMemoryInfoDelegate(IntPtr device, ref NvmlMemory mem);
+    internal GetMemoryInfoDelegate GetMemoryInfoFunc { get; set; } = nvmlDeviceGetMemoryInfo;
+    internal delegate int GetClockInfoDelegate(IntPtr device, int clockType, ref uint clock);
+    internal GetClockInfoDelegate GetClockInfoFunc { get; set; } = nvmlDeviceGetClockInfo;
+    internal delegate int GetPowerUsageDelegate(IntPtr device, ref uint powerMw);
+    internal GetPowerUsageDelegate GetPowerUsageFunc { get; set; } = nvmlDeviceGetPowerUsage;
+    internal delegate int GetPowerManagementLimitDelegate(IntPtr device, ref uint powerLimitMw);
+    internal GetPowerManagementLimitDelegate GetPowerManagementLimitFunc { get; set; } = nvmlDeviceGetPowerManagementLimit;
+
+    internal void ResetHooks()
+    {
+        NvmlInitFunc = nvmlInit;
+        NvmlShutdownFunc = nvmlShutdown;
+        GetDeviceHandleByIndexFunc = nvmlDeviceGetHandleByIndex;
+        GetDeviceNameFunc = nvmlDeviceGetName;
+        GetDriverVersionFunc = nvmlSystemGetDriverVersion;
+        GetTemperatureFunc = nvmlDeviceGetTemperature;
+        GetUtilizationRatesFunc = nvmlDeviceGetUtilizationRates;
+        GetMemoryInfoFunc = nvmlDeviceGetMemoryInfo;
+        GetClockInfoFunc = nvmlDeviceGetClockInfo;
+        GetPowerUsageFunc = nvmlDeviceGetPowerUsage;
+        GetPowerManagementLimitFunc = nvmlDeviceGetPowerManagementLimit;
+    }
+
     public int Init()
     {
-        try { return nvmlInit(); }
+        try { return NvmlInitFunc(); }
         catch (Exception ex)
         {
             Diagnostics.Log.Debug(ex, "Failed to initialize NVIDIA management library (nvmlInit)");
@@ -353,7 +389,7 @@ internal sealed class NvGpuNativePInvoke : INvGpuNative
 
     public int Shutdown()
     {
-        try { return nvmlShutdown(); }
+        try { return NvmlShutdownFunc(); }
         catch (Exception ex)
         {
             Diagnostics.Log.Debug(ex, "Failed to shutdown NVIDIA management library (nvmlShutdown)");
@@ -364,7 +400,7 @@ internal sealed class NvGpuNativePInvoke : INvGpuNative
     public int GetDeviceHandleByIndex(int index, out IntPtr device)
     {
         device = IntPtr.Zero;
-        try { return nvmlDeviceGetHandleByIndex(index, out device); }
+        try { return GetDeviceHandleByIndexFunc(index, out device); }
         catch (Exception ex)
         {
             Diagnostics.Log.Debug(ex, "Failed to get NVIDIA device handle by index");
@@ -379,7 +415,7 @@ internal sealed class NvGpuNativePInvoke : INvGpuNative
         try
         {
             var nameBuf = new byte[96];
-            int ret = nvmlDeviceGetName(device, nameBuf, nameBuf.Length);
+            int ret = GetDeviceNameFunc(device, nameBuf, nameBuf.Length);
             if (ret == NVML_SUCCESS)
             {
                 int len = Array.IndexOf(nameBuf, (byte)0);
@@ -401,7 +437,7 @@ internal sealed class NvGpuNativePInvoke : INvGpuNative
         try
         {
             var verBuf = new byte[80];
-            int ret = nvmlSystemGetDriverVersion(verBuf, verBuf.Length);
+            int ret = GetDriverVersionFunc(verBuf, verBuf.Length);
             if (ret == NVML_SUCCESS)
             {
                 int len = Array.IndexOf(verBuf, (byte)0);
@@ -420,7 +456,7 @@ internal sealed class NvGpuNativePInvoke : INvGpuNative
     {
         temp = 0;
         if (device == IntPtr.Zero) return -1;
-        try { return nvmlDeviceGetTemperature(device, sensorType, ref temp); }
+        try { return GetTemperatureFunc(device, sensorType, ref temp); }
         catch (Exception ex)
         {
             Diagnostics.Log.Debug(ex, "Failed to get NVIDIA device temperature");
@@ -436,7 +472,7 @@ internal sealed class NvGpuNativePInvoke : INvGpuNative
         try
         {
             var util = new NvmlUtilization();
-            int ret = nvmlDeviceGetUtilizationRates(device, ref util);
+            int ret = GetUtilizationRatesFunc(device, ref util);
             if (ret == NVML_SUCCESS)
             {
                 gpuUtil = util.gpu;
@@ -458,7 +494,7 @@ internal sealed class NvGpuNativePInvoke : INvGpuNative
         try
         {
             var mem = new NvmlMemory();
-            int ret = nvmlDeviceGetMemoryInfo(device, ref mem);
+            int ret = GetMemoryInfoFunc(device, ref mem);
             if (ret == NVML_SUCCESS)
             {
                 total = mem.total;
@@ -478,7 +514,7 @@ internal sealed class NvGpuNativePInvoke : INvGpuNative
     {
         clock = 0;
         if (device == IntPtr.Zero) return -1;
-        try { return nvmlDeviceGetClockInfo(device, clockType, ref clock); }
+        try { return GetClockInfoFunc(device, clockType, ref clock); }
         catch (Exception ex)
         {
             Diagnostics.Log.Debug(ex, "Failed to get NVIDIA clock information");
@@ -490,7 +526,7 @@ internal sealed class NvGpuNativePInvoke : INvGpuNative
     {
         powerMw = 0;
         if (device == IntPtr.Zero) return -1;
-        try { return nvmlDeviceGetPowerUsage(device, ref powerMw); }
+        try { return GetPowerUsageFunc(device, ref powerMw); }
         catch (Exception ex)
         {
             Diagnostics.Log.Debug(ex, "Failed to get NVIDIA power usage");
@@ -502,7 +538,7 @@ internal sealed class NvGpuNativePInvoke : INvGpuNative
     {
         powerLimitMw = 0;
         if (device == IntPtr.Zero) return -1;
-        try { return nvmlDeviceGetPowerManagementLimit(device, ref powerLimitMw); }
+        try { return GetPowerManagementLimitFunc(device, ref powerLimitMw); }
         catch (Exception ex)
         {
             Diagnostics.Log.Debug(ex, "Failed to get NVIDIA power management limit");
@@ -544,14 +580,14 @@ internal sealed class NvGpuNativePInvoke : INvGpuNative
     private static extern int nvmlDeviceGetPowerManagementLimit(IntPtr device, ref uint powerLimit);
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct NvmlUtilization
+    internal struct NvmlUtilization
     {
         public uint gpu;
         public uint memory;
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct NvmlMemory
+    internal struct NvmlMemory
     {
         public ulong total;
         public ulong free;

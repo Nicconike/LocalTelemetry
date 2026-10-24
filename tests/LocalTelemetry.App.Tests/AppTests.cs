@@ -1432,6 +1432,74 @@ public class AppTests
             App.TaskManagerProcessLauncher = origTaskMgr;
         }
     }
+
+    private static readonly string[] ElevationSpaceArgs = ["--minimized", "arg with space"];
+
+    [WpfFact]
+    public void App_ElevateAndExit_And_Lifecycle_Branches()
+    {
+        var origElevateAction = App.ElevateAndExitAction;
+        var origStarter = App.ElevateProcessStarter;
+        var origExit = App.ExitHandler;
+        var origMsg = App.MessageBoxAction;
+
+        try
+        {
+            App.ElevateAndExitAction = null;
+
+            bool starterCalled = false;
+            bool exitCalled = false;
+            string? capturedArgs = null;
+            App.ElevateProcessStarter = psi =>
+            {
+                starterCalled = true;
+                capturedArgs = psi.Arguments;
+            };
+            App.ExitHandler = code => exitCalled = true;
+
+            var elevateMethod = typeof(App).GetMethod("ElevateAndExit", BindingFlags.NonPublic | BindingFlags.Static)!;
+            elevateMethod.Invoke(null, [ElevationSpaceArgs]);
+
+            starterCalled.Should().BeTrue();
+            exitCalled.Should().BeTrue();
+            capturedArgs.Should().Contain("--minimized").And.Contain("\"arg with space\"").And.Contain("--elevated");
+
+            // Test catch block when ElevateProcessStarter throws
+            bool msgBoxCalled = false;
+            App.MessageBoxAction = (title, msg) => msgBoxCalled = true;
+            App.ElevateProcessStarter = psi => throw new InvalidOperationException("Elevation refused");
+            elevateMethod.Invoke(null, [Array.Empty<string>()]);
+            msgBoxCalled.Should().BeTrue();
+        }
+        finally
+        {
+            App.ElevateAndExitAction = origElevateAction;
+            App.ElevateProcessStarter = origStarter;
+            App.ExitHandler = origExit;
+            App.MessageBoxAction = origMsg;
+        }
+    }
+
+    [WpfFact]
+    public void App_ToggleMetricsLogging_And_TrayEvents_Coverage()
+    {
+        var app = GetOrCreateApp();
+
+        // 1. ToggleMetricsLogging reflection
+        var toggleMethod = typeof(App).GetMethod("ToggleMetricsLogging", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        toggleMethod.Invoke(app, [true]);
+        toggleMethod.Invoke(app, [false]);
+
+        // 2. Tray TaskbarCreated and ShowContextMenuAction
+        var overlayField = typeof(App).GetField("_overlay", BindingFlags.NonPublic | BindingFlags.Instance);
+        if (overlayField?.GetValue(app) is TaskbarOverlay overlay)
+        {
+            overlay.ShowContextMenuAction?.Invoke(new System.Drawing.Point(100, 100));
+            overlay.IsContextMenuOpen?.Invoke();
+            overlay.GetContextMenuBounds?.Invoke();
+            overlay.CloseContextMenuAction?.Invoke();
+        }
+    }
 }
 
 

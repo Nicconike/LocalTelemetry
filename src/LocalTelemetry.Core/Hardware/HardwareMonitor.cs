@@ -115,6 +115,8 @@ public sealed class HardwareMonitor : IDisposable
     // Event
     public event Action<TelemetrySnapshot>? SnapshotReady;
     internal static bool SuppressTimerForTesting { get; set; }
+    internal static int PowerResumeWarmUpDelayMs { get; set; } = 3000;
+    internal static Func<(NetworkInterface? selected, bool hasGateway)>? SelectActiveNicOverride { get; set; }
 
     private readonly IHardwareLifecycleManager _lifecycleManager;
     private volatile bool _isSuspended;
@@ -1228,7 +1230,9 @@ public sealed class HardwareMonitor : IDisposable
 
         try
         {
-            var (selected, _) = SelectActiveNic(pref);
+            var (selected, _) = SelectActiveNicOverride is not null
+                ? SelectActiveNicOverride()
+                : SelectActiveNic(pref);
             if (selected is not null)
             {
                 _nicInterface = selected;
@@ -1568,7 +1572,7 @@ public sealed class HardwareMonitor : IDisposable
         {
             try
             {
-                await Task.Delay(3000).ConfigureAwait(false);
+                await Task.Delay(PowerResumeWarmUpDelayMs).ConfigureAwait(false);
                 ExecutePowerResumeWarmUp();
             }
             catch (Exception ex)

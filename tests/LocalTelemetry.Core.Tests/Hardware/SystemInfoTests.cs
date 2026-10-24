@@ -2182,15 +2182,35 @@ public class SystemInfoTests
             SystemInfo.GetBatteryDeviceName().Should().BeEmpty();
             SystemInfo.GetBatteryDesignCapacity().Should().BeEmpty();
 
-            // Case B: HasBattery is true -> runs multi-step resolution
+            // Case B: HasBattery is true with SMBIOS Type 22 -> runs multi-step resolution
             hasBatField.SetValue(null, true);
             mfrField.SetValue(null, null);
             devField.SetValue(null, null);
             desField.SetValue(null, null);
 
-            SystemInfo.GetBatteryManufacturer().Should().NotBeNull();
-            SystemInfo.GetBatteryDeviceName().Should().NotBeNull();
-            SystemInfo.GetBatteryDesignCapacity().Should().NotBeNull();
+            WithSmbios(BuildBlob(), () =>
+            {
+                SystemInfo.GetBatteryManufacturer().Should().NotBeNullOrEmpty();
+                SystemInfo.GetBatteryDeviceName().Should().NotBeNullOrEmpty();
+                SystemInfo.GetBatteryDesignCapacity().Should().NotBeNullOrEmpty();
+
+                var getBatteryStr = typeof(SystemInfo).GetMethod("GetSmbiosBatteryString", BindingFlags.NonPublic | BindingFlags.Static)!;
+                var getBatteryWord = typeof(SystemInfo).GetMethod("GetSmbiosBatteryWord", BindingFlags.NonPublic | BindingFlags.Static)!;
+                getBatteryStr.Invoke(null, [0x05]).Should().Be("Sunwoda");
+                getBatteryStr.Invoke(null, [0x08]).Should().Be("A31-80");
+                ((int)getBatteryWord.Invoke(null, [0x0A])!).Should().Be(50000);
+            });
+
+            // 4. WMI error handling paths
+            var qFirst = typeof(SystemInfo).GetMethod("QueryWmiFirst", BindingFlags.NonPublic | BindingFlags.Static)!;
+            var qFirstInt = typeof(SystemInfo).GetMethod("QueryWmiFirstInt", BindingFlags.NonPublic | BindingFlags.Static)!;
+            qFirst.Invoke(null, ["SELECT * FROM Invalid_Wmi_Table_XYZ", "Col"]).Should().Be("");
+            qFirstInt.Invoke(null, ["SELECT * FROM Invalid_Wmi_Table_XYZ", "Col"]).Should().Be(0);
+
+            var qRootStr = typeof(SystemInfo).GetMethod("QueryRootWmiString", BindingFlags.NonPublic | BindingFlags.Static)!;
+            var qRootInt = typeof(SystemInfo).GetMethod("QueryRootWmiInt", BindingFlags.NonPublic | BindingFlags.Static)!;
+            qRootStr.Invoke(null, ["Invalid_RootWmi_Class", "Prop"]).Should().Be("");
+            qRootInt.Invoke(null, ["Invalid_RootWmi_Class", "Prop"]).Should().Be(0);
         }
         finally
         {

@@ -11,21 +11,89 @@ public class NvGpuMonitorTests
     public void NvGpuNativePInvoke_Instance_ExecutesSafely()
     {
         var native = NvGpuNativePInvoke.Instance;
-        var act = () =>
+        try
         {
-            native.Init();
-            native.GetDeviceHandleByIndex(0, out var dev);
-            native.GetDeviceName(dev, out _);
-            native.GetDriverVersion(out _);
-            native.GetTemperature(dev, 0, out _);
-            native.GetUtilizationRates(dev, out _, out _);
-            native.GetMemoryInfo(dev, out _, out _, out _);
-            native.GetClockInfo(dev, 0, out _);
-            native.GetPowerUsage(dev, out _);
-            native.GetPowerManagementLimit(dev, out _);
-            native.Shutdown();
-        };
-        act.Should().NotThrow();
+            // 1. Success hooks
+            native.NvmlInitFunc = () => 0;
+            native.NvmlShutdownFunc = () => 0;
+            native.GetDeviceHandleByIndexFunc = (int idx, out IntPtr dev) => { dev = (IntPtr)0x5000; return 0; };
+            native.GetDeviceNameFunc = (IntPtr d, byte[] b, int l) =>
+            {
+                var bytes = System.Text.Encoding.ASCII.GetBytes("RTX 4090\0");
+                Array.Copy(bytes, b, bytes.Length);
+                return 0;
+            };
+            native.GetDriverVersionFunc = (byte[] b, int l) =>
+            {
+                var bytes = System.Text.Encoding.ASCII.GetBytes("550.54\0");
+                Array.Copy(bytes, b, bytes.Length);
+                return 0;
+            };
+            native.GetTemperatureFunc = (IntPtr d, int s, ref uint t) => { t = 65u; return 0; };
+            native.GetUtilizationRatesFunc = (IntPtr d, ref NvGpuNativePInvoke.NvmlUtilization u) => { u.gpu = 75u; u.memory = 30u; return 0; };
+            native.GetMemoryInfoFunc = (IntPtr d, ref NvGpuNativePInvoke.NvmlMemory m) => { m.total = 1000; m.free = 600; m.used = 400; return 0; };
+            native.GetClockInfoFunc = (IntPtr d, int c, ref uint clk) => { clk = 2500u; return 0; };
+            native.GetPowerUsageFunc = (IntPtr d, ref uint p) => { p = 300000u; return 0; };
+            native.GetPowerManagementLimitFunc = (IntPtr d, ref uint pl) => { pl = 450000u; return 0; };
+
+            native.Init().Should().Be(0);
+            native.GetDeviceHandleByIndex(0, out var validDev).Should().Be(0);
+            native.GetDeviceName(validDev, out var name).Should().Be(0);
+            name.Should().Be("RTX 4090");
+            native.GetDriverVersion(out var ver).Should().Be(0);
+            ver.Should().Be("550.54");
+            native.GetTemperature(validDev, 0, out var temp).Should().Be(0);
+            temp.Should().Be(65u);
+            native.GetUtilizationRates(validDev, out var gpuU, out var memU).Should().Be(0);
+            gpuU.Should().Be(75u);
+            native.GetMemoryInfo(validDev, out var total, out var free, out var used).Should().Be(0);
+            total.Should().Be(1000UL);
+            native.GetClockInfo(validDev, 0, out var clock).Should().Be(0);
+            clock.Should().Be(2500u);
+            native.GetPowerUsage(validDev, out var pwr).Should().Be(0);
+            pwr.Should().Be(300000u);
+            native.GetPowerManagementLimit(validDev, out var pwrLim).Should().Be(0);
+            pwrLim.Should().Be(450000u);
+            native.Shutdown().Should().Be(0);
+
+            // 2. Exception/Failure hooks
+            native.NvmlInitFunc = () => throw new InvalidOperationException("init fail");
+            native.NvmlShutdownFunc = () => throw new InvalidOperationException("shutdown fail");
+            native.GetDeviceHandleByIndexFunc = (int idx, out IntPtr dev) => throw new InvalidOperationException("handle fail");
+            native.GetDeviceNameFunc = (IntPtr d, byte[] b, int l) => throw new InvalidOperationException("name fail");
+            native.GetDriverVersionFunc = (byte[] b, int l) => throw new InvalidOperationException("ver fail");
+            native.GetTemperatureFunc = (IntPtr d, int s, ref uint t) => throw new InvalidOperationException("temp fail");
+            native.GetUtilizationRatesFunc = (IntPtr d, ref NvGpuNativePInvoke.NvmlUtilization u) => throw new InvalidOperationException("util fail");
+            native.GetMemoryInfoFunc = (IntPtr d, ref NvGpuNativePInvoke.NvmlMemory m) => throw new InvalidOperationException("mem fail");
+            native.GetClockInfoFunc = (IntPtr d, int c, ref uint clk) => throw new InvalidOperationException("clock fail");
+            native.GetPowerUsageFunc = (IntPtr d, ref uint p) => throw new InvalidOperationException("pwr fail");
+            native.GetPowerManagementLimitFunc = (IntPtr d, ref uint pl) => throw new InvalidOperationException("pwrLim fail");
+
+            native.Init().Should().Be(-1);
+            native.GetDeviceHandleByIndex(0, out _).Should().Be(-1);
+            native.GetDeviceName((IntPtr)0x1, out _).Should().Be(-1);
+            native.GetDriverVersion(out _).Should().Be(-1);
+            native.GetTemperature((IntPtr)0x1, 0, out _).Should().Be(-1);
+            native.GetUtilizationRates((IntPtr)0x1, out _, out _).Should().Be(-1);
+            native.GetMemoryInfo((IntPtr)0x1, out _, out _, out _).Should().Be(-1);
+            native.GetClockInfo((IntPtr)0x1, 0, out _).Should().Be(-1);
+            native.GetPowerUsage((IntPtr)0x1, out _).Should().Be(-1);
+            native.GetPowerManagementLimit((IntPtr)0x1, out _).Should().Be(-1);
+            native.Shutdown().Should().Be(-1);
+
+            // Zero device handle check
+            native.GetDeviceName(IntPtr.Zero, out _).Should().Be(-1);
+            native.GetTemperature(IntPtr.Zero, 0, out _).Should().Be(-1);
+            native.GetUtilizationRates(IntPtr.Zero, out _, out _).Should().Be(-1);
+            native.GetMemoryInfo(IntPtr.Zero, out _, out _, out _).Should().Be(-1);
+            native.GetClockInfo(IntPtr.Zero, 0, out _).Should().Be(-1);
+            native.GetPowerUsage(IntPtr.Zero, out _).Should().Be(-1);
+            native.GetPowerManagementLimit(IntPtr.Zero, out _).Should().Be(-1);
+        }
+        finally
+        {
+            native.ResetHooks();
+        }
     }
 
     [Fact]

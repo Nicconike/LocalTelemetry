@@ -37,9 +37,30 @@ public sealed class WddmGpuMonitor : IDisposable
         catch (Exception ex) { Log.Error(ex, "Failed to initialize WDDM GPU monitor"); }
     }
 
+    internal delegate int PdhOpenQueryDelegate(IntPtr dataSource, IntPtr userData, out IntPtr query);
+    internal delegate int PdhAddEnglishCounterDelegate(IntPtr query, string counterPath, IntPtr userData, out IntPtr counter);
+    internal delegate int PdhCollectQueryDataDelegate(IntPtr query);
+    internal delegate int PdhGetFormattedCounterArrayDelegate(IntPtr counter, uint format, ref uint bufferSize, ref uint itemCount, IntPtr buffer);
+    internal delegate int PdhCloseQueryDelegate(IntPtr query);
+
+    internal static PdhOpenQueryDelegate PdhOpenQueryFunc { get; set; } = PdhOpenQuery;
+    internal static PdhAddEnglishCounterDelegate PdhAddEnglishCounterFunc { get; set; } = PdhAddEnglishCounter;
+    internal static PdhCollectQueryDataDelegate PdhCollectQueryDataFunc { get; set; } = PdhCollectQueryData;
+    internal static PdhGetFormattedCounterArrayDelegate PdhGetFormattedCounterArrayFunc { get; set; } = PdhGetFormattedCounterArray;
+    internal static PdhCloseQueryDelegate PdhCloseQueryFunc { get; set; } = PdhCloseQuery;
+
+    internal static void ResetHooks()
+    {
+        PdhOpenQueryFunc = PdhOpenQuery;
+        PdhAddEnglishCounterFunc = PdhAddEnglishCounter;
+        PdhCollectQueryDataFunc = PdhCollectQueryData;
+        PdhGetFormattedCounterArrayFunc = PdhGetFormattedCounterArray;
+        PdhCloseQueryFunc = PdhCloseQuery;
+    }
+
     private void Init()
     {
-        int status = PdhOpenQuery(IntPtr.Zero, IntPtr.Zero, out _query);
+        int status = PdhOpenQueryFunc(IntPtr.Zero, IntPtr.Zero, out _query);
         if (status != 0)
         {
             Log.Error($"Failed to open performance data query (status 0x{status:X8})");
@@ -49,7 +70,7 @@ public sealed class WddmGpuMonitor : IDisposable
         // Wildcard counter auto-tracks all current and future instances.
         // Handles process churn without manual re-enumeration - PDH resolves
         // the wildcard on each PdhCollectQueryData call.
-        status = PdhAddEnglishCounter(
+        status = PdhAddEnglishCounterFunc(
             _query,
             @"\GPU Engine(*)\Utilization Percentage",
             IntPtr.Zero,
@@ -58,17 +79,17 @@ public sealed class WddmGpuMonitor : IDisposable
         if (status != 0)
         {
             Log.Error($"Failed to add GPU engine counter (status 0x{status:X8})");
-            PdhCloseQuery(_query);
+            PdhCloseQueryFunc(_query);
             _query = IntPtr.Zero;
             return;
         }
 
         // Collect initial baseline - rate counters need two samples for a delta.
-        status = PdhCollectQueryData(_query);
+        status = PdhCollectQueryDataFunc(_query);
         if (status != 0)
         {
             Log.Error($"Initial collection of performance data failed (status 0x{status:X8})");
-            PdhCloseQuery(_query);
+            PdhCloseQueryFunc(_query);
             _query = IntPtr.Zero;
             return;
         }
@@ -129,7 +150,7 @@ public sealed class WddmGpuMonitor : IDisposable
 
         try
         {
-            int status = PdhCollectQueryData(_query);
+            int status = PdhCollectQueryDataFunc(_query);
             if (status != 0)
             {
                 HandleQueryError();
@@ -172,14 +193,14 @@ public sealed class WddmGpuMonitor : IDisposable
     {
         itemCount = 0;
         uint bufSize = 0;
-        int status = PdhGetFormattedCounterArray(
+        int status = PdhGetFormattedCounterArrayFunc(
             _counter, PdhFmtDouble, ref bufSize, ref itemCount, IntPtr.Zero);
 
         if (itemCount == 0 || status != PdhMoreData) return false;
 
         EnsureBuffer((int)bufSize);
 
-        status = PdhGetFormattedCounterArray(
+        status = PdhGetFormattedCounterArrayFunc(
             _counter, PdhFmtDouble, ref bufSize, ref itemCount, _buffer);
         return status == 0;
     }
@@ -266,7 +287,7 @@ public sealed class WddmGpuMonitor : IDisposable
         _disposed = true;
         IsAvailable = false;
 
-        if (_query != IntPtr.Zero) PdhCloseQuery(_query);
+        if (_query != IntPtr.Zero) PdhCloseQueryFunc(_query);
         if (_buffer != IntPtr.Zero) Marshal.FreeHGlobal(_buffer);
         _query = IntPtr.Zero;
         _counter = IntPtr.Zero;

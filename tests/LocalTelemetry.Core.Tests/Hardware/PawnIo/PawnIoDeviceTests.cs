@@ -386,4 +386,67 @@ public class PawnIoDeviceTests
             PawnIoDevice.ElevationChecker = null;
         }
     }
+
+    [Fact]
+    public void PawnIoDevice_EnableBackupPrivilege_ExecutesSafely()
+    {
+        var enablePriv = typeof(PawnIoDevice).GetMethod("EnableBackupPrivilege", BindingFlags.NonPublic | BindingFlags.Static);
+        enablePriv.Should().NotBeNull();
+        var act = () => enablePriv!.Invoke(null, null);
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void PawnIoDevice_CleanupStaleInstall_WithMockedElevation_CoversBranches()
+    {
+        // 1. Non-elevated early return
+        PawnIoDevice.CleanupHandler = null;
+        PawnIoDevice.ProcessRunner = null;
+        PawnIoDevice.ElevationChecker = () => false;
+        try
+        {
+            PawnIoDevice.CleanupStaleInstall();
+        }
+        finally
+        {
+            PawnIoDevice.ElevationChecker = null;
+        }
+
+        // 2. Elevated with ProcessRunner mock
+        PawnIoDevice.ProcessRunner = _ => 0;
+        PawnIoDevice.ElevationChecker = () => true;
+        try
+        {
+            PawnIoDevice.CleanupStaleInstall();
+        }
+        finally
+        {
+            PawnIoDevice.ProcessRunner = null;
+            PawnIoDevice.ElevationChecker = null;
+        }
+    }
+
+    [Fact]
+    public void PawnIoDevice_RunInstaller_And_StartDriver_NonElevated_Coverage()
+    {
+        PawnIoDevice.ProcessRunner = null;
+        PawnIoDevice.ElevationChecker = () => false;
+        try
+        {
+            var runInstaller = typeof(PawnIoDevice).GetMethod("RunInstaller", BindingFlags.NonPublic | BindingFlags.Static)!;
+            int code = (int)runInstaller.Invoke(null, [new System.Diagnostics.ProcessStartInfo("cmd.exe")])!;
+            code.Should().Be(-1);
+
+            bool started = PawnIoDevice.StartDriverService();
+            started.Should().BeFalse();
+
+            var runSc = typeof(PawnIoDevice).GetMethod("RunSc", BindingFlags.NonPublic | BindingFlags.Static)!;
+            var actSc = () => runSc.Invoke(null, ["query PawnIO"]);
+            actSc.Should().NotThrow();
+        }
+        finally
+        {
+            PawnIoDevice.ElevationChecker = null;
+        }
+    }
 }

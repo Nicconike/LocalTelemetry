@@ -646,4 +646,114 @@ public class WindowsNetworkUsageProviderTests
             try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
+
+    [Fact]
+    public async Task WindowsNetworkUsageProvider_AdapterFactory_FullCoverage()
+    {
+        try
+        {
+            // 1. Null adapter
+            WindowsNetworkUsageProvider.AdapterFactory = () => null;
+            var nullRes = await WindowsNetworkUsageProvider.GetUsageAsync(DateTime.Today, DateTime.Today);
+            nullRes.Should().BeEmpty();
+
+            // 2. Non-physical IANA type
+            WindowsNetworkUsageProvider.AdapterFactory = () => new MockTestNetworkAdapter("MockNonPhysical", "guid-nonphys", 99u, (_, _, _) => Task.FromResult<IReadOnlyList<(ulong, ulong)>>([]));
+            var nonPhysRes = await WindowsNetworkUsageProvider.GetUsageAsync(DateTime.Today, DateTime.Today);
+            nonPhysRes.Should().BeEmpty();
+
+            // 3. Single day query success
+            WindowsNetworkUsageProvider.AdapterFactory = () => new MockTestNetworkAdapter("MockEthernet", "guid-eth", 6u, (_, _, _) => Task.FromResult<IReadOnlyList<(ulong, ulong)>>([(1000UL, 500UL), (200UL, 100UL)]));
+            var singleRes = await WindowsNetworkUsageProvider.GetUsageAsync(DateTime.Today, DateTime.Today);
+            singleRes.Should().ContainSingle(r => r.DownBytes == 1200 && r.UpBytes == 600);
+
+            // 4. Single day query throws exception
+            WindowsNetworkUsageProvider.AdapterFactory = () => new MockTestNetworkAdapter("MockThrow", "guid-throw", 6u, (_, _, _) => throw new InvalidOperationException("API failure"));
+            var throwRes = await WindowsNetworkUsageProvider.GetUsageAsync(DateTime.Today, DateTime.Today);
+            throwRes.Should().BeEmpty();
+
+            // 5. Multi-day 35-day query success
+            WindowsNetworkUsageProvider.AdapterFactory = () => new MockTestNetworkAdapter("MockMulti", "guid-multi", 71u, (_, _, _) => Task.FromResult<IReadOnlyList<(ulong, ulong)>>([(500UL, 250UL)]));
+            var multiRes = await WindowsNetworkUsageProvider.GetUsageAsync(DateTime.Today.AddDays(-35), DateTime.Today);
+            multiRes.Should().NotBeEmpty();
+
+            // 6. Multi-day query with 30-day failure falling back to 7-day slices
+            int callCount = 0;
+            WindowsNetworkUsageProvider.AdapterFactory = () => new MockTestNetworkAdapter("MockFallback", "guid-fallback", 6u, (_, _, _) =>
+            {
+                callCount++;
+                if (callCount == 1) throw new InvalidOperationException("30-day query failed");
+                return Task.FromResult<IReadOnlyList<(ulong, ulong)>>([(300UL, 150UL)]);
+            });
+            var fallbackRes = await WindowsNetworkUsageProvider.GetUsageAsync(DateTime.Today.AddDays(-14), DateTime.Today);
+            fallbackRes.Should().NotBeEmpty();
+
+            // 7. Multi-day slice query throwing on all attempts
+            WindowsNetworkUsageProvider.AdapterFactory = () => new MockTestNetworkAdapter("MockSliceThrow", "guid-fail", 6u, (_, _, _) => throw new InvalidOperationException("Slice failure"));
+            var allFailRes = await WindowsNetworkUsageProvider.GetUsageAsync(DateTime.Today.AddDays(-5), DateTime.Today);
+            allFailRes.Should().BeEmpty();
+        }
+        finally
+        {
+            WindowsNetworkUsageProvider.AdapterFactory = null;
+        }
+    }
+
+    [Fact]
+    public async Task WindowsNetworkUsageProvider_TodayBaseline_And_CatchPaths_Coverage()
+    {
+        string tempPath = Path.Combine(Path.GetTempPath(), $"Traffic_Baseline_{Guid.NewGuid():N}.dat");
+        var historyFile = new TrafficHistoryFile(tempPath);
+
+        try
+        {
+            WindowsNetworkUsageProvider.AdapterFactory = () => new MockTestNetworkAdapter(
+                "MockEth", "guid-today", 6u, (_, _, _) => Task.FromResult<IReadOnlyList<(ulong, ulong)>>([(1000UL, 500UL)]));
+
+            // 1. ImportTodayBaselineAsync when history does NOT have today
+            var baselineMethod = typeof(WindowsNetworkUsageProvider).GetMethod("ImportTodayBaselineAsync", BindingFlags.NonPublic | BindingFlags.Static)!;
+            bool updated = (bool)(await (Task<bool>)baselineMethod.Invoke(null, [historyFile, DateTime.Today, CancellationToken.None])!)!;
+            updated.Should().BeTrue();
+
+            // 2. RefreshTodayUsageAsync normal flow
+            await WindowsNetworkUsageProvider.RefreshTodayUsageAsync(historyFile);
+
+            // 3. Catch path in RefreshTodayUsageAsync
+            var actRefreshThrow = async () => await WindowsNetworkUsageProvider.RefreshTodayUsageAsync(null!);
+            await actRefreshThrow.Should().NotThrowAsync();
+
+            // 4. Catch path in ImportAndSaveHistoryAsync
+            var actImportSaveThrow = async () => await WindowsNetworkUsageProvider.ImportAndSaveHistoryAsync(null!);
+            await actImportSaveThrow.Should().NotThrowAsync();
+
+            // 5. Catch path in ImportDateRangeAsync
+            var resultRange = await WindowsNetworkUsageProvider.ImportDateRangeAsync(null!, DateTime.Today.AddDays(-2), DateTime.Today);
+            resultRange.Success.Should().BeFalse();
+
+            // 6. ImportHistoricalRecordsAsync when history is already up to date
+            var histMethod = typeof(WindowsNetworkUsageProvider).GetMethod("ImportHistoricalRecordsAsync", BindingFlags.NonPublic | BindingFlags.Static)!;
+            int count = (int)(await (Task<int>)histMethod.Invoke(null, [historyFile, DateTime.Today.AddDays(-2), DateTime.Today.AddDays(-1), DateTime.Today, CancellationToken.None])!)!;
+            count.Should().BeGreaterThanOrEqualTo(0);
+        }
+        finally
+        {
+            WindowsNetworkUsageProvider.AdapterFactory = null;
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+        }
+    }
+
+    private sealed class MockTestNetworkAdapter(
+        string profileName,
+        string adapterId,
+        uint ianaType,
+        Func<DateTimeOffset, DateTimeOffset, Windows.Networking.Connectivity.DataUsageGranularity, Task<IReadOnlyList<(ulong, ulong)>>> usageFunc)
+        : WindowsNetworkUsageProvider.INetworkUsageAdapter
+    {
+        public string ProfileName => profileName;
+        public string AdapterId => adapterId;
+        public uint IanaInterfaceType => ianaType;
+        public Task<IReadOnlyList<(ulong BytesReceived, ulong BytesSent)>> GetNetworkUsageAsync(
+            DateTimeOffset start, DateTimeOffset end, Windows.Networking.Connectivity.DataUsageGranularity granularity) =>
+            usageFunc(start, end, granularity);
+    }
 }

@@ -270,4 +270,27 @@ public class HardwareLifecycleManagerTests
         var actSwitchNull = () => onSessionSwitch.Invoke(null, [null, null]);
         actSwitchNull.Should().NotThrow();
     }
+
+    [Fact]
+    public void HardwareLifecycleManager_SubscriptionHooks_CoverCatchBlocks()
+    {
+        try
+        {
+            HardwareLifecycleManager.SubscribeSystemEventsHook = _ => throw new InvalidOperationException("SystemEvents error");
+            HardwareLifecycleManager.SubscribeNetworkChangeHook = _ => throw new InvalidOperationException("NetworkChange error");
+            HardwareLifecycleManager.UnsubscribeSystemEventsHook = _ => throw new InvalidOperationException("Unsubscribe SystemEvents error");
+            HardwareLifecycleManager.UnsubscribeNetworkChangeHook = _ => throw new InvalidOperationException("Unsubscribe NetworkChange error");
+
+            using var manager = new HardwareLifecycleManager();
+            var actDispose = () => manager.Dispose();
+            actDispose.Should().NotThrow();
+        }
+        finally
+        {
+            HardwareLifecycleManager.SubscribeSystemEventsHook = null;
+            HardwareLifecycleManager.SubscribeNetworkChangeHook = null;
+            HardwareLifecycleManager.UnsubscribeSystemEventsHook = null;
+            HardwareLifecycleManager.UnsubscribeNetworkChangeHook = null;
+        }
+    }
 }

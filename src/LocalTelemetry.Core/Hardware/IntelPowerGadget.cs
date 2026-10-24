@@ -70,15 +70,34 @@ internal sealed class IntelPowerGadgetNativePInvoke : IIntelPowerGadgetNative
 {
     public static readonly IntelPowerGadgetNativePInvoke Instance = new();
 
+    internal Func<bool> TryLoadLibraryFunc { get; set; } = DefaultTryLoad;
+    internal Func<int> InitializeFunc { get; set; } = IntelEnergyLib_Initialize;
+    internal Func<int> ShutdownFunc { get; set; } = IntelEnergyLib_Shutdown;
+    internal delegate int GetNumNodesDelegate(ref int nNodes);
+    internal GetNumNodesDelegate GetNumNodesFunc { get; set; } = IntelEnergyLib_GetNumNodes;
+    internal delegate int GetIAFrequencyDelegate(int node, ref double frequency);
+    internal GetIAFrequencyDelegate GetIAFrequencyFunc { get; set; } = IntelEnergyLib_GetIAFrequency;
+
+    internal void ResetHooks()
+    {
+        TryLoadLibraryFunc = DefaultTryLoad;
+        InitializeFunc = IntelEnergyLib_Initialize;
+        ShutdownFunc = IntelEnergyLib_Shutdown;
+        GetNumNodesFunc = IntelEnergyLib_GetNumNodes;
+        GetIAFrequencyFunc = IntelEnergyLib_GetIAFrequency;
+    }
+
+    private static bool DefaultTryLoad()
+    {
+        if (!NativeLibrary.TryLoad("EnergyLib64.dll", out var lib))
+            return false;
+        NativeLibrary.Free(lib);
+        return true;
+    }
+
     public bool TryLoadLibrary()
     {
-        try
-        {
-            if (!NativeLibrary.TryLoad("EnergyLib64.dll", out var lib))
-                return false;
-            NativeLibrary.Free(lib);
-            return true;
-        }
+        try { return TryLoadLibraryFunc(); }
         catch (Exception ex)
         {
             Log.Debug(ex, "Failed to verify native Intel Energy library availability");
@@ -88,7 +107,7 @@ internal sealed class IntelPowerGadgetNativePInvoke : IIntelPowerGadgetNative
 
     public int Initialize()
     {
-        try { return IntelEnergyLib_Initialize(); }
+        try { return InitializeFunc(); }
         catch (Exception ex)
         {
             Log.Debug(ex, "Failed to initialize Intel Energy library");
@@ -98,7 +117,7 @@ internal sealed class IntelPowerGadgetNativePInvoke : IIntelPowerGadgetNative
 
     public int Shutdown()
     {
-        try { return IntelEnergyLib_Shutdown(); }
+        try { return ShutdownFunc(); }
         catch (Exception ex)
         {
             Log.Debug(ex, "Failed to shutdown Intel Energy library");
@@ -109,7 +128,7 @@ internal sealed class IntelPowerGadgetNativePInvoke : IIntelPowerGadgetNative
     public int GetNumNodes(out int nNodes)
     {
         nNodes = 0;
-        try { return IntelEnergyLib_GetNumNodes(ref nNodes); }
+        try { return GetNumNodesFunc(ref nNodes); }
         catch (Exception ex)
         {
             Log.Debug(ex, "Failed to get Intel Energy library node count");
@@ -120,7 +139,7 @@ internal sealed class IntelPowerGadgetNativePInvoke : IIntelPowerGadgetNative
     public int GetIAFrequency(int node, out double frequency)
     {
         frequency = 0;
-        try { return IntelEnergyLib_GetIAFrequency(node, ref frequency); }
+        try { return GetIAFrequencyFunc(node, ref frequency); }
         catch (Exception ex)
         {
             Log.Debug(ex, "Failed to read Intel CPU frequency via Energy library");

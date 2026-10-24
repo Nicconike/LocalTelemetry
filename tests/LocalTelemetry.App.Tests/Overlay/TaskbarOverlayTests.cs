@@ -803,5 +803,38 @@ public class TaskbarOverlayTests
         // 4. RecoverTaskbar
         var actRecover = () => overlay.RecoverTaskbar("Unit test taskbar recovery");
         actRecover.Should().NotThrow();
+
+        // 5. Timer initialization with SkipTimersForTesting = false
+        var origSkipTimers2 = TaskbarOverlay.SkipTimersForTesting;
+        try
+        {
+            TaskbarOverlay.SkipTimersForTesting = false;
+            cfg.Overlay.FollowWindowsTheme = true;
+            var startTheme = typeof(TaskbarOverlay).GetMethod("InitializeThemePolling", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            startTheme.Invoke(overlay, null);
+
+            var startTimers = typeof(TaskbarOverlay).GetMethod("StartWatchAndPositionTimers", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            startTimers.Invoke(overlay, null);
+        }
+        finally
+        {
+            TaskbarOverlay.SkipTimersForTesting = origSkipTimers2;
+        }
+
+        // 6. Embed failure branch in Show and TryReshowExistingWindow
+        var origSkipEmbed = TaskbarOverlay.SkipEmbedForTesting;
+        try
+        {
+            TaskbarOverlay.SkipEmbedForTesting = false;
+            typeof(TaskbarEmbedder).GetField("<State>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, OverlayDeploymentState.Failed);
+            overlay.Show();
+
+            var reshowMethod = typeof(TaskbarOverlay).GetMethod("TryReshowExistingWindow", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            reshowMethod.Invoke(overlay, null);
+        }
+        finally
+        {
+            TaskbarOverlay.SkipEmbedForTesting = origSkipEmbed;
+        }
     }
 }

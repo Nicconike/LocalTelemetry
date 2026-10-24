@@ -11,15 +11,40 @@ public class IntelPowerGadgetTests
     public void IntelPowerGadgetNativePInvoke_Instance_ExecutesSafely()
     {
         var native = IntelPowerGadgetNativePInvoke.Instance;
-        var act = () =>
+        try
         {
-            native.TryLoadLibrary();
-            native.Initialize();
-            native.GetNumNodes(out _);
-            native.GetIAFrequency(0, out _);
-            native.Shutdown();
-        };
-        act.Should().NotThrow();
+            // 1. Success hooks
+            native.TryLoadLibraryFunc = () => true;
+            native.InitializeFunc = () => 0;
+            native.ShutdownFunc = () => 0;
+            native.GetNumNodesFunc = (ref int n) => { n = 1; return 0; };
+            native.GetIAFrequencyFunc = (int node, ref double freq) => { freq = 3600.0; return 0; };
+
+            native.TryLoadLibrary().Should().BeTrue();
+            native.Initialize().Should().Be(0);
+            native.GetNumNodes(out int count).Should().Be(0);
+            count.Should().Be(1);
+            native.GetIAFrequency(0, out double f).Should().Be(0);
+            f.Should().Be(3600.0);
+            native.Shutdown().Should().Be(0);
+
+            // 2. Exception/Failure hooks
+            native.TryLoadLibraryFunc = () => throw new InvalidOperationException("load fail");
+            native.InitializeFunc = () => throw new InvalidOperationException("init fail");
+            native.ShutdownFunc = () => throw new InvalidOperationException("shutdown fail");
+            native.GetNumNodesFunc = (ref int n) => throw new InvalidOperationException("nodes fail");
+            native.GetIAFrequencyFunc = (int node, ref double freq) => throw new InvalidOperationException("freq fail");
+
+            native.TryLoadLibrary().Should().BeFalse();
+            native.Initialize().Should().Be(-1);
+            native.GetNumNodes(out _).Should().Be(-1);
+            native.GetIAFrequency(0, out _).Should().Be(-1);
+            native.Shutdown().Should().Be(-1);
+        }
+        finally
+        {
+            native.ResetHooks();
+        }
     }
 
     [Fact]

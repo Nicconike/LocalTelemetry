@@ -20,6 +20,48 @@ public static class WindowsNetworkUsageProvider
     //   71  = IEEE 802.11 (WiFi), 117 = Gigabit Ethernet, 243 = WiFi (older)
     private static readonly HashSet<uint> PhysicalIanaTypes = [6, 62, 69, 71, 117, 243];
 
+    internal static Func<INetworkUsageAdapter?>? AdapterFactory { get; set; }
+
+    internal interface INetworkUsageAdapter
+    {
+        string ProfileName { get; }
+        string AdapterId { get; }
+        uint IanaInterfaceType { get; }
+        Task<IReadOnlyList<(ulong BytesReceived, ulong BytesSent)>> GetNetworkUsageAsync(
+            DateTimeOffset start, DateTimeOffset end, DataUsageGranularity granularity);
+    }
+
+    private sealed class WinRtNetworkUsageAdapter(ConnectionProfile profile) : INetworkUsageAdapter
+    {
+        public string ProfileName => profile.ProfileName;
+        public string AdapterId => profile.NetworkAdapter?.NetworkAdapterId.ToString() ?? string.Empty;
+        public uint IanaInterfaceType => profile.NetworkAdapter?.IanaInterfaceType ?? 0;
+
+        public async Task<IReadOnlyList<(ulong BytesReceived, ulong BytesSent)>> GetNetworkUsageAsync(
+            DateTimeOffset start, DateTimeOffset end, DataUsageGranularity granularity)
+        {
+            var list = await profile.GetNetworkUsageAsync(start, end, granularity, new NetworkUsageStates());
+            var res = new List<(ulong BytesReceived, ulong BytesSent)>();
+            foreach (var u in list)
+                res.Add((u.BytesReceived, u.BytesSent));
+            return res;
+        }
+    }
+
+    private static WinRtNetworkUsageAdapter? GetDefaultAdapter()
+    {
+        try
+        {
+            var profile = NetworkInformation.GetInternetConnectionProfile();
+            return profile?.NetworkAdapter is not null ? new WinRtNetworkUsageAdapter(profile) : null;
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Error(ex, "WinRT GetInternetConnectionProfile failed");
+            return null;
+        }
+    }
+
     /// <summary>
     /// Retrieves per-day network usage records between <paramref name="start"/> and <paramref name="end"/>
     /// using the WinRT <c>GetNetworkUsageAsync</c> API.
@@ -29,34 +71,23 @@ public static class WindowsNetworkUsageProvider
     public static async Task<List<WindowsNetworkUsageRecord>> GetUsageAsync(DateTime start, DateTime end, CancellationToken ct = default)
     {
         var results = new List<WindowsNetworkUsageRecord>();
-        ConnectionProfile? profile = null;
-        try
-        {
-            profile = NetworkInformation.GetInternetConnectionProfile();
-        }
-        catch (Exception ex)
-        {
-            Diagnostics.Log.Error(ex, "WinRT GetInternetConnectionProfile failed");
-            return results;
-        }
-
-        if (profile?.NetworkAdapter is null)
+        var adapter = AdapterFactory is not null ? AdapterFactory() : GetDefaultAdapter();
+        if (adapter is null)
             return results;
 
-        uint ianaType = profile.NetworkAdapter.IanaInterfaceType;
+        uint ianaType = adapter.IanaInterfaceType;
         if (!PhysicalIanaTypes.Contains(ianaType))
             return results;
 
-        string adapterGuid = profile.NetworkAdapter.NetworkAdapterId.ToString();
-        string interfaceType = ResolveAdapterInterfaceName(adapterGuid, ianaType);
+        string interfaceType = ResolveAdapterInterfaceName(adapter.AdapterId, ianaType);
 
         if (start.Date == end.Date)
         {
-            await QuerySingleDayUsageAsync(profile, start, end, interfaceType, results);
+            await QuerySingleDayUsageAsync(adapter, start, end, interfaceType, results);
             return results;
         }
 
-        await QueryHistoricalChunksAsync(profile, start, end, interfaceType, results, ct);
+        await QueryHistoricalChunksAsync(adapter, start, end, interfaceType, results, ct);
         return results;
     }
 
@@ -85,21 +116,20 @@ public static class WindowsNetworkUsageProvider
     }
 
     private static async Task QuerySingleDayUsageAsync(
-        ConnectionProfile profile, DateTime start, DateTime end, string interfaceType, List<WindowsNetworkUsageRecord> results)
+        INetworkUsageAdapter adapter, DateTime start, DateTime end, string interfaceType, List<WindowsNetworkUsageRecord> results)
     {
         try
         {
-            var usageList = await profile.GetNetworkUsageAsync(
+            var usageList = await adapter.GetNetworkUsageAsync(
                 start.ToUniversalTime(),
                 end.ToUniversalTime(),
-                DataUsageGranularity.Total,
-                new NetworkUsageStates());
+                DataUsageGranularity.Total);
 
             long down = 0, up = 0;
-            foreach (var usage in usageList)
+            foreach (var (bytesReceived, bytesSent) in usageList)
             {
-                down += (long)usage.BytesReceived;
-                up += (long)usage.BytesSent;
+                down += (long)bytesReceived;
+                up += (long)bytesSent;
             }
 
             results.Add(new WindowsNetworkUsageRecord
@@ -112,12 +142,12 @@ public static class WindowsNetworkUsageProvider
         }
         catch (Exception ex)
         {
-            Diagnostics.Log.Debug(ex, $"WinRT today total query skipped ({profile.ProfileName})");
+            Diagnostics.Log.Debug(ex, $"WinRT today total query skipped ({adapter.ProfileName})");
         }
     }
 
     private static async Task QueryHistoricalChunksAsync(
-        ConnectionProfile profile, DateTime start, DateTime end, string interfaceType, List<WindowsNetworkUsageRecord> results, CancellationToken ct)
+        INetworkUsageAdapter adapter, DateTime start, DateTime end, string interfaceType, List<WindowsNetworkUsageRecord> results, CancellationToken ct)
     {
         var chunkStart = start;
         while (chunkStart < end)
@@ -126,7 +156,7 @@ public static class WindowsNetworkUsageProvider
             var chunkEnd = chunkStart.AddDays(30);
             if (chunkEnd > end) chunkEnd = end;
 
-            bool success = await QueryChunkSliceAsync(profile, chunkStart, chunkEnd, interfaceType, results, ct);
+            bool success = await QueryChunkSliceAsync(adapter, chunkStart, chunkEnd, interfaceType, results, ct);
             if (!success)
             {
                 // Fallback to 7-day slices if the 30-day query failed
@@ -137,7 +167,7 @@ public static class WindowsNetworkUsageProvider
                     var subEnd = subStart.AddDays(7);
                     if (subEnd > chunkEnd) subEnd = chunkEnd;
 
-                    await QueryChunkSliceAsync(profile, subStart, subEnd, interfaceType, results, ct);
+                    await QueryChunkSliceAsync(adapter, subStart, subEnd, interfaceType, results, ct);
                     subStart = subEnd;
                 }
             }
@@ -147,26 +177,25 @@ public static class WindowsNetworkUsageProvider
     }
 
     private static async Task<bool> QueryChunkSliceAsync(
-        ConnectionProfile profile, DateTime sliceStart, DateTime sliceEnd, string interfaceType, List<WindowsNetworkUsageRecord> results, CancellationToken ct)
+        INetworkUsageAdapter adapter, DateTime sliceStart, DateTime sliceEnd, string interfaceType, List<WindowsNetworkUsageRecord> results, CancellationToken ct)
     {
         try
         {
             ct.ThrowIfCancellationRequested();
-            var usageList = await profile.GetNetworkUsageAsync(
+            var usageList = await adapter.GetNetworkUsageAsync(
                 sliceStart.ToUniversalTime(),
                 sliceEnd.ToUniversalTime(),
-                DataUsageGranularity.PerDay,
-                new NetworkUsageStates());
+                DataUsageGranularity.PerDay);
 
             int dayOffset = 0;
-            foreach (var usage in usageList)
+            foreach (var (bytesReceived, bytesSent) in usageList)
             {
                 results.Add(new WindowsNetworkUsageRecord
                 {
                     Date = sliceStart.AddDays(dayOffset).ToString("dd-MM-yyyy"),
                     InterfaceType = interfaceType,
-                    DownBytes = (long)usage.BytesReceived,
-                    UpBytes = (long)usage.BytesSent,
+                    DownBytes = (long)bytesReceived,
+                    UpBytes = (long)bytesSent,
                 });
                 dayOffset++;
             }
@@ -174,7 +203,7 @@ public static class WindowsNetworkUsageProvider
         }
         catch (Exception ex)
         {
-            Diagnostics.Log.Debug(ex, $"WinRT network usage query {sliceStart:dd-MM-yyyy} to {sliceEnd:dd-MM-yyyy} skipped ({profile.ProfileName})");
+            Diagnostics.Log.Debug(ex, $"WinRT network usage query {sliceStart:dd-MM-yyyy} to {sliceEnd:dd-MM-yyyy} skipped ({adapter.ProfileName})");
             return false;
         }
     }

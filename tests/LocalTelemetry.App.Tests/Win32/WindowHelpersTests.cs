@@ -373,4 +373,50 @@ public class WindowHelpersTests
             return true;
         }
     }
+
+    [Fact]
+    public void SetStartupEnabled_And_LegacyRegistry_Coverage()
+    {
+        var prevAction = WindowHelpers.SetStartupAction;
+        var prevCleanup = WindowHelpers.LegacyRegistryCleanupAction;
+        var prevFactory = WindowHelpers.TaskSchedulerFactory;
+
+        try
+        {
+            WindowHelpers.SetStartupAction = null;
+
+            // 1. SetStartup throws
+            WindowHelpers.TaskSchedulerFactory = () => throw new InvalidOperationException("TaskScheduler exception");
+            var actEnable = () => WindowHelpers.SetStartup(true);
+            actEnable.Should().NotThrow();
+
+            var actDisable = () => WindowHelpers.SetStartup(false);
+            actDisable.Should().NotThrow();
+
+            // 2. RemoveStartupTask with null LegacyRegistryCleanupAction
+            WindowHelpers.TaskSchedulerFactory = () => new MockTaskScheduler();
+            WindowHelpers.LegacyRegistryCleanupAction = null;
+            var remStartup = typeof(WindowHelpers).GetMethod("RemoveStartupTask", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+            var actRem = () => remStartup.Invoke(null, null);
+            actRem.Should().NotThrow();
+
+            // 3. RemoveStartupTask with throwing LegacyRegistryCleanupAction
+            WindowHelpers.LegacyRegistryCleanupAction = () => throw new InvalidOperationException("Registry error");
+            var actRemThrow = () => remStartup.Invoke(null, null);
+            actRemThrow.Should().NotThrow();
+
+            // 4. IsStartupEnabled when RunKey returns false
+            WindowHelpers.StartupQueryExitCode = () => 1;
+            WindowHelpers.RunKeyQuery = _ => false;
+            WindowHelpers.IsStartupEnabled().Should().BeFalse();
+        }
+        finally
+        {
+            WindowHelpers.SetStartupAction = prevAction;
+            WindowHelpers.LegacyRegistryCleanupAction = prevCleanup;
+            WindowHelpers.TaskSchedulerFactory = prevFactory;
+            WindowHelpers.StartupQueryExitCode = null;
+            WindowHelpers.RunKeyQuery = null;
+        }
+    }
 }

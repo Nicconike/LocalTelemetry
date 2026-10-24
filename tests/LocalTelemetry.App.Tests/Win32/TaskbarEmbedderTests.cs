@@ -1079,6 +1079,25 @@ public class TaskbarEmbedderTests
         bool posBandFail = (bool)posBandMethod.Invoke(embedder, [new IntPtr(9999999), new Size(10000, 30)])!;
         posBandFail.Should().BeFalse();
         embedder.State.Should().Be(OverlayDeploymentState.Failed);
+
+        // 4. FindExplorerTrayWnd invocation
+        var trayHwnd = TaskbarEmbedder.FindExplorerTrayWnd();
+        trayHwnd.Should().NotBe(new IntPtr(12345678));
+
+        // 5. QueryWidgetsButtonRightEdge with caching
+        var queryWidgets = typeof(TaskbarEmbedder).GetMethod("QueryWidgetsButtonRightEdge", BindingFlags.NonPublic | BindingFlags.Static)!;
+        queryWidgets.Invoke(null, [IntPtr.Zero]);
+        queryWidgets.Invoke(null, [IntPtr.Zero]);
+
+        // 6. Registry helper queries
+        var isWidgets = typeof(TaskbarEmbedder).GetMethod("IsWidgetsFeatureEnabled", BindingFlags.NonPublic | BindingFlags.Static)!;
+        isWidgets.Invoke(null, null);
+
+        var isCentered = typeof(TaskbarEmbedder).GetMethod("IsTaskbarCentered", BindingFlags.NonPublic | BindingFlags.Static)!;
+        isCentered.Invoke(null, null);
+
+        var getTrayLeft = typeof(TaskbarEmbedder).GetMethod("GetTrayLeftEdge", BindingFlags.NonPublic | BindingFlags.Static)!;
+        getTrayLeft.Invoke(null, null);
     }
 }
 

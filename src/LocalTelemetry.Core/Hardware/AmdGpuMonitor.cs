@@ -164,9 +164,33 @@ internal sealed class AmdAdlNativePInvoke : IAmdAdlNative
 {
     public static readonly AmdAdlNativePInvoke Instance = new();
 
+    internal Func<int> CreateFunc { get; set; } = () => ADL_Main_Control_Create(ADL_Main_Memory_Alloc, 1);
+    internal Func<int> DestroyFunc { get; set; } = ADL_Main_Control_Destroy;
+    internal delegate int AdapterInfoDelegate(AdlAdapterInfo[] info, ref int count);
+    internal AdapterInfoDelegate AdapterInfoFunc { get; set; } = ADL_Adapter_AdapterInfo_Get;
+    internal delegate int TemperatureDelegate(int adapterIndex, int thermalControllerIndex, ref AdlTemperature temp);
+    internal TemperatureDelegate TemperatureFunc { get; set; } = ADL_Overdrive5_Temperature_Get;
+    internal delegate int ActivityDelegate(int adapterIndex, ref AdlPmActivity activity);
+    internal ActivityDelegate ActivityFunc { get; set; } = ADL_Overdrive5_CurrentActivity_Get;
+    internal delegate int MemoryInfoDelegate(int adapterIndex, ref AdlMemoryInfo memoryInfo);
+    internal MemoryInfoDelegate MemoryInfoFunc { get; set; } = ADL_Adapter_MemoryInfo_Get;
+    internal delegate int PowerLimitDelegate(int adapterIndex, int defaultOrZero, ref AdlPowerLimitInfo powerLimitInfo);
+    internal PowerLimitDelegate PowerLimitFunc { get; set; } = ADL_Overdrive5_PowerLimit_Get;
+
+    internal void ResetHooks()
+    {
+        CreateFunc = () => ADL_Main_Control_Create(ADL_Main_Memory_Alloc, 1);
+        DestroyFunc = ADL_Main_Control_Destroy;
+        AdapterInfoFunc = ADL_Adapter_AdapterInfo_Get;
+        TemperatureFunc = ADL_Overdrive5_Temperature_Get;
+        ActivityFunc = ADL_Overdrive5_CurrentActivity_Get;
+        MemoryInfoFunc = ADL_Adapter_MemoryInfo_Get;
+        PowerLimitFunc = ADL_Overdrive5_PowerLimit_Get;
+    }
+
     public int Create()
     {
-        try { return ADL_Main_Control_Create(ADL_Main_Memory_Alloc, 1); }
+        try { return CreateFunc(); }
         catch (Exception ex)
         {
             Log.Debug(ex, "Failed to initialize AMD display library (ADL_Main_Control_Create)");
@@ -176,7 +200,7 @@ internal sealed class AmdAdlNativePInvoke : IAmdAdlNative
 
     public int Destroy()
     {
-        try { return ADL_Main_Control_Destroy(); }
+        try { return DestroyFunc(); }
         catch (Exception ex)
         {
             Log.Debug(ex, "Failed to destroy AMD display library handle (ADL_Main_Control_Destroy)");
@@ -192,7 +216,7 @@ internal sealed class AmdAdlNativePInvoke : IAmdAdlNative
         {
             int count = 0;
             var info = new AdlAdapterInfo[16];
-            int ret = ADL_Adapter_AdapterInfo_Get(info, ref count);
+            int ret = AdapterInfoFunc(info, ref count);
             if (ret == 0 && count > 0)
             {
                 adapterIndex = info[0].iAdapterIndex;
@@ -215,7 +239,7 @@ internal sealed class AmdAdlNativePInvoke : IAmdAdlNative
         {
             var temp = default(AdlTemperature);
             temp.iSize = Marshal.SizeOf<AdlTemperature>();
-            int ret = ADL_Overdrive5_Temperature_Get(adapterIndex, 0, ref temp);
+            int ret = TemperatureFunc(adapterIndex, 0, ref temp);
             if (ret == 0) tempMilliC = temp.iTemperature;
             return ret;
         }
@@ -234,7 +258,7 @@ internal sealed class AmdAdlNativePInvoke : IAmdAdlNative
         {
             var activity = default(AdlPmActivity);
             activity.iSize = Marshal.SizeOf<AdlPmActivity>();
-            int ret = ADL_Overdrive5_CurrentActivity_Get(adapterIndex, ref activity);
+            int ret = ActivityFunc(adapterIndex, ref activity);
             if (ret == 0)
             {
                 activityPct = activity.iActivityPercent;
@@ -256,7 +280,7 @@ internal sealed class AmdAdlNativePInvoke : IAmdAdlNative
         try
         {
             var mem = new AdlMemoryInfo();
-            int ret = ADL_Adapter_MemoryInfo_Get(adapterIndex, ref mem);
+            int ret = MemoryInfoFunc(adapterIndex, ref mem);
             if (ret == 0)
             {
                 totalBytes = mem.iMemorySize;
@@ -278,7 +302,7 @@ internal sealed class AmdAdlNativePInvoke : IAmdAdlNative
         try
         {
             var pli = default(AdlPowerLimitInfo);
-            int ret = ADL_Overdrive5_PowerLimit_Get(adapterIndex, 0, ref pli);
+            int ret = PowerLimitFunc(adapterIndex, 0, ref pli);
             if (ret == 0)
             {
                 maxMilliW = pli.iMax;
@@ -319,7 +343,7 @@ internal sealed class AmdAdlNativePInvoke : IAmdAdlNative
     private static IntPtr ADL_Main_Memory_Alloc(int size) => Marshal.AllocHGlobal(size);
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct AdlAdapterInfo
+    internal struct AdlAdapterInfo
     {
         public int iAdapterIndex;
         [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
@@ -327,14 +351,14 @@ internal sealed class AmdAdlNativePInvoke : IAmdAdlNative
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct AdlTemperature
+    internal struct AdlTemperature
     {
         public int iSize;
         public int iTemperature;
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct AdlPmActivity
+    internal struct AdlPmActivity
     {
         public int iSize;
         public int iEngineClock;
@@ -351,7 +375,7 @@ internal sealed class AmdAdlNativePInvoke : IAmdAdlNative
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct AdlMemoryInfo
+    internal struct AdlMemoryInfo
     {
         public int iMemorySize;
         public int iMemoryType;
@@ -360,7 +384,7 @@ internal sealed class AmdAdlNativePInvoke : IAmdAdlNative
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct AdlPowerLimitInfo
+    internal struct AdlPowerLimitInfo
     {
         public int iMin;
         public int iMax;

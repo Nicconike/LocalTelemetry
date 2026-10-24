@@ -20,6 +20,7 @@ public class TrafficHistoryStoreTests
             {
                 var history = new TrafficHistoryFile(tempFile);
                 TrafficHistoryStore.Initialize(history);
+                TrafficHistoryStore.HistoryFile.Should().BeSameAs(history);
 
                 int nowYear = DateTime.Now.Year;
                 int nowMonth = DateTime.Now.Month;

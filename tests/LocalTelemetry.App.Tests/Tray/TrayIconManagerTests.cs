@@ -396,6 +396,15 @@ public class TrayIconManagerTests
             actShow.Should().NotThrow();
 
             tray.CloseOverlayContextMenu();
+
+            // Catch block in Update when _tray is disposed
+            var trayField = typeof(TrayIconManager).GetField("_tray", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var notifyIcon = (NotifyIcon)trayField.GetValue(tray)!;
+            notifyIcon.Visible = true;
+            notifyIcon.Dispose();
+            var actUpdate = () => tray.Update(new TelemetrySnapshot());
+            actUpdate.Should().NotThrow();
+            trayField.SetValue(tray, new NotifyIcon());
         }
         finally
         {

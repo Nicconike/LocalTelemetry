@@ -11,20 +11,99 @@ public class IntelGpuMonitorTests
     public void IntelGpuNativePInvoke_Instance_ExecutesSafely()
     {
         var native = IntelGpuNativePInvoke.Instance;
-        var act = () =>
+        try
         {
-            native.Init(out var handle);
-            native.EnumerateDevices(handle, out _);
-            native.GetDeviceName(handle, out _);
-            native.GetTempSensor(handle, out _);
-            native.GetTempC(handle, out _);
-            native.GetFreqDomain(handle, out _);
-            native.GetClockMHz(handle, out _);
-            native.GetMemModule(handle, out _);
-            native.GetVram(handle, out _, out _);
-            native.Close(handle);
-        };
-        act.Should().NotThrow();
+            // 1. Success hooks
+            native.InitFunc = (ref IntelGpuNativePInvoke.CtlInitArgs desc, out IntPtr handle) => { handle = (IntPtr)0x2000; return 0; };
+            native.CloseFunc = h => 0;
+            native.EnumerateDevicesFunc = (IntPtr h, ref uint c, IntPtr[]? d) =>
+            {
+                c = 1;
+                if (d != null && d.Length > 0) d[0] = (IntPtr)0x3000;
+                return 0;
+            };
+            native.GetDevicePropertiesFunc = (IntPtr h, ref IntelGpuNativePInvoke.CtlDeviceAdapterProperties props) =>
+            {
+                props.name = "Intel Arc A770";
+                return 0;
+            };
+            native.EnumTemperatureSensorsFunc = (IntPtr h, ref uint c, IntPtr[]? t) =>
+            {
+                c = 1;
+                if (t != null && t.Length > 0) t[0] = (IntPtr)0x4000;
+                return 0;
+            };
+            native.TemperatureGetStateFunc = (IntPtr h, ref double temp) => { temp = 58.5; return 0; };
+            native.EnumFrequencyDomainsFunc = (IntPtr h, ref uint c, IntPtr[]? f) =>
+            {
+                c = 1;
+                if (f != null && f.Length > 0) f[0] = (IntPtr)0x5000;
+                return 0;
+            };
+            native.FrequencyGetStateFunc = (IntPtr h, ref IntelGpuNativePInvoke.CtlFreqState s) => { s.actual = 2100.0; return 0; };
+            native.EnumMemoryModulesFunc = (IntPtr h, ref uint c, IntPtr[]? m) =>
+            {
+                c = 1;
+                if (m != null && m.Length > 0) m[0] = (IntPtr)0x6000;
+                return 0;
+            };
+            native.MemoryGetStateFunc = (IntPtr h, ref IntelGpuNativePInvoke.CtlMemState s) => { s.size = 16000000; s.free = 8000000; return 0; };
+
+            native.Init(out var apiHandle).Should().Be(0);
+            apiHandle.Should().Be((IntPtr)0x2000);
+            native.EnumerateDevices(apiHandle, out var devs).Should().Be(0);
+            devs.Should().ContainSingle();
+            native.GetDeviceName(devs[0], out var name).Should().Be(0);
+            name.Should().Be("Intel Arc A770");
+            native.GetTempSensor(devs[0], out var tSensor).Should().Be(0);
+            native.GetTempC(tSensor, out var tempC).Should().Be(0);
+            tempC.Should().Be(58.5);
+            native.GetFreqDomain(devs[0], out var fDomain).Should().Be(0);
+            native.GetClockMHz(fDomain, out var clk).Should().Be(0);
+            clk.Should().Be(2100.0);
+            native.GetMemModule(devs[0], out var mMod).Should().Be(0);
+            native.GetVram(mMod, out var total, out var free).Should().Be(0);
+            total.Should().Be(16000000UL);
+            free.Should().Be(8000000UL);
+            native.Close(apiHandle).Should().Be(0);
+
+            // Empty count paths
+            native.EnumerateDevicesFunc = (IntPtr h, ref uint c, IntPtr[]? d) => { c = 0; return 0; };
+            native.EnumerateDevices(apiHandle, out _).Should().Be(-1);
+            native.EnumTemperatureSensorsFunc = (IntPtr h, ref uint c, IntPtr[]? t) => { c = 0; return 0; };
+            native.GetTempSensor(devs[0], out _).Should().Be(-1);
+            native.EnumFrequencyDomainsFunc = (IntPtr h, ref uint c, IntPtr[]? f) => { c = 0; return 0; };
+            native.GetFreqDomain(devs[0], out _).Should().Be(-1);
+            native.EnumMemoryModulesFunc = (IntPtr h, ref uint c, IntPtr[]? m) => { c = 0; return 0; };
+            native.GetMemModule(devs[0], out _).Should().Be(-1);
+
+            // 2. Exception/Failure hooks
+            native.InitFunc = (ref IntelGpuNativePInvoke.CtlInitArgs desc, out IntPtr handle) => throw new InvalidOperationException("init fail");
+            native.CloseFunc = h => throw new InvalidOperationException("close fail");
+            native.EnumerateDevicesFunc = (IntPtr h, ref uint c, IntPtr[]? d) => throw new InvalidOperationException("enum fail");
+            native.GetDevicePropertiesFunc = (IntPtr h, ref IntelGpuNativePInvoke.CtlDeviceAdapterProperties props) => throw new InvalidOperationException("props fail");
+            native.EnumTemperatureSensorsFunc = (IntPtr h, ref uint c, IntPtr[]? t) => throw new InvalidOperationException("temp fail");
+            native.TemperatureGetStateFunc = (IntPtr h, ref double temp) => throw new InvalidOperationException("temp state fail");
+            native.EnumFrequencyDomainsFunc = (IntPtr h, ref uint c, IntPtr[]? f) => throw new InvalidOperationException("freq fail");
+            native.FrequencyGetStateFunc = (IntPtr h, ref IntelGpuNativePInvoke.CtlFreqState s) => throw new InvalidOperationException("freq state fail");
+            native.EnumMemoryModulesFunc = (IntPtr h, ref uint c, IntPtr[]? m) => throw new InvalidOperationException("mem fail");
+            native.MemoryGetStateFunc = (IntPtr h, ref IntelGpuNativePInvoke.CtlMemState s) => throw new InvalidOperationException("mem state fail");
+
+            native.Init(out _).Should().Be(-1);
+            native.Close(apiHandle).Should().Be(-1);
+            native.EnumerateDevices(apiHandle, out _).Should().Be(-1);
+            native.GetDeviceName(apiHandle, out _).Should().Be(-1);
+            native.GetTempSensor(apiHandle, out _).Should().Be(-1);
+            native.GetTempC(apiHandle, out _).Should().Be(-1);
+            native.GetFreqDomain(apiHandle, out _).Should().Be(-1);
+            native.GetClockMHz(apiHandle, out _).Should().Be(-1);
+            native.GetMemModule(apiHandle, out _).Should().Be(-1);
+            native.GetVram(apiHandle, out _, out _).Should().Be(-1);
+        }
+        finally
+        {
+            native.ResetHooks();
+        }
     }
 
     [Fact]

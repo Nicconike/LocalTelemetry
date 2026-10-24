@@ -268,5 +268,55 @@ public class WddmGpuMonitorTests
         var actReset = () => monitor.Reset();
         actReset.Should().NotThrow();
     }
+
+    [Fact]
+    public void WddmGpuMonitor_NativeHooks_FailurePaths_Coverage()
+    {
+        try
+        {
+            // 1. PdhOpenQuery fails
+            WddmGpuMonitor.PdhOpenQueryFunc = (IntPtr ds, IntPtr ud, out IntPtr q) => { q = IntPtr.Zero; return 0x1234; };
+            using (var m1 = new WddmGpuMonitor())
+            {
+                m1.IsAvailable.Should().BeFalse();
+            }
+
+            // 2. PdhAddEnglishCounter fails
+            WddmGpuMonitor.PdhOpenQueryFunc = (IntPtr ds, IntPtr ud, out IntPtr q) => { q = new IntPtr(100); return 0; };
+            WddmGpuMonitor.PdhAddEnglishCounterFunc = (IntPtr q, string cp, IntPtr ud, out IntPtr c) => { c = IntPtr.Zero; return 0x5678; };
+            bool closeCalled = false;
+            WddmGpuMonitor.PdhCloseQueryFunc = q => { closeCalled = true; return 0; };
+            using (var m2 = new WddmGpuMonitor())
+            {
+                m2.IsAvailable.Should().BeFalse();
+                closeCalled.Should().BeTrue();
+            }
+
+            // 3. Initial PdhCollectQueryData fails
+            WddmGpuMonitor.PdhAddEnglishCounterFunc = (IntPtr q, string cp, IntPtr ud, out IntPtr c) => { c = new IntPtr(200); return 0; };
+            WddmGpuMonitor.PdhCollectQueryDataFunc = q => 0x9ABC;
+            using (var m3 = new WddmGpuMonitor())
+            {
+                m3.IsAvailable.Should().BeFalse();
+            }
+
+            // 4. Exception in constructor catch block
+            WddmGpuMonitor.PdhOpenQueryFunc = (IntPtr ds, IntPtr ud, out IntPtr q) => throw new InvalidOperationException("PdhOpenQuery error");
+            using (var m4 = new WddmGpuMonitor())
+            {
+                m4.IsAvailable.Should().BeFalse();
+            }
+
+            // 5. Exception during Reset
+            using var m5 = new WddmGpuMonitor();
+            WddmGpuMonitor.PdhOpenQueryFunc = (IntPtr ds, IntPtr ud, out IntPtr q) => throw new InvalidOperationException("Reset error");
+            var actReset = () => m5.Reset();
+            actReset.Should().NotThrow();
+        }
+        finally
+        {
+            WddmGpuMonitor.ResetHooks();
+        }
+    }
 }
 

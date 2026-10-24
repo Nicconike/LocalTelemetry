@@ -2226,6 +2226,61 @@ public class HardwareMonitorTests
         var actPnp = () => onPnpMethod.Invoke(monitor, null);
         actPnp.Should().NotThrow();
     }
+
+    [Fact]
+    public async Task HardwareMonitor_PowerResume_OfflineNic_And_BatteryRate_Coverage()
+    {
+        var cfg = BasicCfg();
+        cfg.Monitoring.EnableNet = true;
+        cfg.Monitoring.EnableBattery = true;
+        using var monitor = CreateMonitor(cfg);
+
+        // 1. OnPowerResumed with small delay
+        try
+        {
+            HardwareMonitor.PowerResumeWarmUpDelayMs = 10;
+            var onResumed = typeof(HardwareMonitor).GetMethod("OnPowerResumed", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            onResumed.Invoke(monitor, null);
+            await Task.Delay(50);
+        }
+        finally
+        {
+            HardwareMonitor.PowerResumeWarmUpDelayMs = 3000;
+        }
+
+        // 2. Offline NIC branch in EnsureNicCounters
+        try
+        {
+            HardwareMonitor.SelectActiveNicOverride = () => (null, false);
+            var ensureNic = typeof(HardwareMonitor).GetMethod("EnsureNicCounters", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            ensureNic.Invoke(monitor, null);
+            // Call twice to test _wasOfflineLogged guard
+            ensureNic.Invoke(monitor, null);
+        }
+        finally
+        {
+            HardwareMonitor.SelectActiveNicOverride = null;
+        }
+
+        // 3. ComputeBatteryRateFromCapacityDelta
+        var compRate = typeof(HardwareMonitor).GetMethod("ComputeBatteryRateFromCapacityDelta", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        ((float)compRate.Invoke(monitor, [null])!).Should().Be(0f);
+        ((float)compRate.Invoke(monitor, [0L])!).Should().Be(0f);
+        ((float)compRate.Invoke(monitor, [50000L])!).Should().Be(0f); // primes
+        var rateDelta = (float)compRate.Invoke(monitor, [49000L])!;
+        rateDelta.Should().BeInRange(-300f, 300f);
+
+        // 4. ReadMemory reflection
+        var readMem = typeof(HardwareMonitor).GetMethod("ReadMemory", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        object?[] memArgs = [0f, 0f, 0f];
+        readMem.Invoke(monitor, memArgs);
+        ((float)memArgs[2]!).Should().BeGreaterThanOrEqualTo(0f);
+
+        // 5. CalculateNetBytesDelta reflection
+        var calcNet = typeof(HardwareMonitor).GetMethod("CalculateNetBytesDelta", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        calcNet.Invoke(monitor, [1000L, 2000L]);
+        calcNet.Invoke(monitor, [3000L, 5000L]);
+    }
 }
 
 

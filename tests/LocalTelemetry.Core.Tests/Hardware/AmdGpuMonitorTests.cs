@@ -11,17 +11,65 @@ public class AmdGpuMonitorTests
     public void AmdAdlNativePInvoke_Instance_ExecutesSafely()
     {
         var native = AmdAdlNativePInvoke.Instance;
-        var act = () =>
+        try
         {
-            native.Create();
-            native.GetAdapterInfo(out _, out _);
-            native.GetTemperature(0, out _);
-            native.GetActivity(0, out _, out _);
-            native.GetMemoryInfo(0, out _, out _);
-            native.GetPowerLimit(0, out _, out _);
-            native.Destroy();
-        };
-        act.Should().NotThrow();
+            // 1. Success hooks
+            native.CreateFunc = () => 0;
+            native.DestroyFunc = () => 0;
+            native.AdapterInfoFunc = (AmdAdlNativePInvoke.AdlAdapterInfo[] info, ref int count) =>
+            {
+                count = 1;
+                info[0].iAdapterIndex = 0;
+                info[0].strAdapterName = "AMD Radeon RX 7900 XTX";
+                return 0;
+            };
+            native.TemperatureFunc = (int idx, int tc, ref AmdAdlNativePInvoke.AdlTemperature temp) => { temp.iTemperature = 55000; return 0; };
+            native.ActivityFunc = (int idx, ref AmdAdlNativePInvoke.AdlPmActivity act) => { act.iActivityPercent = 80; act.iCoreClock = 25000; return 0; };
+            native.MemoryInfoFunc = (int idx, ref AmdAdlNativePInvoke.AdlMemoryInfo mem) => { mem.iMemorySize = 24000; mem.iFreeMemorySize = 14000; return 0; };
+            native.PowerLimitFunc = (int idx, int def, ref AmdAdlNativePInvoke.AdlPowerLimitInfo pli) => { pli.iMax = 350000; pli.iDefault = 300000; return 0; };
+
+            native.Create().Should().Be(0);
+            native.GetAdapterInfo(out int adIdx, out string adName).Should().Be(0);
+            adIdx.Should().Be(0);
+            adName.Should().Be("AMD Radeon RX 7900 XTX");
+            native.GetTemperature(0, out int tempC).Should().Be(0);
+            tempC.Should().Be(55000);
+            native.GetActivity(0, out int actPct, out int clk).Should().Be(0);
+            actPct.Should().Be(80);
+            clk.Should().Be(25000);
+            native.GetMemoryInfo(0, out long total, out long free).Should().Be(0);
+            total.Should().Be(24000L);
+            free.Should().Be(14000L);
+            native.GetPowerLimit(0, out int maxMw, out int defMw).Should().Be(0);
+            maxMw.Should().Be(350000);
+            defMw.Should().Be(300000);
+            native.Destroy().Should().Be(0);
+
+            // Empty count check in GetAdapterInfo
+            native.AdapterInfoFunc = (AmdAdlNativePInvoke.AdlAdapterInfo[] info, ref int count) => { count = 0; return 0; };
+            native.GetAdapterInfo(out _, out _).Should().Be(-1);
+
+            // 2. Exception/Failure hooks
+            native.CreateFunc = () => throw new InvalidOperationException("create fail");
+            native.DestroyFunc = () => throw new InvalidOperationException("destroy fail");
+            native.AdapterInfoFunc = (AmdAdlNativePInvoke.AdlAdapterInfo[] info, ref int count) => throw new InvalidOperationException("adapter fail");
+            native.TemperatureFunc = (int idx, int tc, ref AmdAdlNativePInvoke.AdlTemperature temp) => throw new InvalidOperationException("temp fail");
+            native.ActivityFunc = (int idx, ref AmdAdlNativePInvoke.AdlPmActivity act) => throw new InvalidOperationException("activity fail");
+            native.MemoryInfoFunc = (int idx, ref AmdAdlNativePInvoke.AdlMemoryInfo mem) => throw new InvalidOperationException("mem fail");
+            native.PowerLimitFunc = (int idx, int def, ref AmdAdlNativePInvoke.AdlPowerLimitInfo pli) => throw new InvalidOperationException("power fail");
+
+            native.Create().Should().Be(-1);
+            native.GetAdapterInfo(out _, out _).Should().Be(-1);
+            native.GetTemperature(0, out _).Should().Be(-1);
+            native.GetActivity(0, out _, out _).Should().Be(-1);
+            native.GetMemoryInfo(0, out _, out _).Should().Be(-1);
+            native.GetPowerLimit(0, out _, out _).Should().Be(-1);
+            native.Destroy().Should().Be(-1);
+        }
+        finally
+        {
+            native.ResetHooks();
+        }
     }
 
     [Fact]

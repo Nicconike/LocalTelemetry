@@ -1882,6 +1882,12 @@ public class SettingsShellTests
             ((bool)isValidMethod.Invoke(null, [""])!).Should().BeFalse();
             ((bool)isValidMethod.Invoke(null, [(string?)null])!).Should().BeFalse();
 
+            // 5. importWindowsUsage validation paths
+            shell.HandleWebMessageJson("""{"type":"importWindowsUsage","payload":{}}""");
+            shell.HandleWebMessageJson("""{"type":"importWindowsUsage","payload":{"startDate":"bad","endDate":"24-10-2026"}}""");
+            shell.HandleWebMessageJson("""{"type":"importWindowsUsage","payload":{"startDate":"20-10-2026","endDate":"bad"}}""");
+            shell.HandleWebMessageJson("""{"type":"importWindowsUsage","payload":{"startDate":"20-10-2026","endDate":"24-10-2026"}}""");
+
             shell.Close();
         }
         finally

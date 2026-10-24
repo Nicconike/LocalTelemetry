@@ -67,6 +67,9 @@ public sealed partial class App : WpfApplication
         return principal.IsInRole(WindowsBuiltInRole.Administrator);
     }
 
+    internal static Action<ProcessStartInfo>? ElevateProcessStarter { get; set; }
+    internal static Action<int>? ExitHandler { get; set; }
+
     private static void ElevateAndExit(string[] args)
     {
         if (ElevateAndExitAction is not null)
@@ -96,7 +99,10 @@ public sealed partial class App : WpfApplication
 
         try
         {
-            Process.Start(psi);
+            if (ElevateProcessStarter is not null)
+                ElevateProcessStarter(psi);
+            else
+                Process.Start(psi);
         }
         catch (Exception ex)
         {
@@ -112,7 +118,10 @@ public sealed partial class App : WpfApplication
             }
         }
 
-        Environment.Exit(0);
+        if (ExitHandler is not null)
+            ExitHandler(0);
+        else
+            Environment.Exit(0);
     }
 
     // Startup

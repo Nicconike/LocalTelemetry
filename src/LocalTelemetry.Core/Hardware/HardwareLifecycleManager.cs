@@ -63,6 +63,11 @@ public sealed class HardwareLifecycleManager : IHardwareLifecycleManager
     private const int DebounceMs = 3000;
     private const int NetworkDebounceMs = 2000;
 
+    internal static Action<HardwareLifecycleManager>? SubscribeSystemEventsHook { get; set; }
+    internal static Action<HardwareLifecycleManager>? SubscribeNetworkChangeHook { get; set; }
+    internal static Action<HardwareLifecycleManager>? UnsubscribeSystemEventsHook { get; set; }
+    internal static Action<HardwareLifecycleManager>? UnsubscribeNetworkChangeHook { get; set; }
+
     /// <summary>
     /// Initializes a new instance of <see cref="HardwareLifecycleManager"/> and subscribes to OS events.
     /// </summary>
@@ -70,10 +75,17 @@ public sealed class HardwareLifecycleManager : IHardwareLifecycleManager
     {
         try
         {
-            SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
-            SystemEvents.PowerModeChanged += OnPowerModeChanged;
-            SystemEvents.SessionEnding += OnSessionEnding;
-            SystemEvents.SessionSwitch += OnSessionSwitch;
+            if (SubscribeSystemEventsHook is not null)
+            {
+                SubscribeSystemEventsHook(this);
+            }
+            else
+            {
+                SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
+                SystemEvents.PowerModeChanged += OnPowerModeChanged;
+                SystemEvents.SessionEnding += OnSessionEnding;
+                SystemEvents.SessionSwitch += OnSessionSwitch;
+            }
         }
         catch (Exception ex)
         {
@@ -82,8 +94,15 @@ public sealed class HardwareLifecycleManager : IHardwareLifecycleManager
 
         try
         {
-            NetworkChange.NetworkAddressChanged += OnNetworkAddressChanged;
-            NetworkChange.NetworkAvailabilityChanged += OnNetworkAvailabilityChanged;
+            if (SubscribeNetworkChangeHook is not null)
+            {
+                SubscribeNetworkChangeHook(this);
+            }
+            else
+            {
+                NetworkChange.NetworkAddressChanged += OnNetworkAddressChanged;
+                NetworkChange.NetworkAvailabilityChanged += OnNetworkAvailabilityChanged;
+            }
         }
         catch (Exception ex)
         {
@@ -263,10 +282,17 @@ public sealed class HardwareLifecycleManager : IHardwareLifecycleManager
 
         try
         {
-            SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
-            SystemEvents.PowerModeChanged -= OnPowerModeChanged;
-            SystemEvents.SessionEnding -= OnSessionEnding;
-            SystemEvents.SessionSwitch -= OnSessionSwitch;
+            if (UnsubscribeSystemEventsHook is not null)
+            {
+                UnsubscribeSystemEventsHook(this);
+            }
+            else
+            {
+                SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
+                SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+                SystemEvents.SessionEnding -= OnSessionEnding;
+                SystemEvents.SessionSwitch -= OnSessionSwitch;
+            }
         }
         catch (Exception ex)
         {
@@ -275,8 +301,15 @@ public sealed class HardwareLifecycleManager : IHardwareLifecycleManager
 
         try
         {
-            NetworkChange.NetworkAddressChanged -= OnNetworkAddressChanged;
-            NetworkChange.NetworkAvailabilityChanged -= OnNetworkAvailabilityChanged;
+            if (UnsubscribeNetworkChangeHook is not null)
+            {
+                UnsubscribeNetworkChangeHook(this);
+            }
+            else
+            {
+                NetworkChange.NetworkAddressChanged -= OnNetworkAddressChanged;
+                NetworkChange.NetworkAvailabilityChanged -= OnNetworkAvailabilityChanged;
+            }
         }
         catch (Exception ex)
         {
