@@ -1,6 +1,6 @@
 {
     "name": "localtelemetry",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "Settings UI for LocalTelemetry",
     "license": "GPL-3.0-or-later",
     "private": true,
@@ -49,3 +49,4 @@
         "lucide-svelte": "^1.0.1"
     }
 }
+

@@ -2,6 +2,52 @@
 
 All notable changes to this project will be documented in this file.
 
+The format is based on [Keep a Changelog](https://keepachangelog.com), and this project adheres to [Semantic Versioning](https://semver.org) & [Conventional Commits](https://conventionalcommits.org).
+
+## [1.1.0](https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0...v1.1.0) (2026-10-24)
+
+### Features
+
+* **overlay,hardware:** support left-aligned taskbar placement, AMD SMN telemetry, and selective uninstaller ([124d302](https://github.com/Nicconike/LocalTelemetry/commit/124d3025252fb46d551f4fb9ca4021dadb3be990))
+
+### Code Refactoring
+
+* decompose core hardware services and expand frontend test coverage ([c1a3a39](https://github.com/Nicconike/LocalTelemetry/commit/c1a3a39310384fd97b2168a5e448aa32894e5d69))
+
+### Tests
+
+* **hardware,ui:** add mock unit tests ([2e617da](https://github.com/Nicconike/LocalTelemetry/commit/2e617da3f378ecda1fd46350f324034ec7a97023))
+* **hardware:** isolate elevation checks for PawnIO device tests ([0ffbd4b](https://github.com/Nicconike/LocalTelemetry/commit/0ffbd4bcc3da3f9a2835d7f42b1eb03169456018))
+* **coverage:** prevent duplicate sync workflow runs and expand unit tests ([59e8371](https://github.com/Nicconike/LocalTelemetry/commit/59e837139e82986f76348c6eedbe7480dbddf9c2))
+* **coverage:** increase backend unit test coverage across Core and App ([c5059c3](https://github.com/Nicconike/LocalTelemetry/commit/c5059c33e8752926a11244dfd2b30b4d00c753d2))
+* **coverage:** expand App and Core test coverage and update test dev dependencies ([c61fd0b](https://github.com/Nicconike/LocalTelemetry/commit/c61fd0b0d66277b65fd9ce391779dee1a3d48a00))
+
+### Build System
+
+* **deps-dev:** Bump mermaid from 11.17.2 to 12.2.0 ([0ffc03c](https://github.com/Nicconike/LocalTelemetry/commit/0ffc03ce7690273ce50ae9d71027ede7ed841f22))
+* **deps:** remediate frontend vulnerabilities and register all bun ecosystems ([3a9692d](https://github.com/Nicconike/LocalTelemetry/commit/3a9692d9ed455325181632132fd081f8a582e2e3))
+* **deps:** bump the frontend-deps group across 1 directory with 5 updates ([#21](https://github.com/Nicconike/LocalTelemetry/issues/21)) ([b34a864](https://github.com/Nicconike/LocalTelemetry/commit/b34a86476f4df6b8ce8568df26eee5650963732e))
+* **deps:** bump dompurify to 3.4.17 to remediate security vulns ([903b95a](https://github.com/Nicconike/LocalTelemetry/commit/903b95aadd99bb7cc93b5b5d331f129ff7f80a72))
+* **deps:** Bump coverlet.collector and 17 others ([178d172](https://github.com/Nicconike/LocalTelemetry/commit/178d172be482957cba51d5f7f3b4f905d87b9c18))
+* **deps:** Bump @lucide/svelte from 1.58.0 to 1.59.0 in /src/LocalTelemetry.App/Settings/wwwroot in the frontend-deps group ([7661f3e](https://github.com/Nicconike/LocalTelemetry/commit/7661f3e7d501f4fc6cba3d4f3d92eecab418ddae))
+* align TFM to Windows SDK, pin Xunit.StaFact, and fix CI test resolution ([80a9a7f](https://github.com/Nicconike/LocalTelemetry/commit/80a9a7f0898a65f5fc2a7fa4b7200449d22d0e5f))
+
+### Continuous Integration
+
+* **release:** harden Inno Setup 7 install, automate project lifecycle, and ignore patch updates ([693b34b](https://github.com/Nicconike/LocalTelemetry/commit/693b34bbac80ed88524b332a068e290cd7662a14))
+* **frontend:** forward codecov token and raise frontend test coverage above 90% ([1d32c1e](https://github.com/Nicconike/LocalTelemetry/commit/1d32c1e1b58e106a895660ddecbdbac8bc1d638a))
+* **deps-dev:** Bump the discord-deps group ([ea8dd7c](https://github.com/Nicconike/LocalTelemetry/commit/ea8dd7c154b99e5f602f97dd235a4d1a98a0830c))
+* **deps:** bump the actions-deps group across 1 directory with 9 updates ([#20](https://github.com/Nicconike/LocalTelemetry/issues/20)) ([0b5aedd](https://github.com/Nicconike/LocalTelemetry/commit/0b5aedd54a47b41b35d1eee686af90d28b911401))
+* trim path and group suffixes from Dependabot PR titles and update docs lockfile ([8be4bcb](https://github.com/Nicconike/LocalTelemetry/commit/8be4bcb240b7e783cd8055f5bd16fc79c62d9c82))
+* prevent premature PR merging and enforce all required status checks ([ea8d880](https://github.com/Nicconike/LocalTelemetry/commit/ea8d88064d07fc8cb3f5a30ca1c02f4da829c85f))
+* pin workflow deps, attach release provenance, and update tests ([e4c6c7e](https://github.com/Nicconike/LocalTelemetry/commit/e4c6c7e0e8df5571841fd6ed51f23b5e06b39cfc))
+* configure explicit path triggers across workflows ([40e5f5f](https://github.com/Nicconike/LocalTelemetry/commit/40e5f5f33d7e6fe28edb0ba93de00870cd69645c))
+* configure codecov bundle analysis and expand mock unit tests ([4e41952](https://github.com/Nicconike/LocalTelemetry/commit/4e419520a18e1157ef709f230353dcb4fedd9c07))
+
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org) & [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
 
 ## [1.0.0](https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0-rc.2...v1.0.0) (2026-10-19)
