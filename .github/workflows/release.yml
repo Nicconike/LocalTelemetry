@@ -54,6 +54,9 @@ jobs:
               run: bun install --frozen-lockfile
               working-directory: .github/release
 
+            - name: Install Cosign
+              uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
             - name: Install Inno Setup 7
               shell: pwsh
               env:
@@ -137,7 +140,28 @@ jobs:
                   if (-not (Test-Path $wingetCreatePath)) {
                       Invoke-WebRequest -Uri "https://aka.ms/wingetcreate/latest" -OutFile $wingetCreatePath
                   }
-                  & $wingetCreatePath submit packaging/winget/localtelemetry.yaml --prtitle "LocalTelemetry: $env:RELEASE_VERSION" --no-open
+
+                  Write-Host "Configuring WinGet authentication token..."
+                  $env:GITHUB_TOKEN = $env:WINGET_CREATE_GITHUB_TOKEN
+                  & $wingetCreatePath token --store --token $env:WINGET_CREATE_GITHUB_TOKEN
+
+                  $repo = $env:GITHUB_REPOSITORY
+                  if (-not $repo) { $repo = "Nicconike/LocalTelemetry" }
+                  $setupUrl = "https://github.com/$repo/releases/download/$env:RELEASE_TAG/LocalTelemetrySetup.exe"
+
+                  Write-Host "Updating WinGet package from upstream repository..."
+                  & $wingetCreatePath update Nicconike.LocalTelemetry `
+                      --version "$env:RELEASE_VERSION" `
+                      --urls "$setupUrl" `
+                      --prtitle "LocalTelemetry: $env:RELEASE_VERSION" `
+                      --submit --no-open
+
+                  if ($LASTEXITCODE -ne 0) {
+                      Write-Warning "Upstream update failed (package might not be merged yet). Submitting manifest directory..."
+                      & $wingetCreatePath submit packaging/winget `
+                          --prtitle "LocalTelemetry: $env:RELEASE_VERSION" `
+                          --no-open
+                  }
 
             - name: Generate Build Provenance Attestation
               id: attest
@@ -148,9 +172,3 @@ jobs:
                       ${{ github.workspace }}/LocalTelemetrySetup.exe
                       ${{ github.workspace }}/LocalTelemetry-win-x64.zip
                   show-summary: true
-
-            - name: Upload Provenance Bundle to Release Assets
-              if: success() && env.RELEASE_TAG != '' && steps.attest.outputs.bundle-path != ''
-              env:
-                  GH_TOKEN: ${{ steps.app_token.outputs.token }}
-              run: gh release upload ${{ env.RELEASE_TAG }} "${{ steps.attest.outputs.bundle-path }}" --clobber

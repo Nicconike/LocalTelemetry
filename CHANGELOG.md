@@ -14,14 +14,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com), and this 
 
 * decompose core hardware services and expand frontend test coverage ([c1a3a39](https://github.com/Nicconike/LocalTelemetry/commit/c1a3a39310384fd97b2168a5e448aa32894e5d69))
 
-### Tests
-
-* **hardware,ui:** add mock unit tests ([2e617da](https://github.com/Nicconike/LocalTelemetry/commit/2e617da3f378ecda1fd46350f324034ec7a97023))
-* **hardware:** isolate elevation checks for PawnIO device tests ([0ffbd4b](https://github.com/Nicconike/LocalTelemetry/commit/0ffbd4bcc3da3f9a2835d7f42b1eb03169456018))
-* **coverage:** prevent duplicate sync workflow runs and expand unit tests ([59e8371](https://github.com/Nicconike/LocalTelemetry/commit/59e837139e82986f76348c6eedbe7480dbddf9c2))
-* **coverage:** increase backend unit test coverage across Core and App ([c5059c3](https://github.com/Nicconike/LocalTelemetry/commit/c5059c33e8752926a11244dfd2b30b4d00c753d2))
-* **coverage:** expand App and Core test coverage and update test dev dependencies ([c61fd0b](https://github.com/Nicconike/LocalTelemetry/commit/c61fd0b0d66277b65fd9ce391779dee1a3d48a00))
-
 ### Build System
 
 * **deps-dev:** Bump mermaid from 11.17.2 to 12.2.0 ([0ffc03c](https://github.com/Nicconike/LocalTelemetry/commit/0ffc03ce7690273ce50ae9d71027ede7ed841f22))
@@ -44,11 +36,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com), and this 
 * configure explicit path triggers across workflows ([40e5f5f](https://github.com/Nicconike/LocalTelemetry/commit/40e5f5f33d7e6fe28edb0ba93de00870cd69645c))
 * configure codecov bundle analysis and expand mock unit tests ([4e41952](https://github.com/Nicconike/LocalTelemetry/commit/4e419520a18e1157ef709f230353dcb4fedd9c07))
 
-# Changelog
+### Tests
 
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org) & [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
+* **hardware,ui:** add mock unit tests ([2e617da](https://github.com/Nicconike/LocalTelemetry/commit/2e617da3f378ecda1fd46350f324034ec7a97023))
+* **hardware:** isolate elevation checks for PawnIO device tests ([0ffbd4b](https://github.com/Nicconike/LocalTelemetry/commit/0ffbd4bcc3da3f9a2835d7f42b1eb03169456018))
+* **coverage:** prevent duplicate sync workflow runs and expand unit tests ([59e8371](https://github.com/Nicconike/LocalTelemetry/commit/59e837139e82986f76348c6eedbe7480dbddf9c2))
+* **coverage:** increase backend unit test coverage across Core and App ([c5059c3](https://github.com/Nicconike/LocalTelemetry/commit/c5059c33e8752926a11244dfd2b30b4d00c753d2))
+* **coverage:** expand App and Core test coverage and update test dev dependencies ([c61fd0b](https://github.com/Nicconike/LocalTelemetry/commit/c61fd0b0d66277b65fd9ce391779dee1a3d48a00))
 
 ## [1.0.0](https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0-rc.2...v1.0.0) (2026-10-19)
 
@@ -77,83 +71,67 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Features
 
-- implement hardware telemetry engine, taskbar overlay, settings UI, and packaging (app) ([08c0d05](https://github.com/Nicconike/LocalTelemetry/commit/08c0d05f73416599159b935b062b92a84783d419))
+* **app:** implement hardware telemetry engine, taskbar overlay, settings UI, and packaging ([08c0d05](https://github.com/Nicconike/LocalTelemetry/commit/08c0d05f73416599159b935b062b92a84783d419))
 
 ### Bug Fixes
 
-- harden release pipeline, sonarlint alerts, and project automation (ci) ([54125e0](https://github.com/Nicconike/LocalTelemetry/commit/54125e0973920aa96e3abc4586a1ea1a4009473e))
-- display dashes for offline network speeds and resolve CI workflows (core) ([313daec](https://github.com/Nicconike/LocalTelemetry/commit/313daec3df5c3e3519d404dedd7d7f1da52d76da))
-- resolve scorecard alerts, codeql false positives, and workflow failures ([2e8288b](https://github.com/Nicconike/LocalTelemetry/commit/2e8288b9d8a984f78ef4d9cf41aed72ac909ce05))
-- harden release pipeline, unblock CI dependencies, and fix docs favicon ([85011b1](https://github.com/Nicconike/LocalTelemetry/commit/85011b131faa88756318adb07624ac1dae85b3b3))
+* **core:** display dashes for offline network speeds and resolve CI workflows ([313daec](https://github.com/Nicconike/LocalTelemetry/commit/313daec3df5c3e3519d404dedd7d7f1da52d76da))
+* **ci:** harden release pipeline, sonarlint alerts, and project automation ([54125e0](https://github.com/Nicconike/LocalTelemetry/commit/54125e0973920aa96e3abc4586a1ea1a4009473e))
+* resolve scorecard alerts, codeql false positives, and workflow failures ([2e8288b](https://github.com/Nicconike/LocalTelemetry/commit/2e8288b9d8a984f78ef4d9cf41aed72ac909ce05))
+* harden release pipeline, unblock CI dependencies, and fix docs favicon ([85011b1](https://github.com/Nicconike/LocalTelemetry/commit/85011b131faa88756318adb07624ac1dae85b3b3))
 
-### Build Systems
-
-- bump the actions-deps group across 1 directory with 4 updates (#5) (ci) ([34f1486](https://github.com/Nicconike/LocalTelemetry/commit/34f1486216f18b463f3dc88de5dff9257b8fedbf))
-
-## [1.0.0-beta.4] - 08-08-2026
+## [1.0.0-beta.4](https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0-beta.3...v1.0.0-beta.4) (2026-08-08)
 
 ### Bug Fixes
 
-- resolve SonarQube vulnerabilities, workflow errors and docs favicon (ci) ([43a4cde](https://github.com/Nicconike/LocalTelemetry/commit/43a4cdeb505cdc04c94c4d10b911a386e92813ba))
+* **ci:** resolve SonarQube vulnerabilities, workflow errors and docs favicon ([43a4cde](https://github.com/Nicconike/LocalTelemetry/commit/43a4cdeb505cdc04c94c4d10b911a386e92813ba))
 
-## [1.0.0-beta.3] - 08-08-2026
+## [1.0.0-beta.3](https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0-beta.2...v1.0.0-beta.3) (2026-08-08)
 
 ### Bug Fixes
 
-- resolve SonarQube issues and improve CI, uninstaller and app robustness; commit bun lockfiles ([b06c0f4](https://github.com/Nicconike/LocalTelemetry/commit/b06c0f484f994f3d0fd7a3f7be3b7506886c3b8d))
+* resolve SonarQube issues and improve CI, uninstaller and app robustness; commit bun lockfiles ([b06c0f4](https://github.com/Nicconike/LocalTelemetry/commit/b06c0f484f994f3d0fd7a3f7be3b7506886c3b8d))
 
-## [1.0.0-beta.2] - 07-08-2026
+## [1.0.0-beta.2](https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0-beta.1...v1.0.0-beta.2) (2026-08-08)
 
 ### Features
 
-- Enhance installation and startup experience for LocalTelemetry ([b902bbb](https://github.com/Nicconike/LocalTelemetry/commit/b902bbbd475d8ee8a31fb320ff1a8db8eb0a31e8))
+* Enhance installation and startup experience for LocalTelemetry ([b902bbb](https://github.com/Nicconike/LocalTelemetry/commit/b902bbbd475d8ee8a31fb320ff1a8db8eb0a31e8))
 
 ### Documentation
 
-- update changelog for v1.0.0-beta.1 ([a07d3ac](https://github.com/Nicconike/LocalTelemetry/commit/a07d3ac3f54880a97131f218030aa475558db293))
+* update changelog for v1.0.0-beta.1 ([a07d3ac](https://github.com/Nicconike/LocalTelemetry/commit/a07d3ac3f54880a97131f218030aa475558db293))
 
-### Build Systems
-
-- chore(deps)(deps): bump dotnet-sdk (#1) ([c1bc79e](https://github.com/Nicconike/LocalTelemetry/commit/c1bc79e09a10d73a9617a25b6c6619fa7b386ddc))
-
-## [1.0.0-beta.1] - 06-08-2026
+## [1.0.0-beta.1](https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0-beta.0...v1.0.0-beta.1) (2026-08-06)
 
 ### Features
 
-- add per-group overlay color customization and navigation guard (settings) ([ebdd7ad](https://github.com/Nicconike/LocalTelemetry/commit/ebdd7adf6e79e7e7ff2737ad107d6bbafcdd3b25))
+* **settings:** add per-group overlay color customization and navigation guard ([ebdd7ad](https://github.com/Nicconike/LocalTelemetry/commit/ebdd7adf6e79e7e7ff2737ad107d6bbafcdd3b25))
 
 ### Continuous Integration
 
-- fix invalid secrets context ([00b6380](https://github.com/Nicconike/LocalTelemetry/commit/00b63804a0053d9dc7d8894bcd16f0486e99845e))
-- fix dependabot PR runs and sort changelog ([d827cf2](https://github.com/Nicconike/LocalTelemetry/commit/d827cf272f6adad8b8afdb5c7922882dcd1604d7))
-- generate release notes and changelog with git-cliff ([021cc85](https://github.com/Nicconike/LocalTelemetry/commit/021cc8523f98ad2942731cd02f74a593b53c4f76))
-- cache sonar scanner and fix token reference ([e7176e5](https://github.com/Nicconike/LocalTelemetry/commit/e7176e5f1ceba483d4a6ca1b9919656379ba1383))
-- prevent release workflow self-trigger and stay on 1.x prereleases ([eb0f1ed](https://github.com/Nicconike/LocalTelemetry/commit/eb0f1edd6deb00eb25a97ac0093d18ced84ed293))
-- Add CommitLint ([e9add45](https://github.com/Nicconike/LocalTelemetry/commit/e9add453013f8dcfa8442d1ba6f3c653133b0118))
+* prevent release workflow self-trigger and stay on 1.x prereleases ([eb0f1ed](https://github.com/Nicconike/LocalTelemetry/commit/eb0f1edd6deb00eb25a97ac0093d18ced84ed293))
+* generate release notes and changelog with git-cliff ([021cc85](https://github.com/Nicconike/LocalTelemetry/commit/021cc8523f98ad2942731cd02f74a593b53c4f76))
+* fix invalid secrets context ([00b6380](https://github.com/Nicconike/LocalTelemetry/commit/00b63804a0053d9dc7d8894bcd16f0486e99845e))
+* fix dependabot PR runs and sort changelog ([d827cf2](https://github.com/Nicconike/LocalTelemetry/commit/d827cf272f6adad8b8afdb5c7922882dcd1604d7))
+* cache sonar scanner and fix token reference ([e7176e5](https://github.com/Nicconike/LocalTelemetry/commit/e7176e5f1ceba483d4a6ca1b9919656379ba1383))
+* Add CommitLint ([e9add45](https://github.com/Nicconike/LocalTelemetry/commit/e9add453013f8dcfa8442d1ba6f3c653133b0118))
+* add commitlint ([da8f4a0](https://github.com/Nicconike/LocalTelemetry/commit/da8f4a05a5ea33d259a27fe9a8ea7cb29e1ee64c))
 
-## [1.0.0-beta.0] - 03-08-2026
+## 1.0.0-beta.0 (2026-08-03)
 
 ### Features
 
-- initial release of localtelemetry ([d0b783e](https://github.com/Nicconike/LocalTelemetry/commit/d0b783e154054f8539500c39c64da3e837408bce))
-
-### Continuous Integration
-
-- update workflow configurations (security) ([6eaccf5](https://github.com/Nicconike/LocalTelemetry/commit/6eaccf53422b1bc04172fb9e840a99aebe6be861))
+* initial release of localtelemetry ([d0b783e](https://github.com/Nicconike/LocalTelemetry/commit/d0b783e154054f8539500c39c64da3e837408bce))
 
 ### Bug Fixes
 
-- fix(ci): update frontend test command, change report paths ([e8baa04](https://github.com/Nicconike/LocalTelemetry/commit/e8baa047736cd26ff2b814c7728b21c1a7582be6))
+* **ci:** update frontend test command, change report paths ([e8baa04](https://github.com/Nicconike/LocalTelemetry/commit/e8baa047736cd26ff2b814c7728b21c1a7582be6))
 
-### Build Systems
+### Build System
 
-- bump happy-dom from 18.0.1 to 20.11.1 in /tests/LocalTelemetry.App.Tests/Settings/wwwroot in the npm_and_yarn group across 1 directory (#2) (deps-dev) ([7fb2104](https://github.com/Nicconike/LocalTelemetry/commit/7fb2104cf3f662d8de4539ca1bc54dacedadabd4))
+* **deps-dev:** bump happy-dom from 18.0.1 to 20.11.1 in /tests/LocalTelemetry.App.Tests/Settings/wwwroot in the npm_and_yarn group across 1 directory ([#2](https://github.com/Nicconike/LocalTelemetry/issues/2)) ([7fb2104](https://github.com/Nicconike/LocalTelemetry/commit/7fb2104cf3f662d8de4539ca1bc54dacedadabd4))
 
-[1.0.0]: https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0-rc.2...v1.0.0
-[1.0.0-rc.2]: https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0-rc.1...v1.0.0-rc.2
-[1.0.0-rc.1]: https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0-beta.4...v1.0.0-rc.1
-[1.0.0-beta.4]: https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0-beta.3...v1.0.0-beta.4
-[1.0.0-beta.3]: https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0-beta.2...v1.0.0-beta.3
-[1.0.0-beta.2]: https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0-beta.1...v1.0.0-beta.2
-[1.0.0-beta.1]: https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0-beta.0...v1.0.0-beta.1
-[1.0.0-beta.0]: https://github.com/Nicconike/LocalTelemetry/tree/v1.0.0-beta.0
+### Continuous Integration
+
+* **security:** update workflow configurations ([6eaccf5](https://github.com/Nicconike/LocalTelemetry/commit/6eaccf53422b1bc04172fb9e840a99aebe6be861))

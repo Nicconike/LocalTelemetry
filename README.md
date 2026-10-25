@@ -69,7 +69,7 @@
     </a>
     <a href="https://alternativeto.net/software/localtelemetry/about/?utm_source=badge&utm_medium=referral"
         target="_blank">
-        <img src="https://img.shields.io/badge/Listed_on-AlternativeTo-0DBCBF?logo=alternativeto&logoColor=white&labelColor=101318"
+        <img src="https://img.shields.io/badge/Like_on-AlternativeTo-0DBCBF?logo=alternativeto&logoColor=white&labelColor=101318"
             alt="AlternativeTo" />
     </a>
     <a href="https://github.com/Nicconike/LocalTelemetry">
@@ -103,9 +103,9 @@
 
 ## Key Features
 
-- 🪟 **Live Taskbar Overlay**: Embeds real-time system telemetry directly into the Windows taskbar with sharp DPI scaling and zero desktop clutter.
-- ⚡ **Deep Hardware Telemetry**: Monitors CPU clocks, wattage, and thermals via kernel MSR registers alongside GPU, RAM, NVMe/SATA disks, and battery rates.
-- 🌐 **Continuous Bandwidth Tracking**: Measures real-time network speeds and imports past data from Windows SRUM records.
+- 🪟 **Live Taskbar Overlay**: Embeds real-time system telemetry directly into the Windows taskbar, automatically adapting to centered and left-aligned taskbar layouts.
+- ⚡ **Deep Hardware Telemetry**: Monitors CPU clocks, wattage, and thermals via Intel MSR and AMD SMN registers with ACPI fallback, alongside GPU, RAM, Disks, and Battery.
+- 🌐 **Continuous Traffic History**: Measures real-time network speeds, records daily upload and download totals, and imports past data from Windows SRUM records.
 - 🎨 **Adaptive OEM Brand Themes**: Detects installed hardware vendors (Intel, AMD, NVIDIA, Samsung, Corsair) and applies authentic manufacturer color palettes.
 - 🔔 **Game-Safe Alerts**: Delivers custom threshold warnings via background toasts that never steal keyboard focus or minimize full-screen games.
 - 🔒 **Private & Offline Logging**: Stores bandwidth history locally in lightweight JSON Lines (`internet_usage.jsonl`) with complete offline privacy and zero analytics.
@@ -225,7 +225,7 @@ Double-click the system tray icon to open the settings interface:
 
 <img src="docs/public/images/monitoring-settings.png" alt="Monitoring settings page" style="border-radius: 8px;" />
 
-**Traffic & Network History** - View daily bandwidth consumption per network interface:
+**Traffic History Calendar** - View daily bandwidth consumption per network interface:
 
 <img src="docs/public/images/traffic-settings.png" alt="Traffic history calendar settings page" style="border-radius: 8px;" />
 

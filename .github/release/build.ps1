@@ -83,6 +83,18 @@ Compress-Archive -Path ./publish/* -DestinationPath ./LocalTelemetry-win-x64.zip
 $hashes = Get-FileHash -Path ./LocalTelemetrySetup.exe, ./LocalTelemetry-win-x64.zip -Algorithm SHA256
 $hashes | ForEach-Object { "{0}  {1}" -f $_.Hash, (Split-Path $_.Path -Leaf) } | Set-Content -Path ./checksums.txt -Encoding utf8
 
+# Sign release artifacts with Cosign (Sigstore keyless OIDC) if available
+if (Get-Command cosign -ErrorAction SilentlyContinue) {
+    Write-Host "Signing release artifacts with Cosign (Sigstore keyless OIDC)..."
+    & cosign sign-blob --yes --bundle ./checksums.txt.sigstore.json ./checksums.txt
+    & cosign sign-blob --yes --bundle ./LocalTelemetrySetup.exe.sigstore.json ./LocalTelemetrySetup.exe
+    & cosign sign-blob --yes --bundle ./LocalTelemetry-win-x64.zip.sigstore.json ./LocalTelemetry-win-x64.zip
+    Write-Host "Artifact signing complete."
+}
+else {
+    Write-Host "Cosign not detected on PATH. Skipping artifact signing."
+}
+
 $setupHash = ($hashes | Where-Object { $_.Path -like "*LocalTelemetrySetup.exe" }).Hash.ToUpperInvariant()
 $zipHash = ($hashes | Where-Object { $_.Path -like "*LocalTelemetry-win-x64.zip" }).Hash.ToLowerInvariant()
 
@@ -112,20 +124,32 @@ else {
     Write-Warning "Manifest file $manifestFile not found."
 }
 
-# 7. Update WinGet Package Manifest
-Write-Host "Updating WinGet package manifest..."
-$wingetManifest = "packaging/winget/localtelemetry.yaml"
-if (Test-Path $wingetManifest) {
-    $setupUrl = "https://github.com/$repo/releases/download/$actualTag/LocalTelemetrySetup.exe"
-    (Get-Content $wingetManifest -Raw) `
-        -replace '(?m)^PackageVersion:\s*.*$', "PackageVersion: $Version" `
-        -replace '(?m)^\s*InstallerUrl:\s*.*$', "      InstallerUrl: $setupUrl" `
-        -replace '(?m)^\s*InstallerSha256:\s*.*$', "      InstallerSha256: `"$setupHash`"" |
-        Set-Content $wingetManifest -Encoding utf8
-    Write-Host "Updated $wingetManifest with version $Version."
+# 7. Update WinGet Package Manifests (Multi-file v1.12.0)
+Write-Host "Updating WinGet package manifests..."
+$wingetVersionFile = "packaging/winget/Nicconike.LocalTelemetry.yaml"
+$wingetInstallerFile = "packaging/winget/Nicconike.LocalTelemetry.installer.yaml"
+$wingetLocaleFile = "packaging/winget/Nicconike.LocalTelemetry.locale.en-US.yaml"
+
+if (Test-Path $wingetVersionFile) {
+    (Get-Content $wingetVersionFile -Raw) -replace '(?m)^PackageVersion:\s*.*$', "PackageVersion: $Version" |
+        Set-Content $wingetVersionFile -Encoding utf8
+    Write-Host "Updated $wingetVersionFile with version $Version."
 }
-else {
-    Write-Warning "WinGet manifest $wingetManifest not found."
+
+if (Test-Path $wingetInstallerFile) {
+    $setupUrl = "https://github.com/$repo/releases/download/$actualTag/LocalTelemetrySetup.exe"
+    (Get-Content $wingetInstallerFile -Raw) `
+        -replace '(?m)^PackageVersion:\s*.*$', "PackageVersion: $Version" `
+        -replace '(?m)^\s*InstallerUrl:\s*.*$', "    InstallerUrl: $setupUrl" `
+        -replace '(?m)^\s*InstallerSha256:\s*.*$', "    InstallerSha256: $setupHash" |
+        Set-Content $wingetInstallerFile -Encoding utf8
+    Write-Host "Updated $wingetInstallerFile with version $Version and hash $setupHash."
+}
+
+if (Test-Path $wingetLocaleFile) {
+    (Get-Content $wingetLocaleFile -Raw) -replace '(?m)^PackageVersion:\s*.*$', "PackageVersion: $Version" |
+        Set-Content $wingetLocaleFile -Encoding utf8
+    Write-Host "Updated $wingetLocaleFile with version $Version."
 }
 
 # 8. Synchronize Package Versions (Docs and Frontend UI)
@@ -141,5 +165,9 @@ foreach ($pkgFile in $packageFiles) {
         Write-Host "Updated $pkgFile with version $Version."
     }
 }
+
+# 9. Update Documentation Release Versions
+Write-Host "Updating documentation versions for $actualTag..."
+node docs/scripts/build-versions.mjs --tag $actualTag
 
 Write-Host "Build and packaging complete for version $Version."

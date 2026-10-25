@@ -5,7 +5,7 @@
  * and updating docs/.vitepress/versions.mjs before VitePress builds.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -118,6 +118,40 @@ function injectEditLinkFalse(content) {
     return `---\neditLink: false\n---\n\n${content}`;
 }
 
+function extractDocsFromWorkingTree(versionLabel) {
+    const targetDir = join(docsDir, `v${versionLabel}`);
+    if (existsSync(targetDir)) {
+        rmSync(targetDir, { recursive: true, force: true });
+    }
+
+    function walkDir(dir, relPrefix = '') {
+        if (!existsSync(dir)) return;
+        const entries = readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+            const relPath = relPrefix ? `${relPrefix}/${entry.name}` : entry.name;
+            const fullPath = join(dir, entry.name);
+            if (entry.isDirectory()) {
+                if (CONTENT_ROOT.some((entryRoot) => entryRoot === relPath || relPath.startsWith(`${entryRoot}/`))) {
+                    walkDir(fullPath, relPath);
+                }
+            } else if (entry.isFile() && entry.name.endsWith('.md')) {
+                if (CONTENT_ROOT.some((entryRoot) => entryRoot === relPath || relPath.startsWith(`${entryRoot}/`))) {
+                    const rawContent = readFileSync(fullPath, 'utf-8');
+                    const withRewrittenLinks = rawContent.replace(ABS_DOC_LINK, (match) => `/v${versionLabel}${match}`);
+                    const finalContent = injectEditLinkFalse(withRewrittenLinks);
+
+                    const outPath = join(targetDir, relPath);
+                    mkdirSync(dirname(outPath), { recursive: true });
+                    writeFileSync(outPath, finalContent);
+                }
+            }
+        }
+    }
+
+    walkDir(docsDir);
+    return existsSync(join(targetDir, 'index.md'));
+}
+
 function extractDocsFromTag(tag, force = false) {
     const versionLabel = tag.replace(/^v/, '');
     const targetDir = join(docsDir, `v${versionLabel}`);
@@ -135,7 +169,10 @@ function extractDocsFromTag(tag, force = false) {
     const baseDir = hasLatestDir ? 'docs/latest' : 'docs';
 
     const treeOutput = runGit(['ls-tree', '-r', '--name-only', tag, '--', baseDir]);
-    if (!treeOutput) return false;
+    if (!treeOutput) {
+        console.log(`[build-versions] Tag ${tag} not found in git tree, extracting from current docs tree...`);
+        return extractDocsFromWorkingTree(versionLabel);
+    }
 
     const files = treeOutput
         .split('\n')
@@ -214,9 +251,19 @@ function updateVersionsFile(validTags) {
 function main() {
     const args = process.argv.slice(2);
     const force = args.includes('--force');
+    const tagArgIndex = args.indexOf('--tag');
+    const extraTag = tagArgIndex !== -1 && args[tagArgIndex + 1] ? args[tagArgIndex + 1] : process.env.RELEASE_TAG;
 
     console.log(`[build-versions] Scanning for release tags >= v${MIN_VERSION}...`);
     const validTags = getValidReleaseTags();
+
+    if (extraTag) {
+        const normalizedTag = extraTag.startsWith('v') ? extraTag : `v${extraTag}`;
+        if (compareSemVer(normalizedTag, MIN_VERSION) >= 0 && !validTags.includes(normalizedTag)) {
+            validTags.push(normalizedTag);
+            validTags.sort((a, b) => compareSemVer(b, a));
+        }
+    }
 
     if (validTags.length === 0) {
         console.log(`[build-versions] No release tags >= v${MIN_VERSION} found yet. Serving Latest docs only.`);

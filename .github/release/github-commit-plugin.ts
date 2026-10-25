@@ -92,8 +92,11 @@ export async function prepare(pluginConfig: PluginConfig, context: PluginContext
     const files = pluginConfig?.files || [
         'CHANGELOG.md',
         'bucket/localtelemetry.json',
+        'docs/.vitepress/versions.mjs',
         'docs/package.json',
-        'packaging/winget/localtelemetry.yaml',
+        'packaging/winget/Nicconike.LocalTelemetry.yaml',
+        'packaging/winget/Nicconike.LocalTelemetry.installer.yaml',
+        'packaging/winget/Nicconike.LocalTelemetry.locale.en-US.yaml',
         'setup.iss',
         'src/LocalTelemetry.App/Settings/wwwroot/package.json',
     ];
