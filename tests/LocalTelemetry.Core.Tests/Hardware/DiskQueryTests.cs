@@ -455,6 +455,44 @@ public class DiskQueryTests
         var adapterMethod = typeof(DiskQuery).GetMethod("QueryBusTypeIoctl", BindingFlags.NonPublic | BindingFlags.Static)!;
         string busType = (string)adapterMethod.Invoke(null, [9999])!;
         busType.Should().BeEmpty();
+
+        // 3. QueryBusTypeIoctl on disk 0
+        var actBus0 = () => adapterMethod.Invoke(null, [0]);
+        actBus0.Should().NotThrow();
+
+        // 4. FormatBusType coverage
+        var formatMethod = typeof(DiskQuery).GetMethod("FormatBusType", BindingFlags.NonPublic | BindingFlags.Static)!;
+        ((string)formatMethod.Invoke(null, [17u])!).Should().Be("NVMe");
+        ((string)formatMethod.Invoke(null, [11u])!).Should().Be("SATA");
+        ((string)formatMethod.Invoke(null, [10u])!).Should().Be("SAS");
+        ((string)formatMethod.Invoke(null, [7u])!).Should().Be("USB");
+        ((string)formatMethod.Invoke(null, [14u])!).Should().Be("Virtual");
+        ((string)formatMethod.Invoke(null, [3u])!).Should().Be("ATA");
+        ((string)formatMethod.Invoke(null, [8u])!).Should().Be("RAID");
+        ((string)formatMethod.Invoke(null, [4u])!).Should().Be("1394");
+        ((string)formatMethod.Invoke(null, [12u])!).Should().Be("SD");
+        ((string)formatMethod.Invoke(null, [13u])!).Should().Be("MMC");
+        ((string)formatMethod.Invoke(null, [19u])!).Should().Be("UFS");
+        ((string)formatMethod.Invoke(null, [1u])!).Should().Be("BusType1");
+        ((string)formatMethod.Invoke(null, [999u])!).Should().Be("BusType999");
+
+        // 5. IsExcludedDrive reflection coverage
+        var isExcludedMethod = typeof(DiskQuery).GetMethod("IsExcludedDrive", BindingFlags.NonPublic | BindingFlags.Static)!;
+        object[] argsUsb = ["USB", "SCSI\\DISK", "Fixed hard disk media", 0, ""];
+        ((bool)isExcludedMethod.Invoke(null, argsUsb)!).Should().BeTrue();
+
+        object[] argsRemovable = ["SCSI", "SCSI\\DISK", "Removable Media", 0, ""];
+        ((bool)isExcludedMethod.Invoke(null, argsRemovable)!).Should().BeTrue();
+
+        object[] argsUsbStor = ["SCSI", "USBSTOR\\DISK", "Fixed hard disk media", 0, ""];
+        ((bool)isExcludedMethod.Invoke(null, argsUsbStor)!).Should().BeTrue();
+
+        object[] argsUasp = ["SCSI", "UASP\\DISK", "Fixed hard disk media", 0, ""];
+        ((bool)isExcludedMethod.Invoke(null, argsUasp)!).Should().BeTrue();
+
+        object[] argsNvme = ["SCSI", "SCSI\\DISK&VEN_NVME", "Fixed hard disk media", 0, ""];
+        ((bool)isExcludedMethod.Invoke(null, argsNvme)!).Should().BeFalse();
+        ((string)argsNvme[4]).Should().Be("NVMe");
     }
 
     [Fact]
@@ -474,6 +512,25 @@ public class DiskQueryTests
         finally
         {
             DiskQuery.SystemVolumePathOverride = null;
+        }
+
+        // Test QueryMsftMediaTypes directly
+        var getMsftMethod = typeof(DiskQuery).GetMethod("QueryMsftMediaTypes", BindingFlags.NonPublic | BindingFlags.Static);
+        if (getMsftMethod is not null)
+        {
+            var res = getMsftMethod.Invoke(null, null);
+            res.Should().NotBeNull();
+        }
+
+        // Test QueryBusTypeFromStorageQuery with an invalid handle
+        var queryBusMethod = typeof(DiskQuery).GetMethod("QueryBusTypeFromStorageQuery", BindingFlags.NonPublic | BindingFlags.Static);
+        if (queryBusMethod is not null)
+        {
+            using var invalidHandle = new Microsoft.Win32.SafeHandles.SafeFileHandle(new IntPtr(-1), false);
+            var cache = new ConcurrentDictionary<int, string>();
+            var busRes = (string)queryBusMethod.Invoke(null, [invalidHandle, 999, cache])!;
+            busRes.Should().BeEmpty();
+            cache.Should().ContainKey(999);
         }
     }
 }

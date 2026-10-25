@@ -1856,7 +1856,7 @@ public class SettingsShellTests
     }
 
     [WpfFact]
-    public void SettingsShell_HandleWebMessageJson_And_Logging_Coverage()
+    public async Task SettingsShell_HandleWebMessageJson_And_Logging_Coverage()
     {
         string tempPath = Path.Combine(Path.GetTempPath(), "settings_shell_msg_" + Guid.NewGuid().ToString("N") + ".dat");
         try
@@ -1887,9 +1887,61 @@ public class SettingsShellTests
 
             // 5. importWindowsUsage validation paths
             shell.HandleWebMessageJson("""{"type":"importWindowsUsage","payload":{}}""");
-            shell.HandleWebMessageJson("""{"type":"importWindowsUsage","payload":{"startDate":"bad","endDate":"24-10-2026"}}""");
-            shell.HandleWebMessageJson("""{"type":"importWindowsUsage","payload":{"startDate":"20-10-2026","endDate":"bad"}}""");
-            shell.HandleWebMessageJson("""{"type":"importWindowsUsage","payload":{"startDate":"20-10-2026","endDate":"24-10-2026"}}""");
+            // 3. HandleImportWindowsUsage - test via reflection and await Task
+            var handleImportMethod = typeof(SettingsShell).GetMethod("HandleImportWindowsUsage", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+            // Valid dates
+            using (var docValid = JsonDocument.Parse("""{"payload":{"startDate":"20-10-2026","endDate":"24-10-2026"}}"""))
+            {
+                await (Task)handleImportMethod.Invoke(shell, [docValid.RootElement])!;
+            }
+
+            // Bad dates
+            using (var docBad = JsonDocument.Parse("""{"payload":{"startDate":"bad","endDate":"24-10-2026"}}"""))
+            {
+                await (Task)handleImportMethod.Invoke(shell, [docBad.RootElement])!;
+            }
+
+            // Missing payload
+            using (var docEmpty = JsonDocument.Parse("""{}"""))
+            {
+                await (Task)handleImportMethod.Invoke(shell, [docEmpty.RootElement])!;
+            }
+
+            // 4. OpenFolder - valid folders and seam
+            var origFolderLauncher = SettingsShell.FolderLauncherAction;
+            try
+            {
+                var openedFolders = new List<string>();
+                SettingsShell.FolderLauncherAction = openedFolders.Add;
+
+                shell.HandleWebMessageJson("""{"type":"openFolder","payload":{"target":"logs"}}""");
+                shell.HandleWebMessageJson("""{"type":"openFolder","payload":{"target":"data"}}""");
+                shell.HandleWebMessageJson("""{"type":"openFolder","payload":{"target":"app"}}""");
+                shell.HandleWebMessageJson("""{"type":"openFolder","payload":{"target":"unknown"}}""");
+                shell.HandleWebMessageJson("""{"type":"openFolder","payload":{}}""");
+
+                openedFolders.Should().NotBeEmpty();
+            }
+            finally
+            {
+                SettingsShell.FolderLauncherAction = origFolderLauncher;
+            }
+
+            // 5. OpenUrl with seam
+            var origUrlLauncher = SettingsShell.UrlLauncherAction;
+            try
+            {
+                string? launchedUrl = null;
+                SettingsShell.UrlLauncherAction = url => launchedUrl = url;
+                shell.HandleWebMessageJson("""{"type":"openUrl","payload":{"url":"https://github.com/Nicconike/LocalTelemetry"}}""");
+                shell.HandleWebMessageJson("""{"type":"openUrl","payload":{"url":"ftp://invalid"}}""");
+                launchedUrl.Should().Be("https://github.com/Nicconike/LocalTelemetry");
+            }
+            finally
+            {
+                SettingsShell.UrlLauncherAction = origUrlLauncher;
+            }
 
             shell.Close();
         }

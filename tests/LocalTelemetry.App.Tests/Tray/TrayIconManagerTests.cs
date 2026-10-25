@@ -405,6 +405,39 @@ public class TrayIconManagerTests
             var actUpdate = () => tray.Update(new TelemetrySnapshot());
             actUpdate.Should().NotThrow();
             trayField.SetValue(tray, new NotifyIcon());
+
+            // Context menu Opened and Closed event handler coverage
+            var createMenu = typeof(TrayIconManager).GetMethod("CreateBaseContextMenu", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var ctx = (ContextMenuStrip)createMenu.Invoke(tray, null)!;
+            var onOpened = typeof(ToolStripDropDown).GetMethod("OnOpened", BindingFlags.Instance | BindingFlags.NonPublic);
+            var onClosed = typeof(ToolStripDropDown).GetMethod("OnClosed", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (onOpened is not null && onClosed is not null)
+            {
+                var actMenuEvents = () =>
+                {
+                    onOpened.Invoke(ctx, [EventArgs.Empty]);
+                    onClosed.Invoke(ctx, [new ToolStripDropDownClosedEventArgs(ToolStripDropDownCloseReason.AppClicked)]);
+                };
+                actMenuEvents.Should().NotThrow();
+            }
+
+            // Exercise catch blocks with disposed _menuOwner
+            var ownerField = typeof(TrayIconManager).GetField("_menuOwner", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var ownerForm = (Form)ownerField.GetValue(tray)!;
+            ownerForm.Dispose();
+
+            // Calling ShowOverlayContextMenu when _menuOwner is disposed exercises catch block (lines 88-91)
+            var actDisposedShow = () => tray.ShowOverlayContextMenu(new Point(50, 50));
+            actDisposedShow.Should().NotThrow();
+
+            // Invoking onClosed with disposed _menuOwner exercises catch block (lines 278-281)
+            if (onClosed is not null)
+            {
+                var actDisposedClose = () => onClosed.Invoke(ctx, [new ToolStripDropDownClosedEventArgs(ToolStripDropDownCloseReason.AppClicked)]);
+                actDisposedClose.Should().NotThrow();
+            }
+
+            ctx.Dispose();
         }
         finally
         {
@@ -412,4 +445,3 @@ public class TrayIconManagerTests
         }
     }
 }
-

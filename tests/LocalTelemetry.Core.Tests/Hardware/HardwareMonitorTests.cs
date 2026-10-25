@@ -2001,6 +2001,7 @@ public class HardwareMonitorTests
         // ReadCpuPct
         var readCpuPct = typeof(HardwareMonitor).GetMethod("ReadCpuPct", BindingFlags.NonPublic | BindingFlags.Instance)!;
         float pct1 = (float)readCpuPct.Invoke(monitor, null)!;
+        pct1.Should().BeInRange(0f, 100f);
         float pct2 = (float)readCpuPct.Invoke(monitor, null)!;
         pct2.Should().BeInRange(0f, 100f);
     }
@@ -2358,5 +2359,111 @@ public class HardwareMonitorTests
 
         var nicSpecific = selectNic.Invoke(null, ["non_existent_adapter_name_123"]);
         nicSpecific.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void HardwareMonitor_SystemEvents_And_NicTransitions_Coverage()
+    {
+        var cfg = new AppSettings();
+        var sysInfoMock = Substitute.For<ISystemInfo>();
+        var pawnIoMock = Substitute.For<IPawnIoManager>();
+        using var monitor = new HardwareMonitor(cfg, sysInfoMock, pawnIoMock);
+
+        // 1. EnsureNicCounters with null/offline adapter and exception
+        var ensureNic = typeof(HardwareMonitor).GetMethod("EnsureNicCounters", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var origNicOverride = HardwareMonitor.SelectActiveNicOverride;
+
+        try
+        {
+            // Offline return
+            HardwareMonitor.SelectActiveNicOverride = () => (null, false);
+            ensureNic.Invoke(monitor, null);
+
+            // Second call with same setting (tests _wasOfflineLogged)
+            ensureNic.Invoke(monitor, null);
+
+            // Throwing override
+            HardwareMonitor.SelectActiveNicOverride = () => throw new InvalidOperationException("NIC query failure");
+            var actThrowNic = () => ensureNic.Invoke(monitor, null);
+            actThrowNic.Should().NotThrow();
+        }
+        finally
+        {
+            HardwareMonitor.SelectActiveNicOverride = origNicOverride;
+        }
+
+        // 2. ReadWmiCpuTemp
+        var readThermal = typeof(HardwareMonitor).GetMethod("ReadWmiCpuTemp", BindingFlags.NonPublic | BindingFlags.Static)!;
+        float thermal = (float)readThermal.Invoke(null, null)!;
+        thermal.Should().BeGreaterThanOrEqualTo(0f);
+
+        // 3. ComputeBatteryRateFromCapacityDelta
+        var computeBat = typeof(HardwareMonitor).GetMethod("ComputeBatteryRateFromCapacityDelta", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        float rateInit = (float)computeBat.Invoke(monitor, [1000L])!;
+        rateInit.Should().Be(0f);
+        float rateSecond = (float)computeBat.Invoke(monitor, [950L])!;
+        rateSecond.Should().BeInRange(-300f, 300f);
+
+        // 4. Memory reading
+        var readMem = typeof(HardwareMonitor).GetMethod("ReadMemory", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        object[] memArgs = [0f, 0f, 0f];
+        readMem.Invoke(monitor, memArgs);
+        ((float)memArgs[0]).Should().BeGreaterThanOrEqualTo(0f);
+
+        // 5. System event handlers reflection
+        var onDisplay = typeof(HardwareMonitor).GetMethod("OnDisplayOrDriverChanged", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var actDisplay = () => onDisplay.Invoke(monitor, null);
+        actDisplay.Should().NotThrow();
+
+        var resetGpu = typeof(HardwareMonitor).GetMethod("ResetGpuMonitors", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var actResetGpu = () => resetGpu.Invoke(monitor, ["test_reason"]);
+        actResetGpu.Should().NotThrow();
+
+        var onSuspend = typeof(HardwareMonitor).GetMethod("OnPowerSuspended", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var actSuspend = () => onSuspend.Invoke(monitor, null);
+        actSuspend.Should().NotThrow();
+
+        var onResume = typeof(HardwareMonitor).GetMethod("ExecutePowerResumeWarmUp", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var actResume = () => onResume.Invoke(monitor, null);
+        actResume.Should().NotThrow();
+
+        var onNet = typeof(HardwareMonitor).GetMethod("OnNetworkTopologyChanged", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var actNet = () => onNet.Invoke(monitor, null);
+        actNet.Should().NotThrow();
+
+        var onPnp = typeof(HardwareMonitor).GetMethod("OnDevicePnPChanged", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var actPnp = () => onPnp.Invoke(monitor, null);
+        actPnp.Should().NotThrow();
+
+        // 6. AMD ADL and WDDM fallback queries
+        var amdNative = Substitute.For<IAmdAdlNative>();
+        using var amdGpu = new AmdGpuMonitor(amdNative);
+        using var wddmGpu = new WddmGpuMonitor();
+
+        SetField(monitor, "_nvGpu", null);
+        SetField(monitor, "_amdGpu", amdGpu);
+        SetField(monitor, "_wddmGpu", wddmGpu);
+
+        var readGpuPct = typeof(HardwareMonitor).GetMethod("ReadGpuPct", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var actPct = () => readGpuPct.Invoke(monitor, [null]);
+        actPct.Should().NotThrow();
+
+        var readGpuTemp = typeof(HardwareMonitor).GetMethod("ReadGpuTemp", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var actTemp = () => readGpuTemp.Invoke(monitor, [null]);
+        actTemp.Should().NotThrow();
+
+        var readGpuPower = typeof(HardwareMonitor).GetMethod("ReadGpuPowerW", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var actPower = () => readGpuPower.Invoke(monitor, [null]);
+        actPower.Should().NotThrow();
+
+        var readGpuVram = typeof(HardwareMonitor).GetMethod("ReadGpuVramUsedMb", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var actVram = () => readGpuVram.Invoke(monitor, [null]);
+        actVram.Should().NotThrow();
+
+        // 7. TrySelectActiveGpuAdapter reflection
+        SetField(monitor, "_gpuVendor", "");
+        var trySelectAdapter = typeof(HardwareMonitor).GetMethod("TrySelectActiveGpuAdapter", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        trySelectAdapter.Invoke(monitor, ["AMD", "Radeon RX 7900 XTX", true]);
+        GetField<string>(monitor, "_gpuVendor").Should().Be("AMD");
     }
 }

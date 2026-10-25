@@ -1516,5 +1516,80 @@ public class TaskbarEmbedderTests
             TaskbarEmbedder.ExplorerTrayWndOverride = origTray;
         }
     }
-}
 
+    [Fact]
+    public void TaskbarEmbedder_EdgeCalculations_And_Diagnostics_Coverage()
+    {
+        var cfg = new AppSettings();
+        var embedder = new TaskbarEmbedder(cfg);
+
+        // 1. GetRightSideBoundary branches
+        var getRightBoundary = typeof(TaskbarEmbedder).GetMethod("GetRightSideBoundary", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        typeof(TaskbarEmbedder).GetField("_trayLeftEdge", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, 1600);
+        typeof(TaskbarEmbedder).GetField("_rightWidgetLeftEdge", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, 1550);
+        int boundary = (int)getRightBoundary.Invoke(embedder, null)!;
+        boundary.Should().Be(1550);
+
+        var origRightWidget = TaskbarEmbedder.RightWidgetLeftEdgeOverride;
+        try
+        {
+            TaskbarEmbedder.RightWidgetLeftEdgeOverride = () => 1500;
+            boundary = (int)getRightBoundary.Invoke(embedder, null)!;
+            boundary.Should().Be(1500);
+        }
+        finally
+        {
+            TaskbarEmbedder.RightWidgetLeftEdgeOverride = origRightWidget;
+        }
+
+        // 2. IsWidgetsFeatureEnabled
+        var isWidgets = typeof(TaskbarEmbedder).GetMethod("IsWidgetsFeatureEnabled", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var actWidgets = () => isWidgets.Invoke(null, null);
+        actWidgets.Should().NotThrow();
+
+        // 3. LogTrayStructure
+        var logDiag = typeof(TaskbarEmbedder).GetMethod("LogTrayStructure", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var actLogDiag = () => logDiag.Invoke(null, null);
+        actLogDiag.Should().NotThrow();
+
+        // 4. Detach on non-desktop IntPtr
+        var actDetach = () => embedder.Detach(new IntPtr(0x1234));
+        actDetach.Should().NotThrow();
+
+        // 5. ResolveFromScreenWorkingArea and Automation queries with zero hwnd
+        var resolveScreen = typeof(TaskbarEmbedder).GetMethod("ResolveFromScreenWorkingArea", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var screenRes = resolveScreen.Invoke(null, null);
+        screenRes.Should().NotBeNull();
+
+        var queryWidgets = typeof(TaskbarEmbedder).GetMethod("QueryWidgetsButtonEdge", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var queryAppList = typeof(TaskbarEmbedder).GetMethod("QueryAppListRightEdgeFromAutomation", BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        var origExplorerTray = TaskbarEmbedder.ExplorerTrayWndOverride;
+        try
+        {
+            TaskbarEmbedder.ExplorerTrayWndOverride = () => IntPtr.Zero;
+            var wRes = queryWidgets.Invoke(null, [IntPtr.Zero, 1920]);
+            wRes.Should().Be((-1, -1));
+
+            var aRes = queryAppList.Invoke(null, [1920]);
+            aRes.Should().Be(-1);
+        }
+        finally
+        {
+            TaskbarEmbedder.ExplorerTrayWndOverride = origExplorerTray;
+        }
+
+        // 6. IsTaskbarCentered live query
+        var origCentered = TaskbarEmbedder.IsTaskbarCenteredOverride;
+        try
+        {
+            TaskbarEmbedder.IsTaskbarCenteredOverride = null;
+            var actCentered = () => TaskbarEmbedder.IsTaskbarCentered();
+            actCentered.Should().NotThrow();
+        }
+        finally
+        {
+            TaskbarEmbedder.IsTaskbarCenteredOverride = origCentered;
+        }
+    }
+}

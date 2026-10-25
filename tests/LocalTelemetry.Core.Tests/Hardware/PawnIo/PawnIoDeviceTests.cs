@@ -457,4 +457,62 @@ public class PawnIoDeviceTests
             PawnIoDevice.ElevationChecker = null;
         }
     }
+
+    [Fact]
+    public void PawnIoDevice_GetDefaultInstallerUri_And_InstallerBranches_Coverage()
+    {
+        // 1. GetDefaultInstallerUri with and without custom URL
+        var getUriMethod = typeof(PawnIoDevice).GetMethod("GetDefaultInstallerUri", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var defaultUri = (Uri)getUriMethod.Invoke(null, null)!;
+        defaultUri.AbsoluteUri.Should().Contain("PawnIO_setup.exe");
+
+        string? origEnv = Environment.GetEnvironmentVariable("PAWNIO_INSTALLER_URL");
+        try
+        {
+            Environment.SetEnvironmentVariable("PAWNIO_INSTALLER_URL", "https://example.com/custom_pawnio.exe");
+            var customUri = (Uri)getUriMethod.Invoke(null, null)!;
+            customUri.AbsoluteUri.Should().Be("https://example.com/custom_pawnio.exe");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("PAWNIO_INSTALLER_URL", origEnv);
+        }
+
+        // 2. TryInstall with exit code 183 (already installed branch)
+        PawnIoDevice.CleanupHandler = () => { };
+        PawnIoDevice.InstallerDownloader = () => [1, 2, 3];
+        PawnIoDevice.ProcessRunner = _ => 183;
+        try
+        {
+            PawnIoDevice.TryInstall().Should().BeTrue();
+        }
+        finally
+        {
+            PawnIoDevice.CleanupHandler = null;
+            PawnIoDevice.InstallerDownloader = null;
+            PawnIoDevice.ProcessRunner = null;
+        }
+
+        // 4. EnableBackupPrivilege and IsProcessElevated fallback coverage
+        var enablePrivMethod = typeof(PawnIoDevice).GetMethod("EnableBackupPrivilege", BindingFlags.NonPublic | BindingFlags.Static);
+        if (enablePrivMethod is not null)
+        {
+            var actPriv = () => enablePrivMethod.Invoke(null, null);
+            actPriv.Should().NotThrow();
+        }
+
+        var isElevatedMethod = typeof(PawnIoDevice).GetMethod("IsProcessElevated", BindingFlags.NonPublic | BindingFlags.Static);
+        if (isElevatedMethod is not null)
+        {
+            PawnIoDevice.ElevationChecker = null;
+            var isElevated = isElevatedMethod.Invoke(null, null);
+            isElevated.Should().NotBeNull();
+        }
+
+        // 5. Execute with non-null input array
+        using var invalidHandle = new Microsoft.Win32.SafeHandles.SafeFileHandle(new IntPtr(-1), false);
+        var device = new PawnIoDevice(invalidHandle);
+        var res = device.Execute("test_fn", [12345UL], 1);
+        res.Should().BeEmpty();
+    }
 }

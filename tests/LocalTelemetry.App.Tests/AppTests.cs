@@ -1511,4 +1511,112 @@ public class AppTests
             actTray.Should().NotThrow();
         }
     }
+
+    [WpfFact]
+    public void App_OverlayActions_And_SnapshotReady_Coverage()
+    {
+        var app = GetOrCreateApp();
+        var overlayField = typeof(App).GetField("_overlay", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var overlay = overlayField.GetValue(app) as TaskbarOverlay;
+        if (overlay is not null)
+        {
+            // 1. Overlay actions
+            var origLauncher = App.TaskManagerLauncherAction;
+            try
+            {
+                bool taskMgrLaunched = false;
+                App.TaskManagerLauncherAction = _ => taskMgrLaunched = true;
+
+                overlay.OnOpenSettingsRequested?.Invoke();
+                overlay.OnToggleOverlayRequested?.Invoke();
+
+                var raiseDoubleClick = typeof(TaskbarOverlay).GetMethod("RaiseDoubleClickAction", BindingFlags.NonPublic | BindingFlags.Instance);
+                if (raiseDoubleClick is not null)
+                {
+                    raiseDoubleClick.Invoke(overlay, ["taskmanager"]);
+                    taskMgrLaunched.Should().BeTrue();
+                    raiseDoubleClick.Invoke(overlay, ["settings"]);
+                }
+            }
+            finally
+            {
+                App.TaskManagerLauncherAction = origLauncher;
+            }
+        }
+
+        // 2. HandleSnapshotReady
+        var handleSnapshot = typeof(App).GetMethod("HandleSnapshotReady", BindingFlags.NonPublic | BindingFlags.Instance);
+        if (handleSnapshot is not null)
+        {
+            var netLoggerField = typeof(App).GetField("_netLogger", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var alertsField = typeof(App).GetField("_alerts", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var origNetLogger = netLoggerField.GetValue(app);
+            var origAlerts = alertsField.GetValue(app);
+
+            var overlayFieldToRestore = typeof(App).GetField("_overlay", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var origOverlayInApp = overlayFieldToRestore.GetValue(app);
+
+            string tmp = Path.Combine(Path.GetTempPath(), $"AppSnapshot_{Guid.NewGuid():N}.dat");
+            try
+            {
+                var cfg = new AppSettings();
+                var history = new TrafficHistoryFile(tmp);
+                using var netLogger = new NetUsageLogger(cfg, history);
+                using var notifClient = new global::LocalTelemetry.App.Services.NotificationClient();
+                using var overlayFallback = overlay is null ? new TaskbarOverlay(cfg, new global::LocalTelemetry.App.Win32.TaskbarEmbedder(cfg)) : null;
+                var effectiveOverlay = overlay ?? overlayFallback!;
+                var alerts = new global::LocalTelemetry.App.Services.AlertService(cfg, effectiveOverlay, notifClient, netLogger);
+
+                overlayFieldToRestore.SetValue(app, effectiveOverlay);
+                netLoggerField.SetValue(app, netLogger);
+                alertsField.SetValue(app, alerts);
+
+                var snap = new TelemetrySnapshot { CpuUsagePct = 25f, RamUsagePct = 50f, GpuUsagePct = 75f };
+                var actSnap = () => handleSnapshot.Invoke(app, [snap]);
+                actSnap.Should().NotThrow();
+
+                // 3. ToggleMetricsLogging coverage
+                var toggleMetrics = typeof(App).GetMethod("ToggleMetricsLogging", BindingFlags.NonPublic | BindingFlags.Instance);
+                if (toggleMetrics is not null)
+                {
+                    toggleMetrics.Invoke(app, [true]);
+                    toggleMetrics.Invoke(app, [false]);
+                }
+
+                // 4. ShowContextMenuAction catch block
+                var showCtxAction = effectiveOverlay.ShowContextMenuAction;
+                if (showCtxAction is not null)
+                {
+                    // Calling with normal point
+                    var actCtx = () => showCtxAction(new System.Drawing.Point(100, 100));
+                    actCtx.Should().NotThrow();
+                }
+
+                // 5. EnsureNotifierLaunched when file not found
+                var origLauncher = App.NotifierLauncherAction;
+                try
+                {
+                    App.NotifierLauncherAction = null;
+                    typeof(App).GetField("_notifierLaunched", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, false);
+                    var cfgInApp = (AppSettings)typeof(App).GetField("_cfg", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(app)!;
+                    cfgInApp.Alerts.Enabled = true;
+                    cfgInApp.Alerts.ShowToastNotif = true;
+
+                    var ensureNotif = typeof(App).GetMethod("EnsureNotifierLaunched", BindingFlags.NonPublic | BindingFlags.Instance);
+                    ensureNotif?.Invoke(app, null);
+                }
+                finally
+                {
+                    App.NotifierLauncherAction = origLauncher;
+                }
+            }
+            finally
+            {
+                overlayFieldToRestore.SetValue(app, origOverlayInApp);
+                netLoggerField.SetValue(app, origNetLogger);
+                alertsField.SetValue(app, origAlerts);
+                try { if (File.Exists(tmp)) File.Delete(tmp); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+            }
+        }
+    }
 }

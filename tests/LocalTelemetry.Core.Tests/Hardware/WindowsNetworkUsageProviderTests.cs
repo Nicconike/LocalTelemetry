@@ -792,4 +792,40 @@ public class WindowsNetworkUsageProviderTests
             try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
+
+    [Fact]
+    public async Task WindowsNetworkUsageProvider_GetDefaultAdapter_And_TodayNewEntry_Coverage()
+    {
+        // 1. GetDefaultAdapter reflection
+        var getDefault = typeof(WindowsNetworkUsageProvider).GetMethod("GetDefaultAdapter", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var actDefault = () => getDefault.Invoke(null, null);
+        actDefault.Should().NotThrow();
+
+        // 2. ImportTodayBaselineAsync on empty history file (line 492: !curToday.HasValue)
+        string tempPath = Path.Combine(Path.GetTempPath(), $"TrafficTodayNew_{Guid.NewGuid():N}.dat");
+        var historyFile = new TrafficHistoryFile(tempPath);
+        var origFactory = WindowsNetworkUsageProvider.AdapterFactory;
+
+        try
+        {
+            WindowsNetworkUsageProvider.AdapterFactory = () => new MockTestNetworkAdapter(
+                "MockEth", Guid.NewGuid().ToString("D"), 6u, (_, _, _) => Task.FromResult<IReadOnlyList<(ulong, ulong)>>([(5_000_000UL, 2_000_000UL)]));
+
+            await WindowsNetworkUsageProvider.RefreshTodayUsageAsync(historyFile, CancellationToken.None);
+
+            var entry = historyFile.Find(DateTime.Today.Year, DateTime.Today.Month, DateTime.Today.Day, "Ethernet");
+            entry.Should().NotBeNull();
+            entry!.Value.DownBytes.Should().Be(5_000_000);
+            entry.Value.UpBytes.Should().Be(2_000_000);
+
+            // Test catch block in RefreshTodayUsageAsync when historyFile throws
+            var actThrow = async () => await WindowsNetworkUsageProvider.RefreshTodayUsageAsync(null!, CancellationToken.None);
+            await actThrow.Should().NotThrowAsync();
+        }
+        finally
+        {
+            WindowsNetworkUsageProvider.AdapterFactory = origFactory;
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+        }
+    }
 }

@@ -96,6 +96,9 @@ var
     DownloadPage: TDownloadWizardPage;
     DotNetDownloaded: Boolean;
     RequiresReboot: Boolean;
+    UninstallChkSettings: TNewCheckBox;
+    UninstallChkTraffic: TNewCheckBox;
+    UninstallChkLogs: TNewCheckBox;
 
 function CreateStartupTask: Boolean;
 var
@@ -364,12 +367,32 @@ begin
     end;
 end;
 
+procedure ToggleUninstallSettings(Sender: TObject);
+begin
+    if Assigned(UninstallChkSettings) then
+        UninstallChkSettings.Checked := not UninstallChkSettings.Checked;
+end;
+
+procedure ToggleUninstallTraffic(Sender: TObject);
+begin
+    if Assigned(UninstallChkTraffic) then
+        UninstallChkTraffic.Checked := not UninstallChkTraffic.Checked;
+end;
+
+procedure ToggleUninstallLogs(Sender: TObject);
+begin
+    if Assigned(UninstallChkLogs) then
+        UninstallChkLogs.Checked := not UninstallChkLogs.Checked;
+end;
+
 function PromptUserDataCleanup(ProfileCount: Integer; out RemoveSettings, RemoveTraffic, RemoveLogs: Boolean): Boolean;
 var
     Form: TSetupForm;
     LblTitle, LblPrompt: TLabel;
-    ChkSettings, ChkTraffic, ChkLogs: TNewCheckBox;
+    LblSettingsDesc, LblTrafficDesc, LblLogsDesc: TLabel;
+    BottomSep: TBevel;
     BtnRemove, BtnSkip: TNewButton;
+    PadX, ContentW: Integer;
 begin
     Result := False;
     RemoveSettings := False;
@@ -379,16 +402,26 @@ begin
     if UninstallSilent then
         Exit;
 
-    Form := CreateCustomForm(ScaleX(490), ScaleY(240), False, False);
+    Form := CreateCustomForm(ScaleX(480), ScaleY(260), False, False);
     try
         Form.Caption := 'LocalTelemetry Uninstall';
         Form.Position := poScreenCenter;
+        Form.BorderStyle := bsDialog;
+        Form.ClientWidth := ScaleX(480);
+        Form.ClientHeight := ScaleY(260);
 
+        PadX := ScaleX(20);
+        ContentW := Form.ClientWidth - (PadX * 2);
+
+        // Header Title
         LblTitle := TLabel.Create(Form);
         LblTitle.Parent := Form;
-        LblTitle.Left := ScaleX(20);
+        LblTitle.AutoSize := False;
+        LblTitle.Left := PadX;
         LblTitle.Top := ScaleY(16);
-        LblTitle.Width := ScaleX(450);
+        LblTitle.Width := ContentW;
+        LblTitle.Height := ScaleY(20);
+        LblTitle.Font.Name := 'Segoe UI';
         LblTitle.Font.Size := 10;
         LblTitle.Font.Style := [fsBold];
         if ProfileCount > 1 then
@@ -396,66 +429,149 @@ begin
         else
             LblTitle.Caption := 'Clean up application data and preferences?';
 
+        // Header Subtitle
         LblPrompt := TLabel.Create(Form);
         LblPrompt.Parent := Form;
-        LblPrompt.Left := ScaleX(20);
-        LblPrompt.Top := ScaleY(44);
-        LblPrompt.Width := ScaleX(450);
-        LblPrompt.WordWrap := True;
-        LblPrompt.Caption := 'Select the items you want to permanently delete. Unchecked items will be kept:';
+        LblPrompt.AutoSize := False;
+        LblPrompt.Left := PadX;
+        LblPrompt.Top := ScaleY(38);
+        LblPrompt.Width := ContentW;
+        LblPrompt.Height := ScaleY(18);
+        LblPrompt.Font.Name := 'Segoe UI';
+        LblPrompt.Font.Size := 9;
+        LblPrompt.Font.Color := $555555;
+        LblPrompt.Caption := 'Select the items you want to permanently delete from this computer:';
 
-        ChkSettings := TNewCheckBox.Create(Form);
-        ChkSettings.Parent := Form;
-        ChkSettings.Left := ScaleX(24);
-        ChkSettings.Top := ScaleY(80);
-        ChkSettings.Width := ScaleX(446);
-        ChkSettings.Caption := 'Application Settings (overlay layout, custom alerts, preferences)';
-        ChkSettings.Checked := True;
+        // 1. Settings Item
+        UninstallChkSettings := TNewCheckBox.Create(Form);
+        UninstallChkSettings.Parent := Form;
+        UninstallChkSettings.Left := PadX;
+        UninstallChkSettings.Top := ScaleY(68);
+        UninstallChkSettings.Width := ContentW;
+        UninstallChkSettings.Height := ScaleY(20);
+        UninstallChkSettings.Font.Name := 'Segoe UI';
+        UninstallChkSettings.Font.Size := 9;
+        UninstallChkSettings.Font.Style := [fsBold];
+        UninstallChkSettings.Caption := 'Application Settings && Preferences';
+        UninstallChkSettings.Checked := True;
 
-        ChkTraffic := TNewCheckBox.Create(Form);
-        ChkTraffic.Parent := Form;
-        ChkTraffic.Left := ScaleX(24);
-        ChkTraffic.Top := ScaleY(110);
-        ChkTraffic.Width := ScaleX(446);
-        ChkTraffic.Caption := 'Traffic History (recorded daily and monthly bandwidth totals)';
-        ChkTraffic.Checked := False; // Preserved by default to prevent accidental data loss
+        LblSettingsDesc := TLabel.Create(Form);
+        LblSettingsDesc.Parent := Form;
+        LblSettingsDesc.AutoSize := False;
+        LblSettingsDesc.Left := PadX + ScaleX(20);
+        LblSettingsDesc.Top := ScaleY(88);
+        LblSettingsDesc.Width := ContentW - ScaleX(20);
+        LblSettingsDesc.Height := ScaleY(16);
+        LblSettingsDesc.Font.Name := 'Segoe UI';
+        LblSettingsDesc.Font.Size := 8;
+        LblSettingsDesc.Font.Color := $666666;
+        LblSettingsDesc.Cursor := crHandPoint;
+        LblSettingsDesc.Caption := 'Overlay layout, custom themes, hardware sensor alerts, and preferences';
+        LblSettingsDesc.OnClick := @ToggleUninstallSettings;
 
-        ChkLogs := TNewCheckBox.Create(Form);
-        ChkLogs.Parent := Form;
-        ChkLogs.Left := ScaleX(24);
-        ChkLogs.Top := ScaleY(140);
-        ChkLogs.Width := ScaleX(446);
-        ChkLogs.Caption := 'Cache & Diagnostic Logs (WebView2 cache, temporary files, logs)';
-        ChkLogs.Checked := True;
+        // 2. Traffic History Item
+        UninstallChkTraffic := TNewCheckBox.Create(Form);
+        UninstallChkTraffic.Parent := Form;
+        UninstallChkTraffic.Left := PadX;
+        UninstallChkTraffic.Top := ScaleY(112);
+        UninstallChkTraffic.Width := ContentW;
+        UninstallChkTraffic.Height := ScaleY(20);
+        UninstallChkTraffic.Font.Name := 'Segoe UI';
+        UninstallChkTraffic.Font.Size := 9;
+        UninstallChkTraffic.Font.Style := [fsBold];
+        UninstallChkTraffic.Caption := 'Network Traffic History';
+        UninstallChkTraffic.Checked := False; // Preserved by default
 
-        BtnRemove := TNewButton.Create(Form);
-        BtnRemove.Parent := Form;
-        BtnRemove.Left := ScaleX(245);
-        BtnRemove.Top := ScaleY(190);
-        BtnRemove.Width := ScaleX(120);
-        BtnRemove.Height := ScaleY(28);
-        BtnRemove.Caption := 'Remove Selected';
-        BtnRemove.ModalResult := mrOk;
-        BtnRemove.Default := True;
+        LblTrafficDesc := TLabel.Create(Form);
+        LblTrafficDesc.Parent := Form;
+        LblTrafficDesc.AutoSize := False;
+        LblTrafficDesc.Left := PadX + ScaleX(20);
+        LblTrafficDesc.Top := ScaleY(132);
+        LblTrafficDesc.Width := ContentW - ScaleX(20);
+        LblTrafficDesc.Height := ScaleY(16);
+        LblTrafficDesc.Font.Name := 'Segoe UI';
+        LblTrafficDesc.Font.Size := 8;
+        LblTrafficDesc.Font.Color := $666666;
+        LblTrafficDesc.Cursor := crHandPoint;
+        LblTrafficDesc.Caption := 'Recorded daily and monthly network bandwidth consumption databases';
+        LblTrafficDesc.OnClick := @ToggleUninstallTraffic;
 
+        // 3. Cache & Logs Item
+        UninstallChkLogs := TNewCheckBox.Create(Form);
+        UninstallChkLogs.Parent := Form;
+        UninstallChkLogs.Left := PadX;
+        UninstallChkLogs.Top := ScaleY(156);
+        UninstallChkLogs.Width := ContentW;
+        UninstallChkLogs.Height := ScaleY(20);
+        UninstallChkLogs.Font.Name := 'Segoe UI';
+        UninstallChkLogs.Font.Size := 9;
+        UninstallChkLogs.Font.Style := [fsBold];
+        UninstallChkLogs.Caption := 'Cache && Diagnostic Logs';
+        UninstallChkLogs.Checked := True;
+
+        LblLogsDesc := TLabel.Create(Form);
+        LblLogsDesc.Parent := Form;
+        LblLogsDesc.AutoSize := False;
+        LblLogsDesc.Left := PadX + ScaleX(20);
+        LblLogsDesc.Top := ScaleY(176);
+        LblLogsDesc.Width := ContentW - ScaleX(20);
+        LblLogsDesc.Height := ScaleY(16);
+        LblLogsDesc.Font.Name := 'Segoe UI';
+        LblLogsDesc.Font.Size := 8;
+        LblLogsDesc.Font.Color := $666666;
+        LblLogsDesc.Cursor := crHandPoint;
+        LblLogsDesc.Caption := 'WebView2 runtime cache, temporary session files, and crash logs';
+        LblLogsDesc.OnClick := @ToggleUninstallLogs;
+
+        // Bottom Separator Line (full width edge-to-edge)
+        BottomSep := TBevel.Create(Form);
+        BottomSep.Parent := Form;
+        BottomSep.Left := 0;
+        BottomSep.Top := ScaleY(206);
+        BottomSep.Width := Form.ClientWidth;
+        BottomSep.Height := ScaleY(1);
+        BottomSep.Shape := bsTopLine;
+
+        // Action Buttons
         BtnSkip := TNewButton.Create(Form);
         BtnSkip.Parent := Form;
-        BtnSkip.Left := ScaleX(375);
-        BtnSkip.Top := ScaleY(190);
-        BtnSkip.Width := ScaleX(95);
-        BtnSkip.Height := ScaleY(28);
+        BtnSkip.Width := ScaleX(85);
+        BtnSkip.Height := ScaleY(26);
+        BtnSkip.Left := Form.ClientWidth - PadX - BtnSkip.Width;
+        BtnSkip.Top := ScaleY(220);
+        BtnSkip.Font.Name := 'Segoe UI';
+        BtnSkip.Font.Size := 9;
         BtnSkip.Caption := 'Keep All';
         BtnSkip.ModalResult := mrCancel;
         BtnSkip.Cancel := True;
 
+        // Primary Action Button (Default Highlight): Remove Selected
+        BtnRemove := TNewButton.Create(Form);
+        BtnRemove.Parent := Form;
+        BtnRemove.Width := ScaleX(125);
+        BtnRemove.Height := ScaleY(26);
+        BtnRemove.Left := BtnSkip.Left - ScaleX(8) - BtnRemove.Width;
+        BtnRemove.Top := ScaleY(220);
+        BtnRemove.Font.Name := 'Segoe UI';
+        BtnRemove.Font.Size := 9;
+        BtnRemove.Caption := 'Remove Selected';
+        BtnRemove.ModalResult := mrOk;
+        BtnRemove.Default := True;
+
+        // Give initial focus to the primary button so Windows highlights it as default
+        Form.ActiveControl := BtnRemove;
+
         if Form.ShowModal = mrOk then
         begin
-            RemoveSettings := ChkSettings.Checked;
-            RemoveTraffic := ChkTraffic.Checked;
-            RemoveLogs := ChkLogs.Checked;
+            RemoveSettings := UninstallChkSettings.Checked;
+            RemoveTraffic := UninstallChkTraffic.Checked;
+            RemoveLogs := UninstallChkLogs.Checked;
             Result := RemoveSettings or RemoveTraffic or RemoveLogs;
         end;
     finally
+        UninstallChkSettings := nil;
+        UninstallChkTraffic := nil;
+        UninstallChkLogs := nil;
         Form.Free;
     end;
 end;

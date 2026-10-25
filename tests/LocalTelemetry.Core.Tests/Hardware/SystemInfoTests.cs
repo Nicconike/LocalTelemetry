@@ -2432,8 +2432,85 @@ public class SystemInfoTests
         string rootStr = (string)queryRootStr.Invoke(null, ["NonExistentClass", "NonExistentProp"])!;
         rootStr.Should().BeEmpty();
 
-        var queryRootInt = typeof(SystemInfo).GetMethod("QueryRootWmiInt", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var queryRootInt = typeof(SystemInfo).GetMethod("QueryRootInt", BindingFlags.NonPublic | BindingFlags.Static)
+            ?? typeof(SystemInfo).GetMethod("QueryRootWmiInt", BindingFlags.NonPublic | BindingFlags.Static)!;
         int rootInt = (int)queryRootInt.Invoke(null, ["NonExistentClass", "NonExistentProp"])!;
         rootInt.Should().Be(0);
+    }
+
+    [Fact]
+    public void SystemInfo_CpuSocket_And_SystemProduct_And_RamType_Coverage()
+    {
+        // 1. GetCpuSocket with cleared cache
+        var socketCacheField = typeof(SystemInfo).GetField("_cpuSocketCache", BindingFlags.NonPublic | BindingFlags.Static)!;
+        socketCacheField.SetValue(null, null);
+        string socket = SystemInfo.GetCpuSocket();
+        socket.Should().NotBeNull();
+
+        // 2. DeriveSocketFromCpuName and CpuIdSocketLookup
+        var deriveSocket = typeof(SystemInfo).GetMethod("DeriveSocketFromCpuName", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var actDerive = () => deriveSocket.Invoke(null, null);
+        actDerive.Should().NotThrow();
+
+        var cpuidSocket = typeof(SystemInfo).GetMethod("CpuIdSocketLookup", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var actCpuid = () => cpuidSocket.Invoke(null, null);
+        actCpuid.Should().NotThrow();
+
+        // 3. Thread and core count methods
+        SystemInfo.GetCpuThreadCount().Should().BeGreaterThan(0);
+        SystemInfo.GetCpuCoreCount().Should().BeGreaterThanOrEqualTo(0);
+
+        // 4. System manufacturer and product name
+        SystemInfo.GetSystemManufacturer().Should().NotBeNull();
+        SystemInfo.GetSystemProductName().Should().NotBeNull();
+
+        // 5. Memory queries
+        var queryRamWmi = typeof(SystemInfo).GetMethod("QueryRamTypeWmi", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var ramWmi = (string)queryRamWmi.Invoke(null, null)!;
+        ramWmi.Should().NotBeNull();
+
+        var queryRamSmbios = typeof(SystemInfo).GetMethod("QueryRamTypeSmbios", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var ramSmbios = (string)queryRamSmbios.Invoke(null, null)!;
+        ramSmbios.Should().NotBeNull();
+
+        // 6. Registry processor speed
+        var querySpeed = typeof(SystemInfo).GetMethod("QueryRegistryProcessorSpeed", BindingFlags.NonPublic | BindingFlags.Static)!;
+        int speed = (int)querySpeed.Invoke(null, null)!;
+        speed.Should().BeGreaterThanOrEqualTo(0);
+
+        // 7. WMI error handling paths
+        var queryWmiFirst = typeof(SystemInfo).GetMethod("QueryWmiFirst", BindingFlags.NonPublic | BindingFlags.Static)!;
+        ((string)queryWmiFirst.Invoke(null, ["SELECT InvalidProp FROM Win32_NonExistentClassTest", "InvalidProp"])!).Should().BeEmpty();
+
+        var queryWmiFirstInt = typeof(SystemInfo).GetMethod("QueryWmiFirstInt", BindingFlags.NonPublic | BindingFlags.Static)!;
+        ((int)queryWmiFirstInt.Invoke(null, ["SELECT InvalidProp FROM Win32_NonExistentClassTest", "InvalidProp"])!).Should().Be(0);
+
+        var queryRootWmiString = typeof(SystemInfo).GetMethod("QueryRootWmiString", BindingFlags.NonPublic | BindingFlags.Static)!;
+        ((string)queryRootWmiString.Invoke(null, ["NonExistentClassTest", "Prop"])!).Should().BeEmpty();
+
+        var queryRootWmiInt = typeof(SystemInfo).GetMethod("QueryRootWmiInt", BindingFlags.NonPublic | BindingFlags.Static)!;
+        ((int)queryRootWmiInt.Invoke(null, ["NonExistentClassTest", "Prop"])!).Should().Be(0);
+
+        // 8. Power, CPU speed, and disk queries
+        var queryNtPower = typeof(SystemInfo).GetMethod("QueryNtPowerMaxMhz", BindingFlags.NonPublic | BindingFlags.Static)!;
+        ((int)queryNtPower.Invoke(null, null)!).Should().BeGreaterThanOrEqualTo(0);
+
+        var queryCpuidSpeed = typeof(SystemInfo).GetMethod("QueryCpuMaxSpeedCpuid", BindingFlags.NonPublic | BindingFlags.Static)!;
+        ((int)queryCpuidSpeed.Invoke(null, null)!).Should().BeGreaterThanOrEqualTo(0);
+
+        SystemInfo.GetDiskManufacturer().Should().NotBeNull();
+        SystemInfo.GetAllDisks().Should().NotBeNull();
+
+        // 9. Battery detail fallback branches
+        var hasBatField = typeof(SystemInfo).GetField("_hasBatteryCache", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var mfrField = typeof(SystemInfo).GetField("_batteryManufacturerCache", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var nameField = typeof(SystemInfo).GetField("_batteryDeviceNameCache", BindingFlags.NonPublic | BindingFlags.Static)!;
+        hasBatField.SetValue(null, true);
+        mfrField.SetValue(null, null);
+        nameField.SetValue(null, null);
+
+        SystemInfo.GetBatteryManufacturer().Should().NotBeNull();
+        SystemInfo.GetBatteryDeviceName().Should().NotBeNull();
+        SystemInfo.GetBatteryDesignCapacity().Should().NotBeNull();
     }
 }
