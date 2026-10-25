@@ -757,4 +757,39 @@ public class WindowsNetworkUsageProviderTests
             DateTimeOffset start, DateTimeOffset end, Windows.Networking.Connectivity.DataUsageGranularity granularity) =>
             usageFunc(start, end, granularity);
     }
+
+    [Fact]
+    public void WindowsNetworkUsageProvider_ClampImportRange_And_MergeRecords_Coverage()
+    {
+        // 1. ClampImportRange reflection
+        var clampMethod = typeof(WindowsNetworkUsageProvider).GetMethod("ClampImportRange", BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        // Future date clamped to today, older date clamped to 60 days
+        var future = DateTime.Today.AddDays(10);
+        var ancient = DateTime.Today.AddDays(-100);
+        var (start, end) = ((DateTime, DateTime))clampMethod.Invoke(null, [ancient, future])!;
+        start.Should().Be(DateTime.Today.AddDays(-60));
+        end.Should().Be(DateTime.Today);
+
+        // 2. MergeRecords with zero and non-zero records
+        var mergeMethod = typeof(WindowsNetworkUsageProvider).GetMethod("MergeRecords", BindingFlags.NonPublic | BindingFlags.Static)!;
+        string tempPath = Path.Combine(Path.GetTempPath(), $"TrafficMerge_{Guid.NewGuid():N}.dat");
+        var historyFile = new TrafficHistoryFile(tempPath);
+
+        try
+        {
+            var zeroRec = new WindowsNetworkUsageRecord { Date = "01-08-2026", InterfaceType = "Ethernet", DownBytes = 0, UpBytes = 0 };
+            var nonZeroRec = new WindowsNetworkUsageRecord { Date = "02-08-2026", InterfaceType = "WiFi", DownBytes = 2048, UpBytes = 1024 };
+            var daysSet = new HashSet<string>();
+
+            var (down, up) = ((long, long))mergeMethod.Invoke(null, [historyFile, new List<WindowsNetworkUsageRecord> { zeroRec, nonZeroRec }, daysSet])!;
+            down.Should().Be(2048);
+            up.Should().Be(1024);
+            daysSet.Should().Contain("02-08-2026");
+        }
+        finally
+        {
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+        }
+    }
 }

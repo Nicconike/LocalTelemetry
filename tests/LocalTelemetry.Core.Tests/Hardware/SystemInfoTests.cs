@@ -2397,6 +2397,43 @@ public class SystemInfoTests
             smbiosField.SetValue(null, origSmbios);
         }
     }
+
+    [Fact]
+    public void SystemInfo_BatteryAndWmiMethods_DetailedCoverage()
+    {
+        // 1. Battery query methods
+        SystemInfo.GetBatteryManufacturer().Should().NotBeNull();
+        SystemInfo.GetBatteryDeviceName().Should().NotBeNull();
+        SystemInfo.GetBatteryDesignCapacity().Should().NotBeNull();
+        SystemInfo.GetBatteryFullChargedCapacity().Should().NotBeNull();
+
+        // 2. Disk model, manufacturer, and all disks
+        SystemInfo.GetDiskModel().Should().NotBeNull();
+        SystemInfo.GetDiskManufacturer().Should().NotBeNull();
+        var disks = SystemInfo.GetAllDisks();
+        disks.Should().NotBeNull();
+
+        // 3. WMI helper reflection
+        var queryWmiFirst = typeof(SystemInfo).GetMethod("QueryWmiFirst", BindingFlags.NonPublic | BindingFlags.Static)!;
+        string resFirst = (string)queryWmiFirst.Invoke(null, ["SELECT Caption FROM Win32_OperatingSystem", "Caption"])!;
+        resFirst.Should().NotBeEmpty();
+
+        var queryWmiFirstInt = typeof(SystemInfo).GetMethod("QueryWmiFirstInt", BindingFlags.NonPublic | BindingFlags.Static)!;
+        int resInt = (int)queryWmiFirstInt.Invoke(null, ["SELECT TotalPhysicalMemory FROM Win32_ComputerSystem", "TotalPhysicalMemory"])!;
+        (resInt >= 0).Should().BeTrue();
+
+        var tryParseInt = typeof(SystemInfo).GetMethod("TryParseWmiInt", BindingFlags.NonPublic | BindingFlags.Static)!;
+        ((int)tryParseInt.Invoke(null, [null])!).Should().Be(0);
+        ((int)tryParseInt.Invoke(null, [""])!).Should().Be(0);
+        ((int)tryParseInt.Invoke(null, ["-5"])!).Should().Be(0);
+        ((int)tryParseInt.Invoke(null, ["42"])!).Should().Be(42);
+
+        var queryRootStr = typeof(SystemInfo).GetMethod("QueryRootWmiString", BindingFlags.NonPublic | BindingFlags.Static)!;
+        string rootStr = (string)queryRootStr.Invoke(null, ["NonExistentClass", "NonExistentProp"])!;
+        rootStr.Should().BeEmpty();
+
+        var queryRootInt = typeof(SystemInfo).GetMethod("QueryRootWmiInt", BindingFlags.NonPublic | BindingFlags.Static)!;
+        int rootInt = (int)queryRootInt.Invoke(null, ["NonExistentClass", "NonExistentProp"])!;
+        rootInt.Should().Be(0);
+    }
 }
-
-

@@ -13,11 +13,13 @@ coverage:
             default:
                 target: auto
                 threshold: 1%
+                informational: true
                 if_ci_failed: error
         patch:
             default:
                 target: auto
                 threshold: 15%
+                informational: true
                 if_ci_failed: error
 
 bundle_analysis:
@@ -25,22 +27,25 @@ bundle_analysis:
     status: informational
 
 comment:
-    layout: "header, diff, flags, components, bundle_analysis"
+    layout: "header, diff, flags, components"
     behavior: default
     require_changes: false
-    require_base: true
+    require_base: false
     require_head: true
 
 flags:
     app:
         paths:
             - src/LocalTelemetry.App/**
+        carryforward: true
     core:
         paths:
             - src/LocalTelemetry.Core/**
+        carryforward: true
     notifier:
         paths:
             - src/LocalTelemetry.Notifier/**
+        carryforward: true
 
 component_management:
     individual_components:

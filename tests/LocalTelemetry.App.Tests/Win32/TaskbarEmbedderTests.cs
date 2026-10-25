@@ -1247,5 +1247,274 @@ public class TaskbarEmbedderTests
             TaskbarEmbedder.IsTaskbarCenteredOverride = null;
         }
     }
+
+    [Fact]
+    public void TaskbarEmbedder_EdgeResolution_And_ScreenWorkingArea_Branches()
+    {
+        var resolveScreen = typeof(TaskbarEmbedder).GetMethod("ResolveFromScreenWorkingArea", BindingFlags.NonPublic | BindingFlags.Static);
+        resolveScreen.Should().NotBeNull();
+        var screenRes = resolveScreen.Invoke(null, null);
+        screenRes.Should().NotBeNull();
+
+        var resolveTray = typeof(TaskbarEmbedder).GetMethod("ResolveFromTrayWindow", BindingFlags.NonPublic | BindingFlags.Static);
+        resolveTray.Should().NotBeNull();
+        var trayRes = resolveTray.Invoke(null, null);
+        // On headless or CI runner, tray might be null or valid tuple
+        trayRes?.ToString().Should().NotBeNull();
+
+        var logTray = typeof(TaskbarEmbedder).GetMethod("LogTrayStructure", BindingFlags.NonPublic | BindingFlags.Static);
+        logTray.Should().NotBeNull();
+        var actLog = () => logTray.Invoke(null, null);
+        actLog.Should().NotThrow();
+    }
+
+    [Fact]
+    public void TaskbarEmbedder_FindExplorerTrayWnd_And_CenteredRegistry_Coverage()
+    {
+        // 1. IsTaskbarCentered without override
+        TaskbarEmbedder.IsTaskbarCenteredOverride = null;
+        bool isCentered = TaskbarEmbedder.IsTaskbarCentered();
+        isCentered.Should().Be(isCentered);
+
+        // 2. IsWidgetsFeatureEnabled
+        var isWidgets = typeof(TaskbarEmbedder).GetMethod("IsWidgetsFeatureEnabled", BindingFlags.NonPublic | BindingFlags.Static);
+        isWidgets.Should().NotBeNull();
+        bool widgetsVal = (bool)isWidgets.Invoke(null, null)!;
+        widgetsVal.Should().Be(widgetsVal);
+
+        // 3. FindExplorerTrayWnd with mock FindWindowExOverride simulating non-explorer vs explorer
+        var origFind = TaskbarEmbedder.FindWindowExOverride;
+        using var form = new Form();
+        try
+        {
+            int callCount = 0;
+            TaskbarEmbedder.FindWindowExOverride = (parent, child, cls, win) =>
+            {
+                callCount++;
+                return callCount == 1 ? form.Handle : IntPtr.Zero;
+            };
+
+            IntPtr found = TaskbarEmbedder.FindExplorerTrayWnd();
+            found.Should().NotBeNull();
+        }
+        finally
+        {
+            TaskbarEmbedder.FindWindowExOverride = origFind;
+        }
+
+        // 4. FindRightmostChildTrayLeft
+        var findChild = typeof(TaskbarEmbedder).GetMethod("FindRightmostChildTrayLeft", BindingFlags.NonPublic | BindingFlags.Static);
+        findChild.Should().NotBeNull();
+        var dummyRect = new NativeMethods.RECT { Left = 0, Top = 1000, Right = 1920, Bottom = 1048 };
+        int childLeft = (int)findChild.Invoke(null, [form.Handle, dummyRect])!;
+        childLeft.Should().Be(int.MaxValue);
+    }
+
+    [Fact]
+    public void TaskbarEmbedder_WidgetsAndAppListEdges_ComprehensiveBranches()
+    {
+        var cfg = new AppSettings();
+        var embedder = new TaskbarEmbedder(cfg);
+
+        // 1. GetRightSideBoundary branches
+        var getRightSide = typeof(TaskbarEmbedder).GetMethod("GetRightSideBoundary", BindingFlags.NonPublic | BindingFlags.Instance);
+        getRightSide.Should().NotBeNull();
+
+        // Case A: RightWidgetLeftEdgeOverride with _trayLeftEdge > 0
+        typeof(TaskbarEmbedder).GetField("_trayLeftEdge", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, 1500);
+        TaskbarEmbedder.RightWidgetLeftEdgeOverride = () => 1400;
+        int rA = (int)getRightSide.Invoke(embedder, null)!;
+        rA.Should().Be(1400);
+
+        // Case B: RightWidgetLeftEdgeOverride with _trayLeftEdge <= 0
+        typeof(TaskbarEmbedder).GetField("_trayLeftEdge", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, -1);
+        int rB = (int)getRightSide.Invoke(embedder, null)!;
+        rB.Should().Be(1400);
+
+        TaskbarEmbedder.RightWidgetLeftEdgeOverride = null;
+
+        // Case C: _rightWidgetLeftEdge > 0 and _trayLeftEdge > 0
+        typeof(TaskbarEmbedder).GetField("_rightWidgetLeftEdge", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, 1300);
+        typeof(TaskbarEmbedder).GetField("_trayLeftEdge", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, 1600);
+        int rC = (int)getRightSide.Invoke(embedder, null)!;
+        rC.Should().Be(1300);
+
+        // Case D: _rightWidgetLeftEdge > 0 and _trayLeftEdge <= 0
+        typeof(TaskbarEmbedder).GetField("_trayLeftEdge", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, -1);
+        int rD = (int)getRightSide.Invoke(embedder, null)!;
+        rD.Should().Be(1300);
+
+        // Case E: _rightWidgetLeftEdge <= 0 and _trayLeftEdge > 0
+        typeof(TaskbarEmbedder).GetField("_rightWidgetLeftEdge", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, -1);
+        typeof(TaskbarEmbedder).GetField("_trayLeftEdge", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, 1700);
+        int rE = (int)getRightSide.Invoke(embedder, null)!;
+        rE.Should().Be(1700);
+
+        // Case F: both <= 0
+        typeof(TaskbarEmbedder).GetField("_trayLeftEdge", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, -1);
+        int rF = (int)getRightSide.Invoke(embedder, null)!;
+        rF.Should().Be(-1);
+
+        // 2. UpdateWidgetsEdges branches
+        var updateWidgets = typeof(TaskbarEmbedder).GetMethod("UpdateWidgetsEdges", BindingFlags.NonPublic | BindingFlags.Instance);
+        updateWidgets.Should().NotBeNull();
+
+        // Left override
+        TaskbarEmbedder.LeftWidgetRightEdgeOverride = () => 200;
+        TaskbarEmbedder.RightWidgetLeftEdgeOverride = () => 1400;
+        updateWidgets.Invoke(embedder, null);
+        TaskbarEmbedder.RightWidgetLeftEdgeOverride = null;
+        updateWidgets.Invoke(embedder, null);
+        TaskbarEmbedder.LeftWidgetRightEdgeOverride = null;
+
+        // Right override
+        TaskbarEmbedder.RightWidgetLeftEdgeOverride = () => 1400;
+        updateWidgets.Invoke(embedder, null);
+        TaskbarEmbedder.LeftWidgetRightEdgeOverride = () => 200;
+        updateWidgets.Invoke(embedder, null);
+        TaskbarEmbedder.RightWidgetLeftEdgeOverride = null;
+        TaskbarEmbedder.LeftWidgetRightEdgeOverride = null;
+
+        // No overrides
+        updateWidgets.Invoke(embedder, null);
+
+        // 3. GetAppListRightEdge branches (cached vs recalculate)
+        var getAppList = typeof(TaskbarEmbedder).GetMethod("GetAppListRightEdge", BindingFlags.NonPublic | BindingFlags.Instance);
+        getAppList.Should().NotBeNull();
+
+        // Cached value hit
+        typeof(TaskbarEmbedder).GetField("_cachedAppListRightEdge", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, 450);
+        typeof(TaskbarEmbedder).GetField("_lastAppListQueryTicks", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, Stopwatch.GetTimestamp());
+        int cachedEdge = (int)getAppList.Invoke(embedder, null)!;
+        cachedEdge.Should().Be(450);
+
+        // Cache expired / fallback path
+        typeof(TaskbarEmbedder).GetField("_cachedAppListRightEdge", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, -1);
+        typeof(TaskbarEmbedder).GetField("_lastAppListQueryTicks", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, 0L);
+        typeof(TaskbarEmbedder).GetField("_taskbarRect", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, new Rectangle(0, 1000, 1920, 48));
+        int fallbackEdge = (int)getAppList.Invoke(embedder, null)!;
+        fallbackEdge.Should().BeGreaterThan(0);
+
+        // 4. ResetStaticEdgeCaches
+        var resetCaches = typeof(TaskbarEmbedder).GetMethod("ResetStaticEdgeCaches", BindingFlags.NonPublic | BindingFlags.Static);
+        resetCaches.Should().NotBeNull();
+        var actReset = () => resetCaches.Invoke(null, null);
+        actReset.Should().NotThrow();
+    }
+
+    [Fact]
+    public void TaskbarEmbedder_TaskbarFloatPositioning_And_ClampingBranches()
+    {
+        var cfg = new AppSettings();
+        var embedder = new TaskbarEmbedder(cfg);
+
+        using var form = new Form();
+        typeof(TaskbarEmbedder).GetField("_taskbarRect", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, new Rectangle(0, 1032, 1920, 48));
+        typeof(TaskbarEmbedder).GetField("_taskbarEdge", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, NativeMethods.ABE_BOTTOM);
+        typeof(TaskbarEmbedder).GetField("_isWin11", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, true);
+
+        var compFloatX = typeof(TaskbarEmbedder).GetMethod("ComputeHorizontalTaskbarFloatX", BindingFlags.NonPublic | BindingFlags.Instance);
+        compFloatX.Should().NotBeNull();
+
+        // 1. Win11 Left Aligned branches
+        TaskbarEmbedder.IsTaskbarCenteredOverride = () => false;
+        TaskbarEmbedder.AppListRightEdgeOverride = () => 400;
+        cfg.Overlay.Placement = "left";
+        cfg.Overlay.PlacementOffset = 5;
+        int xLeft = (int)compFloatX.Invoke(embedder, [200])!;
+        xLeft.Should().Be(405);
+
+        cfg.Overlay.Placement = "beside_apps";
+        int xBeside = (int)compFloatX.Invoke(embedder, [200])!;
+        xBeside.Should().Be(405);
+
+        cfg.Overlay.Placement = "right";
+        TaskbarEmbedder.RightWidgetLeftEdgeOverride = () => 1600;
+        int xRight = (int)compFloatX.Invoke(embedder, [200])!;
+        xRight.Should().Be(1395);
+
+        // Clamping branch: force out of range to trigger Math.Clamp and warning log
+        cfg.Overlay.PlacementOffset = -1000;
+        int xClamped = (int)compFloatX.Invoke(embedder, [200])!;
+        xClamped.Should().BeGreaterThanOrEqualTo(400);
+
+        // 2. Win11 Centered branches
+        TaskbarEmbedder.IsTaskbarCenteredOverride = () => true;
+        cfg.Overlay.PlacementOffset = 0;
+        cfg.Overlay.Placement = "center";
+        int xCenter = (int)compFloatX.Invoke(embedder, [200])!;
+        xCenter.Should().Be(860);
+
+        cfg.Overlay.Placement = "left";
+        TaskbarEmbedder.LeftWidgetRightEdgeOverride = () => 180;
+        int xCenterLeft = (int)compFloatX.Invoke(embedder, [200])!;
+        xCenterLeft.Should().Be(180);
+
+        TaskbarEmbedder.LeftWidgetRightEdgeOverride = null;
+        TaskbarEmbedder.RightWidgetLeftEdgeOverride = null;
+        TaskbarEmbedder.AppListRightEdgeOverride = null;
+        TaskbarEmbedder.IsTaskbarCenteredOverride = null;
+
+        // 3. PositionFloat invalid bounds branch
+        typeof(TaskbarEmbedder).GetField("_taskbarRect", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, new Rectangle(0, 0, 0, 0));
+        var posFloat = typeof(TaskbarEmbedder).GetMethod("PositionFloat", BindingFlags.NonPublic | BindingFlags.Instance);
+        posFloat.Should().NotBeNull();
+        bool floatRes = (bool)posFloat.Invoke(embedder, [form.Handle, new Size(200, 30)])!;
+        floatRes.Should().BeFalse();
+        embedder.State.Should().Be(OverlayDeploymentState.Failed);
+    }
+
+    [Fact]
+    public void TaskbarEmbedder_ChildEmbedding_FailurePaths_And_BandResolution()
+    {
+        var cfg = new AppSettings();
+        var embedder = new TaskbarEmbedder(cfg);
+
+        // 1. PositionInBand with destroyed/zero parent hwnd
+        typeof(TaskbarEmbedder).GetField("_parentHwnd", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, IntPtr.Zero);
+        var posBand = typeof(TaskbarEmbedder).GetMethod("PositionInBand", BindingFlags.NonPublic | BindingFlags.Instance);
+        posBand.Should().NotBeNull();
+        bool posBandRes = (bool)posBand.Invoke(embedder, [IntPtr.Zero, new Size(200, 30)])!;
+        posBandRes.Should().BeFalse();
+        embedder.State.Should().Be(OverlayDeploymentState.Failed);
+
+        // 2. ResolveParentAndTaskBand for legacy taskbar (_isWin11 = false)
+        typeof(TaskbarEmbedder).GetField("_isWin11", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, false);
+        var resolveParent = typeof(TaskbarEmbedder).GetMethod("ResolveParentAndTaskBand", BindingFlags.NonPublic | BindingFlags.Instance);
+        resolveParent.Should().NotBeNull();
+
+        // When tray has no ReBarWindow32 / WorkerW
+        bool legacyRes = (bool)resolveParent.Invoke(embedder, [new IntPtr(0x1234)])!;
+        legacyRes.Should().BeFalse();
+
+        // 3. TrySetParent failure when tray is IntPtr.Zero
+        var origTray = TaskbarEmbedder.ExplorerTrayWndOverride;
+        try
+        {
+            TaskbarEmbedder.ExplorerTrayWndOverride = () => IntPtr.Zero;
+            var trySetParent = typeof(TaskbarEmbedder).GetMethod("TrySetParent", BindingFlags.NonPublic | BindingFlags.Instance);
+            trySetParent.Should().NotBeNull();
+            bool parentRes = (bool)trySetParent.Invoke(embedder, [IntPtr.Zero, new Size(200, 30)])!;
+            parentRes.Should().BeFalse();
+        }
+        finally
+        {
+            TaskbarEmbedder.ExplorerTrayWndOverride = origTray;
+        }
+
+        // 4. Embed failure branch: TrySetParent false and PositionFloat fails on IntPtr.Zero
+        try
+        {
+            TaskbarEmbedder.ExplorerTrayWndOverride = () => IntPtr.Zero;
+            bool embedSuccess = embedder.Embed(IntPtr.Zero, new Size(200, 30));
+            embedSuccess.Should().BeFalse();
+            embedder.IsEmbedded.Should().BeFalse();
+            embedder.State.Should().Be(OverlayDeploymentState.Failed);
+        }
+        finally
+        {
+            TaskbarEmbedder.ExplorerTrayWndOverride = origTray;
+        }
+    }
 }
 

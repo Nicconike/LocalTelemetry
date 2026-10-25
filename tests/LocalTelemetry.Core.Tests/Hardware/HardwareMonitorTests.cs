@@ -2281,6 +2281,82 @@ public class HardwareMonitorTests
         calcNet.Invoke(monitor, [1000L, 2000L]);
         calcNet.Invoke(monitor, [3000L, 5000L]);
     }
+
+    [Fact]
+    public void HardwareMonitor_AmdSensors_FallbackToRyzenSmu_And_InitPawnIo_Branches()
+    {
+        var cfg = new AppSettings();
+        var sysInfoMock = Substitute.For<ISystemInfo>();
+        sysInfoMock.GetCpuVendor().Returns("AMD");
+        sysInfoMock.GetCpuName().Returns("AMD Ryzen 7 7800X3D");
+
+        var transportMock = Substitute.For<IPawnIoTransport>();
+        var pawnIoMock = Substitute.For<IPawnIoManager>();
+
+        // Scenario 1: AMDFamily17 fails to load, falls back to RyzenSMU
+        pawnIoMock.TryCreate().Returns(transportMock);
+        pawnIoMock.LoadResourceBytes("AMDFamily17.bin").Returns((byte[]?)null);
+        pawnIoMock.LoadResourceBytes("RyzenSMU.bin").Returns([1, 2, 3]);
+        pawnIoMock.LoadModule(transportMock, Arg.Any<byte[]>()).Returns(true);
+
+        using var monitor = new HardwareMonitor(cfg, sysInfoMock, pawnIoMock);
+
+        var initAmd = typeof(HardwareMonitor).GetMethod("InitAmdSensors", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var actAmd = () => initAmd.Invoke(monitor, [transportMock]);
+        actAmd.Should().NotThrow();
+
+        // Scenario 2: Unknown CPU Vendor
+        var setupSensors = typeof(HardwareMonitor).GetMethod("SetupCpuSensors", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        typeof(HardwareMonitor).GetField("_cpuVendor", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(monitor, "Qualcomm");
+        var actUnknownVendor = () => setupSensors.Invoke(monitor, [transportMock]);
+        actUnknownVendor.Should().NotThrow();
+
+        // Scenario 3: InitPawnIo driver failure paths
+        var pawnIoFailMock = Substitute.For<IPawnIoManager>();
+        pawnIoFailMock.TryCreate().Returns((IPawnIoTransport?)null);
+        pawnIoFailMock.StartDriverService().Returns(false);
+        pawnIoFailMock.TryInstall().Returns(false);
+
+        using var monitorFail = new HardwareMonitor(cfg, sysInfoMock, pawnIoFailMock);
+        var initPawn = typeof(HardwareMonitor).GetMethod("InitPawnIo", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var actFail = () => initPawn.Invoke(monitorFail, null);
+        actFail.Should().NotThrow();
+    }
+
+    [Fact]
+    public void HardwareMonitor_WmiCpuTemp_And_Battery_And_NicQueries()
+    {
+        // 1. ReadWmiCpuTemp reflection
+        var readWmi = typeof(HardwareMonitor).GetMethod("ReadWmiCpuTemp", BindingFlags.NonPublic | BindingFlags.Static)!;
+        float temp = (float)readWmi.Invoke(null, null)!;
+        temp.Should().BeGreaterThanOrEqualTo(0f);
+
+        // 2. ReadBattery and QueryBatteryRateW reflection
+        var cfg = new AppSettings();
+        var sysInfoMock = Substitute.For<ISystemInfo>();
+        var pawnIoMock = Substitute.For<IPawnIoManager>();
+        using var monitor = new HardwareMonitor(cfg, sysInfoMock, pawnIoMock);
+
+        var readBat = typeof(HardwareMonitor).GetMethod("ReadBattery", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var batResult = readBat.Invoke(monitor, null);
+        batResult.Should().NotBeNull();
+
+        var queryRate = typeof(HardwareMonitor).GetMethod("QueryBatteryRateW", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        float rate = (float)queryRate.Invoke(monitor, null)!;
+        rate.Should().BeInRange(-500f, 500f);
+
+        // 3. ReadNetBytes with null nic
+        var readNet = typeof(HardwareMonitor).GetMethod("ReadNetBytes", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        typeof(HardwareMonitor).GetField("_nicInterface", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(monitor, null);
+        var netRes = readNet.Invoke(monitor, null);
+        netRes.Should().Be((0.0, 0.0));
+
+        // 4. SelectActiveNic
+        var selectNic = typeof(HardwareMonitor).GetMethod("SelectActiveNic", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var nicRes = selectNic.Invoke(null, ["auto"]);
+        nicRes.Should().NotBeNull();
+
+        var nicSpecific = selectNic.Invoke(null, ["non_existent_adapter_name_123"]);
+        nicSpecific.Should().NotBeNull();
+    }
 }
-
-
