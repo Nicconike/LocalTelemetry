@@ -436,7 +436,7 @@ public class DiskQueryTests
         // 2. GetBootDriveIndex reflection
         var detBoot = typeof(DiskQuery).GetMethod("GetBootDriveIndex", BindingFlags.NonPublic | BindingFlags.Static);
         detBoot.Should().NotBeNull();
-        var bootIdx = detBoot!.Invoke(null, null);
+        var bootIdx = detBoot.Invoke(null, null);
         if (bootIdx is int idx)
         {
             idx.Should().BeGreaterThanOrEqualTo(0);
@@ -531,6 +531,97 @@ public class DiskQueryTests
             var busRes = (string)queryBusMethod.Invoke(null, [invalidHandle, 999, cache])!;
             busRes.Should().BeEmpty();
             cache.Should().ContainKey(999);
+        }
+    }
+
+    [Fact]
+    public void DiskQuery_ParseMsftMediaType_CoversAllBranches()
+    {
+        DiskQuery.ParseMsftMediaType(3).Should().Be("HDD");
+        DiskQuery.ParseMsftMediaType((ushort)3).Should().Be("HDD");
+        DiskQuery.ParseMsftMediaType(4).Should().Be("SSD");
+        DiskQuery.ParseMsftMediaType((ushort)4).Should().Be("SSD");
+        DiskQuery.ParseMsftMediaType(5).Should().Be("SCM");
+        DiskQuery.ParseMsftMediaType(0).Should().Be("");
+        DiskQuery.ParseMsftMediaType(99).Should().Be("");
+        DiskQuery.ParseMsftMediaType(null).Should().Be("");
+        DiskQuery.ParseMsftMediaType("invalid").Should().Be("");
+    }
+
+    [Fact]
+    public void DiskQuery_DeviceIoControlOverride_Coverage()
+    {
+        var queryBusMethod = typeof(DiskQuery).GetMethod("QueryBusTypeIoctl", BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        try
+        {
+            DiskQuery.CreateFileOverride = _ => new Microsoft.Win32.SafeHandles.SafeFileHandle(new IntPtr(1234), false);
+
+            // Case 1: NVMe (BusType = 17)
+            DiskQuery.DeviceIoControlOverride = (handle, ioctl, inBuf, outBuf) =>
+            {
+                if (outBuf.Length >= 28)
+                {
+                    BitConverter.GetBytes((uint)17).CopyTo(outBuf, 24); // BusType uint at offset 24
+                }
+                return true;
+            };
+
+            var busRes = (string)queryBusMethod.Invoke(null, [101])!;
+            busRes.Should().Be("NVMe");
+
+            // Case 2: BusType = 0 (Unknown)
+            DiskQuery.DeviceIoControlOverride = (handle, ioctl, inBuf, outBuf) =>
+            {
+                Array.Clear(outBuf, 0, outBuf.Length);
+                return true;
+            };
+            busRes = (string)queryBusMethod.Invoke(null, [102])!;
+            busRes.Should().BeEmpty();
+
+            // Case 3: BusType = 99 (> 32 garbage)
+            DiskQuery.DeviceIoControlOverride = (handle, ioctl, inBuf, outBuf) =>
+            {
+                if (outBuf.Length >= 28)
+                {
+                    BitConverter.GetBytes((uint)99).CopyTo(outBuf, 24);
+                }
+                return true;
+            };
+            busRes = (string)queryBusMethod.Invoke(null, [103])!;
+            busRes.Should().BeEmpty();
+
+            // Case 4: Exception during parsing
+            DiskQuery.DeviceIoControlOverride = (handle, ioctl, inBuf, outBuf) =>
+            {
+                throw new InvalidOperationException("Simulated IOCTL error");
+            };
+            busRes = (string)queryBusMethod.Invoke(null, [104])!;
+            busRes.Should().BeEmpty();
+
+            // Case 5: Boot drive extents via IOCTL
+            DiskQuery.DeviceIoControlOverride = (handle, ioctl, inBuf, outBuf) =>
+            {
+                if (outBuf.Length >= 12)
+                {
+                    BitConverter.GetBytes(3).CopyTo(outBuf, 8); // diskNumber = 3
+                    return true;
+                }
+                return false;
+            };
+
+            var getBootMethod = typeof(DiskQuery).GetMethod("GetBootDriveIndex", BindingFlags.NonPublic | BindingFlags.Static)!;
+            var bootResult = getBootMethod.Invoke(null, null);
+            bootResult.Should().Be(3);
+
+            // Case 6: Boot drive extents IOCTL returns false
+            DiskQuery.DeviceIoControlOverride = (handle, ioctl, inBuf, outBuf) => false;
+            _ = getBootMethod.Invoke(null, null);
+        }
+        finally
+        {
+            DiskQuery.CreateFileOverride = null;
+            DiskQuery.DeviceIoControlOverride = null;
         }
     }
 }

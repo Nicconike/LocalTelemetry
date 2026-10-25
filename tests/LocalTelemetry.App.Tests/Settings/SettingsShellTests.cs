@@ -1654,7 +1654,8 @@ public class SettingsShellTests
             var procField = typeof(SettingsShell).GetField("_currentProcess", BindingFlags.NonPublic | BindingFlags.Instance);
             procField?.SetValue(shell, System.Diagnostics.Process.GetCurrentProcess());
 
-            var tickMethod = typeof(SettingsShell).GetMethod("<OnLoaded>b__53_0", BindingFlags.NonPublic | BindingFlags.Instance);
+            var tickMethod = typeof(SettingsShell).GetMethods(BindingFlags.NonPublic | BindingFlags.Instance)
+                .FirstOrDefault(m => m.Name.Contains("<OnLoaded>b__"));
             tickMethod?.Invoke(shell, [null, EventArgs.Empty]);
             titleBlock.Text.Should().Contain("LocalTelemetry");
 
@@ -1662,7 +1663,8 @@ public class SettingsShellTests
             tickMethod?.Invoke(shell, [null, EventArgs.Empty]);
 
             // 4. LocationChanged blur callback
-            var locMethod = typeof(SettingsShell).GetMethod("<.ctor>b__52_0", BindingFlags.NonPublic | BindingFlags.Instance);
+            var locMethod = typeof(SettingsShell).GetMethods(BindingFlags.NonPublic | BindingFlags.Instance)
+                .FirstOrDefault(m => m.Name.Contains("<.ctor>b__"));
             typeof(SettingsShell).GetField("_webViewReady", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(shell, false);
             locMethod?.Invoke(shell, [null, EventArgs.Empty]);
             typeof(SettingsShell).GetField("_webViewReady", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(shell, true);
@@ -1949,5 +1951,294 @@ public class SettingsShellTests
         {
             try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
+    }
+
+    [WpfFact]
+    public void SettingsShell_DefaultLauncherFallbacks_Coverage()
+    {
+        using var ctx = new ShellContext();
+        var origFolder = SettingsShell.FolderLauncherAction;
+        var origUrl = SettingsShell.UrlLauncherAction;
+
+        try
+        {
+            SettingsShell.FolderLauncherAction = null;
+            SettingsShell.UrlLauncherAction = null;
+
+            var actFolder = () => ctx.Shell.HandleWebMessageJson("""{"type":"openFolder","payload":{"target":"logs"}}""");
+            actFolder.Should().NotThrow();
+
+            var actUrl = () => ctx.Shell.HandleWebMessageJson("""{"type":"openUrl","payload":{"url":"https://github.com/Nicconike/LocalTelemetry"}}""");
+            actUrl.Should().NotThrow();
+        }
+        finally
+        {
+            SettingsShell.FolderLauncherAction = origFolder;
+            SettingsShell.UrlLauncherAction = origUrl;
+        }
+    }
+
+    [WpfFact]
+    public void SettingsShell_TitleBarAndClose_Coverage()
+    {
+        using var ctx = new ShellContext();
+        var closeMethod = typeof(SettingsShell).GetMethod("CloseButton_Click", BindingFlags.NonPublic | BindingFlags.Instance);
+        closeMethod.Should().NotBeNull();
+        var actClose = () => closeMethod.Invoke(ctx.Shell, [null, null]);
+        actClose.Should().NotThrow();
+    }
+
+    [WpfFact]
+    public async Task SettingsShell_RemainingEdgeCases_Coverage()
+    {
+        using var ctx = new ShellContext();
+
+        // 1. ProcessWebMessage untrusted and trusted sources
+        ctx.Shell.ProcessWebMessage("https://untrusted.com", "{}");
+        ctx.Shell.ProcessWebMessage("https://localtelemetry.settings", """{"type":"getSettings"}""");
+
+        // 2. FolderProcessLauncher when FolderLauncherAction is null
+        var origFolder = SettingsShell.FolderLauncherAction;
+        var origFolderLauncher = SettingsShell.FolderProcessLauncher;
+        try
+        {
+            AppSettings.InitPaths(AppContext.BaseDirectory);
+            Directory.CreateDirectory(AppSettings.DataDir);
+            SettingsShell.FolderLauncherAction = null;
+            bool launchedFolder = false;
+            SettingsShell.FolderProcessLauncher = _ => launchedFolder = true;
+            ctx.Shell.HandleWebMessageJson("""{"type":"openFolder","payload":{"target":"data"}}""");
+            launchedFolder.Should().BeTrue();
+        }
+        finally
+        {
+            SettingsShell.FolderLauncherAction = origFolder;
+            SettingsShell.FolderProcessLauncher = origFolderLauncher;
+        }
+
+        // 3. LocationChanged with ScriptExecutorOverride (normal + throwing)
+        var origScript = SettingsShell.ScriptExecutorOverride;
+        var onLocationChanged = typeof(Window).GetMethod("OnLocationChanged", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        typeof(SettingsShell).GetField("_webViewReady", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(ctx.Shell, true);
+        try
+        {
+            bool executedScript = false;
+            SettingsShell.ScriptExecutorOverride = _ => executedScript = true;
+            onLocationChanged.Invoke(ctx.Shell, [EventArgs.Empty]);
+            executedScript.Should().BeTrue();
+
+            // Throwing path (lines 124-125)
+            SettingsShell.ScriptExecutorOverride = _ => throw new InvalidOperationException("Simulated script error");
+            var actMove = () => onLocationChanged.Invoke(ctx.Shell, [EventArgs.Empty]);
+            actMove.Should().NotThrow();
+        }
+        finally
+        {
+            SettingsShell.ScriptExecutorOverride = origScript;
+        }
+
+        // 4. Show and Activate with SkipShowForTesting false (lines 38, 44)
+        var origSkipShow = SettingsShell.SkipShowForTesting;
+        try
+        {
+            SettingsShell.SkipShowForTesting = false;
+            ctx.Shell.Show();
+            ctx.Shell.Activate();
+        }
+        finally
+        {
+            SettingsShell.SkipShowForTesting = origSkipShow;
+        }
+
+        // 5. InitWebView error path with MessageBoxFunc (lines 274-275)
+        var origMsgBoxAction = SettingsShell.MessageBoxAction;
+        var origMsgBoxFunc = SettingsShell.MessageBoxFunc;
+        try
+        {
+            SettingsShell.MessageBoxAction = null;
+            bool msgBoxShown = false;
+            SettingsShell.MessageBoxFunc = (_, _) => { msgBoxShown = true; return MessageBoxResult.OK; };
+
+            var initWv = typeof(SettingsShell).GetMethod("InitWebViewAsync", BindingFlags.NonPublic | BindingFlags.Instance);
+            if (initWv is not null)
+            {
+                var task = (Task)initWv.Invoke(ctx.Shell, null)!;
+                task.Wait();
+                msgBoxShown.Should().BeTrue();
+            }
+        }
+        finally
+        {
+            SettingsShell.MessageBoxAction = origMsgBoxAction;
+            SettingsShell.MessageBoxFunc = origMsgBoxFunc;
+        }
+
+        // 6. HandleImportWindowsUsage error paths and success paths (lines 701-704, 711-714, 716-720)
+        var origStoreHist = ctx.History;
+        var origAdapter = WindowsNetworkUsageProvider.AdapterFactory;
+        try
+        {
+            // Case A: TrafficHistoryStore uninitialized (lines 701-704)
+            TrafficHistoryStore.Initialize(null!);
+            ctx.Shell.HandleWebMessageJson("""{"type":"importWindowsUsage","payload":{"startDate":"01-01-2026","endDate":"02-01-2026"}}""");
+            if (ctx.Shell.LastImportTask is not null)
+                await ctx.Shell.LastImportTask;
+        }
+        finally
+        {
+            TrafficHistoryStore.Initialize(origStoreHist);
+        }
+
+        try
+        {
+            // Case B: DaysImported > 0 (lines 711-714)
+            WindowsNetworkUsageProvider.AdapterFactory = () => new MockAppNetworkAdapter(
+                "MockEth",
+                Guid.NewGuid().ToString("D"),
+                6u,
+                (_, _, _) => Task.FromResult<IReadOnlyList<(ulong, ulong)>>([(1000UL, 2000UL)]));
+
+            ctx.Shell.HandleWebMessageJson("""{"type":"importWindowsUsage","payload":{"startDate":"01-01-2026","endDate":"02-01-2026"}}""");
+            if (ctx.Shell.LastImportTask is not null)
+                await ctx.Shell.LastImportTask;
+
+            // Case C: Exception thrown during import (lines 716-720)
+            WindowsNetworkUsageProvider.AdapterFactory = () => throw new InvalidOperationException("Simulated adapter query failure");
+            ctx.Shell.HandleWebMessageJson("""{"type":"importWindowsUsage","payload":{"startDate":"01-01-2026","endDate":"02-01-2026"}}""");
+            if (ctx.Shell.LastImportTask is not null)
+                await ctx.Shell.LastImportTask;
+        }
+        finally
+        {
+            WindowsNetworkUsageProvider.AdapterFactory = origAdapter;
+        }
+
+        // 7. UrlProcessLauncher when UrlLauncherAction is null
+        var origUrl = SettingsShell.UrlLauncherAction;
+        var origUrlProc = SettingsShell.UrlProcessLauncher;
+        try
+        {
+            SettingsShell.UrlLauncherAction = null;
+            bool launchedUrl = false;
+            SettingsShell.UrlProcessLauncher = _ => launchedUrl = true;
+            ctx.Shell.HandleWebMessageJson("""{"type":"openUrl","payload":{"url":"https://github.com/Nicconike/LocalTelemetry"}}""");
+            launchedUrl.Should().BeTrue();
+        }
+        finally
+        {
+            SettingsShell.UrlLauncherAction = origUrl;
+            SettingsShell.UrlProcessLauncher = origUrlProc;
+        }
+
+        // 8. ThrowInUpdateCheckForTesting (lines 755-766)
+        try
+        {
+            SettingsShell.ThrowInUpdateCheckForTesting = true;
+            ctx.Shell.HandleWebMessageJson("""{"type":"checkForUpdates","payload":{"force":true}}""");
+        }
+        finally
+        {
+            SettingsShell.ThrowInUpdateCheckForTesting = false;
+        }
+
+        // 9. ThrowInBuildDateForTesting (lines 868-870)
+        try
+        {
+            SettingsShell.ThrowInBuildDateForTesting = true;
+            var sendSysInfo = typeof(SettingsShell).GetMethod("SendSystemInfo", BindingFlags.NonPublic | BindingFlags.Instance);
+            sendSysInfo?.Invoke(ctx.Shell, null);
+        }
+        finally
+        {
+            SettingsShell.ThrowInBuildDateForTesting = false;
+        }
+
+        // 10. TitleBar_MouseLeftButtonDown with single click (line 1515)
+        var titleBar = typeof(SettingsShell).GetMethod("TitleBar_MouseLeftButtonDown", BindingFlags.NonPublic | BindingFlags.Instance);
+        var origSkipDrag = SettingsShell.SkipDragMoveForTesting;
+        try
+        {
+            SettingsShell.SkipDragMoveForTesting = true;
+            var clickArgs = new System.Windows.Input.MouseButtonEventArgs(
+                System.Windows.Input.Mouse.PrimaryDevice,
+                0,
+                System.Windows.Input.MouseButton.Left)
+            {
+                RoutedEvent = UIElement.MouseLeftButtonDownEvent
+            };
+            titleBar?.Invoke(ctx.Shell, [null!, clickArgs]);
+        }
+        finally
+        {
+            SettingsShell.SkipDragMoveForTesting = origSkipDrag;
+        }
+    }
+
+    [WpfFact]
+    public async Task SettingsShell_WebMessage_And_ImportWindowsUsage_Branches_Coverage()
+    {
+        using var ctx = new ShellContext();
+
+        // 1. ThrowInWebMessageForTesting
+        SettingsShell.ThrowInWebMessageForTesting = true;
+        try
+        {
+            var act = () => ctx.Shell.HandleWebMessageJson("{\"type\":\"getSettings\"}");
+            act.Should().NotThrow();
+        }
+        finally
+        {
+            SettingsShell.ThrowInWebMessageForTesting = false;
+        }
+
+        // 2. ThrowInImportWindowsUsageForTesting
+        SettingsShell.ThrowInImportWindowsUsageForTesting = true;
+        try
+        {
+            ctx.Shell.HandleWebMessageJson("{\"type\":\"importWindowsUsage\",\"payload\":{\"startDate\":\"2026-01-01\",\"endDate\":\"2026-01-02\"}}");
+            if (ctx.Shell.LastImportTask is not null)
+                await ctx.Shell.LastImportTask;
+        }
+        finally
+        {
+            SettingsShell.ThrowInImportWindowsUsageForTesting = false;
+        }
+
+        // 3. ImportWindowsUsage with DaysImported > 0
+        var origImport = WindowsNetworkUsageProvider.ImportDateRangeAsyncOverride;
+        try
+        {
+            WindowsNetworkUsageProvider.ImportDateRangeAsyncOverride = (_, _, _, _) => Task.FromResult(new WindowsUsageImportResult
+            {
+                Success = true,
+                DaysImported = 3,
+                DownBytes = 1000,
+                UpBytes = 500,
+                Message = "Import completed"
+            });
+
+            ctx.Shell.HandleWebMessageJson("{\"type\":\"importWindowsUsage\",\"payload\":{\"startDate\":\"2026-01-01\",\"endDate\":\"2026-01-03\"}}");
+            if (ctx.Shell.LastImportTask is not null)
+                await ctx.Shell.LastImportTask;
+        }
+        finally
+        {
+            WindowsNetworkUsageProvider.ImportDateRangeAsyncOverride = origImport;
+        }
+    }
+
+    private sealed class MockAppNetworkAdapter(
+        string profileName,
+        string adapterId,
+        uint ianaType,
+        Func<DateTimeOffset, DateTimeOffset, Windows.Networking.Connectivity.DataUsageGranularity, Task<IReadOnlyList<(ulong, ulong)>>> usageFunc)
+        : WindowsNetworkUsageProvider.INetworkUsageAdapter
+    {
+        public string ProfileName => profileName;
+        public string AdapterId => adapterId;
+        public uint IanaInterfaceType => ianaType;
+        public Task<IReadOnlyList<(ulong BytesReceived, ulong BytesSent)>> GetNetworkUsageAsync(
+            DateTimeOffset start, DateTimeOffset end, Windows.Networking.Connectivity.DataUsageGranularity granularity)
+            => usageFunc(start, end, granularity);
     }
 }

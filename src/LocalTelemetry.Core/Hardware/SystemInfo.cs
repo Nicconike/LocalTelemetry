@@ -37,6 +37,7 @@ public static class SystemInfo
     private const string IntelVendor = "Intel";
     private const string NvidiaVendor = "NVIDIA";
     private const string UnknownLabel = "Unknown";
+    private const string SkipSmbiosSpeedForTestingMessage = "Skip SMBIOS speed for testing";
 
     // Caches (populated on first call, never re-read)
     private static byte[]? _smbiosCache;
@@ -56,6 +57,10 @@ public static class SystemInfo
     {
         try
         {
+            if (ThrowInQueryWmiForTesting)
+                throw new ManagementException("Simulated WMI failure");
+            if (ThrowInQueryWmiGenericExceptionForTesting)
+                throw new InvalidOperationException("Simulated generic WMI failure");
             using var searcher = new ManagementObjectSearcher(query);
             using var results = searcher.Get();
             foreach (ManagementBaseObject mo in results)
@@ -77,6 +82,10 @@ public static class SystemInfo
     {
         try
         {
+            if (ThrowInQueryWmiForTesting)
+                throw new ManagementException("Simulated WMI int failure");
+            if (ThrowInQueryWmiGenericExceptionForTesting)
+                throw new InvalidOperationException("Simulated generic WMI int failure");
             using var searcher = new ManagementObjectSearcher(query);
             using var results = searcher.Get();
             foreach (ManagementBaseObject mo in results)
@@ -104,6 +113,18 @@ public static class SystemInfo
     public static string GetCpuSocket()
     {
         if (_cpuSocketCache is not null) return _cpuSocketCache;
+
+        if (FallbackCpuSocketForTesting)
+        {
+            string derivedFall = DeriveSocketFromCpuName();
+            if (derivedFall.Length > 0)
+                return _cpuSocketCache = derivedFall;
+
+            string cpuidFall = CpuIdSocketLookup();
+            if (cpuidFall.Length > 0) return _cpuSocketCache = cpuidFall;
+
+            return _cpuSocketCache = "";
+        }
 
         // Step 1: WMI SocketDesignation (SMBIOS Type 4 Socket Designation) - brand-agnostic
         string sd = QueryWmiFirst("SELECT SocketDesignation FROM Win32_Processor", "SocketDesignation");
@@ -224,7 +245,7 @@ public static class SystemInfo
 
     private static string GetCpuBrandString()
     {
-        string? cpuid = GetCpuBrandStringCpuid();
+        string? cpuid = SkipCpuidBrandForTesting ? null : GetCpuBrandStringCpuid();
         if (!string.IsNullOrEmpty(cpuid)) return cpuid;
         string reg = GetCpuName();
         if (!string.IsNullOrEmpty(reg)) return reg;
@@ -654,6 +675,8 @@ public static class SystemInfo
     {
         try
         {
+            if (ThrowInPhysicalCoreCountForTesting)
+                throw new InvalidOperationException("Simulated GLPI error");
             uint len = 0;
             GetLogicalProcessorInformation(IntPtr.Zero, ref len);
             if (Marshal.GetLastWin32Error() != 122 || len == 0) return Environment.ProcessorCount;
@@ -688,6 +711,8 @@ public static class SystemInfo
     {
         try
         {
+            if (SkipSmbiosMaxSpeedForTesting)
+                throw new InvalidOperationException(SkipSmbiosSpeedForTestingMessage);
             byte[] raw = GetSmbiosRaw();
             return FindSmbiosType4Value(raw, 0x2A, 0x23);
         }
@@ -701,6 +726,8 @@ public static class SystemInfo
     {
         try
         {
+            if (SkipSmbiosMaxSpeedForTesting)
+                throw new InvalidOperationException(SkipSmbiosSpeedForTestingMessage);
             byte[] raw = GetSmbiosRaw();
             int threads = FindSmbiosType4Value(raw, 0x2E, 0x25);
             if (threads > 0) return threads;
@@ -767,6 +794,8 @@ public static class SystemInfo
 
         try
         {
+            if (SkipSmbiosMaxSpeedForTesting)
+                throw new InvalidOperationException(SkipSmbiosSpeedForTestingMessage);
             byte[] raw = GetSmbiosRaw();
             int smbiosMhz = FindSmbiosType4Value(raw, 0x14, 0x14);
             if (smbiosMhz > 0) return smbiosMhz;
@@ -831,6 +860,8 @@ public static class SystemInfo
     {
         try
         {
+            if (ThrowInNtPowerQueryForTesting)
+                throw new InvalidOperationException("Simulated power info error");
             int count = Environment.ProcessorCount;
             int size = Marshal.SizeOf<NativeMethods.ProcessorPowerInformation>() * count;
             IntPtr buf = Marshal.AllocHGlobal(size);
@@ -860,6 +891,8 @@ public static class SystemInfo
     {
         try
         {
+            if (ThrowInRegistrySpeedForTesting)
+                throw new InvalidOperationException("Simulated registry speed error");
             using var key = Registry.LocalMachine.OpenSubKey(@"HARDWARE\DESCRIPTION\System\CentralProcessor\0");
             if (key is not null)
             {
@@ -1100,9 +1133,11 @@ public static class SystemInfo
     public static string GetSystemManufacturer()
     {
         string wmi = QueryWmiFirst("SELECT Manufacturer FROM Win32_ComputerSystem", "Manufacturer");
-        if (wmi.Length > 0) return wmi;
+        if (wmi.Length > 0 && !FallbackToSmbiosSystemInfoForTesting) return wmi;
         try
         {
+            if (ThrowInSystemModelForTesting)
+                throw new InvalidOperationException("Simulated system manufacturer error");
             byte[] raw = GetSmbiosRaw();
             if (raw.Length == 0) return "";
             return FindSmbiosString(raw, 1, 0x04);
@@ -1116,9 +1151,11 @@ public static class SystemInfo
     public static string GetSystemProductName()
     {
         string wmi = QueryWmiFirst("SELECT Model FROM Win32_ComputerSystem", "Model");
-        if (wmi.Length > 0) return wmi;
+        if (wmi.Length > 0 && !FallbackToSmbiosSystemInfoForTesting) return wmi;
         try
         {
+            if (ThrowInSystemModelForTesting)
+                throw new InvalidOperationException("Simulated system product name error");
             byte[] raw = GetSmbiosRaw();
             if (raw.Length == 0) return "";
             return FindSmbiosString(raw, 1, 0x05);
@@ -1197,30 +1234,35 @@ public static class SystemInfo
         var mfrs = new List<string>();
         try
         {
+            if (SkipSmbiosMaxSpeedForTesting)
+                throw new InvalidOperationException(SkipSmbiosSpeedForTestingMessage);
             byte[] raw = GetSmbiosRaw();
             if (raw.Length == 0) return mfrs;
 
-            int p = 0;
-            while (p < raw.Length)
-            {
-                byte t = raw[p];
-                byte len = raw[p + 1];
-                if (len < 4 || p + len > raw.Length) break;
-
-                if (t == 17 && len > 0x17)
-                {
-                    byte idx = raw[p + 0x17];
-                    mfrs.Add(GetSmbiosString(raw, p, len, idx));
-                }
-
-                p += len;
-                while (p < raw.Length && !(raw[p] == 0 && raw[p + 1] == 0)) p++;
-                p += 2;
-                if (t == 127) break;
-            }
+            ParseSmbiosRamManufacturers(raw, mfrs);
         }
         catch (Exception ex) { Diagnostics.Log.Error(ex, "Failed to query memory module manufacturers via SMBIOS"); }
         return mfrs;
+    }
+
+    private static void ParseSmbiosRamManufacturers(byte[] raw, List<string> mfrs)
+    {
+        int p = 0;
+        while (p < raw.Length)
+        {
+            byte t = raw[p];
+            byte len = raw[p + 1];
+            if (len < 4 || p + len > raw.Length) break;
+
+            if (t == 17 && len > 0x17)
+            {
+                byte idx = raw[p + 0x17];
+                mfrs.Add(GetSmbiosString(raw, p, len, idx));
+            }
+
+            p = AdvanceSmbiosPointer(raw, p, len);
+            if (t == 127) break;
+        }
     }
 
     internal static string FormFactorLabel(int ff) => ff switch
@@ -1281,6 +1323,8 @@ public static class SystemInfo
     {
         try
         {
+            if (ThrowInRamTypeForTesting)
+                throw new InvalidOperationException("Simulated RAM type WMI failure");
             using var searcher = new ManagementObjectSearcher("SELECT MemoryType, SMBIOSMemoryType FROM Win32_PhysicalMemory");
             using var results = searcher.Get();
             foreach (ManagementBaseObject mo in results)
@@ -1299,6 +1343,8 @@ public static class SystemInfo
     {
         try
         {
+            if (ThrowInRamTypeForTesting)
+                throw new InvalidOperationException("Simulated RAM type SMBIOS failure");
             byte[] raw = GetSmbiosRaw();
             int mt = FindSmbiosType17MemoryType(raw);
             if (mt > 0) return MemoryTypeLabel(mt);
@@ -1343,11 +1389,14 @@ public static class SystemInfo
     /// <summary>Detects whether the system has a battery (laptop/tablet).</summary>
     public static bool HasBattery()
     {
+        if (HasBatteryOverride.HasValue) return HasBatteryOverride.Value;
         if (_hasBatteryCache.HasValue) return _hasBatteryCache.Value;
 
         bool hasBattery = false;
         try
         {
+            if (ThrowInPowerStatusForTesting)
+                throw new InvalidOperationException("Simulated power status error");
             if (NativeMethods.GetSystemPowerStatus(out var sps))
                 hasBattery = sps.BatteryFlag != 128;
         }
@@ -1359,9 +1408,11 @@ public static class SystemInfo
         {
             try
             {
+                if (ThrowInWin32BatteryForTesting)
+                    throw new InvalidOperationException("Simulated Win32_Battery query error");
                 using var searcher = new ManagementObjectSearcher("SELECT * FROM Win32_Battery");
                 using var results = searcher.Get();
-                if (results.Count > 0)
+                if (results.Count > 0 || MockBatteryDetectedViaWmiForTesting)
                 {
                     hasBattery = true;
                     Diagnostics.Log.Info("Battery detected via system management (system power API reported no battery)");
@@ -1411,11 +1462,56 @@ public static class SystemInfo
         return s.Length > 0 && int.TryParse(s, out int n) && n > 0 ? n : 0;
     }
 
+    internal static bool? HasBatteryOverride { get; set; }
+    internal static Func<string, string, string>? QueryRootWmiStringOverride { get; set; }
+    internal static Func<string, string, int>? QueryRootWmiIntOverride { get; set; }
+    internal static bool ThrowInRootWmiForTesting { get; set; }
+    internal static bool ThrowInRootWmiGenericExceptionForTesting { get; set; }
+    internal static bool ThrowInWin32BatteryForTesting { get; set; }
+    internal static bool ThrowInWin32BatteryGenericExceptionForTesting { get; set; }
+    internal static bool ThrowInPowerStatusForTesting { get; set; }
+    internal static bool ThrowInSystemModelForTesting { get; set; }
+    internal static bool FallbackToSmbiosSystemInfoForTesting { get; set; }
+    internal static bool ThrowInRamTypeForTesting { get; set; }
+    internal static bool ThrowInNtPowerQueryForTesting { get; set; }
+    internal static bool ThrowInRegistrySpeedForTesting { get; set; }
+    internal static bool FallbackCpuSocketForTesting { get; set; }
+    internal static bool SkipCpuidBrandForTesting { get; set; }
+    internal static bool SkipSmbiosMaxSpeedForTesting { get; set; }
+    internal static bool ThrowInQueryWmiForTesting { get; set; }
+    internal static bool ThrowInQueryWmiGenericExceptionForTesting { get; set; }
+    internal static bool ThrowInPhysicalCoreCountForTesting { get; set; }
+    internal static bool MockBatteryDetectedViaWmiForTesting { get; set; }
+
+    internal static void ResetCaches()
+    {
+        _cpuSocketCache = null;
+        _batteryManufacturerCache = null;
+        _batteryDeviceNameCache = null;
+        _batteryDesignCapacityCache = null;
+        _batteryFullChargeCapacityCache = null;
+        _hasBatteryCache = null;
+        _nicsCache = null;
+        _osVersionCache = null;
+        _smbiosCache = null;
+        _cpuNameCache = null;
+        _ramTotalBytesCache = null;
+        _gpusCache = null;
+        _ramModulesCache = null;
+    }
+
     /// <summary>Queries a WMI class in ROOT\WMI and returns the first non-empty string property value.</summary>
     private static string QueryRootWmiString(string className, string property)
     {
+        if (QueryRootWmiStringOverride is not null)
+            return QueryRootWmiStringOverride(className, property);
+
         try
         {
+            if (ThrowInRootWmiForTesting)
+                throw new ManagementException("Simulated ROOT\\WMI management failure");
+            if (ThrowInRootWmiGenericExceptionForTesting)
+                throw new InvalidOperationException("Simulated ROOT\\WMI generic failure");
             var scope = new ManagementScope(@"\\.\ROOT\WMI");
             scope.Connect();
             using var searcher = new ManagementObjectSearcher(scope, new ObjectQuery($"SELECT {property} FROM {className}"));
@@ -1440,8 +1536,15 @@ public static class SystemInfo
     /// <summary>Queries a WMI class in ROOT\WMI and returns the first positive int property value.</summary>
     private static int QueryRootWmiInt(string className, string property)
     {
+        if (QueryRootWmiIntOverride is not null)
+            return QueryRootWmiIntOverride(className, property);
+
         try
         {
+            if (ThrowInRootWmiForTesting)
+                throw new ManagementException("Simulated ROOT\\WMI management failure");
+            if (ThrowInRootWmiGenericExceptionForTesting)
+                throw new InvalidOperationException("Simulated ROOT\\WMI generic failure");
             var scope = new ManagementScope(@"\\.\ROOT\WMI");
             scope.Connect();
             using var searcher = new ManagementObjectSearcher(scope, new ObjectQuery($"SELECT {property} FROM {className}"));
@@ -1481,6 +1584,10 @@ public static class SystemInfo
     {
         try
         {
+            if (ThrowInWin32BatteryForTesting)
+                throw new ManagementException("Simulated Win32_Battery name failure");
+            if (ThrowInWin32BatteryGenericExceptionForTesting)
+                throw new InvalidOperationException("Simulated Win32_Battery generic failure");
             using var searcher = new ManagementObjectSearcher("SELECT Name FROM Win32_Battery");
             using var results = searcher.Get();
             foreach (ManagementBaseObject mo in results)
@@ -1498,6 +1605,10 @@ public static class SystemInfo
     {
         try
         {
+            if (ThrowInWin32BatteryForTesting)
+                throw new ManagementException("Simulated Win32_Battery devid failure");
+            if (ThrowInWin32BatteryGenericExceptionForTesting)
+                throw new InvalidOperationException("Simulated Win32_Battery generic devid failure");
             using var searcher = new ManagementObjectSearcher("SELECT DeviceID FROM Win32_Battery");
             using var results = searcher.Get();
             foreach (ManagementBaseObject mo in results)
@@ -1596,6 +1707,8 @@ public static class SystemInfo
     {
         try
         {
+            if (SkipSmbiosMaxSpeedForTesting)
+                throw new InvalidOperationException(SkipSmbiosSpeedForTestingMessage);
             byte[] raw = GetSmbiosRaw();
             if (raw.Length == 0) return "";
             string mfr = FindSmbiosString(raw, 39, 0x06);
@@ -1614,25 +1727,33 @@ public static class SystemInfo
     {
         try
         {
+            if (SkipSmbiosMaxSpeedForTesting)
+                throw new InvalidOperationException(SkipSmbiosSpeedForTestingMessage);
             byte[] raw = GetSmbiosRaw();
             if (raw.Length == 0) return "";
-            int p = 0;
-            while (p < raw.Length)
-            {
-                byte t = raw[p];
-                byte len = raw[p + 1];
-                if (len < 4 || p + len > raw.Length) break;
-                if (t == 39 && len >= 0x0B)
-                {
-                    int cap = raw[p + 0x0A] | (raw[p + 0x0B] << 8);
-                    if (cap > 0 && cap != 0x8000)
-                        return $"{cap / 1000.0:F0} W";
-                }
-                p = AdvanceSmbiosPointer(raw, p, len);
-                if (t == 127) break;
-            }
+            return ParseSmbiosPsuMaxCapacity(raw);
         }
         catch (Exception ex) { Diagnostics.Log.Error(ex, "Failed to query power supply capacity from SMBIOS"); }
+        return "";
+    }
+
+    private static string ParseSmbiosPsuMaxCapacity(byte[] raw)
+    {
+        int p = 0;
+        while (p < raw.Length)
+        {
+            byte t = raw[p];
+            byte len = raw[p + 1];
+            if (len < 4 || p + len > raw.Length) break;
+            if (t == 39 && len >= 0x0B)
+            {
+                int cap = raw[p + 0x0A] | (raw[p + 0x0B] << 8);
+                if (cap > 0 && cap != 0x8000)
+                    return $"{cap / 1000.0:F0} W";
+            }
+            p = AdvanceSmbiosPointer(raw, p, len);
+            if (t == 127) break;
+        }
         return "";
     }
 

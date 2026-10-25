@@ -496,7 +496,7 @@ public class EseNetworkUsageReaderTests
         string tempDir = Path.Combine(Path.GetTempPath(), $"temp_ese_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
         string dummyRaw = Path.Combine(tempDir, $"test_{Guid.NewGuid():N}.INTEG.RAW");
-        File.WriteAllText(dummyRaw, "dummy raw content");
+        await File.WriteAllTextAsync(dummyRaw, "dummy raw content");
 
         var copyMethod = typeof(EseNetworkUsageReader).GetMethod("RunEsentutlCopy", BindingFlags.NonPublic | BindingFlags.Static)!;
         try
@@ -504,14 +504,35 @@ public class EseNetworkUsageReaderTests
             var res = await (Task<bool>)copyMethod.Invoke(null, ["cmd.exe", "/c exit 0", "dest.edb", tempDir, CancellationToken.None])!;
             res.Should().BeTrue();
         }
-        catch (Exception)
+        catch (Exception ex)
         {
             // Allowed on platforms where cmd execution is restricted
+            System.Diagnostics.Trace.WriteLine(ex.Message);
         }
         finally
         {
             try { if (File.Exists(dummyRaw)) File.Delete(dummyRaw); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
             try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+        }
+    }
+
+    [Fact]
+    public async Task EseNetworkUsageReader_MissingEsentutl_ReturnsEmpty()
+    {
+        string dummyDb = Path.Combine(Path.GetTempPath(), $"DummySrum_{Guid.NewGuid():N}.dat");
+        await File.WriteAllBytesAsync(dummyDb, [1, 2, 3]);
+
+        try
+        {
+            EseNetworkUsageReader.EsentUtlPathOverride = @"C:\NonExistent_Esentutl.exe";
+            var records = await EseNetworkUsageReader.ReadUsageInternalAsync(
+                DateTime.Today.AddDays(-1), DateTime.Today, dummyDb, null, null, null);
+            records.Should().BeEmpty();
+        }
+        finally
+        {
+            EseNetworkUsageReader.EsentUtlPathOverride = null;
+            try { if (File.Exists(dummyDb)) File.Delete(dummyDb); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
 }

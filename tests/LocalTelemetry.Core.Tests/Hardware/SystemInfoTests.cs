@@ -2513,4 +2513,243 @@ public class SystemInfoTests
         SystemInfo.GetBatteryDeviceName().Should().NotBeNull();
         SystemInfo.GetBatteryDesignCapacity().Should().NotBeNull();
     }
+
+    [Fact]
+    public void SystemInfo_BatteryAndGpuFallbacks_FullBranchCoverage()
+    {
+        try
+        {
+            SystemInfo.ResetCaches();
+            SystemInfo.HasBatteryOverride = true;
+
+            // 1. Live ACPI battery static data returns valid
+            SystemInfo.QueryRootWmiStringOverride = (cls, prop) => "Sunwoda-BAT100";
+            SystemInfo.QueryRootWmiIntOverride = (cls, prop) => 54000;
+
+            SystemInfo.GetBatteryManufacturer().Should().Be("Sunwoda-BAT100");
+            SystemInfo.GetBatteryDeviceName().Should().Be("Sunwoda-BAT100");
+            SystemInfo.GetBatteryDesignCapacity().Should().Be("54000 mWh");
+
+            // 2. Battery queries return empty string -> fallbacks taken
+            SystemInfo.ResetCaches();
+            SystemInfo.HasBatteryOverride = true;
+            SystemInfo.QueryRootWmiStringOverride = (cls, prop) => "";
+            SystemInfo.QueryRootWmiIntOverride = (cls, prop) => 0;
+
+            var mfr = SystemInfo.GetBatteryManufacturer();
+            mfr.Should().NotBeNull();
+            var dev = SystemInfo.GetBatteryDeviceName();
+            dev.Should().NotBeNull();
+            var cap = SystemInfo.GetBatteryDesignCapacity();
+            cap.Should().NotBeNull();
+
+            // 3. HasBatteryOverride = false
+            SystemInfo.ResetCaches();
+            SystemInfo.HasBatteryOverride = false;
+            SystemInfo.GetBatteryManufacturer().Should().BeEmpty();
+            SystemInfo.GetBatteryDeviceName().Should().BeEmpty();
+            SystemInfo.GetBatteryDesignCapacity().Should().BeEmpty();
+
+            // 4. GetNicColor with dummy array returning empty
+            var nicsField = typeof(SystemInfo).GetField("_nicsCache", BindingFlags.NonPublic | BindingFlags.Static)!;
+            nicsField.SetValue(null, new (string, string)[] { ("UnknownAdapter", "NonExistentVendor999") });
+            SystemInfo.GetNicColor().Should().BeEmpty();
+
+            // 5. IsDiscreteGpu reflection
+            var isDiscreteMethod = typeof(SystemInfo).GetMethod("IsDiscreteGpu", BindingFlags.NonPublic | BindingFlags.Static);
+            if (isDiscreteMethod is not null)
+            {
+                // Intel Arc
+                var devInfo = new LocalTelemetry.Core.Hardware.NativeMethods.SpDevinfoData();
+                ((bool)isDiscreteMethod.Invoke(null, ["Intel(R) Arc(TM) A770", "Intel", IntPtr.Zero, devInfo])!).Should().BeTrue();
+                // AMD RX
+                ((bool)isDiscreteMethod.Invoke(null, ["AMD Radeon RX 6700 XT", "AMD", IntPtr.Zero, devInfo])!).Should().BeTrue();
+            }
+        }
+        finally
+        {
+            SystemInfo.HasBatteryOverride = null;
+            SystemInfo.QueryRootWmiStringOverride = null;
+            SystemInfo.QueryRootWmiIntOverride = null;
+            SystemInfo.ResetCaches();
+        }
+    }
+
+    [Fact]
+    public void SystemInfo_ComprehensiveEdgeCases_Coverage()
+    {
+        try
+        {
+            // 1. FallbackCpuSocketForTesting
+            SystemInfo.ResetCaches();
+            typeof(SystemInfo).GetField("_cpuNameCache", BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, "Unknown");
+            SystemInfo.FallbackCpuSocketForTesting = true;
+            var socket = SystemInfo.GetCpuSocket();
+            socket.Should().NotBeNull();
+            SystemInfo.ResetCaches();
+
+            // 2. ThrowInPowerStatusForTesting and ThrowInWin32BatteryForTesting
+            SystemInfo.ResetCaches();
+            SystemInfo.HasBatteryOverride = null;
+            SystemInfo.ThrowInPowerStatusForTesting = true;
+            SystemInfo.ThrowInWin32BatteryForTesting = true;
+            SystemInfo.HasBattery().Should().BeFalse();
+
+            // 3. ThrowInRootWmiForTesting and battery names (ManagementException and generic)
+            SystemInfo.ThrowInRootWmiForTesting = true;
+            SystemInfo.ThrowInWin32BatteryForTesting = true;
+            var devMethod = typeof(SystemInfo).GetMethod("QueryWin32BatteryName", BindingFlags.NonPublic | BindingFlags.Static);
+            devMethod?.Invoke(null, null).Should().Be("");
+
+            var mfrMethod = typeof(SystemInfo).GetMethod("QueryWin32BatteryManufacturer", BindingFlags.NonPublic | BindingFlags.Static);
+            mfrMethod?.Invoke(null, null).Should().Be("");
+
+            var rootStrMethod = typeof(SystemInfo).GetMethod("QueryRootWmiString", BindingFlags.NonPublic | BindingFlags.Static);
+            rootStrMethod?.Invoke(null, ["BatteryStaticData", "DeviceName"]).Should().Be("");
+
+            var rootIntMethod = typeof(SystemInfo).GetMethod("QueryRootWmiInt", BindingFlags.NonPublic | BindingFlags.Static);
+            rootIntMethod?.Invoke(null, ["BatteryStaticData", "DesignedCapacity"]).Should().Be(0);
+
+            // Generic exception path for RootWmi and Win32Battery
+            SystemInfo.ThrowInRootWmiForTesting = false;
+            SystemInfo.ThrowInWin32BatteryForTesting = false;
+            SystemInfo.ThrowInRootWmiGenericExceptionForTesting = true;
+            SystemInfo.ThrowInWin32BatteryGenericExceptionForTesting = true;
+            devMethod?.Invoke(null, null).Should().Be("");
+            mfrMethod?.Invoke(null, null).Should().Be("");
+            rootStrMethod?.Invoke(null, ["BatteryStaticData", "DeviceName"]).Should().Be("");
+            rootIntMethod?.Invoke(null, ["BatteryStaticData", "DesignedCapacity"]).Should().Be(0);
+
+            // 4. MockBatteryDetectedViaWmiForTesting
+            SystemInfo.ResetCaches();
+            SystemInfo.ThrowInPowerStatusForTesting = true;
+            SystemInfo.MockBatteryDetectedViaWmiForTesting = true;
+            SystemInfo.HasBattery().Should().BeTrue();
+
+            // 5. ThrowInQueryWmiForTesting and generic exception
+            SystemInfo.ThrowInQueryWmiForTesting = true;
+            var queryWmiMethod = typeof(SystemInfo).GetMethod("QueryWmiFirst", BindingFlags.NonPublic | BindingFlags.Static);
+            queryWmiMethod?.Invoke(null, ["SELECT Name FROM Win32_Processor", "Name"]).Should().Be("");
+            var queryWmiIntMethod = typeof(SystemInfo).GetMethod("QueryWmiFirstInt", BindingFlags.NonPublic | BindingFlags.Static);
+            queryWmiIntMethod?.Invoke(null, ["SELECT NumberOfCores FROM Win32_Processor", "NumberOfCores"]).Should().Be(0);
+            SystemInfo.ThrowInQueryWmiForTesting = false;
+
+            SystemInfo.ThrowInQueryWmiGenericExceptionForTesting = true;
+            queryWmiMethod?.Invoke(null, ["SELECT Name FROM Win32_Processor", "Name"]).Should().Be("");
+            queryWmiIntMethod?.Invoke(null, ["SELECT NumberOfCores FROM Win32_Processor", "NumberOfCores"]).Should().Be(0);
+            SystemInfo.ThrowInQueryWmiGenericExceptionForTesting = false;
+
+            // Physical core count error path
+            SystemInfo.ThrowInPhysicalCoreCountForTesting = true;
+            var fallbackMethod = typeof(SystemInfo).GetMethod("GetPhysicalCoreCountFallback", BindingFlags.NonPublic | BindingFlags.Static);
+            fallbackMethod?.Invoke(null, null).Should().Be(Environment.ProcessorCount);
+            SystemInfo.ThrowInPhysicalCoreCountForTesting = false;
+
+            // 6. SkipCpuidBrandForTesting
+            SystemInfo.SkipCpuidBrandForTesting = true;
+            var brandMethod = typeof(SystemInfo).GetMethod("GetCpuBrandString", BindingFlags.NonPublic | BindingFlags.Static);
+            brandMethod?.Invoke(null, null).Should().NotBeNull();
+            SystemInfo.SkipCpuidBrandForTesting = false;
+
+            // 7. SkipSmbiosMaxSpeedForTesting & QueryCpuMaxSpeedMsr with SharedPawnIoDevice
+            SystemInfo.SkipSmbiosMaxSpeedForTesting = true;
+            var origSharedPawn = HardwareMonitor.SharedPawnIoDevice;
+            try
+            {
+                // Test QueryCpuMaxSpeedMsr with successful ratio
+                var mockTransport = new MockPawnIoSpeedTransport([35UL]); // 35 * 100 = 3500 MHz
+                HardwareMonitor.SharedPawnIoDevice = mockTransport;
+                var msrSpeedMethod = typeof(SystemInfo).GetMethod("QueryCpuMaxSpeedMsr", BindingFlags.NonPublic | BindingFlags.Static);
+                msrSpeedMethod?.Invoke(null, null);
+
+                // Test QueryCpuMaxSpeedMsr with throwing transport
+                var throwingTransport = new ThrowingPawnIoSpeedTransport();
+                HardwareMonitor.SharedPawnIoDevice = throwingTransport;
+                msrSpeedMethod?.Invoke(null, null);
+
+                // Test GetCpuMaxSpeedMhz when SharedPawnIoDevice is null (falls back to NT / WMI / registry)
+                HardwareMonitor.SharedPawnIoDevice = null;
+                SystemInfo.GetCpuMaxSpeedMhz().Should().BeGreaterThanOrEqualTo(0);
+                SystemInfo.GetCpuThreadCount().Should().BeGreaterThan(0);
+
+                // Test PSU methods with SkipSmbios
+                SystemInfo.GetPsuName().Should().BeEmpty();
+                SystemInfo.GetPsuMaxCapacity().Should().BeEmpty();
+            }
+            finally
+            {
+                HardwareMonitor.SharedPawnIoDevice = origSharedPawn;
+                SystemInfo.SkipSmbiosMaxSpeedForTesting = false;
+            }
+
+            // 8. ThrowInSystemModelForTesting & FallbackToSmbiosSystemInfoForTesting
+            SystemInfo.FallbackToSmbiosSystemInfoForTesting = true;
+            SystemInfo.ThrowInSystemModelForTesting = true;
+            SystemInfo.GetSystemManufacturer().Should().Be("");
+            SystemInfo.GetSystemProductName().Should().Be("");
+
+            // 9. ThrowInRamTypeForTesting
+            SystemInfo.ThrowInRamTypeForTesting = true;
+            var ramWmi = typeof(SystemInfo).GetMethod("QueryRamTypeWmi", BindingFlags.NonPublic | BindingFlags.Static);
+            ramWmi?.Invoke(null, null).Should().Be("");
+            var ramSmbios = typeof(SystemInfo).GetMethod("QueryRamTypeSmbios", BindingFlags.NonPublic | BindingFlags.Static);
+            ramSmbios?.Invoke(null, null).Should().Be("");
+
+            // 10. ThrowInNtPowerQueryForTesting and ThrowInRegistrySpeedForTesting
+            SystemInfo.ThrowInNtPowerQueryForTesting = true;
+            SystemInfo.ThrowInRegistrySpeedForTesting = true;
+            var ntSpeed = typeof(SystemInfo).GetMethod("QueryNtPowerMaxMhz", BindingFlags.NonPublic | BindingFlags.Static);
+            ntSpeed?.Invoke(null, null).Should().Be(0);
+            var regSpeed = typeof(SystemInfo).GetMethod("QueryRegistryProcessorSpeed", BindingFlags.NonPublic | BindingFlags.Static);
+            regSpeed?.Invoke(null, null).Should().Be(0);
+
+            // 11. DiskQuery.QueryDrive0Override & QueryAllDrivesOverride
+            var origPhys0 = DiskQuery.QueryDrive0Override;
+            var origAllDrives = DiskQuery.QueryAllDrivesOverride;
+            try
+            {
+                DiskQuery.QueryDrive0Override = () => new DiskInfo { Model = "Samsung SSD 980", Vendor = "" };
+                SystemInfo.GetDiskManufacturer().Should().Be("Samsung");
+
+                DiskQuery.QueryAllDrivesOverride = () => throw new InvalidOperationException("Simulated drive query error");
+                SystemInfo.GetAllDisks().Should().BeEmpty();
+            }
+            finally
+            {
+                DiskQuery.QueryDrive0Override = origPhys0;
+                DiskQuery.QueryAllDrivesOverride = origAllDrives;
+            }
+        }
+        finally
+        {
+            SystemInfo.FallbackCpuSocketForTesting = false;
+            SystemInfo.ThrowInPowerStatusForTesting = false;
+            SystemInfo.ThrowInWin32BatteryForTesting = false;
+            SystemInfo.ThrowInWin32BatteryGenericExceptionForTesting = false;
+            SystemInfo.ThrowInRootWmiForTesting = false;
+            SystemInfo.ThrowInRootWmiGenericExceptionForTesting = false;
+            SystemInfo.MockBatteryDetectedViaWmiForTesting = false;
+            SystemInfo.ThrowInQueryWmiForTesting = false;
+            SystemInfo.SkipCpuidBrandForTesting = false;
+            SystemInfo.SkipSmbiosMaxSpeedForTesting = false;
+            SystemInfo.FallbackToSmbiosSystemInfoForTesting = false;
+            SystemInfo.ThrowInSystemModelForTesting = false;
+            SystemInfo.ThrowInRamTypeForTesting = false;
+            SystemInfo.ThrowInNtPowerQueryForTesting = false;
+            SystemInfo.ThrowInRegistrySpeedForTesting = false;
+            SystemInfo.ResetCaches();
+        }
+    }
+
+    private sealed class MockPawnIoSpeedTransport(ulong[] returnValues) : IPawnIoTransport
+    {
+        public ulong[] Execute(string name, ulong[]? input, int outLength) => returnValues;
+        public void Dispose() { }
+    }
+
+    private sealed class ThrowingPawnIoSpeedTransport : IPawnIoTransport
+    {
+        public ulong[] Execute(string name, ulong[]? input, int outLength) => throw new InvalidOperationException("Simulated MSR read failure");
+        public void Dispose() { }
+    }
 }

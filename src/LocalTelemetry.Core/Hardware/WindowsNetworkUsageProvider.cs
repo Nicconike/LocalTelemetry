@@ -21,6 +21,10 @@ public static class WindowsNetworkUsageProvider
     private static readonly HashSet<uint> PhysicalIanaTypes = [6, 62, 69, 71, 117, 243];
 
     internal static Func<INetworkUsageAdapter?>? AdapterFactory { get; set; }
+    internal static bool ThrowInGetDefaultAdapterForTesting { get; set; }
+    internal static bool ThrowInResolveAdapterForTesting { get; set; }
+    internal static bool ThrowInGetInstallDateForTesting { get; set; }
+    internal static Func<TrafficHistoryFile, DateTime, DateTime, CancellationToken, Task<WindowsUsageImportResult>>? ImportDateRangeAsyncOverride { get; set; }
 
     internal interface INetworkUsageAdapter
     {
@@ -52,6 +56,8 @@ public static class WindowsNetworkUsageProvider
     {
         try
         {
+            if (ThrowInGetDefaultAdapterForTesting)
+                throw new InvalidOperationException("Simulated WinRT failure");
             var profile = NetworkInformation.GetInternetConnectionProfile();
             return profile?.NetworkAdapter is not null ? new WinRtNetworkUsageAdapter(profile) : null;
         }
@@ -95,6 +101,8 @@ public static class WindowsNetworkUsageProvider
     {
         try
         {
+            if (ThrowInResolveAdapterForTesting)
+                throw new InvalidOperationException("Simulated network query failure");
             foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
             {
                 string id = ni.Id?.Trim("{}".ToCharArray()) ?? string.Empty;
@@ -243,6 +251,8 @@ public static class WindowsNetworkUsageProvider
     {
         try
         {
+            if (ThrowInGetInstallDateForTesting)
+                throw new InvalidOperationException("Simulated registry failure");
             using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
                 @"SOFTWARE\Microsoft\Windows NT\CurrentVersion");
             if (key is not null)
@@ -368,6 +378,9 @@ public static class WindowsNetworkUsageProvider
     public static async Task<WindowsUsageImportResult> ImportDateRangeAsync(
         TrafficHistoryFile historyFile, DateTime start, DateTime end, CancellationToken ct = default)
     {
+        if (ImportDateRangeAsyncOverride is not null)
+            return await ImportDateRangeAsyncOverride(historyFile, start, end, ct);
+
         try
         {
             if (start.Date > end.Date)

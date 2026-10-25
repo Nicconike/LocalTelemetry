@@ -204,6 +204,18 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
     internal static Func<int>? RightWidgetLeftEdgeOverride { get; set; }
     internal static Func<int>? AppListRightEdgeOverride { get; set; }
     internal static Func<bool>? IsTaskbarCenteredOverride { get; set; }
+    internal static Func<int, int>? AppListRightEdgeAutomationOverride { get; set; }
+    internal static bool ThrowInAttachChildForTesting { get; set; }
+    internal static bool ThrowInDumpTaskbarHierarchyForTesting { get; set; }
+    internal static bool ThrowInTrayLeftEdgeForTesting { get; set; }
+    internal static bool ThrowInAppListRightEdgeForTesting { get; set; }
+    internal static bool ThrowInIsWidgetsFeatureEnabledForTesting { get; set; }
+    internal static bool ThrowInExplorerLookupForTesting { get; set; }
+    internal static bool FailGetClientRectForTesting { get; set; }
+    internal static bool FailPositionFloatForTesting { get; set; }
+    internal static bool ThrowInQueryWidgetsButtonEdgeForTesting { get; set; }
+    internal static bool ThrowInQueryAppListRightEdgeFromAutomationForTesting { get; set; }
+    internal static bool ThrowInIsTaskbarCenteredForTesting { get; set; }
 
     internal static IntPtr SafeFindWindowEx(IntPtr hwndParent, IntPtr hwndChildAfter, string? lpszClass, string? lpszWindow)
     {
@@ -226,6 +238,9 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
             if (pid == 0) continue;
             try
             {
+                if (ThrowInExplorerLookupForTesting)
+                    throw new InvalidOperationException("Simulated explorer lookup error");
+
                 using var proc = Process.GetProcessById((int)pid);
                 if (proc.ProcessName.Equals("explorer", StringComparison.OrdinalIgnoreCase))
                     return hwnd;
@@ -285,24 +300,29 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
         if (scr is null || scr.Bounds.Width <= 0 || scr.Bounds.Height <= 0)
             return null;
 
-        if (scr.WorkingArea.Bottom < scr.Bounds.Bottom)
+        return CalculateFromWorkingArea(scr.Bounds, scr.WorkingArea);
+    }
+
+    internal static (Rectangle Rect, uint Edge) CalculateFromWorkingArea(Rectangle bounds, Rectangle workingArea)
+    {
+        if (workingArea.Bottom < bounds.Bottom)
         {
-            return (new Rectangle(scr.Bounds.Left, scr.WorkingArea.Bottom, scr.Bounds.Width, scr.Bounds.Bottom - scr.WorkingArea.Bottom), NativeMethods.ABE_BOTTOM);
+            return (new Rectangle(bounds.Left, workingArea.Bottom, bounds.Width, bounds.Bottom - workingArea.Bottom), NativeMethods.ABE_BOTTOM);
         }
-        if (scr.WorkingArea.Top > scr.Bounds.Top)
+        if (workingArea.Top > bounds.Top)
         {
-            return (new Rectangle(scr.Bounds.Left, scr.Bounds.Top, scr.Bounds.Width, scr.WorkingArea.Top - scr.Bounds.Top), NativeMethods.ABE_TOP);
+            return (new Rectangle(bounds.Left, bounds.Top, bounds.Width, workingArea.Top - bounds.Top), NativeMethods.ABE_TOP);
         }
-        if (scr.WorkingArea.Right < scr.Bounds.Right)
+        if (workingArea.Right < bounds.Right)
         {
-            return (new Rectangle(scr.WorkingArea.Right, scr.Bounds.Top, scr.Bounds.Right - scr.WorkingArea.Right, scr.Bounds.Height), NativeMethods.ABE_RIGHT);
+            return (new Rectangle(workingArea.Right, bounds.Top, bounds.Right - workingArea.Right, bounds.Height), NativeMethods.ABE_RIGHT);
         }
-        if (scr.WorkingArea.Left > scr.Bounds.Left)
+        if (workingArea.Left > bounds.Left)
         {
-            return (new Rectangle(scr.Bounds.Left, scr.Bounds.Top, scr.WorkingArea.Left - scr.Bounds.Left, scr.Bounds.Height), NativeMethods.ABE_LEFT);
+            return (new Rectangle(bounds.Left, bounds.Top, workingArea.Left - bounds.Left, bounds.Height), NativeMethods.ABE_LEFT);
         }
 
-        return (new Rectangle(scr.Bounds.Left, scr.Bounds.Bottom - 48, scr.Bounds.Width, 48), NativeMethods.ABE_BOTTOM);
+        return (new Rectangle(bounds.Left, bounds.Bottom - 48, bounds.Width, 48), NativeMethods.ABE_BOTTOM);
     }
 
     /// <summary>Checks whether the Windows 11 taskbar icons are centered (1) or left-aligned (0).</summary>
@@ -313,6 +333,9 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
 
         try
         {
+            if (ThrowInIsTaskbarCenteredForTesting)
+                throw new InvalidOperationException("Simulated TaskbarAl error");
+
             using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
                 @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced");
             if (key is null) return true;
@@ -330,6 +353,9 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
     {
         try
         {
+            if (ThrowInTrayLeftEdgeForTesting)
+                throw new InvalidOperationException("Simulated tray left edge error");
+
             IntPtr tray = FindExplorerTrayWnd();
             if (tray == IntPtr.Zero) return -1;
 
@@ -445,6 +471,9 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
 
         try
         {
+            if (ThrowInAppListRightEdgeForTesting)
+                throw new InvalidOperationException("Simulated app list right edge error");
+
             // If legacy taskband is present, use its actual bounding rectangle
             if (_taskBandHwnd != IntPtr.Zero && NativeMethods.IsWindow(_taskBandHwnd)
                 && NativeMethods.GetWindowRect(_taskBandHwnd, out var bandRect) && bandRect.Width > 0)
@@ -454,7 +483,9 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
                 return bandRect.Right;
             }
 
-            int automatedRight = QueryAppListRightEdgeFromAutomation(_taskbarRect.Width);
+            int automatedRight = AppListRightEdgeAutomationOverride is not null
+                ? AppListRightEdgeAutomationOverride(_taskbarRect.Width)
+                : QueryAppListRightEdgeFromAutomation(_taskbarRect.Width);
             if (automatedRight > 0)
             {
                 _cachedAppListRightEdge = automatedRight;
@@ -477,6 +508,9 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
     {
         IntPtr tray = FindExplorerTrayWnd();
         if (tray == IntPtr.Zero) return -1;
+
+        if (ThrowInQueryAppListRightEdgeFromAutomationForTesting)
+            throw new InvalidOperationException("Simulated app list right edge automation error");
 
         var trayElem = AutomationElement.FromHandle(tray);
         if (trayElem is null) return -1;
@@ -505,16 +539,21 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
     private static int FindMaxButtonRight(AutomationElement listElem)
     {
         var children = listElem.FindAll(TreeScope.Children, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button));
+        if (children is null || children.Count == 0) return -1;
+        var rects = new List<System.Windows.Rect>(children.Count);
+        foreach (AutomationElement child in children)
+            rects.Add(child.Current.BoundingRectangle);
+        return CalculateMaxButtonRight(rects);
+    }
+
+    internal static int CalculateMaxButtonRight(IEnumerable<System.Windows.Rect> rects)
+    {
         int maxChildRight = -1;
-        if (children is not null && children.Count > 0)
+        foreach (var cr in rects)
         {
-            foreach (AutomationElement child in children)
+            if (!cr.IsEmpty && cr.Width > 0)
             {
-                var cr = child.Current.BoundingRectangle;
-                if (!cr.IsEmpty && cr.Width > 0)
-                {
-                    maxChildRight = Math.Max(maxChildRight, (int)cr.Right);
-                }
+                maxChildRight = Math.Max(maxChildRight, (int)cr.Right);
             }
         }
         return maxChildRight;
@@ -602,6 +641,9 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
     {
         try
         {
+            if (ThrowInIsWidgetsFeatureEnabledForTesting)
+                throw new InvalidOperationException("Simulated widgets error");
+
             using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
                 @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced");
             if (key is null) return true;
@@ -626,6 +668,9 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
 
         try
         {
+            if (ThrowInQueryWidgetsButtonEdgeForTesting)
+                throw new InvalidOperationException("Simulated query widgets button error");
+
             var trayElem = AutomationElement.FromHandle(tray);
             if (trayElem is not null)
             {
@@ -654,7 +699,11 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
 
     private static (int leftRightEdge, int rightLeftEdge) ParseWidgetBoundingBox(AutomationElement widgetBtn, int taskbarWidth, long now)
     {
-        var rect = widgetBtn.Current.BoundingRectangle;
+        return CalculateWidgetEdges(widgetBtn.Current.BoundingRectangle, taskbarWidth, now);
+    }
+
+    internal static (int leftRightEdge, int rightLeftEdge) CalculateWidgetEdges(System.Windows.Rect rect, int taskbarWidth, long now)
+    {
         if (rect.IsEmpty || rect.Width <= 0 || rect.Height <= 0)
         {
             return (-1, -1);
@@ -687,6 +736,9 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
     {
         try
         {
+            if (ThrowInDumpTaskbarHierarchyForTesting)
+                throw new InvalidOperationException("Simulated dump hierarchy error");
+
             IntPtr tray = FindExplorerTrayWnd();
             if (tray == IntPtr.Zero)
             {
@@ -743,6 +795,9 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
     {
         try
         {
+            if (ThrowInAttachChildForTesting)
+                throw new InvalidOperationException("Simulated attach child error");
+
             var tray = FindExplorerTrayWnd();
             if (tray == IntPtr.Zero) return false;
 
@@ -897,7 +952,7 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
             return false;
         }
 
-        if (!NativeMethods.GetClientRect(_parentHwnd, out var parentRect))
+        if (!NativeMethods.GetClientRect(_parentHwnd, out var parentRect) || FailGetClientRectForTesting)
         {
             Log.Error("Cannot position overlay in taskbar band because retrieving parent taskbar client bounds failed.");
             State = OverlayDeploymentState.Failed;
@@ -1016,6 +1071,9 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
 
     private bool PositionFloat(IntPtr overlayHwnd, Size sz)
     {
+        if (FailPositionFloatForTesting)
+            return false;
+
         if (_cfg.Overlay.FloatX >= 0 && _cfg.Overlay.FloatY >= 0)
         {
             return PositionCustomFloat(overlayHwnd, sz);

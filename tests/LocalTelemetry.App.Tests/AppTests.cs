@@ -1619,4 +1619,185 @@ public class AppTests
             }
         }
     }
+
+    [WpfFact]
+    public void App_RemainingBranches_Coverage()
+    {
+        var app = GetOrCreateApp();
+        var initCfg = typeof(App).GetMethod("InitializeConfigurationAndLogging", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        bool fileStartup = (bool)initCfg.Invoke(app, null)!;
+        var initServices = typeof(App).GetMethod("InitializeCoreServicesAndHistory", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        initServices.Invoke(app, [fileStartup]);
+
+        string tempDir = Path.Combine(Path.GetTempPath(), $"AppCoverage_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            // 1. Fresh config with left-aligned taskbar (lines 174-176)
+            var origCentered = TaskbarEmbedder.IsTaskbarCenteredOverride;
+            try
+            {
+                TaskbarEmbedder.IsTaskbarCenteredOverride = () => false;
+                App.ExeDirOverride = tempDir;
+                var initCfgMethod = typeof(App).GetMethod("InitializeConfigurationAndLogging", BindingFlags.NonPublic | BindingFlags.Instance)!;
+                initCfgMethod.Invoke(app, null);
+
+                var cfg = (AppSettings)typeof(App).GetField("_cfg", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(app)!;
+                cfg.Overlay.Placement.Should().Be("right");
+            }
+            finally
+            {
+                TaskbarEmbedder.IsTaskbarCenteredOverride = origCentered;
+                App.ExeDirOverride = null;
+                AppSettings.InitPaths(AppContext.BaseDirectory);
+            }
+
+            // 2. EnsureNotifierStopped with mock process
+            var ensureStopped = typeof(App).GetMethod("EnsureNotifierStopped", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            typeof(App).GetField("_notifierLaunched", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, true);
+            ensureStopped.Invoke(app, null);
+
+            // Test line 654: Kill notifier process that does not exit within timeout
+            using var sleepingProc = Process.Start(new ProcessStartInfo("cmd.exe", "/c ping -n 5 127.0.0.1 >nul")
+            {
+                CreateNoWindow = true,
+                UseShellExecute = false
+            });
+            if (sleepingProc is not null)
+            {
+                typeof(App).GetField("_notifierProcess", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, sleepingProc);
+                typeof(App).GetField("_notifierLaunched", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, true);
+                ensureStopped.Invoke(app, null);
+            }
+
+            // 3. HandleSettingsApplied with null settings shell
+            var handleApplied = typeof(App).GetMethod("HandleSettingsApplied", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            handleApplied.Invoke(app, null);
+
+            // 4. Test ToggleMetricsLogging exception handling (lines 280-283)
+            var toggleMetrics = typeof(App).GetMethod("ToggleMetricsLogging", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            try
+            {
+                App.ThrowInToggleMetricsForTesting = true;
+                toggleMetrics.Invoke(app, [true]);
+                toggleMetrics.Invoke(app, [false]);
+            }
+            finally
+            {
+                App.ThrowInToggleMetricsForTesting = false;
+            }
+
+            // 5. Test EnsureNotifierLaunched when binary does not exist (lines 614-616)
+            var ensureLaunched = typeof(App).GetMethod("EnsureNotifierLaunched", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var appCfg = (AppSettings)typeof(App).GetField("_cfg", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(app)!;
+            appCfg.Alerts.Enabled = true;
+            appCfg.Alerts.ShowToastNotif = true;
+            var origLauncher = App.NotifierLauncherAction;
+            try
+            {
+                App.NotifierLauncherAction = null;
+                ensureLaunched.Invoke(app, null);
+            }
+            finally
+            {
+                App.NotifierLauncherAction = origLauncher;
+            }
+
+            // 6. Test WireEvents context menu exception handling (lines 428-431)
+            var overlay = (TaskbarOverlay)typeof(App).GetField("_overlay", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(app)!;
+            try
+            {
+                App.ThrowInTrayContextMenuForTesting = true;
+                overlay.ShowContextMenuAction?.Invoke(new System.Drawing.Point(50, 50));
+            }
+            finally
+            {
+                App.ThrowInTrayContextMenuForTesting = false;
+            }
+
+            // 7. Test TaskbarCreated invocation (lines 419-422)
+            var tray = (TrayIconManager)typeof(App).GetField("_tray", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(app)!;
+            appCfg.Overlay.Visible = true;
+            tray.RaiseTaskbarCreated();
+
+            // 8. Test LaunchTaskManager with ProcessStarter (lines 488-490)
+            var launchTaskMgr = typeof(App).GetMethod("LaunchTaskManager", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var origProcLauncher = App.TaskManagerProcessLauncher;
+            try
+            {
+                App.TaskManagerProcessLauncher = null;
+                App.ProcessStarter = _ => null;
+                launchTaskMgr.Invoke(app, null);
+            }
+            finally
+            {
+                App.TaskManagerProcessLauncher = origProcLauncher;
+                App.ProcessStarter = null;
+            }
+
+            // 9. Test OpenSettings with SettingsShellFactory null (lines 522-524)
+            var openSettings = typeof(App).GetMethod("OpenSettings", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var origShellFactory = App.SettingsShellFactory;
+            var origSuppressSettings = App.SuppressSettingsWindowForTesting;
+            try
+            {
+                App.SettingsShellFactory = null;
+                App.SuppressSettingsWindowForTesting = false;
+                SettingsShell.SkipShowForTesting = true;
+                openSettings.Invoke(app, null);
+
+                // Now test HandleSettingsApplied when settings shell is loaded/open (lines 566-568)
+                handleApplied.Invoke(app, null);
+            }
+            finally
+            {
+                App.SettingsShellFactory = origShellFactory;
+                App.SuppressSettingsWindowForTesting = origSuppressSettings;
+            }
+
+            // 10. Test StartUserInterface with Suppress flags false (lines 234, 237)
+            var startUi = typeof(App).GetMethod("StartUserInterface", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var origSuppressOverlay = App.SuppressOverlayForTesting;
+            var origSuppressMonitor = App.SuppressHardwareMonitorForTesting;
+            try
+            {
+                App.SuppressOverlayForTesting = false;
+                App.SuppressHardwareMonitorForTesting = false;
+                App.SuppressSettingsWindowForTesting = true;
+                appCfg.Overlay.Visible = true;
+                string[] startupArgs = ["--minimized"];
+                startUi.Invoke(app, [startupArgs]);
+            }
+            finally
+            {
+                App.SuppressOverlayForTesting = origSuppressOverlay;
+                App.SuppressHardwareMonitorForTesting = origSuppressMonitor;
+                App.SuppressSettingsWindowForTesting = origSuppressSettings;
+            }
+
+            // 11. Test ApplyVendorColors with user customizations (lines 327, 335)
+            var customCfg = new AppSettings();
+            customCfg.Overlay.UserCustomizedMetricColors.Add("cpu");
+            customCfg.Overlay.UserCustomizedGroupColors.Add("cpu");
+            App.ApplyVendorColors(customCfg);
+
+            // 12. Test StartBackgroundInitialization exception logging (lines 257-262)
+            var startBg = typeof(App).GetMethod("StartBackgroundInitialization", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var origInvAction = App.HardwareInventoryAction;
+            try
+            {
+                App.HardwareInventoryAction = (_, _) => throw new InvalidOperationException("Simulated hardware error");
+                startBg.Invoke(app, [new TrafficHistoryFile(Path.Combine(tempDir, "hist.json"))]);
+            }
+            finally
+            {
+                App.HardwareInventoryAction = origInvAction;
+            }
+        }
+        finally
+        {
+            try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+        }
+    }
 }

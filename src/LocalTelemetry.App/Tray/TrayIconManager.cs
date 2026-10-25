@@ -26,6 +26,7 @@ public sealed class TrayIconManager : IDisposable
     public event Action? ToggleOverlayRequested;
     public event Action? TaskManagerRequested;
     public event Action? TaskbarCreated;
+    internal void RaiseTaskbarCreated() => TaskbarCreated?.Invoke();
 
     internal static bool SkipUiForTesting { get; set; }
 
@@ -387,6 +388,7 @@ internal sealed class HiddenMenuOwnerForm : Form
     private static readonly uint WmTaskbarCreated = NativeMethods.RegisterWindowMessage("TaskbarCreated");
 
     public event Action? TaskbarCreated;
+    internal void RaiseTaskbarCreated() => TaskbarCreated?.Invoke();
 
     public HiddenMenuOwnerForm()
     {

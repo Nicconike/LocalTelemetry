@@ -23,6 +23,14 @@ public sealed class PawnIoDevice : IPawnIoTransport
     private SafeFileHandle? _handle;
     private bool _disposed;
 
+    internal static Func<string, SafeFileHandle>? CreateFileOverride { get; set; }
+    internal static Func<SafeFileHandle, uint, byte[], byte[], bool>? DeviceIoControlOverride { get; set; }
+    internal static bool PrivilegeEnabled { get; set; }
+    internal static bool ThrowInEnableBackupPrivilegeForTesting { get; set; }
+    internal static Func<HttpClient>? HttpClientFactory { get; set; }
+    internal static Func<ProcessStartInfo, Process?>? ProcessLauncher { get; set; }
+    internal static bool ThrowInStartDriverServiceForTesting { get; set; }
+
     internal PawnIoDevice(SafeFileHandle handle)
     {
         _handle = handle;
@@ -36,14 +44,16 @@ public sealed class PawnIoDevice : IPawnIoTransport
     {
         EnableBackupPrivilege();
 
-        var handle = NativeMethods.CreateFile(
-            DevicePath,
-            NativeMethods.GENERIC_READ | NativeMethods.GENERIC_WRITE,
-            NativeMethods.FILE_SHARE_READ | NativeMethods.FILE_SHARE_WRITE,
-            IntPtr.Zero,
-            NativeMethods.OPEN_EXISTING,
-            FILE_ATTRIBUTE_NORMAL,
-            IntPtr.Zero);
+        var handle = CreateFileOverride != null
+            ? CreateFileOverride(DevicePath)
+            : NativeMethods.CreateFile(
+                DevicePath,
+                NativeMethods.GENERIC_READ | NativeMethods.GENERIC_WRITE,
+                NativeMethods.FILE_SHARE_READ | NativeMethods.FILE_SHARE_WRITE,
+                IntPtr.Zero,
+                NativeMethods.OPEN_EXISTING,
+                FILE_ATTRIBUTE_NORMAL,
+                IntPtr.Zero);
 
         if (handle.IsInvalid)
         {
@@ -56,12 +66,13 @@ public sealed class PawnIoDevice : IPawnIoTransport
         return new PawnIoDevice(handle);
     }
 
-    private static bool _privilegeEnabled;
     private static void EnableBackupPrivilege()
     {
-        if (_privilegeEnabled) return;
+        if (PrivilegeEnabled) return;
         try
         {
+            if (ThrowInEnableBackupPrivilegeForTesting)
+                throw new InvalidOperationException("Simulated privilege failure");
             var hProc = NativeMethods.GetCurrentProcess();
             if (!NativeMethods.OpenProcessToken(hProc,
                     NativeMethods.TOKEN_QUERY | NativeMethods.TOKEN_ADJUST_PRIVILEGES, out var token))
@@ -84,7 +95,7 @@ public sealed class PawnIoDevice : IPawnIoTransport
                 if (NativeMethods.AdjustTokenPrivileges(token, false, ref tp, (uint)len, IntPtr.Zero, IntPtr.Zero)
                     && Marshal.GetLastWin32Error() == 0)
                 {
-                    _privilegeEnabled = true;
+                    PrivilegeEnabled = true;
                 }
             }
         }
@@ -99,8 +110,10 @@ public sealed class PawnIoDevice : IPawnIoTransport
         if (_disposed || _handle is null || blob is null || blob.Length == 0)
             return false;
 
-        bool ok = NativeMethods.DeviceIoControl(_handle, IOCTL_PIO_LOAD_BINARY,
-            blob, (uint)blob.Length, null, 0, out _, IntPtr.Zero);
+        bool ok = DeviceIoControlOverride != null
+            ? DeviceIoControlOverride(_handle, IOCTL_PIO_LOAD_BINARY, blob, [])
+            : NativeMethods.DeviceIoControl(_handle, IOCTL_PIO_LOAD_BINARY,
+                blob, (uint)blob.Length, null, 0, out _, IntPtr.Zero);
         if (!ok)
             Log.Error($"Failed to load PawnIO kernel module ({blob.Length} bytes, Win32 error {Marshal.GetLastWin32Error()})");
 
@@ -132,10 +145,14 @@ public sealed class PawnIoDevice : IPawnIoTransport
         byte[] outBuffer = ArrayPool<byte>.Shared.Rent(outBufSize);
         try
         {
-            if (!NativeMethods.DeviceIoControl(_handle, IOCTL_PIO_EXECUTE_FN,
+            bool ioctlSuccess = DeviceIoControlOverride != null
+                ? DeviceIoControlOverride(_handle, IOCTL_PIO_EXECUTE_FN, inBuffer, outBuffer)
+                : NativeMethods.DeviceIoControl(_handle, IOCTL_PIO_EXECUTE_FN,
                     inBuffer, (uint)inBufSize,
                     outBuffer, (uint)outBufSize,
-                    out _, IntPtr.Zero))
+                    out _, IntPtr.Zero);
+
+            if (!ioctlSuccess)
             {
                 int err = Marshal.GetLastWin32Error();
                 if (err is 6 or 1167) // ERROR_INVALID_HANDLE or ERROR_DEVICE_NOT_CONNECTED
@@ -231,6 +248,33 @@ public sealed class PawnIoDevice : IPawnIoTransport
         }.Uri;
     }
 
+    private static byte[] DownloadInstallerBytes()
+    {
+        if (InstallerDownloader is not null)
+        {
+            return InstallerDownloader();
+        }
+
+        using var client = HttpClientFactory is not null ? HttpClientFactory() : new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        return client.GetByteArrayAsync(GetDefaultInstallerUri()).GetAwaiter().GetResult();
+    }
+
+    private static (string Path, bool IsTemporary) ResolveInstallerPath()
+    {
+        string localPath = Path.Combine(AppContext.BaseDirectory, "PawnIO_setup.exe");
+        if (InstallerDownloader is null && File.Exists(localPath))
+        {
+            Log.Info("Using bundled PawnIO installer");
+            return (localPath, false);
+        }
+
+        Log.Info("Downloading PawnIO installer");
+        byte[] setupBytes = DownloadInstallerBytes();
+        string tmpPath = Path.Combine(Path.GetTempPath(), "PawnIO_setup.exe");
+        File.WriteAllBytes(tmpPath, setupBytes);
+        return (tmpPath, true);
+    }
+
     /// <summary>
     /// Downloads and runs the PawnIO setup installer with silent flags.
     /// Cleans up any stale installation first.
@@ -245,35 +289,7 @@ public sealed class PawnIoDevice : IPawnIoTransport
 
         try
         {
-            string? installerPath = null;
-            bool isTemporaryFile = false;
-
-            string localPath = Path.Combine(AppContext.BaseDirectory, "PawnIO_setup.exe");
-            if (InstallerDownloader is null && File.Exists(localPath))
-            {
-                Log.Info("Using bundled PawnIO installer");
-                installerPath = localPath;
-            }
-            else
-            {
-                Log.Info("Downloading PawnIO installer");
-                byte[] setupBytes;
-                if (InstallerDownloader is not null)
-                {
-                    setupBytes = InstallerDownloader();
-                }
-                else
-                {
-                    using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-                    setupBytes = client.GetByteArrayAsync(GetDefaultInstallerUri())
-                        .GetAwaiter().GetResult();
-                }
-
-                string tmpPath = Path.Combine(Path.GetTempPath(), "PawnIO_setup.exe");
-                File.WriteAllBytes(tmpPath, setupBytes);
-                installerPath = tmpPath;
-                isTemporaryFile = true;
-            }
+            var (installerPath, isTemporaryFile) = ResolveInstallerPath();
 
             var psi = new ProcessStartInfo(installerPath, "-install -silent")
             {
@@ -283,7 +299,7 @@ public sealed class PawnIoDevice : IPawnIoTransport
             };
 
             int exitCode = RunInstaller(psi);
-            if (isTemporaryFile && installerPath is not null)
+            if (isTemporaryFile)
             {
                 try { File.Delete(installerPath); } catch (Exception ex) { Log.Error(ex, "Failed to delete temporary installer file"); }
             }
@@ -341,7 +357,7 @@ public sealed class PawnIoDevice : IPawnIoTransport
         if (!CanRunElevatedOperation())
             return -1;
 
-        using var proc = Process.Start(psi);
+        using var proc = ProcessLauncher is not null ? ProcessLauncher(psi) : Process.Start(psi);
         if (proc is null) return -1;
         proc.WaitForExit(90000);
         return proc.ExitCode;
@@ -391,7 +407,7 @@ public sealed class PawnIoDevice : IPawnIoTransport
         if (!CanRunElevatedOperation())
             return;
 
-        using var proc = Process.Start(psi);
+        using var proc = ProcessLauncher is not null ? ProcessLauncher(psi) : Process.Start(psi);
         if (proc is not null)
             proc.WaitForExit(5000);
     }
@@ -402,6 +418,9 @@ public sealed class PawnIoDevice : IPawnIoTransport
     {
         try
         {
+            if (ThrowInStartDriverServiceForTesting)
+                throw new InvalidOperationException("Simulated sc error");
+
             string scPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "sc.exe");
             var psi = new ProcessStartInfo(scPath, "start PawnIO")
             {
@@ -419,7 +438,7 @@ public sealed class PawnIoDevice : IPawnIoTransport
             if (!CanRunElevatedOperation())
                 return false;
 
-            using var proc = Process.Start(psi);
+            using var proc = ProcessLauncher is not null ? ProcessLauncher(psi) : Process.Start(psi);
             if (proc is not null)
             {
                 proc.WaitForExit(10000);

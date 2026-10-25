@@ -815,12 +815,119 @@ public class WindowsNetworkUsageProviderTests
 
             var entry = historyFile.Find(DateTime.Today.Year, DateTime.Today.Month, DateTime.Today.Day, "Ethernet");
             entry.Should().NotBeNull();
-            entry!.Value.DownBytes.Should().Be(5_000_000);
+            entry.Value.DownBytes.Should().Be(5_000_000);
             entry.Value.UpBytes.Should().Be(2_000_000);
 
             // Test catch block in RefreshTodayUsageAsync when historyFile throws
             var actThrow = async () => await WindowsNetworkUsageProvider.RefreshTodayUsageAsync(null!, CancellationToken.None);
             await actThrow.Should().NotThrowAsync();
+        }
+        finally
+        {
+            WindowsNetworkUsageProvider.AdapterFactory = origFactory;
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+        }
+    }
+
+    [Fact]
+    public async Task WindowsNetworkUsageProvider_ImportHistoricalZero_Coverage()
+    {
+        string tempPath = Path.Combine(Path.GetTempPath(), $"TrafficZero_{Guid.NewGuid():N}.dat");
+        var historyFile = new TrafficHistoryFile(tempPath);
+        var origFactory = WindowsNetworkUsageProvider.AdapterFactory;
+
+        try
+        {
+            DateTime start = DateTime.Today.AddDays(-5);
+            DateTime end = DateTime.Today.AddDays(-1);
+
+            // Pre-populate historyFile with large byte values so all records are skipped as already up to date
+            for (var d = start; d <= end; d = d.AddDays(1))
+            {
+                historyFile.SetDay(d.Year, d.Month, d.Day, 1_000_000_000_000L, 1_000_000_000_000L, "Ethernet", "test");
+                historyFile.SetDay(d.Year, d.Month, d.Day, 1_000_000_000_000L, 1_000_000_000_000L, "WiFi", "test");
+            }
+
+            WindowsNetworkUsageProvider.AdapterFactory = () => new MockTestNetworkAdapter(
+                "MockEth", Guid.NewGuid().ToString("D"), 6u, (_, _, _) => Task.FromResult<IReadOnlyList<(ulong, ulong)>>([]));
+
+            var res = await WindowsNetworkUsageProvider.ImportDateRangeAsync(historyFile, start, end);
+            res.Success.Should().BeTrue();
+            res.DaysImported.Should().Be(0);
+        }
+        finally
+        {
+            WindowsNetworkUsageProvider.AdapterFactory = origFactory;
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+        }
+    }
+
+    [Fact]
+    public async Task WindowsNetworkUsageProvider_ErrorPaths_And_TodayBaselineInitial_Coverage()
+    {
+        var origFactory = WindowsNetworkUsageProvider.AdapterFactory;
+        try
+        {
+            // Test ThrowInGetDefaultAdapterForTesting
+            WindowsNetworkUsageProvider.ThrowInGetDefaultAdapterForTesting = true;
+            WindowsNetworkUsageProvider.AdapterFactory = null;
+            var usage = await WindowsNetworkUsageProvider.GetUsageAsync(DateTime.Today, DateTime.Today);
+            usage.Should().BeEmpty();
+        }
+        finally
+        {
+            WindowsNetworkUsageProvider.ThrowInGetDefaultAdapterForTesting = false;
+            WindowsNetworkUsageProvider.AdapterFactory = origFactory;
+        }
+
+        try
+        {
+            // Test ThrowInResolveAdapterForTesting
+            WindowsNetworkUsageProvider.ThrowInResolveAdapterForTesting = true;
+            string resolved = WindowsNetworkUsageProvider.ResolveAdapterInterfaceName("test-guid", 6u);
+            resolved.Should().Be("Ethernet");
+        }
+        finally
+        {
+            WindowsNetworkUsageProvider.ThrowInResolveAdapterForTesting = false;
+        }
+
+        try
+        {
+            // Test ThrowInGetInstallDateForTesting
+            WindowsNetworkUsageProvider.ThrowInGetInstallDateForTesting = true;
+            var dt = WindowsNetworkUsageProvider.GetWindowsInstallDate();
+            dt.Should().Be(DateTime.Today.AddDays(-30));
+        }
+        finally
+        {
+            WindowsNetworkUsageProvider.ThrowInGetInstallDateForTesting = false;
+        }
+
+        string tempPath = Path.Combine(Path.GetTempPath(), $"TrafficInitialToday_{Guid.NewGuid():N}.dat");
+        try
+        {
+            // Test RefreshTodayUsageAsync on empty file where today's record doesn't exist yet (lines 492-496)
+            var historyFile = new TrafficHistoryFile(tempPath);
+            WindowsNetworkUsageProvider.AdapterFactory = () => new MockTestNetworkAdapter(
+                "MockAdapter",
+                Guid.NewGuid().ToString("D"),
+                6u,
+                (_, _, _) => Task.FromResult<IReadOnlyList<(ulong, ulong)>>([(5000UL, 3000UL)]));
+
+            await WindowsNetworkUsageProvider.RefreshTodayUsageAsync(historyFile);
+            var today = DateTime.Today;
+            var entry = historyFile.Find(today.Year, today.Month, today.Day, "Ethernet");
+            entry.HasValue.Should().BeTrue();
+            if (entry is { } val)
+            {
+                val.DownBytes.Should().Be(5000);
+                val.UpBytes.Should().Be(3000);
+            }
+            else
+            {
+                Assert.Fail("entry should not be null");
+            }
         }
         finally
         {

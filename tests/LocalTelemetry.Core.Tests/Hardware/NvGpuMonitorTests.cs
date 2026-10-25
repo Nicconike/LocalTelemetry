@@ -46,8 +46,11 @@ public class NvGpuMonitorTests
             temp.Should().Be(65u);
             native.GetUtilizationRates(validDev, out var gpuU, out var memU).Should().Be(0);
             gpuU.Should().Be(75u);
+            memU.Should().Be(30u);
             native.GetMemoryInfo(validDev, out var total, out var free, out var used).Should().Be(0);
             total.Should().Be(1000UL);
+            free.Should().Be(600UL);
+            used.Should().Be(400UL);
             native.GetClockInfo(validDev, 0, out var clock).Should().Be(0);
             clock.Should().Be(2500u);
             native.GetPowerUsage(validDev, out var pwr).Should().Be(0);
@@ -129,8 +132,8 @@ public class NvGpuMonitorTests
         nativeMock.Init().Returns(0);
 
         nativeMock.GetDeviceHandleByIndex(0, out Arg.Any<IntPtr>()).Returns(x => { x[1] = (IntPtr)0x1000; return 0; });
-        nativeMock.GetDeviceName((IntPtr)0x1000, out Arg.Any<string>()!).Returns(x => { x[1] = "NVIDIA GeForce RTX 4090"; return 0; });
-        nativeMock.GetDriverVersion(out Arg.Any<string>()!).Returns(x => { x[0] = "550.54"; return 0; });
+        nativeMock.GetDeviceName((IntPtr)0x1000, out Arg.Any<string>()).Returns(x => { x[1] = "NVIDIA GeForce RTX 4090"; return 0; });
+        nativeMock.GetDriverVersion(out Arg.Any<string>()).Returns(x => { x[0] = "550.54"; return 0; });
 
         nativeMock.GetTemperature((IntPtr)0x1000, 0, out Arg.Any<uint>()).Returns(x => { x[2] = 62u; return 0; });
         nativeMock.GetUtilizationRates((IntPtr)0x1000, out Arg.Any<uint>(), out Arg.Any<uint>()).Returns(x => { x[1] = 85u; x[2] = 40u; return 0; });
@@ -147,7 +150,7 @@ public class NvGpuMonitorTests
         nativeMock.GetPowerUsage((IntPtr)0x1000, out Arg.Any<uint>()).Returns(x => { x[1] = 320000u; return 0; });
         nativeMock.GetPowerManagementLimit((IntPtr)0x1000, out Arg.Any<uint>()).Returns(x => { x[1] = 450000u; return 0; });
 
-        using var monitor = new NvGpuMonitor(nativeMock);
+        var monitor = new NvGpuMonitor(nativeMock);
 
         monitor.IsAvailable.Should().BeTrue();
         monitor.GpuName.Should().Be("NVIDIA GeForce RTX 4090");
@@ -155,7 +158,7 @@ public class NvGpuMonitorTests
 
         var data = monitor.Query();
         data.Should().NotBeNull();
-        data!.Value.TempC.Should().Be(62.0f);
+        data.Value.TempC.Should().Be(62.0f);
         data.Value.UsagePct.Should().Be(85.0f);
         data.Value.VramTotalMb.Should().Be(24576.0f);
         data.Value.VramUsedMb.Should().Be(10240.0f);
@@ -173,7 +176,7 @@ public class NvGpuMonitorTests
         var nativeMock = Substitute.For<INvGpuNative>();
         nativeMock.Init().Returns(0);
         nativeMock.GetDeviceHandleByIndex(0, out Arg.Any<IntPtr>()).Returns(x => { x[1] = (IntPtr)0x1000; return 0; });
-        nativeMock.GetDeviceName((IntPtr)0x1000, out Arg.Any<string>()!).Returns(x => { x[1] = "NVIDIA GeForce RTX 5060 Laptop GPU"; return 0; });
+        nativeMock.GetDeviceName((IntPtr)0x1000, out Arg.Any<string>()).Returns(x => { x[1] = "NVIDIA GeForce RTX 5060 Laptop GPU"; return 0; });
 
         // Simulate NVML_ERROR_GPU_IS_LOST (15)
         nativeMock.GetTemperature((IntPtr)0x1000, 0, out Arg.Any<uint>()).Returns(15);
@@ -193,7 +196,7 @@ public class NvGpuMonitorTests
         var nativeMock = Substitute.For<INvGpuNative>();
         nativeMock.Init().Returns(0);
         nativeMock.GetDeviceHandleByIndex(0, out Arg.Any<IntPtr>()).Returns(x => { x[1] = (IntPtr)0x1000; return 0; });
-        nativeMock.GetDeviceName((IntPtr)0x1000, out Arg.Any<string>()!).Returns(x => { x[1] = "NVIDIA GeForce RTX 5060 Laptop GPU"; return 0; });
+        nativeMock.GetDeviceName((IntPtr)0x1000, out Arg.Any<string>()).Returns(x => { x[1] = "NVIDIA GeForce RTX 5060 Laptop GPU"; return 0; });
 
         using var monitor = new NvGpuMonitor(nativeMock);
         monitor.IsAvailable.Should().BeTrue();
@@ -210,7 +213,7 @@ public class NvGpuMonitorTests
         var nativeMock = Substitute.For<INvGpuNative>();
         nativeMock.Init().Returns(0);
         nativeMock.GetDeviceHandleByIndex(0, out Arg.Any<IntPtr>()).Returns(x => { x[1] = (IntPtr)0x1000; return 0; });
-        nativeMock.GetDeviceName((IntPtr)0x1000, out Arg.Any<string>()!).Returns(x => { x[1] = "NVIDIA GeForce RTX 5060 Laptop GPU"; return 0; });
+        nativeMock.GetDeviceName((IntPtr)0x1000, out Arg.Any<string>()).Returns(x => { x[1] = "NVIDIA GeForce RTX 5060 Laptop GPU"; return 0; });
 
         // Simulate single 999 (NVML_ERROR_UNKNOWN) on temperature, but other metrics succeed
         nativeMock.GetTemperature((IntPtr)0x1000, 0, out Arg.Any<uint>()).Returns(999);
@@ -221,7 +224,7 @@ public class NvGpuMonitorTests
 
         var data = monitor.Query();
         data.Should().NotBeNull();
-        data!.Value.UsagePct.Should().Be(20f);
+        data.Value.UsagePct.Should().Be(20f);
         // Did not shut down
         monitor.IsAvailable.Should().BeTrue();
         nativeMock.DidNotReceive().Shutdown();
@@ -233,7 +236,7 @@ public class NvGpuMonitorTests
         var nativeMock = Substitute.For<INvGpuNative>();
         nativeMock.Init().Returns(0);
         nativeMock.GetDeviceHandleByIndex(0, out Arg.Any<IntPtr>()).Returns(x => { x[1] = (IntPtr)0x1000; return 0; });
-        nativeMock.GetDeviceName((IntPtr)0x1000, out Arg.Any<string>()!).Returns(x => { x[1] = "NVIDIA GeForce RTX 5060 Laptop GPU"; return 0; });
+        nativeMock.GetDeviceName((IntPtr)0x1000, out Arg.Any<string>()).Returns(x => { x[1] = "NVIDIA GeForce RTX 5060 Laptop GPU"; return 0; });
 
         // All calls return 999
         nativeMock.GetTemperature((IntPtr)0x1000, 0, out Arg.Any<uint>()).Returns(999);

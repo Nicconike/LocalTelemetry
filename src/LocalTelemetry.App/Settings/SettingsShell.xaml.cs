@@ -26,11 +26,21 @@ public sealed partial class SettingsShell : Window
 
     internal static Action<string>? PostJsonActionOverride { get; set; }
     internal static Action<string>? UrlLauncherAction { get; set; }
+    internal static Action<ProcessStartInfo>? UrlProcessLauncher { get; set; }
     internal static Action<string>? FolderLauncherAction { get; set; }
+    internal static Action<ProcessStartInfo>? FolderProcessLauncher { get; set; }
+    internal static Action<string>? ScriptExecutorOverride { get; set; }
     internal static bool SkipWebView2InitForTesting { get; set; }
     internal static bool SkipInitializeComponentForTesting { get; set; }
     internal static bool SkipShowForTesting { get; set; }
+    internal static bool SkipDragMoveForTesting { get; set; }
+    internal static bool ThrowInUpdateCheckForTesting { get; set; }
+    internal static bool ThrowInBuildDateForTesting { get; set; }
+    internal static bool ThrowInWebMessageForTesting { get; set; }
+    internal static bool ThrowInImportWindowsUsageForTesting { get; set; }
     internal static Action<string, string>? MessageBoxAction { get; set; }
+    internal static Func<string, string, MessageBoxResult>? MessageBoxFunc { get; set; }
+    internal Task? LastImportTask { get; private set; }
 
     public new void Show()
     {
@@ -93,7 +103,16 @@ public sealed partial class SettingsShell : Window
         _updateChecker = new UpdateCheckService(cfg);
         _wwwRoot = Path.Combine(AppContext.BaseDirectory, "wwwroot");
 
-        // Set taskbar/alt-tab icon from the embedded application icon
+        SetWindowIcon();
+
+        Loaded += OnLoaded;
+        // Close WebView2 select dropdowns when the window is moved
+        // (WebView2 native popups render at stale screen coordinates after move)
+        LocationChanged += (_, _) => OnLocationChanged();
+    }
+
+    private void SetWindowIcon()
+    {
         try
         {
             string? exePath = Environment.ProcessPath;
@@ -110,18 +129,25 @@ public sealed partial class SettingsShell : Window
             }
         }
         catch (Exception ex) { Log.Error(ex, "Window icon extraction failed"); }
+    }
 
-        Loaded += OnLoaded;
-        // Close WebView2 select dropdowns when the window is moved
-        // (WebView2 native popups render at stale screen coordinates after move)
-        LocationChanged += (_, _) =>
+    private void OnLocationChanged()
+    {
+        if (_webViewReady && (ScriptExecutorOverride is not null || WebView?.CoreWebView2 is not null))
         {
-            if (_webViewReady && WebView?.CoreWebView2 is not null)
+            try
             {
-                try { WebView.CoreWebView2.ExecuteScriptAsync("try{document.activeElement?.blur();}catch(e){console.warn('WebView2 blur failed',e);}"); }
-                catch (Exception ex) { Log.Error(ex, "WebView2 blur script failed after window move"); }
+                if (ScriptExecutorOverride is not null)
+                {
+                    ScriptExecutorOverride("try{document.activeElement?.blur();}catch(e){console.warn('WebView2 blur failed',e);}");
+                }
+                else
+                {
+                    WebView!.CoreWebView2.ExecuteScriptAsync("try{document.activeElement?.blur();}catch(e){console.warn('WebView2 blur failed',e);}");
+                }
             }
-        };
+            catch (Exception ex) { Log.Error(ex, "WebView2 blur script failed after window move"); }
+        }
     }
 
     // Use Loaded event so the WPF visual tree is ready.
@@ -163,8 +189,33 @@ public sealed partial class SettingsShell : Window
             _appUsageTimer.Start();
         }
 
-        if (_webViewReady || SkipWebView2InitForTesting) return;
+        if (_webViewReady) return;
+        if (SkipWebView2InitForTesting)
+        {
+            SetupTimersAndSubscriptions();
+            return;
+        }
         await InitWebViewAsync();
+    }
+
+    private void SetupTimersAndSubscriptions()
+    {
+        // Subscribe to network change events for real-time NIC dropdown updates.
+        _nicDebounceTimer = new System.Threading.Timer(
+            _ => Dispatcher.Invoke(CheckAndSendNics));
+        NetworkChange.NetworkAddressChanged += OnNetworkAddressChanged;
+
+        // Start periodic push of today's traffic totals (every 5 seconds).
+        _trafficTodayTimer = new System.Threading.Timer(
+            _ => Dispatcher.Invoke(SendTrafficToday),
+            null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+
+        TrafficHistoryStore.HistoryUpdated += OnHistoryUpdated;
+
+        _webViewReady = true;
+        SendTrafficToday();
+        SendTrafficMonths();
+        SendAllTrafficHistory();
     }
 
     // WebView2 init
@@ -228,22 +279,7 @@ public sealed partial class SettingsShell : Window
                 WebView.Source = new Uri($"https://{SettingsHost}/{SettingsEntryPoint}");
             }
 
-            // Subscribe to network change events for real-time NIC dropdown updates.
-            _nicDebounceTimer = new System.Threading.Timer(
-                _ => Dispatcher.Invoke(CheckAndSendNics));
-            NetworkChange.NetworkAddressChanged += OnNetworkAddressChanged;
-
-            // Start periodic push of today's traffic totals (every 5 seconds).
-            _trafficTodayTimer = new System.Threading.Timer(
-                _ => Dispatcher.Invoke(SendTrafficToday),
-                null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
-
-            TrafficHistoryStore.HistoryUpdated += OnHistoryUpdated;
-
-            _webViewReady = true;
-            SendTrafficToday();
-            SendTrafficMonths();
-            SendAllTrafficHistory();
+            SetupTimersAndSubscriptions();
         }
         catch (Exception ex)
         {
@@ -251,6 +287,10 @@ public sealed partial class SettingsShell : Window
             if (MessageBoxAction is not null)
             {
                 MessageBoxAction("LocalTelemetry - Settings Error", ex.Message);
+            }
+            else if (MessageBoxFunc is not null)
+            {
+                MessageBoxFunc(ex.Message, "LocalTelemetry - Settings Error");
             }
             else
             {
@@ -272,22 +312,30 @@ public sealed partial class SettingsShell : Window
     }
 
     // Inbound message handler
-    private void OnWebMessageReceived(
-        object? sender, CoreWebView2WebMessageReceivedEventArgs e)
+    internal void ProcessWebMessage(string? source, string json)
     {
-        if (!IsValidMessageSource(e.Source))
+        if (!IsValidMessageSource(source))
         {
-            Log.Warn($"Rejected web message from untrusted source '{e.Source}'");
+            Log.Warn($"Rejected web message from untrusted source '{source}'");
             return;
         }
 
-        HandleWebMessageJson(e.WebMessageAsJson);
+        HandleWebMessageJson(json);
+    }
+
+    private void OnWebMessageReceived(
+        object? sender, CoreWebView2WebMessageReceivedEventArgs e)
+    {
+        ProcessWebMessage(e.Source, e.WebMessageAsJson);
     }
 
     internal void HandleWebMessageJson(string json)
     {
         try
         {
+            if (ThrowInWebMessageForTesting)
+                throw new InvalidOperationException("Simulated web message error");
+
             using JsonDocument doc = JsonDocument.Parse(json);
             JsonElement root = doc.RootElement;
 
@@ -314,7 +362,7 @@ public sealed partial class SettingsShell : Window
                 case "openFolder": HandleOpenFolder(root); break;
                 case "getTrafficHistoryAll": SendAllTrafficHistory(); break;
                 case "importDat": HandleImportJson(json); break;
-                case "importWindowsUsage": _ = HandleImportWindowsUsage(root); break;
+                case "importWindowsUsage": LastImportTask = HandleImportWindowsUsage(root); break;
                 case "checkForUpdates": HandleCheckForUpdatesMsg(root); break;
                 case "log": HandleFrontendLog(root); break;
                 default: break;
@@ -362,10 +410,11 @@ public sealed partial class SettingsShell : Window
                 return;
             }
 
-            if (SkipShowForTesting || SkipWebView2InitForTesting)
-                return;
-
-            Process.Start(new ProcessStartInfo { FileName = parsedUri.AbsoluteUri, UseShellExecute = true });
+            var psi = new ProcessStartInfo { FileName = parsedUri.AbsoluteUri, UseShellExecute = true };
+            if (UrlProcessLauncher is not null)
+                UrlProcessLauncher(psi);
+            else if (!SkipShowForTesting && !SkipWebView2InitForTesting)
+                Process.Start(psi);
         }
         else
         {
@@ -410,16 +459,17 @@ public sealed partial class SettingsShell : Window
                 return;
             }
 
-            if (SkipShowForTesting || SkipWebView2InitForTesting)
-                return;
-
             string explorerPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
-            Process.Start(new ProcessStartInfo
+            var psi = new ProcessStartInfo
             {
                 FileName = explorerPath,
                 Arguments = $"\"{dirToOpen}\"",
                 UseShellExecute = true
-            });
+            };
+            if (FolderProcessLauncher is not null)
+                FolderProcessLauncher(psi);
+            else if (!SkipShowForTesting && !SkipWebView2InitForTesting)
+                Process.Start(psi);
         }
     }
 
@@ -638,6 +688,9 @@ public sealed partial class SettingsShell : Window
     {
         try
         {
+            if (ThrowInImportWindowsUsageForTesting)
+                throw new InvalidOperationException("Simulated import windows usage error");
+
             if (!root.TryGetProperty(PayloadProp, out JsonElement payload)
                 || !payload.TryGetProperty("startDate", out JsonElement startEl)
                 || !payload.TryGetProperty("endDate", out JsonElement endEl))
@@ -712,6 +765,8 @@ public sealed partial class SettingsShell : Window
     {
         try
         {
+            if (ThrowInUpdateCheckForTesting)
+                throw new InvalidOperationException("Simulated update check error");
             Log.Debug($"Dispatching software update check (Forced: {force})");
             var result = await _updateChecker.CheckForUpdatesAsync(force).ConfigureAwait(false);
             var resJson = JsonSerializer.Serialize(new
@@ -830,6 +885,8 @@ public sealed partial class SettingsShell : Window
         string buildDate = string.Empty;
         try
         {
+            if (ThrowInBuildDateForTesting)
+                throw new InvalidOperationException("Simulated build date failure");
             string assemblyPath = Path.Combine(AppContext.BaseDirectory, $"{asm.GetName().Name}.dll");
             if (!File.Exists(assemblyPath))
                 assemblyPath = Environment.ProcessPath ?? assemblyPath;
@@ -1482,6 +1539,7 @@ public sealed partial class SettingsShell : Window
                 ? WindowState.Normal : WindowState.Maximized;
             return;
         }
+        if (SkipDragMoveForTesting) return;
         DragMove();
     }
 

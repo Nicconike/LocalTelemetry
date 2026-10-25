@@ -51,12 +51,16 @@ public sealed partial class App : WpfApplication
     internal static Action? QuitAppAction { get; set; }
     internal static Func<string, Task>? SrumImporterAction { get; set; }
     internal static Action<ISystemInfo, string>? HardwareInventoryAction { get; set; }
+    internal static string? ExeDirOverride { get; set; }
     internal static IPawnIoManager? PawnIoManagerOverride { get; set; }
     internal static bool SuppressSettingsWindowForTesting { get; set; }
     internal static bool SuppressOverlayForTesting { get; set; }
     internal static bool SuppressHardwareMonitorForTesting { get; set; }
     internal static Action<string, string>? MessageBoxAction { get; set; }
     internal static Func<AppSettings, NetUsageLogger, SettingsShell>? SettingsShellFactory { get; set; }
+    internal static Func<ProcessStartInfo, Process?>? ProcessStarter { get; set; }
+    internal static bool ThrowInToggleMetricsForTesting { get; set; }
+    internal static bool ThrowInTrayContextMenuForTesting { get; set; }
 
     // Elevation
     private static bool IsAdministrator()
@@ -166,7 +170,7 @@ public sealed partial class App : WpfApplication
         _startupUtc = DateTime.UtcNow;
         _uiCtx = SynchronizationContext.Current;
 
-        string exeDir = AppContext.BaseDirectory;
+        string exeDir = ExeDirOverride ?? AppContext.BaseDirectory;
         AppSettings.InitPaths(exeDir);
         bool isFreshConfig = !File.Exists(AppSettings.ConfigPath);
         _cfg = AppSettings.Load();
@@ -273,6 +277,8 @@ public sealed partial class App : WpfApplication
         _metricsWasEnabled = enable;
         try
         {
+            if (ThrowInToggleMetricsForTesting)
+                throw new InvalidOperationException("Simulated metrics logging failure");
             Log.EnableMetrics(enable);
             Log.Info(enable ? "Metrics logging enabled" : "Metrics logging disabled");
         }
@@ -421,6 +427,8 @@ public sealed partial class App : WpfApplication
         {
             try
             {
+                if (ThrowInTrayContextMenuForTesting)
+                    throw new InvalidOperationException("Simulated context menu failure");
                 Log.Debug($"Forwarding right-click context menu display to TrayIconManager at ({pt.X}, {pt.Y})");
                 _tray.ShowOverlayContextMenu(pt);
             }
@@ -479,7 +487,7 @@ public sealed partial class App : WpfApplication
             }
             else
             {
-                Process.Start(psi);
+                using var proc = ProcessStarter is not null ? ProcessStarter(psi) : Process.Start(psi);
             }
             Log.Info("Launched Task Manager");
         }

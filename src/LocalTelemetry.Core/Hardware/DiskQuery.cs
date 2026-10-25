@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Management;
 using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
 using System.Runtime.Versioning;
 
 namespace LocalTelemetry.Core.Hardware;
@@ -39,10 +40,13 @@ public static class DiskQuery
     private static readonly Lazy<ConcurrentDictionary<int, string>> _busTypeIoctlCache = new(() => new());
 
     private static List<DiskInfo>? _cachedDrives;
+    internal static Func<DiskInfo?>? QueryDrive0Override { get; set; }
+    internal static Func<List<DiskInfo>>? QueryAllDrivesOverride { get; set; }
 
     /// <summary>Returns all physical drives (cached after first call).</summary>
     public static List<DiskInfo> QueryAllDrives()
     {
+        if (QueryAllDrivesOverride is not null) return QueryAllDrivesOverride();
         if (_cachedDrives is not null) return _cachedDrives;
         _cachedDrives = EnumerateAllDrives();
         return _cachedDrives;
@@ -58,6 +62,7 @@ public static class DiskQuery
     /// <summary>Returns the first physical drive (usually the boot drive) or null.</summary>
     public static DiskInfo? QueryPhysicalDrive0()
     {
+        if (QueryDrive0Override is not null) return QueryDrive0Override();
         return QueryAllDrives().FirstOrDefault();
     }
 
@@ -130,9 +135,11 @@ public static class DiskQuery
             return cached;
 
         string path = $@"\\.\PhysicalDrive{diskIndex}";
-        using var handle = NativeMethods.CreateFile(path, 0,
-            NativeMethods.FILE_SHARE_READ | NativeMethods.FILE_SHARE_WRITE,
-            IntPtr.Zero, NativeMethods.OPEN_EXISTING, 0, IntPtr.Zero);
+        using var handle = CreateFileOverride != null
+            ? CreateFileOverride(path)
+            : NativeMethods.CreateFile(path, 0,
+                NativeMethods.FILE_SHARE_READ | NativeMethods.FILE_SHARE_WRITE,
+                IntPtr.Zero, NativeMethods.OPEN_EXISTING, 0, IntPtr.Zero);
 
         if (handle is null || handle.IsInvalid)
             return cache[diskIndex] = string.Empty;
@@ -148,26 +155,30 @@ public static class DiskQuery
         StorageAdapterDescriptor desc;
         byte[] descBytes = new byte[Marshal.SizeOf<StorageAdapterDescriptor>()];
 
-        if (NativeMethods.DeviceIoControl(handle, IOCTL_STORAGE_QUERY_PROPERTY,
-                queryBytes, (uint)queryBytes.Length,
-                descBytes, (uint)descBytes.Length, out uint _, IntPtr.Zero))
+        try
         {
-            try
+            bool ioctlSuccess = DeviceIoControlOverride != null
+                ? DeviceIoControlOverride(handle, IOCTL_STORAGE_QUERY_PROPERTY, queryBytes, descBytes)
+                : NativeMethods.DeviceIoControl(handle, IOCTL_STORAGE_QUERY_PROPERTY,
+                    queryBytes, (uint)queryBytes.Length,
+                    descBytes, (uint)descBytes.Length, out uint _, IntPtr.Zero);
+
+            if (ioctlSuccess)
             {
                 desc = BytesToStruct<StorageAdapterDescriptor>(descBytes);
-            }
-            catch (Exception ex)
-            {
-                Diagnostics.Log.Error(ex, $"Failed to parse storage adapter descriptor for disk {diskIndex}");
-                return cache[diskIndex] = string.Empty;
-            }
 
-            // 0 = BusTypeUnknown, >32 = garbage (driver returned wrong struct) - let fallback chain handle it
-            if (desc.BusType == 0 || desc.BusType > 32)
-                return cache[diskIndex] = string.Empty;
+                // 0 = BusTypeUnknown, >32 = garbage (driver returned wrong struct) - let fallback chain handle it
+                if (desc.BusType == 0 || desc.BusType > 32)
+                    return cache[diskIndex] = string.Empty;
 
-            string busType = FormatBusType(desc.BusType);
-            return cache[diskIndex] = busType;
+                string busType = FormatBusType(desc.BusType);
+                return cache[diskIndex] = busType;
+            }
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Error(ex, $"Failed to parse storage adapter descriptor for disk {diskIndex}");
+            return cache[diskIndex] = string.Empty;
         }
 
         return cache[diskIndex] = string.Empty;
@@ -312,19 +323,7 @@ public static class DiskQuery
             foreach (ManagementBaseObject mo in coll)
             {
                 string devId = mo["DeviceId"]?.ToString() ?? "";
-                int mt = mo["MediaType"] switch
-                {
-                    int i => i,
-                    ushort u => (int)u,
-                    _ => 0
-                };
-                string mType = mt switch
-                {
-                    3 => "HDD",
-                    4 => "SSD",
-                    5 => "SCM",
-                    _ => ""
-                };
+                string mType = ParseMsftMediaType(mo["MediaType"]);
                 if (!string.IsNullOrEmpty(devId) && !string.IsNullOrEmpty(mType))
                     msftMediaTypes[devId] = mType;
             }
@@ -334,6 +333,23 @@ public static class DiskQuery
             Diagnostics.Log.Debug(ex, "WMI query for MSFT_PhysicalDisk failed; falling back to heuristic detection");
         }
         return msftMediaTypes;
+    }
+
+    internal static string ParseMsftMediaType(object? rawMediaType)
+    {
+        int mt = rawMediaType switch
+        {
+            int i => i,
+            ushort u => (int)u,
+            _ => 0
+        };
+        return mt switch
+        {
+            3 => "HDD",
+            4 => "SSD",
+            5 => "SCM",
+            _ => ""
+        };
     }
 
     private static bool IsExcludedDrive(string iface, string pnpId, string win32Media, int idx, out string resolvedBusType)
@@ -461,6 +477,8 @@ public static class DiskQuery
     }
 
     internal static string? SystemVolumePathOverride { get; set; }
+    internal static Func<string, SafeFileHandle>? CreateFileOverride { get; set; }
+    internal static Func<SafeFileHandle, uint, byte[], byte[], bool>? DeviceIoControlOverride { get; set; }
 
     private static int? GetBootDriveIndex()
     {
@@ -469,9 +487,11 @@ public static class DiskQuery
             string? systemDrive = Path.GetPathRoot(Environment.SystemDirectory);
             if (string.IsNullOrEmpty(systemDrive)) return null;
             string volumePath = SystemVolumePathOverride ?? (@"\\.\" + systemDrive.TrimEnd('\\'));
-            using var hVolume = NativeMethods.CreateFile(volumePath,
-                0, NativeMethods.FILE_SHARE_READ | NativeMethods.FILE_SHARE_WRITE,
-                IntPtr.Zero, NativeMethods.OPEN_EXISTING, 0, IntPtr.Zero);
+            using var hVolume = CreateFileOverride != null
+                ? CreateFileOverride(volumePath)
+                : NativeMethods.CreateFile(volumePath,
+                    0, NativeMethods.FILE_SHARE_READ | NativeMethods.FILE_SHARE_WRITE,
+                    IntPtr.Zero, NativeMethods.OPEN_EXISTING, 0, IntPtr.Zero);
             if (hVolume is null || hVolume.IsInvalid)
             {
                 Diagnostics.Log.Error("Could not open system volume to determine boot drive index");
@@ -479,8 +499,11 @@ public static class DiskQuery
             else
             {
                 byte[] extents = new byte[32];
-                if (NativeMethods.DeviceIoControl(hVolume, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS,
-                        null, 0, extents, 32, out uint ret, IntPtr.Zero) && ret >= 12)
+                bool ioctlSuccess = DeviceIoControlOverride != null
+                    ? DeviceIoControlOverride(hVolume, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, [], extents)
+                    : NativeMethods.DeviceIoControl(hVolume, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS,
+                        null, 0, extents, 32, out uint _, IntPtr.Zero);
+                if (ioctlSuccess)
                 {
                     int diskNumber = BitConverter.ToInt32(extents, 8);
                     return diskNumber;

@@ -52,6 +52,8 @@ public static class EseNetworkUsageReader
         return await ReadUsageInternalAsync(startDate, endDate, null, null, null, null, ct).ConfigureAwait(false);
     }
 
+    internal static string? EsentUtlPathOverride { get; set; }
+
     internal static async Task<List<WindowsNetworkUsageRecord>> ReadUsageInternalAsync(
         DateTime startDate,
         DateTime endDate,
@@ -68,7 +70,7 @@ public static class EseNetworkUsageReader
             return [];
         }
 
-        string esentutl = Path.Combine(Environment.SystemDirectory, "esentutl.exe");
+        string esentutl = EsentUtlPathOverride ?? Path.Combine(Environment.SystemDirectory, "esentutl.exe");
         if (!File.Exists(esentutl))
         {
             Log.Warn("Database utility was not found, falling back to runtime provider");

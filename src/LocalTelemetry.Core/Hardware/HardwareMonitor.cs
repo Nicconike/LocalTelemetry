@@ -71,7 +71,7 @@ public sealed class HardwareMonitor : IDisposable
     private IntelPowerGadget? _intelPwrGadget;
 
     // PawnIO - EV-signed kernel driver for MSR/SMU access
-    internal static IPawnIoTransport? SharedPawnIoDevice { get; private set; }
+    internal static IPawnIoTransport? SharedPawnIoDevice { get; set; }
     private IPawnIoTransport? _pawnIoDevice;
     private IntelMsrReader? _intelMsr;
     private AmdMsrReader? _amdMsr;
@@ -117,6 +117,26 @@ public sealed class HardwareMonitor : IDisposable
     internal static bool SuppressTimerForTesting { get; set; }
     internal static int PowerResumeWarmUpDelayMs { get; set; } = 3000;
     internal static Func<(NetworkInterface? selected, bool hasGateway)>? SelectActiveNicOverride { get; set; }
+    internal static Func<NativeMethods.SystemPowerStatus?>? SystemPowerStatusOverride { get; set; }
+    internal static bool ThrowInInitFreqForTesting { get; set; }
+    internal static bool ThrowInIntelPwrGadgetInitForTesting { get; set; }
+    internal static bool ThrowInPawnIoInitForTesting { get; set; }
+    internal static bool ThrowInGpuInitForTesting { get; set; }
+    internal static bool ThrowInStorageDrivesInitForTesting { get; set; }
+    internal static bool ThrowInPerDiskCountersForTesting { get; set; }
+    internal static bool ThrowInReadCpuPctForTesting { get; set; }
+    internal static bool ThrowInReadGpuPctForTesting { get; set; }
+    internal static bool ThrowInReadBatteryForTesting { get; set; }
+    internal static bool ThrowInReadMemoryForTesting { get; set; }
+    internal static bool ThrowInPowerSuspendedForTesting { get; set; }
+    internal static bool ThrowInPowerResumeWarmUpForTesting { get; set; }
+    internal static bool ThrowInResetGpuForTesting { get; set; }
+    internal static (long? chargeRate, long? dischargeRate)? MockBatteryRatesForTesting { get; set; }
+    internal static bool ThrowInDisplaySettingsChangedForTesting { get; set; }
+    internal static bool ThrowInNetworkChangeForTesting { get; set; }
+    internal static bool ThrowInDevicePnPForTesting { get; set; }
+    internal static bool ThrowInGatewayCheckForTesting { get; set; }
+    internal static bool ThrowInPrimeNicForTesting { get; set; }
 
     private readonly IHardwareLifecycleManager _lifecycleManager;
     private volatile bool _isSuspended;
@@ -215,6 +235,9 @@ public sealed class HardwareMonitor : IDisposable
     {
         try
         {
+            if (ThrowInInitFreqForTesting)
+                throw new InvalidOperationException("Simulated init freq error");
+
             int count = Environment.ProcessorCount;
             int size = count * Marshal.SizeOf<NativeMethods.ProcessorPowerInformation>();
             IntPtr buf = Marshal.AllocHGlobal(size);
@@ -246,6 +269,9 @@ public sealed class HardwareMonitor : IDisposable
     {
         try
         {
+            if (ThrowInIntelPwrGadgetInitForTesting)
+                throw new InvalidOperationException("Simulated Intel Power Gadget init error");
+
             _intelPwrGadget = new IntelPowerGadget();
             if (_intelPwrGadget.IsAvailable)
                 Log.Info("Intel Power Gadget detected and active for CPU telemetry");
@@ -260,6 +286,9 @@ public sealed class HardwareMonitor : IDisposable
     {
         try
         {
+            if (ThrowInPawnIoInitForTesting)
+                throw new InvalidOperationException("Simulated PawnIO init error");
+
             if (TryConnectPawnIo(out var device, isInitialProbe: true))
             {
                 SetupCpuSensors(device!);
@@ -373,7 +402,12 @@ public sealed class HardwareMonitor : IDisposable
 
     private void InitNvGpu()
     {
-        try { _nvGpu = new NvGpuMonitor(); }
+        try
+        {
+            if (ThrowInGpuInitForTesting)
+                throw new InvalidOperationException("Simulated NV GPU init error");
+            _nvGpu = new NvGpuMonitor();
+        }
         catch (Exception ex) { Log.Error(ex, "Failed to initialize NVIDIA graphics monitor"); _nvGpu = null; }
     }
 
@@ -381,6 +415,8 @@ public sealed class HardwareMonitor : IDisposable
     {
         try
         {
+            if (ThrowInGpuInitForTesting)
+                throw new InvalidOperationException("Simulated Intel GPU init error");
             _intelGpu = new IntelGpuMonitor();
             if (_intelGpu.IsAvailable)
                 Log.Debug($"Intel graphics adapter initialized ({_intelGpu.GpuName})");
@@ -392,6 +428,8 @@ public sealed class HardwareMonitor : IDisposable
     {
         try
         {
+            if (ThrowInGpuInitForTesting)
+                throw new InvalidOperationException("Simulated WDDM GPU init error");
             _wddmGpu = new WddmGpuMonitor();
             if (_wddmGpu.IsAvailable)
                 Log.Debug("Windows graphics display driver monitor ready");
@@ -405,6 +443,8 @@ public sealed class HardwareMonitor : IDisposable
     {
         try
         {
+            if (ThrowInGpuInitForTesting)
+                throw new InvalidOperationException("Simulated AMD GPU init error");
             _amdGpu = new AmdGpuMonitor();
             if (_amdGpu.IsAvailable)
                 Log.Debug($"Detected AMD graphics adapter {_amdGpu.GpuName}");
@@ -556,6 +596,9 @@ public sealed class HardwareMonitor : IDisposable
     {
         try
         {
+            if (ThrowInStorageDrivesInitForTesting)
+                throw new InvalidOperationException("Simulated storage drives error");
+
             var diskInfos = DiskQuery.QueryAllDrives();
             _primaryDiskType = diskInfos.Count > 0 ? (diskInfos[0].DisplayType ?? diskInfos[0].BusType ?? "DISK") : "DISK";
             _diskBusTypes = diskInfos.Select(d => d.DisplayType ?? d.BusType ?? "DISK").ToList();
@@ -571,10 +614,22 @@ public sealed class HardwareMonitor : IDisposable
         }
     }
 
+    private static int CompareDiskCounters(
+        (PerformanceCounter read, PerformanceCounter write) a,
+        (PerformanceCounter read, PerformanceCounter write) b)
+    {
+        int ai = int.TryParse(ExtractDiskIndex(a.read.InstanceName), out var ia) ? ia : 0;
+        int bi = int.TryParse(ExtractDiskIndex(b.read.InstanceName), out var ib) ? ib : 0;
+        return ai.CompareTo(bi);
+    }
+
     private static List<(PerformanceCounter read, PerformanceCounter write)>? CreatePerDiskCounters()
     {
         try
         {
+            if (ThrowInPerDiskCountersForTesting)
+                throw new InvalidOperationException("Simulated per disk counters error");
+
             var cat = new PerformanceCounterCategory(PhysicalDiskCategory);
             string[] instances = cat.GetInstanceNames();
             var result = new List<(PerformanceCounter read, PerformanceCounter write)>();
@@ -583,11 +638,8 @@ public sealed class HardwareMonitor : IDisposable
             foreach (var inst in instances)
             {
                 if (inst == "_Total") continue;
-                int end = 0;
-                while (end < inst.Length && char.IsDigit(inst[end])) end++;
-                if (end == 0) continue;
-                string diskIndex = inst[..end];
-                if (!seen.Add(diskIndex)) continue;
+                string diskIndex = ExtractDiskIndex(inst);
+                if (string.IsNullOrEmpty(diskIndex) || !seen.Add(diskIndex)) continue;
 
                 result.Add((
                     new PerformanceCounter(PhysicalDiskCategory, "Disk Read Bytes/sec", inst),
@@ -595,12 +647,7 @@ public sealed class HardwareMonitor : IDisposable
                 ));
             }
 
-            result.Sort((a, b) =>
-            {
-                int ai = int.TryParse(ExtractDiskIndex(a.read.InstanceName), out var ia) ? ia : 0;
-                int bi = int.TryParse(ExtractDiskIndex(b.read.InstanceName), out var ib) ? ib : 0;
-                return ai.CompareTo(bi);
-            });
+            result.Sort(CompareDiskCounters);
 
             return result;
         }
@@ -785,6 +832,9 @@ public sealed class HardwareMonitor : IDisposable
     {
         try
         {
+            if (ThrowInReadCpuPctForTesting)
+                throw new InvalidOperationException("Simulated CPU pct error");
+
             if (!NativeMethods.GetSystemTimes(out long idle, out long kernel, out long user))
             {
                 LogMetricErrorOnce("cpu", "cpu_pct_gst_failed", "Failed to retrieve system processor times via GetSystemTimes");
@@ -901,6 +951,9 @@ public sealed class HardwareMonitor : IDisposable
     {
         try
         {
+            if (ThrowInReadGpuPctForTesting)
+                throw new InvalidOperationException("Simulated GPU pct error");
+
             if (_cfg.Monitoring.GpuUsageSource == "wddm" &&
                 _wddmGpu is { IsAvailable: true })
             {
@@ -1337,6 +1390,9 @@ public sealed class HardwareMonitor : IDisposable
     {
         try
         {
+            if (ThrowInGatewayCheckForTesting)
+                throw new InvalidOperationException("Simulated gateway error");
+
             var gw = n.GetIPProperties()?.GatewayAddresses;
             return gw is not null && gw.Count > 0
                 && gw.Any(g => g.Address is not null && !g.Address.ToString().StartsWith("0."));
@@ -1352,6 +1408,9 @@ public sealed class HardwareMonitor : IDisposable
     {
         try
         {
+            if (ThrowInPrimeNicForTesting)
+                throw new InvalidOperationException("Simulated prime NIC error");
+
             var stats = selected.GetIPv4Statistics();
             _prevRx = stats.BytesReceived;
             _prevTx = stats.BytesSent;
@@ -1436,7 +1495,14 @@ public sealed class HardwareMonitor : IDisposable
     // Battery
     private (float pct, bool isCharging, bool isOnAC, float rateW) ReadBattery()
     {
-        if (!NativeMethods.GetSystemPowerStatus(out var sps))
+        NativeMethods.SystemPowerStatus sps;
+        if (SystemPowerStatusOverride is not null)
+        {
+            var res = SystemPowerStatusOverride();
+            if (!res.HasValue) return (0f, false, false, 0f);
+            sps = res.Value;
+        }
+        else if (!NativeMethods.GetSystemPowerStatus(out sps))
             return (0f, false, false, 0f);
 
         // BatteryFlag: 128 = no system battery
@@ -1461,6 +1527,17 @@ public sealed class HardwareMonitor : IDisposable
     {
         try
         {
+            if (ThrowInReadBatteryForTesting)
+                throw new InvalidOperationException("Simulated read battery error");
+
+            if (MockBatteryRatesForTesting is { } mockRates)
+            {
+                if (mockRates.chargeRate is not null && mockRates.chargeRate.Value > 0)
+                    return mockRates.chargeRate.Value / 1000f;
+                if (mockRates.dischargeRate is not null && mockRates.dischargeRate.Value > 0)
+                    return -(mockRates.dischargeRate.Value / 1000f);
+            }
+
             _batterySearcher ??= new ManagementObjectSearcher(
                 new ManagementScope(@"\\.\ROOT\WMI"),
                 new ObjectQuery("SELECT RemainingCapacity, ChargeRate, DischargeRate FROM BatteryStatus"));
@@ -1515,6 +1592,9 @@ public sealed class HardwareMonitor : IDisposable
     {
         try
         {
+            if (ThrowInReadMemoryForTesting)
+                throw new InvalidOperationException("Simulated read memory error");
+
             var ms = new NativeMethods.MemoryStatusEx { dwLength = (uint)Marshal.SizeOf<NativeMethods.MemoryStatusEx>() };
             if (NativeMethods.GlobalMemoryStatusEx(ref ms) && ms.ullTotalPhys > 0)
             {
@@ -1558,6 +1638,9 @@ public sealed class HardwareMonitor : IDisposable
         if (_isSuspended) return;
         try
         {
+            if (ThrowInDisplaySettingsChangedForTesting)
+                throw new InvalidOperationException("Simulated display change error");
+
             Log.Debug("Display settings or refresh rate changed; refreshing WDDM display adapter state");
             _wddmGpu?.Reset();
         }
@@ -1571,6 +1654,9 @@ public sealed class HardwareMonitor : IDisposable
     {
         try
         {
+            if (ThrowInResetGpuForTesting)
+                throw new InvalidOperationException("Simulated reset GPU error");
+
             var backends = new List<string>();
             if (_nvGpu is not null) backends.Add("NVIDIA NVML");
             if (_wddmGpu is not null) backends.Add("WDDM");
@@ -1595,6 +1681,9 @@ public sealed class HardwareMonitor : IDisposable
         _isSuspended = true;
         try
         {
+            if (ThrowInPowerSuspendedForTesting)
+                throw new InvalidOperationException("Simulated power suspend error");
+
             _timer?.Change(Timeout.Infinite, Timeout.Infinite);
             Log.Debug("Polling timer paused for suspend");
         }
@@ -1629,6 +1718,9 @@ public sealed class HardwareMonitor : IDisposable
     {
         if (_disposed) return;
 
+        if (ThrowInPowerResumeWarmUpForTesting)
+            throw new InvalidOperationException("Simulated power resume warm-up error");
+
         ResetGpuMonitors("system power resume");
         _lastPreferredNic = "~~unset~~";
         EnsureNicCounters();
@@ -1643,6 +1735,9 @@ public sealed class HardwareMonitor : IDisposable
         if (_isSuspended) return;
         try
         {
+            if (ThrowInNetworkChangeForTesting)
+                throw new InvalidOperationException("Simulated network change error");
+
             Log.Debug("Network topology changed, refreshing NIC binding");
             _lastPreferredNic = "~~unset~~";
             EnsureNicCounters();
@@ -1658,6 +1753,9 @@ public sealed class HardwareMonitor : IDisposable
         if (_isSuspended) return;
         try
         {
+            if (ThrowInDevicePnPForTesting)
+                throw new InvalidOperationException("Simulated device PnP error");
+
             Log.Debug("Device PnP event, refreshing disk cache");
             DiskQuery.RefreshDiskCache();
         }

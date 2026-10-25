@@ -96,7 +96,7 @@ public class AmdGpuMonitorTests
         var nativeMock = Substitute.For<IAmdAdlNative>();
         nativeMock.Create().Returns(0);
 
-        nativeMock.GetAdapterInfo(out Arg.Any<int>(), out Arg.Any<string>()!).Returns(x =>
+        nativeMock.GetAdapterInfo(out Arg.Any<int>(), out Arg.Any<string>()).Returns(x =>
         {
             x[0] = -1;
             x[1] = string.Empty;
@@ -115,7 +115,7 @@ public class AmdGpuMonitorTests
         var nativeMock = Substitute.For<IAmdAdlNative>();
         nativeMock.Create().Returns(0);
 
-        nativeMock.GetAdapterInfo(out Arg.Any<int>(), out Arg.Any<string>()!).Returns(x =>
+        nativeMock.GetAdapterInfo(out Arg.Any<int>(), out Arg.Any<string>()).Returns(x =>
         {
             x[0] = 0;
             x[1] = "AMD Radeon RX 7900 XTX";
@@ -191,7 +191,7 @@ public class AmdGpuMonitorTests
     {
         var nativeMock = Substitute.For<IAmdAdlNative>();
         nativeMock.Create().Returns(0);
-        nativeMock.GetAdapterInfo(out Arg.Any<int>(), out Arg.Any<string>()!).Returns(x =>
+        nativeMock.GetAdapterInfo(out Arg.Any<int>(), out Arg.Any<string>()).Returns(x =>
         {
             x[0] = 0;
             x[1] = "AMD Radeon RX 7900 XTX";
@@ -212,7 +212,7 @@ public class AmdGpuMonitorTests
     {
         var nativeMock = Substitute.For<IAmdAdlNative>();
         nativeMock.Create().Returns(0);
-        nativeMock.GetAdapterInfo(out Arg.Any<int>(), out Arg.Any<string>()!).Returns(x =>
+        nativeMock.GetAdapterInfo(out Arg.Any<int>(), out Arg.Any<string>()).Returns(x =>
         {
             x[0] = 0;
             x[1] = "AMD Radeon RX 7900 XTX";
@@ -241,7 +241,7 @@ public class AmdGpuMonitorTests
     {
         var nativeMock = Substitute.For<IAmdAdlNative>();
         nativeMock.Create().Returns(0);
-        nativeMock.GetAdapterInfo(out Arg.Any<int>(), out Arg.Any<string>()!).Returns(x =>
+        nativeMock.GetAdapterInfo(out Arg.Any<int>(), out Arg.Any<string>()).Returns(x =>
         {
             x[0] = 0;
             x[1] = "AMD Radeon RX 7900 XTX";

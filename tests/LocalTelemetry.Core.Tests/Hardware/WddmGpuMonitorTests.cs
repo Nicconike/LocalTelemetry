@@ -11,7 +11,7 @@ public class WddmGpuMonitorTests
     [Fact]
     public void WddmGpuMonitor_InstantiationAndGetUsagePct()
     {
-        using var monitor = new WddmGpuMonitor();
+        var monitor = new WddmGpuMonitor();
 
         if (monitor.IsAvailable)
         {
@@ -34,7 +34,7 @@ public class WddmGpuMonitorTests
         method.Should().NotBeNull();
 
         IntPtr ptrNull = IntPtr.Zero;
-        int keyNull = (int)method!.Invoke(null, [ptrNull])!;
+        int keyNull = (int)method.Invoke(null, [ptrNull])!;
         keyNull.Should().Be(0);
 
         IntPtr ptr1 = Marshal.StringToHGlobalUni("pid_1234_luid_0x00000000_0x00000001_phys_0_eng_0_engtype_3D");
@@ -75,12 +75,12 @@ public class WddmGpuMonitorTests
     [Fact]
     public void WddmGpuMonitor_BufferAndDisposalEdgeCases()
     {
-        using var monitor = new WddmGpuMonitor();
+        var monitor = new WddmGpuMonitor();
 
         var ensureBuffer = typeof(WddmGpuMonitor).GetMethod("EnsureBuffer", BindingFlags.NonPublic | BindingFlags.Instance);
         ensureBuffer.Should().NotBeNull();
 
-        ensureBuffer!.Invoke(monitor, [1024]);
+        ensureBuffer.Invoke(monitor, [1024]);
         ensureBuffer.Invoke(monitor, [2048]);
         ensureBuffer.Invoke(monitor, [512]); // Should not realloc since capacity >= 512
 
@@ -91,7 +91,7 @@ public class WddmGpuMonitorTests
     [Fact]
     public void WddmGpuMonitor_GetUsagePct_HandlesExceptionsGracefully()
     {
-        using var monitor = new WddmGpuMonitor();
+        var monitor = new WddmGpuMonitor();
         if (monitor.IsAvailable)
         {
             // Reset when available executes Init and debug log
@@ -129,8 +129,8 @@ public class WddmGpuMonitorTests
         ensureBuffer.Should().NotBeNull();
 
         // Allocate buffer for 2 items (ItemStride = 24)
-        ensureBuffer!.Invoke(monitor, [48]);
-        IntPtr buffer = (IntPtr)bufferField!.GetValue(monitor)!;
+        ensureBuffer.Invoke(monitor, [48]);
+        IntPtr buffer = (IntPtr)bufferField.GetValue(monitor)!;
         buffer.Should().NotBe(IntPtr.Zero);
 
         IntPtr strName = Marshal.StringToHGlobalUni("pid_1234_luid_0x00000000_0x00000001_phys_0_eng_0_engtype_3D");

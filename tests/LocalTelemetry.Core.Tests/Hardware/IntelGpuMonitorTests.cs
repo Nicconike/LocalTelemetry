@@ -126,7 +126,7 @@ public class IntelGpuMonitorTests
     {
         var nativeMock = Substitute.For<IIntelGpuNative>();
         nativeMock.Init(out Arg.Any<IntPtr>()).Returns(x => { x[0] = (IntPtr)0x1000; return 0; });
-        nativeMock.EnumerateDevices((IntPtr)0x1000, out Arg.Any<IntPtr[]>()!).Returns(x => { x[1] = Array.Empty<IntPtr>(); return -1; });
+        nativeMock.EnumerateDevices((IntPtr)0x1000, out Arg.Any<IntPtr[]>()).Returns(x => { x[1] = Array.Empty<IntPtr>(); return -1; });
 
         using var monitor = new IntelGpuMonitor(nativeMock);
 
@@ -140,13 +140,13 @@ public class IntelGpuMonitorTests
 
         nativeMock.Init(out Arg.Any<IntPtr>()).Returns(x => { x[0] = (IntPtr)0x1000; return 0; });
 
-        nativeMock.EnumerateDevices((IntPtr)0x1000, out Arg.Any<IntPtr[]>()!).Returns(x =>
+        nativeMock.EnumerateDevices((IntPtr)0x1000, out Arg.Any<IntPtr[]>()).Returns(x =>
         {
             x[1] = new IntPtr[] { (IntPtr)0x2000 };
             return 0;
         });
 
-        nativeMock.GetDeviceName((IntPtr)0x2000, out Arg.Any<string>()!).Returns(x => { x[1] = "Intel Arc A770 Graphics"; return 0; });
+        nativeMock.GetDeviceName((IntPtr)0x2000, out Arg.Any<string>()).Returns(x => { x[1] = "Intel Arc A770 Graphics"; return 0; });
         nativeMock.GetTempSensor((IntPtr)0x2000, out Arg.Any<IntPtr>()).Returns(x => { x[1] = (IntPtr)0x3000; return 0; });
         nativeMock.GetFreqDomain((IntPtr)0x2000, out Arg.Any<IntPtr>()).Returns(x => { x[1] = (IntPtr)0x4000; return 0; });
         nativeMock.GetMemModule((IntPtr)0x2000, out Arg.Any<IntPtr>()).Returns(x => { x[1] = (IntPtr)0x5000; return 0; });
@@ -161,7 +161,7 @@ public class IntelGpuMonitorTests
             return 0;
         });
 
-        using var monitor = new IntelGpuMonitor(nativeMock);
+        var monitor = new IntelGpuMonitor(nativeMock);
 
         monitor.IsAvailable.Should().BeTrue();
         monitor.GpuName.Should().Be("Intel Arc A770 Graphics");
@@ -194,7 +194,7 @@ public class IntelGpuMonitorTests
     {
         var nativeMock = Substitute.For<IIntelGpuNative>();
         nativeMock.Init(out Arg.Any<IntPtr>()).Returns(x => { x[0] = (IntPtr)0x1000; return 0; });
-        nativeMock.EnumerateDevices((IntPtr)0x1000, out Arg.Any<IntPtr[]>()!).Returns(x =>
+        nativeMock.EnumerateDevices((IntPtr)0x1000, out Arg.Any<IntPtr[]>()).Returns(x =>
         {
             x[1] = new IntPtr[] { (IntPtr)0x2000 };
             return 0;
@@ -214,14 +214,14 @@ public class IntelGpuMonitorTests
     {
         var nativeMock = Substitute.For<IIntelGpuNative>();
         nativeMock.Init(out Arg.Any<IntPtr>()).Returns(x => { x[0] = (IntPtr)0x1000; return 0; });
-        nativeMock.EnumerateDevices((IntPtr)0x1000, out Arg.Any<IntPtr[]>()!).Returns(x =>
+        nativeMock.EnumerateDevices((IntPtr)0x1000, out Arg.Any<IntPtr[]>()).Returns(x =>
         {
             x[1] = new IntPtr[] { (IntPtr)0x2000 };
             return 0;
         });
 
         // Fail individual sensor queries during Init
-        nativeMock.GetDeviceName((IntPtr)0x2000, out Arg.Any<string>()!).Returns(-1);
+        nativeMock.GetDeviceName((IntPtr)0x2000, out Arg.Any<string>()).Returns(-1);
         nativeMock.GetTempSensor((IntPtr)0x2000, out Arg.Any<IntPtr>()).Returns(-1);
         nativeMock.GetFreqDomain((IntPtr)0x2000, out Arg.Any<IntPtr>()).Returns(-1);
         nativeMock.GetMemModule((IntPtr)0x2000, out Arg.Any<IntPtr>()).Returns(-1);
@@ -239,7 +239,7 @@ public class IntelGpuMonitorTests
     {
         var nativeMock = Substitute.For<IIntelGpuNative>();
         nativeMock.Init(out Arg.Any<IntPtr>()).Returns(x => { x[0] = (IntPtr)0x1000; return 0; });
-        nativeMock.EnumerateDevices((IntPtr)0x1000, out Arg.Any<IntPtr[]>()!).Returns(x =>
+        nativeMock.EnumerateDevices((IntPtr)0x1000, out Arg.Any<IntPtr[]>()).Returns(x =>
         {
             x[1] = new IntPtr[] { (IntPtr)0x2000 };
             return 0;
@@ -279,7 +279,7 @@ public class IntelGpuMonitorTests
     {
         var nativeMock = Substitute.For<IIntelGpuNative>();
         nativeMock.Init(out Arg.Any<IntPtr>()).Returns(x => { x[0] = (IntPtr)0x1000; return 0; });
-        nativeMock.EnumerateDevices((IntPtr)0x1000, out Arg.Any<IntPtr[]>()!).Returns(x =>
+        nativeMock.EnumerateDevices((IntPtr)0x1000, out Arg.Any<IntPtr[]>()).Returns(x =>
         {
             x[1] = new IntPtr[] { (IntPtr)0x2000 };
             return 0;
@@ -315,15 +315,16 @@ public class IntelGpuMonitorTests
     {
         var nativeMock = Substitute.For<IIntelGpuNative>();
         nativeMock.Init(out Arg.Any<IntPtr>()).Returns(x => { x[0] = (IntPtr)0x1000; return 0; });
-        nativeMock.EnumerateDevices((IntPtr)0x1000, out Arg.Any<IntPtr[]>()!).Returns(x =>
+        nativeMock.EnumerateDevices((IntPtr)0x1000, out Arg.Any<IntPtr[]>()).Returns(x =>
         {
             x[1] = new IntPtr[] { (IntPtr)0x2000 };
             return 0;
         });
 
         var monitor = new IntelGpuMonitor(nativeMock);
-        monitor.Dispose();
-        monitor.Dispose();
+        Action disposeAction = monitor.Dispose;
+        disposeAction();
+        disposeAction.Should().NotThrow();
 
         nativeMock.Received(1).Close((IntPtr)0x1000);
     }

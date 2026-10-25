@@ -1,4 +1,7 @@
+using System.Diagnostics;
+using System.Net.Http;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using FluentAssertions;
 using LocalTelemetry.Core.Hardware.PawnIo;
 using Microsoft.Win32.SafeHandles;
@@ -6,6 +9,7 @@ using Xunit;
 
 namespace LocalTelemetry.Core.Tests.Hardware.PawnIo;
 
+[Collection("TrafficHistory")]
 public class PawnIoDeviceTests
 {
     [Fact]
@@ -514,5 +518,134 @@ public class PawnIoDeviceTests
         var device = new PawnIoDevice(invalidHandle);
         var res = device.Execute("test_fn", [12345UL], 1);
         res.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void PawnIoDevice_OverridesAndExecute_Coverage()
+    {
+        try
+        {
+            // 1. TryCreate with CreateFileOverride
+            PawnIoDevice.CreateFileOverride = _ => new Microsoft.Win32.SafeHandles.SafeFileHandle(new IntPtr(1234), false);
+            var dev = PawnIoDevice.TryCreate();
+            dev.Should().NotBeNull();
+
+            // 2. LoadModule with DeviceIoControlOverride
+            PawnIoDevice.DeviceIoControlOverride = (handle, ioctl, inBuf, outBuf) => true;
+            dev.LoadModule([1, 2, 3, 4]).Should().BeTrue();
+
+            PawnIoDevice.DeviceIoControlOverride = (handle, ioctl, inBuf, outBuf) => false;
+            dev.LoadModule([1, 2, 3, 4]).Should().BeFalse();
+
+            // 3. Execute with DeviceIoControlOverride returning success
+            PawnIoDevice.DeviceIoControlOverride = (handle, ioctl, inBuf, outBuf) =>
+            {
+                if (outBuf.Length >= 8)
+                {
+                    BitConverter.GetBytes(999UL).CopyTo(outBuf, 0);
+                }
+                return true;
+            };
+            var result = dev.Execute("read_value", [1UL, 2UL], 1);
+            result.Should().ContainSingle().Which.Should().Be(999UL);
+
+            // 4. Execute with DeviceIoControlOverride returning false (Win32 error 5)
+            PawnIoDevice.DeviceIoControlOverride = (handle, ioctl, inBuf, outBuf) =>
+            {
+                Marshal.SetLastPInvokeError(5); // ERROR_ACCESS_DENIED
+                return false;
+            };
+            var failRes = dev.Execute("read_value", null, 1);
+            failRes.Should().BeEmpty();
+        }
+        finally
+        {
+            PawnIoDevice.CreateFileOverride = null;
+            PawnIoDevice.DeviceIoControlOverride = null;
+        }
+    }
+
+    [Fact]
+    public void PawnIoDevice_ProcessLauncher_And_PrivilegeException_And_HttpClientFactory_Coverage()
+    {
+        // 1. Test ThrowInEnableBackupPrivilegeForTesting
+        bool origPriv = PawnIoDevice.PrivilegeEnabled;
+        try
+        {
+            PawnIoDevice.PrivilegeEnabled = false;
+            PawnIoDevice.ThrowInEnableBackupPrivilegeForTesting = true;
+            PawnIoDevice.CreateFileOverride = _ => new SafeFileHandle(IntPtr.Zero, true);
+            var dev = PawnIoDevice.TryCreate();
+            dev.Should().BeNull();
+        }
+        finally
+        {
+            PawnIoDevice.ThrowInEnableBackupPrivilegeForTesting = false;
+            PawnIoDevice.PrivilegeEnabled = origPriv;
+            PawnIoDevice.CreateFileOverride = null;
+        }
+
+        // 2. Test ThrowInStartDriverServiceForTesting
+        try
+        {
+            PawnIoDevice.ThrowInStartDriverServiceForTesting = true;
+            PawnIoDevice.StartDriverService().Should().BeFalse();
+        }
+        finally
+        {
+            PawnIoDevice.ThrowInStartDriverServiceForTesting = false;
+        }
+
+        // 3. Test ProcessLauncher with ElevationChecker = true for RunInstaller, RunSc, StartDriverService
+        var origElevation = PawnIoDevice.ElevationChecker;
+        var origRunner = PawnIoDevice.ProcessRunner;
+        var origLauncher = PawnIoDevice.ProcessLauncher;
+        var origCleanup = PawnIoDevice.CleanupHandler;
+        var origDownloader = PawnIoDevice.InstallerDownloader;
+        var origHttpFactory = PawnIoDevice.HttpClientFactory;
+
+        try
+        {
+            PawnIoDevice.ElevationChecker = () => true;
+            PawnIoDevice.ProcessRunner = null;
+            PawnIoDevice.ProcessLauncher = _ => Process.Start(new ProcessStartInfo("cmd.exe", "/c exit 0") { CreateNoWindow = true, UseShellExecute = false });
+
+            // Test StartDriverService using ProcessLauncher
+            bool startOk = PawnIoDevice.StartDriverService();
+            startOk.Should().BeTrue();
+
+            // Test CleanupStaleInstall using ProcessLauncher
+            PawnIoDevice.CleanupHandler = null;
+            var actCleanup = () => PawnIoDevice.CleanupStaleInstall();
+            actCleanup.Should().NotThrow();
+
+            // Test TryInstall with HttpClientFactory
+            PawnIoDevice.InstallerDownloader = null;
+            var fakeHandler = new FakeHttpMessageHandler(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent([0x4D, 0x5A, 0x90, 0x00])
+            });
+            PawnIoDevice.HttpClientFactory = () => new HttpClient(fakeHandler);
+
+            bool installOk = PawnIoDevice.TryInstall();
+            installOk.Should().BeTrue();
+        }
+        finally
+        {
+            PawnIoDevice.ElevationChecker = origElevation;
+            PawnIoDevice.ProcessRunner = origRunner;
+            PawnIoDevice.ProcessLauncher = origLauncher;
+            PawnIoDevice.CleanupHandler = origCleanup;
+            PawnIoDevice.InstallerDownloader = origDownloader;
+            PawnIoDevice.HttpClientFactory = origHttpFactory;
+        }
+    }
+
+    private sealed class FakeHttpMessageHandler(HttpResponseMessage response) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(response);
+        }
     }
 }
