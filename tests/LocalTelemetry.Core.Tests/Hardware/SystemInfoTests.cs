@@ -6,6 +6,8 @@ using LocalTelemetry.Core.Hardware.PawnIo;
 using NSubstitute;
 using Xunit;
 
+[assembly: CollectionBehavior(DisableTestParallelization = true)]
+
 namespace LocalTelemetry.Core.Tests.Hardware;
 
 [Collection("SystemInfo")]

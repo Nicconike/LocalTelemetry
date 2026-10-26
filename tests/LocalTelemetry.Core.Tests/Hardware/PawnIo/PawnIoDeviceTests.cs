@@ -619,7 +619,7 @@ public class PawnIoDeviceTests
             var actCleanup = () => PawnIoDevice.CleanupStaleInstall();
             actCleanup.Should().NotThrow();
 
-            // Test TryInstall with HttpClientFactory
+            // Test DownloadInstallerBytes with HttpClientFactory
             PawnIoDevice.InstallerDownloader = null;
             var fakeHandler = new FakeHttpMessageHandler(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
             {
@@ -627,8 +627,14 @@ public class PawnIoDeviceTests
             });
             PawnIoDevice.HttpClientFactory = () => new HttpClient(fakeHandler);
 
-            bool installOk = PawnIoDevice.TryInstall();
-            installOk.Should().BeTrue();
+            var downloadMethod = typeof(PawnIoDevice).GetMethod("DownloadInstallerBytes", BindingFlags.NonPublic | BindingFlags.Static);
+            var downloaded = (byte[])downloadMethod?.Invoke(null, null)!;
+            downloaded.Should().Equal([0x4D, 0x5A, 0x90, 0x00]);
+
+            // Test RunInstaller using ProcessLauncher
+            var runInstaller = typeof(PawnIoDevice).GetMethod("RunInstaller", BindingFlags.NonPublic | BindingFlags.Static);
+            var exitCode = (int)runInstaller?.Invoke(null, [new ProcessStartInfo("cmd.exe", "/c exit 0")])!;
+            exitCode.Should().Be(0);
         }
         finally
         {
