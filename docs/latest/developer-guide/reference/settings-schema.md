@@ -203,6 +203,12 @@ The mode is determined at launch by checking for the `app.mode` marker file in t
 | `groupColors` | `object` | Key-value hex mapping | Empty `{}` | Group color overrides for entire component categories. |
 | `followWindowsTheme` | `boolean` | `true`, `false` | `true` | Dynamically adapts color key and luminosity to Windows theme. |
 | `userCustomizedMetricColors` | `array` | Metric ID strings | `[]` | Metric IDs manually recolored by the user; preserved during vendor color updates. |
+
+> [!NOTE] Runtime DTO Augmentation
+> The settings serialization pipeline (`SettingsDtoMapping.ToDto`) augments the client DTO with runtime taskbar properties:
+>
+> - `taskbarSpaceConstrained`: `boolean` (`true` when the available taskbar slot is narrower than the overlay width).
+> - `availableSlotWidth`: `integer` (measured width of the available taskbar slot in pixels).
 | `userCustomizedGroupColors` | `array` | Group key strings | `[]` | Group keys manually recolored by the user. |
 | `row1` | `array` | Metric ID strings | 10 default IDs | Column metric layout (even indices = top, odd indices = bottom). |
 

@@ -176,18 +176,24 @@ scoop update localtelemetry
 
 ### Verifying Your Download
 
-Every release ships with cryptographic hashes in `checksums.txt` and [SLSA](https://slsa.dev/) build attestations:
+Every release ships with cryptographic hashes in `checksums.txt`, Sigstore Cosign signature bundles, and [SLSA](https://slsa.dev/) build attestations:
 
 ```pwsh
 # 1. Compare the SHA-256 hashes against checksums.txt
 Get-FileHash .\LocalTelemetrySetup.exe, .\LocalTelemetry-win-x64.zip -Algorithm SHA256
 
-# 2. Verify the SLSA build provenance attestations
+# 2. Verify keyless signatures with Cosign
+cosign verify-blob --bundle .\LocalTelemetrySetup.exe.sigstore.json `
+    --certificate-identity-regexp "https://github.com/Nicconike/LocalTelemetry/.*" `
+    --certificate-oidc-issuer "https://token.actions.githubusercontent.com" `
+    .\LocalTelemetrySetup.exe
+
+# 3. Verify the SLSA build provenance attestations
 gh attestation verify .\LocalTelemetrySetup.exe --repo Nicconike/LocalTelemetry
 gh attestation verify .\LocalTelemetry-win-x64.zip --repo Nicconike/LocalTelemetry
 ```
 
-The attestation verifies that the official [**Release workflow**](https://github.com/Nicconike/LocalTelemetry/actions/workflows/release.yml) generated the binaries without tampering.
+The signatures and attestations confirm that the official [**Release workflow**](https://github.com/Nicconike/LocalTelemetry/actions/workflows/release.yml) built the binaries without tampering.
 
 ---
 

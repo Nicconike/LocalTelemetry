@@ -46,6 +46,7 @@ public static class JsonlTrafficImporter
         {
             using var doc = JsonDocument.Parse(line);
             var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return false;
 
             string? dateStr = root.TryGetProperty("date", out var d) ? d.GetString() : null;
             if (string.IsNullOrWhiteSpace(dateStr) || dateStr.Length < 10) return false;

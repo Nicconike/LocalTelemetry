@@ -2722,6 +2722,27 @@ public class SystemInfoTests
             SystemInfo.GetSystemManufacturer().Should().Be("");
             SystemInfo.GetSystemProductName().Should().Be("");
 
+            SystemInfo.ThrowInSystemModelForTesting = false;
+            SystemInfo.GetSystemManufacturer();
+            SystemInfo.GetSystemProductName();
+            SystemInfo.GetSystemModel();
+
+            // Additional CPU and Battery helper paths
+            var getSmbiosCore = typeof(SystemInfo).GetMethod("GetSmbiosCoreCount", BindingFlags.NonPublic | BindingFlags.Static);
+            getSmbiosCore?.Invoke(null, null);
+
+            var getArchFallback = typeof(SystemInfo).GetMethod("GetCpuArchitectureFallback", BindingFlags.NonPublic | BindingFlags.Static);
+            getArchFallback?.Invoke(null, null);
+
+            SystemInfo.ResetCaches();
+            SystemInfo.GetBatteryManufacturer();
+            SystemInfo.GetBatteryDeviceName();
+            SystemInfo.GetBatteryDesignCapacity();
+            SystemInfo.GetBatteryFullChargedCapacity();
+            SystemInfo.GetBatteryHealthPct();
+            SystemInfo.GetBatteryWearLevelPct();
+            SystemInfo.GetBatteryCycleCount();
+
             // 9. ThrowInRamTypeForTesting
             SystemInfo.ThrowInRamTypeForTesting = true;
             var ramWmi = typeof(SystemInfo).GetMethod("QueryRamTypeWmi", BindingFlags.NonPublic | BindingFlags.Static);

@@ -82,10 +82,10 @@ The WebView2 bridge supports 11 inbound requests from JavaScript and 10 outbound
 | `getNics` | None | Requests the list of active physical network adapters. |
 | `getTrafficMonths` | None | Requests distinct months available in the bandwidth database. |
 | `getSystemInfo` | None | Requests hardware specifications and diagnostic details. |
-| `openUrl` | `{ url: string }` | Safely opens an HTTP/HTTPS URL in the default browser. |
+| `openUrl` | `{ url: string }` | Safely opens an HTTP/HTTPS URL or `ms-settings:` URI. |
 | `openFolder` | `{ target: "app" \| "data" \| "logs" }` | Opens the install folder, data folder, or logs folder in Explorer. |
 | `getTrafficHistoryAll` | None | Requests all historical network usage records and today's total. |
-| `importDat` | `{ content: string }` | Imports plaintext backup `.dat` bandwidth logs (`Date Upload/Download KB`). |
+| `importDat` | `{ content: string }` | Imports `.jsonl` backup files or legacy plaintext `.dat` bandwidth logs. |
 | `importWindowsUsage` | `{ startDate: string, endDate: string }` | Direct JET/ESE database extraction from Windows `SRUDB.dat`. |
 | `checkForUpdates` | `{ force: boolean }` | Triggers a GitHub Releases update query (forced or cached). |
 
@@ -93,10 +93,10 @@ The WebView2 bridge supports 11 inbound requests from JavaScript and 10 outbound
 
 | Message Type | Payload Structure | Description |
 | :--- | :--- | :--- |
-| `settings` | `SettingsDto` | Supplies current configuration to the Svelte store. |
+| `settings` | `SettingsDto` | Supplies current configuration and runtime taskbar slot constraint status to the Svelte store. |
 | `saved` | `{ error?: string }` | Confirms successful settings persistence or reports an error. |
 | `nics` | `string[]` | Active network adapter names and hardware descriptions. |
-| `systemInfo` | `SystemInfoDto` | Full CPU, GPU, RAM, Disk, PSU, and Battery hardware specifications. |
+| `systemInfo` | `SystemInfoDto` | Full CPU, GPU, RAM, Disk, PSU, and Battery specifications (including health, wear, cycles, and RAM SPD rating). |
 | `trafficHistoryAll` | `{ records, todayDown, todayUp }` | Full historical bandwidth records and live daily totals. |
 | `trafficToday` | `{ downBytes, upBytes }` | Real-time 5-second bandwidth counter update. |
 | `trafficMonths` | `string[]` | Available month strings formatted as `YYYY-MM`. |
@@ -134,10 +134,10 @@ src/LocalTelemetry.App/Settings/wwwroot/
 │   │   ├── pages/                    # 10 Dedicated Settings Pages
 │   │   │   ├── GeneralPage.svelte    # Autostart, polling interval & units
 │   │   │   ├── MonitoringPage.svelte # Hardware component sensor toggles
-│   │   │   ├── OverlayPage.svelte    # Taskbar overlay placement, offsets & opacity
+│   │   │   ├── OverlayPage.svelte    # Taskbar overlay placement, offsets, opacity & space constraint banner
 │   │   │   ├── LayoutPage.svelte     # Metric drag-and-drop reordering
 │   │   │   ├── NetworkPage.svelte    # Active adapter selection & traffic logging toggle
-│   │   │   ├── TrafficHistoryPage.svelte # Daily network calendar heatmap & .dat import
+│   │   │   ├── TrafficHistoryPage.svelte # Daily network calendar heatmap, .jsonl backup & .dat import
 │   │   │   ├── AlertsPage.svelte     # Threshold limits & toast settings
 │   │   │   ├── SystemPage.svelte     # Hardware summary & specs overview
 │   │   │   ├── AppearancePage.svelte # Window themes & metric color pickers

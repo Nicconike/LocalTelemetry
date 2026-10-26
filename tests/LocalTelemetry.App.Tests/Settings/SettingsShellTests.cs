@@ -2001,6 +2001,46 @@ public class SettingsShellTests
     }
 
     [WpfFact]
+    public void SettingsShell_WindowIcon_And_LocationChanged_Coverage()
+    {
+        // 1. SetWindowIcon failure branch
+        try
+        {
+            SettingsShell.ThrowInSetWindowIconForTesting = true;
+            using var ctxFail = new ShellContext();
+            ctxFail.Shell.Should().NotBeNull();
+        }
+        finally
+        {
+            SettingsShell.ThrowInSetWindowIconForTesting = false;
+        }
+
+        using var ctx = new ShellContext();
+        var onLoc = typeof(SettingsShell).GetMethod("HandleWindowLocationChanged", BindingFlags.NonPublic | BindingFlags.Instance);
+        typeof(SettingsShell).GetField("_webViewReady", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(ctx.Shell, true);
+
+        // 2. OnLocationChanged with ScriptExecutorAsyncOverride
+        try
+        {
+            string? capturedScript = null;
+            SettingsShell.ScriptExecutorOverride = null;
+            SettingsShell.ScriptExecutorAsyncOverride = s => { capturedScript = s; return Task.CompletedTask; };
+            onLoc?.Invoke(ctx.Shell, null);
+            capturedScript.Should().Contain("blur");
+
+            // 3. OnLocationChanged error catch branch
+            SettingsShell.ScriptExecutorAsyncOverride = _ => throw new InvalidOperationException("Simulated script blur failure");
+            var act = () => onLoc?.Invoke(ctx.Shell, null);
+            act.Should().NotThrow();
+        }
+        finally
+        {
+            SettingsShell.ScriptExecutorAsyncOverride = null;
+            SettingsShell.ScriptExecutorOverride = null;
+        }
+    }
+
+    [WpfFact]
     public async Task SettingsShell_RemainingEdgeCases_Coverage()
     {
         using var ctx = new ShellContext();

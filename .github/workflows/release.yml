@@ -141,9 +141,17 @@ jobs:
                       Invoke-WebRequest -Uri "https://aka.ms/wingetcreate/latest" -OutFile $wingetCreatePath
                   }
 
-                  Write-Host "Configuring WinGet authentication token..."
-                  $env:GITHUB_TOKEN = $env:WINGET_CREATE_GITHUB_TOKEN
-                  & $wingetCreatePath token --store --token $env:WINGET_CREATE_GITHUB_TOKEN
+                  # Disable wingetcreate usage telemetry
+                  $wingetCreateSettingsDir = "$env:LOCALAPPDATA\wingetcreate"
+                  if (-not (Test-Path $wingetCreateSettingsDir)) {
+                      New-Item -ItemType Directory -Path $wingetCreateSettingsDir -Force | Out-Null
+                  }
+                  @{
+                      '$schema' = 'https://aka.ms/wingetcreate-settings.schema.0.1.json'
+                      Telemetry = @{
+                          disable = $true
+                      }
+                  } | ConvertTo-Json -Depth 5 | Set-Content -Path "$wingetCreateSettingsDir\settings.json" -Encoding UTF8
 
                   $repo = $env:GITHUB_REPOSITORY
                   if (-not $repo) { $repo = "Nicconike/LocalTelemetry" }

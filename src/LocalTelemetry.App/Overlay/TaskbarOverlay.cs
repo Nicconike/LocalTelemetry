@@ -1021,7 +1021,17 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
         _uiCtx.Post(_ =>
         {
             if (_disposed) return;
-            RecoverTaskbar(trayChanged ? "taskbar window change" : (embedderRecovering ? "taskbar recovery transition" : "taskbar window recovery"));
+            string reason = "taskbar window recovery";
+            if (trayChanged)
+            {
+                reason = "taskbar window change";
+            }
+            else if (embedderRecovering)
+            {
+                reason = "taskbar recovery transition";
+            }
+
+            RecoverTaskbar(reason);
         }, null);
     }
 

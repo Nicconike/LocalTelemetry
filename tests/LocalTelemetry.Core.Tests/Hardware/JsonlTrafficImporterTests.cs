@@ -68,4 +68,36 @@ public class JsonlTrafficImporterTests
             try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
+
+    [Fact]
+    public void JsonlTrafficImporter_Import_HandlesInvalidFormatsAndDateBoundaries()
+    {
+        string tempFile = Path.Combine(Path.GetTempPath(), $"JsonlImporter_{Guid.NewGuid():N}.jsonl");
+        try
+        {
+            var history = new TrafficHistoryFile(tempFile);
+            TrafficHistoryStore.Initialize(history);
+
+            string content = """
+                [1, 2, 3]
+                {"other":"value"}
+                {"date":"short"}
+                {"date":"12-xx-2026","download_bytes":100,"upload_bytes":100}
+                {"date":"2026-xx-12","download_bytes":100,"upload_bytes":100}
+                {"date":"15-08-1990","download_bytes":100,"upload_bytes":100}
+                {"date":"2026-08-15","download_bytes":12.34,"upload_bytes":100}
+                {"date":"2026-08-20"}
+                """;
+
+            int imported = JsonlTrafficImporter.Import(content);
+            imported.Should().Be(1);
+
+            var monthRecords = TrafficHistoryStore.GetMonth(2026, 8);
+            monthRecords.Should().ContainSingle(r => r.Day == 20 && r.DownBytes == 0 && r.UpBytes == 0);
+        }
+        finally
+        {
+            try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+        }
+    }
 }

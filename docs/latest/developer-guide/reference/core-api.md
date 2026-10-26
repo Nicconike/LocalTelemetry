@@ -107,6 +107,54 @@ public sealed class HardwareState
 }
 ```
 
+### `ISystemInfo` Battery & RAM Methods
+
+- **Namespace:** `LocalTelemetry.Core.Hardware`
+
+Key hardware discovery methods for battery diagnostics and memory speeds:
+
+```csharp
+[SupportedOSPlatform("windows")]
+public interface ISystemInfo
+{
+    // Battery diagnostics
+    bool HasBattery();
+    string GetBatteryManufacturer();
+    string GetBatteryDeviceName();
+    string GetBatteryDesignCapacity();
+    string GetBatteryFullChargedCapacity();
+    int GetBatteryCycleCount();
+    double GetBatteryHealthPct();
+    double GetBatteryWearLevelPct();
+
+    // Memory configuration
+    string GetRamSpeed();
+    List<Dictionary<string, object?>> GetRamModules();
+}
+```
+
+---
+
+## :file-code: Traffic Backup Importer Subsystem
+
+### `JsonlTrafficImporter`
+
+- **Namespace:** `LocalTelemetry.Core.Hardware`
+
+Parses line-delimited JSON (`.jsonl`) usage records from backup files and merges valid entries into `TrafficHistoryStore`.
+
+```csharp
+namespace LocalTelemetry.Core.Hardware;
+
+public static class JsonlTrafficImporter
+{
+    /// <summary>Parses JSONL content and merges valid records into TrafficHistoryStore.</summary>
+    /// <param name="content">Raw JSONL string containing line-delimited JSON usage records.</param>
+    /// <returns>Number of distinct days successfully imported or updated.</returns>
+    public static int Import(string content);
+}
+```
+
 ---
 
 ## :monitor: Overlay Deployment State Machine

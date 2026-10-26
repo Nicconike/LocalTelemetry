@@ -63,6 +63,7 @@ flowchart TD
         TriggerRelease["<b>Push to master</b><br/>release/* and src/* changes"]
         SemRel["<b>Semantic Release</b><br/>Analyzes commits & tags version"]
         BuildPkg["<b>Build & Inno Setup</b><br/>build.ps1 publishes win-x64 & installer"]
+        CosignSign["<b>Cosign Signing</b><br/>Sigstore keyless OIDC bundles"]
         SignedCommit["<b>Signed Release Commit</b><br/>github-commit-plugin via REST API"]
         GHRelease["<b>GitHub Release</b><br/>Publishes installer, ZIP & SHA256"]
         WinGet["<b>WinGet Submission</b><br/>Official wingetcreate CLI"]
@@ -70,14 +71,15 @@ flowchart TD
 
         TriggerRelease --> SemRel
         SemRel --> BuildPkg
-        BuildPkg --> SignedCommit
+        BuildPkg --> CosignSign
+        CosignSign --> SignedCommit
         SignedCommit --> GHRelease
         GHRelease --> WinGet
         WinGet --> Attestation
     end
 
     class TriggerCI,TriggerQuality,TriggerRelease triggerNode
-    class Commitlint,Vitest,CodeQL,Sonar,Scorecard,SyncPR,Triage,SemRel,SignedCommit,WinGet,Attestation stepNode
+    class Commitlint,Vitest,CodeQL,Sonar,Scorecard,SyncPR,Triage,SemRel,CosignSign,SignedCommit,WinGet,Attestation stepNode
     class DotNetBuild,DotNetTest,BuildPkg,GHRelease buildNode
     class Coverage dataNode
 
@@ -137,14 +139,15 @@ The release pipeline is defined in [`.github/workflows/release.yml`](https://git
      - Compiles `LocalTelemetrySetup.exe` with Inno Setup 7 (`ISCC.exe`).
      - Packages the portable archive `LocalTelemetry-win-x64.zip`.
      - Generates SHA-256 cryptographic hashes in `checksums.txt`.
-     - Injects updated version and checksum values into `bucket/localtelemetry.json` and `packaging/winget/localtelemetry.yaml`, and synchronizes package versions.
+     - Signs release artifacts with Cosign (Sigstore keyless OIDC) to generate `.sigstore.json` bundles.
+     - Injects updated version and checksum values into `bucket/localtelemetry.json`, `docs/.vitepress/versions.mjs`, and multi-file WinGet manifests (`packaging/winget/Nicconike.LocalTelemetry.*.yaml`), and synchronizes package versions.
    - **Repository State Commit (`github-commit-plugin.ts`)**: Uploads file blobs and creates a signed commit via the GitHub REST API. This step updates `master` with web-flow signing and bypasses branch protections cleanly.
-   - **Release Publication (`@semantic-release/github`)**: Creates the GitHub Release tag pointing to the new commit. Attaches `LocalTelemetrySetup.exe`, `LocalTelemetry-win-x64.zip`, and `checksums.txt`.
+   - **Release Publication (`@semantic-release/github`)**: Creates the GitHub Release tag pointing to the new commit. Attaches `LocalTelemetrySetup.exe`, `LocalTelemetry-win-x64.zip`, `checksums.txt`, and Cosign bundles.
    - **WinGet Package Submission (`wingetcreate`)**:
-     - Submits updated metadata to the official Microsoft WinGet Community Repository using Microsoft's official `wingetcreate` CLI utility.
-4. **Cryptographic Provenance Attestations**:
+     - Updates `Nicconike.LocalTelemetry` in the official Microsoft WinGet Community Repository using `wingetcreate update`, falling back to manifest directory submission.
+4. **Cryptographic Signatures & Provenance Attestations**:
+   - Signs release binaries using Sigstore Cosign keyless OIDC certificates.
    - Generates SLSA Level 3 build provenance attestations for `LocalTelemetrySetup.exe` and `LocalTelemetry-win-x64.zip` via `actions/attest-build-provenance`.
-   - Uploads the signed provenance attestation bundle directly to GitHub Release assets using the GitHub CLI (`gh release upload`).
 
 ---
 

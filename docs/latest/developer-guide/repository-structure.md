@@ -32,12 +32,12 @@ LocalTelemetry/
 │   ├── package.json             # Documentation dependencies (Bun runtime)
 │   └── tsconfig.json            # Documentation TypeScript compiler configuration
 ├── packaging/                   # Third-party distribution manifests
-│   └── winget/                  # Windows Package Manager manifest
+│   └── winget/                  # Windows Package Manager manifests (Nicconike.LocalTelemetry.*.yaml)
 ├── src/                         # Production source code (.NET 10 + Svelte 5)
 │   ├── LocalTelemetry.Core/     # Hardware polling engine, PawnIO, SystemInfo, Config
 │   │   ├── Config/              # AppSettings.cs, schema migration & atomic persistence
 │   │   ├── Diagnostics/         # Log.cs structured logger & file rotation
-│   │   ├── Hardware/            # Sensor pollers (NVML, ADL, ControlLib, WDDM, PDH, DiskQuery, HardwareInventory, HardwareLifecycleManager)
+│   │   ├── Hardware/            # Sensor pollers (NVML, ADL, ControlLib, WDDM, PDH, DiskQuery, JsonlTrafficImporter, HardwareInventory, HardwareLifecycleManager)
 │   │   │   └── PawnIo/          # Kernel driver transport, Intel MSR & AMD Ryzen SMU readers
 │   │   └── Models/              # Metrics.cs, TelemetrySnapshot, OverlayDeploymentState, UpdateCheckResult
 │   ├── LocalTelemetry.App/      # WPF Desktop host & Win32 taskbar integration

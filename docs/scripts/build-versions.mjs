@@ -124,6 +124,8 @@ function extractDocsFromWorkingTree(versionLabel) {
         rmSync(targetDir, { recursive: true, force: true });
     }
 
+    const sourceBase = existsSync(join(docsDir, 'latest')) ? join(docsDir, 'latest') : docsDir;
+
     function walkDir(dir, relPrefix = '') {
         if (!existsSync(dir)) return;
         const entries = readdirSync(dir, { withFileTypes: true });
@@ -148,7 +150,7 @@ function extractDocsFromWorkingTree(versionLabel) {
         }
     }
 
-    walkDir(docsDir);
+    walkDir(sourceBase);
     return existsSync(join(targetDir, 'index.md'));
 }
 

@@ -82,6 +82,7 @@ LocalTelemetry uses an out-of-process notifier (`LocalTelemetry.Notifier.exe`) t
 ### :move: Overlay placement, clipping, or auto-hide issues
 
 - **Taskbar Embedding vs. Floating Fallback**: LocalTelemetry first attempts to embed directly into the Windows taskband as a child window (Approach A). If taskband embedding is blocked or fails, it automatically switches to a floating layered window positioned over the taskbar (Approach B).
+- **Taskbar Space Constrained Warning**: If your taskbar has many open applications or high display scaling, LocalTelemetry detects that the available taskbar slot is narrower than the overlay. The Overlay settings tab shows a warning banner and clamps the overlay to prevent overlap. To resolve the constraint, reduce the number of enabled metrics in **Layout**, reduce the **Scale** slider, or click **Open Taskbar Settings** in the warning banner to turn off Windows Widgets.
 - **Adjust Edge Offset**: If taskbar icons overlap the overlay, go to **Settings &rarr; Overlay** and adjust **Offset from Edge** (`0px` to `200px`) or switch **Position in taskbar** between `Left side` and `Right side`.
 - **Explorer Restart Watchdog**: If the Windows taskbar crashes or restarts, an integrated background watchdog checks the taskbar handle every 5 seconds and automatically re-embeds the overlay. If it does not reappear immediately, right-click the system tray icon and choose **Show Overlay**.
 

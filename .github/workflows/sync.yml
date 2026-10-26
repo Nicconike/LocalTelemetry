@@ -16,6 +16,7 @@ on:
     workflow_run:
         workflows: ["CI", "SonarQube Analysis", "CodeQL"]
         types: [completed]
+        branches-ignore: [master]
 
 permissions:
     contents: read

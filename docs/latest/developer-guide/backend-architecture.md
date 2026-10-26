@@ -146,7 +146,7 @@ flowchart TD
 
 - Reads active network adapter traffic statistics and calculates bandwidth deltas.
 - Logs daily download, upload, and total usage to `internet_usage.jsonl` via `NetUsageLogger.cs`, `TrafficHistoryFile.cs`, and `TrafficHistoryStore.cs`.
-- Backfills historical bandwidth records from the Windows System Resource Usage Monitor (`SRUDB.dat`) database using the Extensible Storage Engine (ESE / `esent.dll`) via `WindowsNetworkUsageProvider.cs`, `EseNetworkUsageReader.cs`, and `DatImporter.cs`.
+- Backfills historical bandwidth records from the Windows System Resource Usage Monitor (`SRUDB.dat`) database using the Extensible Storage Engine (ESE / `esent.dll`) via `WindowsNetworkUsageProvider.cs` and `EseNetworkUsageReader.cs`. Restores backups via `JsonlTrafficImporter.cs` and `DatImporter.cs`.
 
 ### :palette: BrandColorDefaults (Hardware Palette Mapper)
 

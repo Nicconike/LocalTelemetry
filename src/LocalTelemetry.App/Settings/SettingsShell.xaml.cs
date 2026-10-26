@@ -30,6 +30,7 @@ public sealed partial class SettingsShell : Window
     internal static Action<string>? FolderLauncherAction { get; set; }
     internal static Action<ProcessStartInfo>? FolderProcessLauncher { get; set; }
     internal static Action<string>? ScriptExecutorOverride { get; set; }
+    internal static Func<string, Task>? ScriptExecutorAsyncOverride { get; set; }
     internal static bool SkipWebView2InitForTesting { get; set; }
     internal static bool SkipInitializeComponentForTesting { get; set; }
     internal static bool SkipShowForTesting { get; set; }
@@ -38,6 +39,7 @@ public sealed partial class SettingsShell : Window
     internal static bool ThrowInBuildDateForTesting { get; set; }
     internal static bool ThrowInWebMessageForTesting { get; set; }
     internal static bool ThrowInImportWindowsUsageForTesting { get; set; }
+    internal static bool ThrowInSetWindowIconForTesting { get; set; }
     internal static Action<string, string>? MessageBoxAction { get; set; }
     internal static Func<string, string, MessageBoxResult>? MessageBoxFunc { get; set; }
     internal Task? LastImportTask { get; private set; }
@@ -110,13 +112,16 @@ public sealed partial class SettingsShell : Window
         Loaded += OnLoaded;
         // Close WebView2 select dropdowns when the window is moved
         // (WebView2 native popups render at stale screen coordinates after move)
-        LocationChanged += (_, _) => OnLocationChanged();
+        LocationChanged += (_, _) => HandleWindowLocationChanged();
     }
 
     private void SetWindowIcon()
     {
         try
         {
+            if (ThrowInSetWindowIconForTesting)
+                throw new InvalidOperationException("Simulated window icon failure");
+
             string? exePath = Environment.ProcessPath;
             if (exePath is not null)
             {
@@ -133,15 +138,19 @@ public sealed partial class SettingsShell : Window
         catch (Exception ex) { Log.Error(ex, "Window icon extraction failed"); }
     }
 
-    private void OnLocationChanged()
+    private void HandleWindowLocationChanged()
     {
-        if (_webViewReady && (ScriptExecutorOverride is not null || WebView?.CoreWebView2 is not null))
+        if (_webViewReady && (ScriptExecutorOverride is not null || ScriptExecutorAsyncOverride is not null || WebView?.CoreWebView2 is not null))
         {
             try
             {
                 if (ScriptExecutorOverride is not null)
                 {
                     ScriptExecutorOverride("try{document.activeElement?.blur();}catch(e){console.warn('WebView2 blur failed',e);}");
+                }
+                else if (ScriptExecutorAsyncOverride is not null)
+                {
+                    ScriptExecutorAsyncOverride("try{document.activeElement?.blur();}catch(e){console.warn('WebView2 blur failed',e);}");
                 }
                 else
                 {
@@ -915,29 +924,39 @@ public sealed partial class SettingsShell : Window
     {
         if (isLaptop)
         {
-            string bm = SystemInfo.GetBatteryManufacturer();
-            if (!string.IsNullOrEmpty(bm)) payload["batteryManufacturer"] = bm;
-            string bn = SystemInfo.GetBatteryDeviceName();
-            if (!string.IsNullOrEmpty(bn)) payload["batteryDeviceName"] = bn;
-            string dc = SystemInfo.GetBatteryDesignCapacity();
-            if (!string.IsNullOrEmpty(dc)) payload["batteryDesignCapacity"] = dc;
-            string fc = SystemInfo.GetBatteryFullChargedCapacity();
-            if (!string.IsNullOrEmpty(fc)) payload["batteryFullChargedCapacity"] = fc;
-
-            double health = SystemInfo.GetBatteryHealthPct();
-            if (health > 0) payload["batteryHealthPct"] = health;
-            double wear = SystemInfo.GetBatteryWearLevelPct();
-            if (health > 0) payload["batteryWearLevelPct"] = wear;
-            int cycles = SystemInfo.GetBatteryCycleCount();
-            if (cycles > 0) payload["batteryCycleCount"] = cycles;
+            AppendBatteryInfo(payload);
         }
         else
         {
-            string psuName = SystemInfo.GetPsuName();
-            if (!string.IsNullOrEmpty(psuName)) payload["psu"] = psuName;
-            string psuCap = SystemInfo.GetPsuMaxCapacity();
-            if (!string.IsNullOrEmpty(psuCap)) payload["psuCapacity"] = psuCap;
+            AppendDesktopPsuInfo(payload);
         }
+    }
+
+    private static void AppendBatteryInfo(Dictionary<string, object?> payload)
+    {
+        string bm = SystemInfo.GetBatteryManufacturer();
+        if (!string.IsNullOrEmpty(bm)) payload["batteryManufacturer"] = bm;
+        string bn = SystemInfo.GetBatteryDeviceName();
+        if (!string.IsNullOrEmpty(bn)) payload["batteryDeviceName"] = bn;
+        string dc = SystemInfo.GetBatteryDesignCapacity();
+        if (!string.IsNullOrEmpty(dc)) payload["batteryDesignCapacity"] = dc;
+        string fc = SystemInfo.GetBatteryFullChargedCapacity();
+        if (!string.IsNullOrEmpty(fc)) payload["batteryFullChargedCapacity"] = fc;
+
+        double health = SystemInfo.GetBatteryHealthPct();
+        if (health > 0) payload["batteryHealthPct"] = health;
+        double wear = SystemInfo.GetBatteryWearLevelPct();
+        if (health > 0) payload["batteryWearLevelPct"] = wear;
+        int cycles = SystemInfo.GetBatteryCycleCount();
+        if (cycles > 0) payload["batteryCycleCount"] = cycles;
+    }
+
+    private static void AppendDesktopPsuInfo(Dictionary<string, object?> payload)
+    {
+        string psuName = SystemInfo.GetPsuName();
+        if (!string.IsNullOrEmpty(psuName)) payload["psu"] = psuName;
+        string psuCap = SystemInfo.GetPsuMaxCapacity();
+        if (!string.IsNullOrEmpty(psuCap)) payload["psuCapacity"] = psuCap;
     }
 
     private sealed record GpuInfoDto(string Name, string Vendor, bool Dedicated, string? VramGb, string? Driver, string? TdpW);

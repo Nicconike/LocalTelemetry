@@ -64,7 +64,7 @@ Requests complete hardware discovery specifications and runtime diagnostic metad
 
 ### 6. `openUrl`
 
-Opens an external URL in the default web browser. Only absolute `http://` or `https://` URLs are accepted.
+Opens an external URL or system URI in the default handler. Accepts absolute `http://`, `https://`, or `ms-settings:` URIs (such as `ms-settings:taskbar`).
 
 - **Payload:**
 
@@ -107,7 +107,7 @@ Requests complete historical traffic records and live daily usage totals.
 
 ### 9. `importDat`
 
-Imports plaintext external backup `.dat` bandwidth logs (`YYYY/MM/DD UpKB/DownloadKB`).
+Imports bandwidth backup files. Supports native JSON Lines (`.jsonl`) backup records or legacy plaintext `.dat` lines (`YYYY/MM/DD UpKB/DownloadKB`). If the content starts with `{`, `JsonlTrafficImporter` processes the payload; otherwise `DatImporter` processes it.
 
 - **Payload:**
 
@@ -115,7 +115,7 @@ Imports plaintext external backup `.dat` bandwidth logs (`YYYY/MM/DD UpKB/Downlo
 {
   "type": "importDat",
   "payload": {
-    "content": "raw_dat_records_string"
+    "content": "raw_jsonl_or_dat_string"
   }
 }
 ```
@@ -176,6 +176,8 @@ interface OverlayDto {
     doubleClickAction: 'settings' | 'taskmanager' | 'none';
     position: 'left' | 'right' | 'beside_apps';
     taskbarAlignment?: 'left' | 'center'; // Dynamically detected Windows 11 alignment
+    taskbarSpaceConstrained?: boolean; // True when available taskbar slot is narrower than overlay
+    availableSlotWidth?: number; // Measured pixel width of available taskbar slot
     offsetX: number;
     opacity: number;
     scale: number;
@@ -245,9 +247,18 @@ Supplies comprehensive hardware discovery specifications.
   "installedRamGb": 64.0,
   "ramGb": "63.8",
   "ramMfr": "Corsair",
-  "ramSpeed": "6000 MT/s",
+  "ramSpeed": "4800 MT/s (rated 6000 MT/s)",
   "ramSlots": 4,
-  "ramModules": ["Module 1: 32 GB 6000 MT/s", "Module 2: 32 GB 6000 MT/s"],
+  "ramModules": [
+    {
+      "name": "Module 1",
+      "capacity": "32 GB",
+      "speed": "4800 MT/s (rated 6000 MT/s)",
+      "configuredSpeed": 4800,
+      "ratedSpeed": 6000,
+      "mfr": "Corsair"
+    }
+  ],
   "disks": [
     {
       "model": "Samsung SSD 990 PRO 2TB",
@@ -267,6 +278,13 @@ Supplies comprehensive hardware discovery specifications.
   "bios": "2402",
   "biosUefi": true,
   "systemType": "Desktop",
+  "batteryMfr": "SMP",
+  "batteryDeviceName": "L20M4PC0",
+  "batteryDesignCapacity": "50000 mWh",
+  "batteryFullChargedCapacity": "47250 mWh",
+  "batteryHealthPct": 94.5,
+  "batteryWearLevelPct": 5.5,
+  "batteryCycleCount": 142,
   "psu": "Corsair RM1000x",
   "psuCapacity": "1000 W",
   "exeDir": "C:\\Program Files\\LocalTelemetry",

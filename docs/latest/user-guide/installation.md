@@ -89,6 +89,25 @@ scoop update localtelemetry
 > [!NOTE]
 > In portable mode (when no `app.mode` file exists in the executable folder), all configuration (`settings.json`), network usage history (`internet_usage.jsonl`), diagnostic logs, and the WebView2 runtime cache (`webview2_data/`, **~30 MB**) are stored directly inside the extracted folder alongside `LocalTelemetry.exe` (**~65 MB** total once launched). The bundled PawnIO kernel sensor driver initializes silently on first elevated launch.
 
+### :shield-check: Verifying Downloaded Binaries (Cosign & SLSA)
+
+Every release includes cryptographic checksums, Sigstore Cosign signature bundles, and SLSA provenance attestations:
+
+```powershell
+# 1. Compare the SHA-256 hashes against checksums.txt
+Get-FileHash .\LocalTelemetrySetup.exe, .\LocalTelemetry-win-x64.zip -Algorithm SHA256
+
+# 2. Verify keyless signatures with Cosign
+cosign verify-blob --bundle .\LocalTelemetrySetup.exe.sigstore.json `
+    --certificate-identity-regexp "https://github.com/Nicconike/LocalTelemetry/.*" `
+    --certificate-oidc-issuer "https://token.actions.githubusercontent.com" `
+    .\LocalTelemetrySetup.exe
+
+# 3. Verify SLSA build provenance attestations
+gh attestation verify .\LocalTelemetrySetup.exe --repo Nicconike/LocalTelemetry
+gh attestation verify .\LocalTelemetry-win-x64.zip --repo Nicconike/LocalTelemetry
+```
+
 ## :user-shield: Administrator Rights & UAC Explained
 
 ### :shield-question-mark: Why does LocalTelemetry need Administrator rights?

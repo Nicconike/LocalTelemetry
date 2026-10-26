@@ -9,7 +9,7 @@ LocalTelemetry includes a built-in network tracking engine that logs daily inter
 - **Interactive Calendar Heatmap**: Displays daily bandwidth usage color-coded across 6 volume tiers from under 10 GB to over 200 GB, with cell tooltips for instant inspection.
 - **Lightweight Local Storage**: Saves usage logs into `internet_usage.jsonl` using JSON Lines format for zero-overhead local persistence.
 - **Deep Windows SRUM History Backfill**: Queries the Windows System Resource Usage Monitor (SRUM) database directly via an Extensible Storage Engine (ESE) reader, backfilling historical bandwidth all the way back to your original Windows installation date.
-- **Plaintext `.dat` File Import**: Imports historical bandwidth logs exported from legacy monitors or custom tools in plaintext `.dat` format (`YYYY/MM/DD UpKB/DownKB`).
+- **Backup File Import (`.jsonl` & `.dat`)**: Imports native `internet_usage.jsonl` backup files and legacy plaintext `.dat` logs (`YYYY/MM/DD UpKB/DownKB`).
 - **Bandwidth Quota Alerts**: Configurable daily (5 GB – 500 GB) and monthly (100 GB – 5,000 GB) internet quota thresholds with desktop toast notifications and overlay flashing.
 
 ---
@@ -97,6 +97,7 @@ Clicking on any date cell opens an in-depth breakdown card displaying:
   - **Source Provenance Badges**:
     - `Windows` *(blue badge)*: Record backfilled from the Windows SRUM database.
     - `.DAT Import` *(orange badge)*: Record imported from an external `.dat` text file.
+    - `JsonlImport` *(badge)*: Record imported from a JSON Lines (`.jsonl`) backup file.
     - *Unbadged*: Live session data recorded directly by LocalTelemetry.
 
 Clicking the selected day cell a second time closes the drill-down card.
@@ -124,11 +125,18 @@ Under the **Windows Network Usage** section on the Traffic page, you can manuall
 - **Import Execution**: Click **Import from Windows**. LocalTelemetry reads historical records from the Windows database for the requested range.
 - **Status Reporting**: Displays the total days and bandwidth imported (e.g. `Imported 14 day(s): ↓ 12.45 GB, ↑ 2.10 GB`) or confirms that the period is already up to date.
 
-### :import: Manual Plaintext Backup File Import
+### :import: Manual Traffic Database & Backup File Import
 
-Under the **Import** section on the Traffic page, click **Select .dat file** to load external bandwidth logs:
+Under the **Traffic Database & Backup** section on the Traffic page, click **Select .jsonl or .dat file** to restore or load external bandwidth logs:
 
-- **Supported Format**: Plaintext `.dat` files with a header line and daily records formatted as `YYYY/MM/DD UpKB/DownloadKB`:
+- **JSON Lines Format (`.jsonl`)**: Restores native LocalTelemetry backup files containing line-delimited JSON objects. Supports `date`, upload bytes (`up_bytes`, `upload_bytes`, `up`), download bytes (`down_bytes`, `download_bytes`, `down`), and `interface`. Dates support `YYYY-MM-DD`, `DD-MM-YYYY`, and `DD/MM/YYYY`. Records merge into `TrafficHistoryStore` with source `JsonlImport`.
+
+  ```json
+  {"date":"2026-10-01","download_bytes":524288000,"upload_bytes":104857600,"interface":"Ethernet"}
+  {"date":"02-10-2026","down":1073741824,"up":209715200,"interface":"Wi-Fi"}
+  ```
+
+- **Legacy Plaintext Format (`.dat`)**: Loads plaintext `.dat` files with a header line and daily records formatted as `YYYY/MM/DD UpKB/DownloadKB`:
 
   ```text
   Date Upload/Download KB
@@ -136,11 +144,11 @@ Under the **Import** section on the Traffic page, click **Select .dat file** to 
   2026/08/02 51200/102400
   ```
 
-- **Processing**: Lines are validated, values are converted to bytes, assigned the interface `Dat File` with source `DatImport`, and saved into `internet_usage.jsonl`.
+- **Processing & Storage**: The importer validates lines and converts values to bytes. It merges records into `TrafficHistoryStore` and saves them to `internet_usage.jsonl`.
 - **Status Feedback**: Displays the number of days imported (e.g. `Imported 31 day(s)`) or an error message if parsing fails.
 
 ::: warning Binary SRUDB.dat Files
-The **Select .dat file** button is designed specifically for plaintext text logs (such as exports from NetSpeedMonitor or custom scripts). Do not manually select the Windows binary `SRUDB.dat` file with this button; LocalTelemetry already reads Windows `SRUDB.dat` automatically in the background using its built-in ESE reader.
+The **Select .jsonl or .dat file** button is designed for text backups and logs. Do not select the Windows binary `SRUDB.dat` file with this button. LocalTelemetry reads Windows `SRUDB.dat` automatically in the background using its built-in ESE reader.
 :::
 
 ---

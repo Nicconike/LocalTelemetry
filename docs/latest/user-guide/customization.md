@@ -31,6 +31,7 @@ The settings panel is organized into 10 dedicated tabs matching the exact naviga
 - **Opacity**: Adjust overlay opacity (`20%` to `100%`).
 - **Scale**: Adjust overlay scaling multiplier (`80%` to `200%`).
 - **Double-Click Action**: Configure what happens when double-clicking the overlay (`None`, `Open Task Manager`, or `Open Settings`).
+- **Taskbar Space Constraint Banner**: Warns when the available taskbar slot is narrower than the overlay. LocalTelemetry scales down and clamps coordinates to prevent overlap. Includes a button to open Windows Taskbar Settings (`ms-settings:taskbar`) to hide Windows Widgets.
 
 ![Overlay Settings Tab](/images/overlay-settings.png)
 *Overlay settings tab for configuring taskbar placement, edge offset, opacity, scaling, and double-click behavior.*
@@ -76,7 +77,7 @@ The settings panel is organized into 10 dedicated tabs matching the exact naviga
 - **Filter by Adapter**: Filter bandwidth totals dynamically for **All** or any individual network interface discovered in the month's records (such as **Ethernet** or **Wi-Fi**).
 - **Day Detail Breakdown**: Click on any calendar day to inspect per-adapter upload and download volumes.
 - **Windows Network Usage Import**: Backfill historical usage from Windows SRUM using date presets (`Last 7 Days`, `Last 14 Days`, `Last 30 Days`) or custom `From` / `To` date pickers.
-- **Traffic Database (.dat format) Import**: Import external plaintext `.dat` backup logs into the database.
+- **Traffic Database & Backup Import**: Import native `internet_usage.jsonl` backups or external plaintext `.dat` logs into the database.
 - **Persistent Storage**: All historical records are saved locally in `internet_usage.jsonl`.
 
 ![Traffic History Tab](/images/traffic-settings.png)
@@ -98,11 +99,11 @@ The settings panel is organized into 10 dedicated tabs matching the exact naviga
   - **System**: Device Name (computer name), OS (Windows display version string), and System Type (`Desktop` or `Laptop`).
   - **Motherboard**: System model name, Motherboard manufacturer and model, hardware version/revision, serial number, BIOS version, firmware boot mode (`UEFI` or `Legacy`), and power supply information (PSU model and wattage rating on desktop PCs).
   - **Processor (CPU)**: Processor model string, CPU vendor brand, physical core count, logical thread count, base clock frequency (GHz), maximum turbo boost frequency (GHz), socket designation (e.g. `Socket LGA 1700`, `Socket AM5`), and thermal design power (TDP in Watts).
-  - **Memory (RAM)**: Total installed RAM (with usable capacity in GB), memory manufacturer, clock speed (e.g. `5600 MT/s`), memory generation type (e.g. `DDR5`, `DDR4`), number of populated module slots, and individual capacity and speed breakdown per module (`Module 1`, `Module 2`, etc.).
+  - **Memory (RAM)**: Total installed RAM (with usable capacity in GB), memory manufacturer, clock speed (e.g. `5600 MT/s` or configured speed with rated SPD speed when different, such as `4800 MT/s (rated 6000 MT/s)`), memory generation type (e.g. `DDR5`, `DDR4`), number of populated module slots, and individual capacity and speed breakdown per module (`Module 1`, `Module 2`, etc.).
   - **Graphics (GPU)**: Detected graphics cards labeled as `Dedicated` or `Integrated`, GPU model name, dedicated VRAM capacity (GB), installed driver version, and board TDP power limit (W).
   - **Storage**: Discovered physical drives indexed sequentially (`Disk 1`, `Disk 2`, etc.) with a blue `Boot` badge for the OS drive, drive model name, storage capacity, and connection bus type (`[NVMe]`, `[SATA]`, `[SCSI]`, or `[DISK]`).
   - **Network**: Discovered active network adapters (`Adapter` name for each physical or virtual connection).
-  - **Battery** *(Laptops only)*: Detected battery manufacturer, device name / model identifier, factory designed capacity, and current full charge capacity.
+  - **Battery** *(Laptops only)*: Detected battery manufacturer, device name / model identifier, factory designed capacity, current full charge capacity, battery health percentage, wear level percentage, and completed charge cycle count.
 
 ![System Information Tab](/images/system-settings.png)
 *System information tab summarizing detected hardware specifications and driver versions.*

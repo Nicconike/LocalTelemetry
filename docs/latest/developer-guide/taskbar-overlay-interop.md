@@ -132,9 +132,13 @@ On centered taskbars, the app icons occupy the center band:
 
 On left-aligned taskbars, app icons start from the Start button and expand toward the right:
 
-- **Application Band Boundary Detection (`GetAppListRightEdge`)**:
+- **Application Band Boundary Detection (`GetAppListRightEdge` & `GetAppListLeftEdge`)**:
   - Inspects UIAutomation elements for `Taskbar.TaskListButtonPanel` or native `MSTaskListWClass`.
-  - Determines the exact right boundary of running and pinned applications.
+  - Determines the exact left and right boundaries of running and pinned applications.
+- **Taskbar Space Congestion Detection (`IsTaskbarSpaceConstrained`)**:
+  - Calculates the available horizontal gap (`AvailableSlotWidth`) between running app icons and the system tray or widgets.
+  - Sets `IsTaskbarSpaceConstrained` to `true` when the measured slot is narrower than the overlay width (`overlayWidth > availableWidth`).
+  - Supplies status to the frontend settings UI via `TaskbarSlotStatusProvider`.
 - **Position Next to Apps (`beside_apps` or `left`)**:
   - Positions the overlay immediately following the app list:
 
@@ -146,7 +150,7 @@ On left-aligned taskbars, app icons start from the Start button and expand towar
     $$\text{X} = \text{clientRightBoundary} - \text{Width} - \text{PlacementOffset}$$
 
 - **Boundary Clamping**:
-  - Clamps computed coordinates via `Math.Clamp(x, clientAppRight, maxRight)` to prevent visual overlap.
+  - Clamps computed coordinates via `Math.Clamp(x, minX, maxX)` to keep the overlay within bounds and prevent visual overlap.
 
 ---
 

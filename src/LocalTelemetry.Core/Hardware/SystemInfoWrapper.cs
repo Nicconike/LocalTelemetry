@@ -35,9 +35,12 @@ public sealed class SystemInfoWrapper : ISystemInfo
     public string GetBatteryDeviceName() => SystemInfo.GetBatteryDeviceName();
     public string GetBatteryDesignCapacity() => SystemInfo.GetBatteryDesignCapacity();
     public string GetBatteryFullChargedCapacity() => SystemInfo.GetBatteryFullChargedCapacity();
-    public int GetBatteryCycleCount() => SystemInfo.GetBatteryCycleCount();
-    public double GetBatteryHealthPct() => SystemInfo.GetBatteryHealthPct();
-    public double GetBatteryWearLevelPct() => SystemInfo.GetBatteryWearLevelPct();
+    int ISystemInfo.GetBatteryCycleCount() => SystemInfo.GetBatteryCycleCount();
+    double ISystemInfo.GetBatteryHealthPct() => SystemInfo.GetBatteryHealthPct();
+    double ISystemInfo.GetBatteryWearLevelPct() => SystemInfo.GetBatteryWearLevelPct();
+    public int GetBatteryCycleCount() => ((ISystemInfo)this).GetBatteryCycleCount();
+    public double GetBatteryHealthPct() => ((ISystemInfo)this).GetBatteryHealthPct();
+    public double GetBatteryWearLevelPct() => ((ISystemInfo)this).GetBatteryWearLevelPct();
     public string GetPsuName() => SystemInfo.GetPsuName();
     public string GetPsuMaxCapacity() => SystemInfo.GetPsuMaxCapacity();
     public string GetDiskModel() => SystemInfo.GetDiskModel();

@@ -16,6 +16,7 @@ The taskbar overlay is a borderless, transparent window positioned directly on y
 - **DPI-Aware Scaling**: Automatically detects and adapts to display scaling levels (100%, 125%, 150%, 175%, 200%, and multi-monitor mixed DPI setups).
 - **Automatic Theme Contrast & Key Color Sync**: When **Follow Windows Theme** is enabled, a 2-second background timer detects Windows light/dark taskbar changes (`SystemUsesLightTheme`). It dynamically synchronizes the overlay transparency key color (`#f0f0f0` for light theme, `#1c1b19` or custom hex for dark theme) and adjusts text luminosity for high-contrast legibility against any taskbar color.
 - **Visual Alert Flash Effect**: When any hardware metric crosses a critical threshold configured in **Alerts**, the overlay triggers an instantaneous translucent orange warning flash (`rgba(255, 80, 0, 0.24)`) across the buffer to alert you visually without stealing window focus.
+- **Taskbar Space Congestion Detection & Clamping**: Measures available taskbar space between open apps and system widgets or notification area. If available width is narrower than the overlay, it clamps coordinates to prevent overlap and alerts in Settings.
 - **Hybrid Embedding Engine**: Embeds as a native child window into the Windows taskbar shell, with an automatic fallback to a synchronized floating layered window if direct child embedding is restricted.
 
 ## :paintbrush-vertical: Default Metric Layout & Vendor Brand Colors
@@ -115,6 +116,7 @@ In the settings dashboard under the **Overlay** tab, you can customize layout, g
 - :ruler: **Offset from Edge**: Adjust horizontal pixel distance from the chosen taskbar anchor (`0px` to `200px`).
 - :blend: **Opacity**: Adjust overlay transparency from `20%` to `100%`.
 - :zoom-in: **Scale**: Adjust the display scale multiplier from `80%` to `200%`.
+- :triangle-alert: **Space Congestion Warning**: When open taskbar application buttons squeeze available space, a warning banner appears with a one-click shortcut to Windows Taskbar Settings (`ms-settings:taskbar`).
 - :mouse-pointer-click: **Double-Click Action**: Configure what happens when double-clicking the overlay:
   - `None`: Disables double-click action.
   - `Open Task Manager`: Launches Windows Task Manager.

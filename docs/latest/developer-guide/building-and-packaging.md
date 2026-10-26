@@ -80,12 +80,12 @@ For portable installations, [`Uninstall.bat`](https://github.com/Nicconike/Local
 
 ## :package-check: WinGet Packaging Specifications
 
-The repository maintains the Windows Package Manager manifest in `packaging/winget/localtelemetry.yaml`:
+The repository maintains the official multi-file Windows Package Manager manifests in `packaging/winget/`:
 
-- **Package Identifier**: `Nicconike.LocalTelemetry`
-- **Installer Type**: `inno`
-- **Silent Switches**: `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-`
-- **Automated Workflow**: When a release is published via `.github/workflows/release.yml`, the workflow calculates the SHA-256 hash of `LocalTelemetrySetup.exe`, updates `packaging/winget/localtelemetry.yaml`, and submits the release to the WinGet Community Repository via Microsoft's official `wingetcreate` CLI utility.
+- **Version Manifest (`Nicconike.LocalTelemetry.yaml`)**: Defines the package identifier (`Nicconike.LocalTelemetry`), version, and default locale.
+- **Installer Manifest (`Nicconike.LocalTelemetry.installer.yaml`)**: Defines the Inno Setup installer type, architecture (`x64`), download URL, SHA-256 hash, and silent switches (`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-`).
+- **Locale Manifest (`Nicconike.LocalTelemetry.locale.en-US.yaml`)**: Contains package metadata, description, license, tags, and release notes URL.
+- **Automated Workflow**: When a release is published via `.github/workflows/release.yml`, `build.ps1` updates all three manifest files. The release workflow then submits the update to the official Microsoft WinGet Community Repository via `wingetcreate`.
 
 ---
 
@@ -110,4 +110,16 @@ The portable release package bundles the `./publish/*` directory (including `Uni
 
 ```powershell
 Compress-Archive -Path ./publish/* -DestinationPath ./LocalTelemetry-win-x64.zip -Force
+```
+
+---
+
+## :shield-check: Artifact Signing with Cosign
+
+Release binaries are signed keylessly with [Sigstore Cosign](https://github.com/sigstore/cosign) using GitHub Actions OIDC:
+
+```powershell
+cosign sign-blob --yes --bundle ./checksums.txt.sigstore.json ./checksums.txt
+cosign sign-blob --yes --bundle ./LocalTelemetrySetup.exe.sigstore.json ./LocalTelemetrySetup.exe
+cosign sign-blob --yes --bundle ./LocalTelemetry-win-x64.zip.sigstore.json ./LocalTelemetry-win-x64.zip
 ```

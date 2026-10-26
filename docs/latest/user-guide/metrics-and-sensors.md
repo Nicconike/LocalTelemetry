@@ -61,6 +61,10 @@ Memory telemetry tracks active system memory consumption and overall capacity ut
 | **RAM Usage**          | `RAM`         | `58%`           | Percentage of total physical memory currently in use  |
 | **RAM Used**           | `RAM`         | `18.5GB`        | Active physical memory in Gigabytes                   |
 
+### :gauge: Configured vs. Rated Clock Speeds
+
+LocalTelemetry queries SMBIOS and WMI for active memory clocks. If modules run below rated XMP or EXPO speeds, the System page displays both configured speed and rated SPD speed (for example, `4800 MT/s (rated 6000 MT/s)`).
+
 ---
 
 ## :hard-drive: Storage (Disk) Metrics
@@ -114,6 +118,14 @@ On laptops, handheld PCs, and battery-powered Windows devices, LocalTelemetry pr
 - **Fully Charged on AC Power**: Displays `Full` once the battery reaches 100% and charging completes.
 - **Running on Battery**: Displays real-time power consumption prefixed with a minus sign (e.g. `-18.5W`) so you can monitor your laptop's current energy draw.
 - **Desktop Systems**: Battery metrics are automatically hidden when no physical battery is present.
+
+### :shield-heart: Battery Health & Wear Telemetry
+
+The System settings page reports additional hardware diagnostics for installed batteries:
+
+- **Battery Health**: Percentage of original design capacity remaining (`FullChargedCapacity / DesignCapacity * 100`).
+- **Wear Level**: Percentage of capacity lost through degradation (`100% - Health`).
+- **Charge Cycle Count**: Total lifetime battery charge and discharge cycles reported by battery firmware.
 
 ---
 

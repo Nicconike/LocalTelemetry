@@ -206,6 +206,7 @@ When Windows display adapters restart (e.g. driver update, GPU TDR recovery, or 
   - Scans table `{973F5D5C-1D90-4944-BE8E-24B94231A174}` for network interface data usage.
   - Maps interface GUIDs to physical adapter names.
   - Feeds historical daily upload and download octets into `TrafficHistoryStore.cs` for calendar display.
+- **Backup Importer Subsystems**: `JsonlTrafficImporter.cs` parses line-delimited JSON usage records from `internet_usage.jsonl` backup files. `DatImporter.cs` parses legacy plaintext `.dat` files. Both merge records into `TrafficHistoryStore.cs`.
 
 ---
 
@@ -214,6 +215,8 @@ When Windows display adapters restart (e.g. driver update, GPU TDR recovery, or 
 - **Charge State & Level**: Samples remaining battery percentage and AC power connection status via `GetSystemPowerStatus`.
 - **Real-Time Charge / Discharge Rate**: Queries WMI `root\wmi:BatteryStatus` to sample remaining milliwatt-hours (`mWh`). Delta over time intervals calculates real-time rate in Watts (`W`).
 - **Hardware Metadata Extraction**: Inspects WMI `root\wmi:BatteryStaticData` and `Win32_Battery` to extract authentic manufacturer name, device model, designed capacity, and full charge capacity.
+- **Battery Health & Wear Percentage**: `SystemInfo.GetBatteryHealthPct()` computes health via `(FullChargedCapacity / DesignCapacity) * 100`. `SystemInfo.GetBatteryWearLevelPct()` calculates wear percentage.
+- **Charge Cycle Count**: `SystemInfo.GetBatteryCycleCount()` queries `root\wmi:BatteryCycleCount` for total lifetime hardware charge cycles.
 - **Virtual Battery Filtering**: Automatically filters out virtual battery stubs (e.g. `-Virtual Battery 0-`, `CRB Battery 0`), prioritizing physical battery hardware.
 
 ---

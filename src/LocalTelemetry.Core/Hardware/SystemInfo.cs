@@ -466,10 +466,10 @@ public static class SystemInfo
         return arch switch
         {
             9 => SocketAm5,
-            8 => ResolveZen4MobileSocket(suffix),
-            7 => ResolveZen4OrMobileSocket(suffix),
+            8 => ResolveZen4Package(suffix),
+            7 => ResolveZen4OrPackage(suffix),
             6 => SocketFp7,
-            5 => ResolveZen3MobileSocket(suffix),
+            5 => ResolveZen3Package(suffix),
             4 => SocketFp6,
             3 or 2 => suffix.IndexOf('U') >= 0 ? SocketFp5 : SocketAm4,
             1 => suffix.IndexOf('U') >= 0 ? SocketFp4 : SocketAm4,
@@ -477,21 +477,21 @@ public static class SystemInfo
         };
     }
 
-    private static string ResolveZen4MobileSocket(ReadOnlySpan<char> suffix)
+    private static string ResolveZen4Package(ReadOnlySpan<char> suffix)
     {
         if (suffix.IndexOf('U') >= 0 || suffix.IndexOf("HS") >= 0 || suffix.IndexOf('H') >= 0)
             return SocketFp8;
         return SocketAm5;
     }
 
-    private static string ResolveZen4OrMobileSocket(ReadOnlySpan<char> suffix)
+    private static string ResolveZen4OrPackage(ReadOnlySpan<char> suffix)
     {
         if (suffix.IndexOf("HX") >= 0) return SocketFl1;
         if (suffix.IndexOf("HS") >= 0 || suffix.IndexOf('U') >= 0) return SocketFp8;
         return SocketAm5;
     }
 
-    private static string ResolveZen3MobileSocket(ReadOnlySpan<char> suffix)
+    private static string ResolveZen3Package(ReadOnlySpan<char> suffix)
     {
         if (suffix.IndexOf("HX") >= 0) return SocketFp7;
         if (suffix.IndexOf('H') >= 0 || suffix.IndexOf("HS") >= 0 || suffix.IndexOf('U') >= 0) return SocketFp6;
@@ -1211,20 +1211,7 @@ public static class SystemInfo
                 string serial = (mo["SerialNumber"] as string ?? "").Trim();
                 uint configuredSpeed = Convert.ToUInt32(mo["ConfiguredClockSpeed"] ?? 0U);
                 uint ratedSpeed = Convert.ToUInt32(mo["Speed"] ?? 0U);
-                uint activeSpeed = configuredSpeed > 0 ? configuredSpeed : ratedSpeed;
-                string speedDisplay;
-                if (configuredSpeed > 0 && ratedSpeed > 0 && configuredSpeed != ratedSpeed)
-                {
-                    speedDisplay = $"{configuredSpeed} MT/s (rated {ratedSpeed} MT/s)";
-                }
-                else if (activeSpeed > 0)
-                {
-                    speedDisplay = $"{activeSpeed} MT/s";
-                }
-                else
-                {
-                    speedDisplay = "";
-                }
+                string speedDisplay = FormatRamModuleSpeed(configuredSpeed, ratedSpeed);
 
                 ushort ff = Convert.ToUInt16(mo["FormFactor"] ?? (ushort)0);
                 ushort mt = Convert.ToUInt16(mo["MemoryType"] ?? (ushort)0);
@@ -1248,6 +1235,16 @@ public static class SystemInfo
         }
         catch (Exception ex) { Diagnostics.Log.Error(ex, "Failed to query physical memory modules via system management"); }
         return results;
+    }
+
+    private static string FormatRamModuleSpeed(uint configuredSpeed, uint ratedSpeed)
+    {
+        if (configuredSpeed > 0 && ratedSpeed > 0 && configuredSpeed != ratedSpeed)
+        {
+            return $"{configuredSpeed} MT/s (rated {ratedSpeed} MT/s)";
+        }
+        uint activeSpeed = configuredSpeed > 0 ? configuredSpeed : ratedSpeed;
+        return activeSpeed > 0 ? $"{activeSpeed} MT/s" : "";
     }
 
     private static List<string> GetSmbiosRamManufacturers()
@@ -1704,13 +1701,22 @@ public static class SystemInfo
 
         // 1. Live ACPI battery static data from root\wmi
         int staticMwh = QueryRootWmiInt("BatteryStaticData", "DesignedCapacity");
-        if (staticMwh > 0) return (_batteryDesignCapacityMwhCache = staticMwh).Value;
+        if (staticMwh > 0)
+        {
+            _batteryDesignCapacityMwhCache = staticMwh;
+            return staticMwh;
+        }
 
         // 2. SMBIOS Type 22 (Portable Battery)
         int smbiosMwh = GetSmbiosBatteryWord(0x0A);
-        if (smbiosMwh > 0) return (_batteryDesignCapacityMwhCache = smbiosMwh).Value;
+        if (smbiosMwh > 0)
+        {
+            _batteryDesignCapacityMwhCache = smbiosMwh;
+            return smbiosMwh;
+        }
 
-        return (_batteryDesignCapacityMwhCache = 0).Value;
+        _batteryDesignCapacityMwhCache = 0;
+        return 0;
     }
 
     /// <summary>Gets the battery full charged capacity in mWh as integer.</summary>
@@ -1720,8 +1726,13 @@ public static class SystemInfo
         if (!HasBattery()) return 0;
         if (_batteryFullChargeCapacityMwhCache.HasValue) return _batteryFullChargeCapacityMwhCache.Value;
         int fccWmi = QueryRootWmiInt("BatteryFullChargedCapacity", "FullChargedCapacity");
-        if (fccWmi > 0) return (_batteryFullChargeCapacityMwhCache = fccWmi).Value;
-        return (_batteryFullChargeCapacityMwhCache = 0).Value;
+        if (fccWmi > 0)
+        {
+            _batteryFullChargeCapacityMwhCache = fccWmi;
+            return fccWmi;
+        }
+        _batteryFullChargeCapacityMwhCache = 0;
+        return 0;
     }
 
     /// <summary>Gets the battery design capacity in mWh.</summary>
@@ -1731,7 +1742,9 @@ public static class SystemInfo
         if (!HasBattery()) return "";
         if (_batteryDesignCapacityCache is not null) return _batteryDesignCapacityCache;
         int mwh = GetBatteryDesignCapacityMwh();
-        return _batteryDesignCapacityCache = mwh > 0 ? $"{mwh} mWh" : "";
+        string formatted = mwh > 0 ? $"{mwh} mWh" : "";
+        _batteryDesignCapacityCache = formatted;
+        return formatted;
     }
 
     /// <summary>Gets the battery full charged capacity in mWh from WMI.</summary>
@@ -1741,7 +1754,9 @@ public static class SystemInfo
         if (!HasBattery()) return "";
         if (_batteryFullChargeCapacityCache is not null) return _batteryFullChargeCapacityCache;
         int mwh = GetBatteryFullChargedCapacityMwh();
-        return _batteryFullChargeCapacityCache = mwh > 0 ? $"{mwh} mWh" : "";
+        string formatted = mwh > 0 ? $"{mwh} mWh" : "";
+        _batteryFullChargeCapacityCache = formatted;
+        return formatted;
     }
 
     /// <summary>Gets the battery charge cycle count from WMI.</summary>
@@ -1751,7 +1766,9 @@ public static class SystemInfo
         if (!HasBattery()) return 0;
         if (_batteryCycleCountCache.HasValue) return _batteryCycleCountCache.Value;
         int cycles = QueryRootWmiInt("BatteryCycleCount", "CycleCount");
-        return (_batteryCycleCountCache = cycles > 0 ? cycles : 0).Value;
+        int resolvedCycles = cycles > 0 ? cycles : 0;
+        _batteryCycleCountCache = resolvedCycles;
+        return resolvedCycles;
     }
 
     /// <summary>Gets the battery health percentage based on full charge vs design capacity.</summary>
