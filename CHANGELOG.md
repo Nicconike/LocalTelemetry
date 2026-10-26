@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com), and this project adheres to [Semantic Versioning](https://semver.org) & [Conventional Commits](https://conventionalcommits.org).
 
+## [1.2.0](https://github.com/Nicconike/LocalTelemetry/compare/v1.1.0...v1.2.0) (2026-10-26)
+
+### Features
+
+* **traffic:** add JSONL traffic history backup importer and battery health telemetry ([7070f9d](https://github.com/Nicconike/LocalTelemetry/commit/7070f9d0fa264459d9cc7941e6d8f3e47247e8a5))
+
+### Code Refactoring
+
+* **installer:** redesign uninstaller cleanup dialog layout and expand unit tests ([cb8033e](https://github.com/Nicconike/LocalTelemetry/commit/cb8033e54561fc66dcc47a902df9057f3ff71670))
+
+### Continuous Integration
+
+* **release:** sign assets with cosign and normalize changelog standards ([e22aa4f](https://github.com/Nicconike/LocalTelemetry/commit/e22aa4f63da1d22c2c614ff1b7862e42e72f75b2))
+* enforce ignore-scripts and run test suites in parallel ([5ae545f](https://github.com/Nicconike/LocalTelemetry/commit/5ae545f659e2170209dcbe065709d2eccd9bda66))
+
+### Tests
+
+* **coverage:** achieve min 95 percent line coverage and resolve sonar quality issues ([8ed284f](https://github.com/Nicconike/LocalTelemetry/commit/8ed284f8a69c19869ef6124924ae0c5299a7dc61))
+* expand unit test coverage across taskbar embedder and hardware monitors ([18de8a4](https://github.com/Nicconike/LocalTelemetry/commit/18de8a4f0de88efbd17a6cd3f8c8f062dc695bb8))
+
 ## [1.1.0](https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0...v1.1.0) (2026-10-24)
 
 ### Features

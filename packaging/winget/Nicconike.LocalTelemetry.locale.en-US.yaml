@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.12.0.schema.json
 PackageIdentifier: Nicconike.LocalTelemetry
-PackageVersion: 1.1.0
+PackageVersion: 1.2.0
 PackageLocale: en-US
 Publisher: Nicconike
 PublisherUrl: https://github.com/Nicconike
@@ -33,3 +33,4 @@ Tags:
 ReleaseNotesUrl: https://github.com/Nicconike/LocalTelemetry/releases
 ManifestType: defaultLocale
 ManifestVersion: 1.12.0
+
