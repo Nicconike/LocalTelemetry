@@ -220,7 +220,7 @@ Supplies comprehensive hardware discovery specifications.
 
 ```json
 {
-  "version": "1.0.0-rc.1",
+  "version": "1.2.0",
   "buildDate": "03-10-2026, 04:30 PM",
   "deploymentMode": "Standard",
   "targetRuntime": ".NET 10.0.0",

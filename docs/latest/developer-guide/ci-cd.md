@@ -165,7 +165,7 @@ The documentation site deployment pipeline is defined in [`.github/workflows/doc
 
 1. When a new release is published, the workflow triggers automatically.
 2. The `actions/checkout` step clones the repository with `fetch-depth: 0` to retrieve all Git tags.
-3. The build script `docs/scripts/build-versions.mjs` scans all tags matching `v*` with version `>= v1.0.0-rc.1`.
+3. The build script `docs/scripts/build-versions.mjs` scans all tags matching `v*` with version `>= v1.0.0`.
 4. The script extracts immutable markdown documentation from the tagged commit tree into `docs/v<version>/`. It skips versions that are already generated to optimize build performance.
 5. It disables edit links (`editLink: false`), rewrites internal cross-references to the versioned path, and updates `docs/.vitepress/versions.mjs`.
 6. Bun builds the full VitePress static site containing both the latest docs and all locked release versions.

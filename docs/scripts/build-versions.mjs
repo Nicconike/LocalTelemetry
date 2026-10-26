@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Automatically extracts immutable documentation from Git release tags
- * starting from v1.0.0-rc.1 and newer, preparing versioned folders
+ * starting from v1.0.0 and newer, preparing versioned folders
  * and updating docs/.vitepress/versions.mjs before VitePress builds.
  */
 import { execFileSync } from 'node:child_process';
@@ -16,8 +16,8 @@ const versionsFile = join(docsDir, '.vitepress', 'versions.mjs');
 const CONTENT_ROOT = ['index.md', 'about', 'user-guide', 'developer-guide'];
 const ABS_DOC_LINK = /(?<![:/.])\/(?:about|user-guide|developer-guide)(?:\/|$)/g;
 
-// Only tags >= v1.0.0-rc.1 are included in versioned documentation
-const MIN_VERSION = '1.0.0-rc.1';
+// Only tags >= v1.0.0 are included in versioned documentation
+const MIN_VERSION = '1.0.0';
 
 const gitExecutable = (() => {
     if (process.platform === 'win32') {

@@ -6,6 +6,4 @@ export const versions = [
     { text: 'v1.2.0', link: '/v1.2.0/' },
     { text: 'v1.1.0', link: '/v1.1.0/' },
     { text: 'v1.0.0', link: '/v1.0.0/' },
-    { text: 'v1.0.0-rc.2', link: '/v1.0.0-rc.2/' },
-    { text: 'v1.0.0-rc.1', link: '/v1.0.0-rc.1/' },
 ];

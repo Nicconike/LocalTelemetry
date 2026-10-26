@@ -58,7 +58,7 @@ The configuration script is located at [`setup.iss`](https://github.com/Nicconik
 If Inno Setup 7 is installed on your system (via `winget install --id JRSoftware.InnoSetup.7`):
 
 ```powershell
-& "C:\Program Files\Inno Setup 7\ISCC.exe" /DAppVersion=1.0.0-rc.1 /DAppVersionInfoVersion=1.0.0.0 setup.iss
+& "C:\Program Files\Inno Setup 7\ISCC.exe" /DAppVersion=1.2.0 /DAppVersionInfoVersion=1.2.0.0 setup.iss
 ```
 
 This compiles `LocalTelemetrySetup.exe` into the repository root folder.

@@ -19,7 +19,7 @@ const parsedVersion = computed(() => {
         path = '/' + path.slice(baseUrl.length);
     }
 
-    // Match version prefix like /v1.0.0-rc.1/...
+    // Match version prefix
     const match = path.match(/^\/v(\d[\w.-]*)(?:\/(.*))?$/);
     if (match) {
         let sub = match[2] || '';

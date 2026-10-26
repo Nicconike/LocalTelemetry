@@ -2072,11 +2072,15 @@ public class TaskbarEmbedderTests
         var queryLeftAuto = typeof(TaskbarEmbedder).GetMethod("QueryAppListLeftEdgeFromAutomation", BindingFlags.NonPublic | BindingFlags.Static);
         try
         {
+            TaskbarEmbedder.ExplorerTrayWndOverride = () => fakeForm.Handle;
             TaskbarEmbedder.ThrowInQueryAppListLeftEdgeFromAutomationForTesting = true;
-            queryLeftAuto?.Invoke(null, null);
+            var act = () => queryLeftAuto?.Invoke(null, null);
+            act.Should().Throw<TargetInvocationException>()
+                .WithInnerException<InvalidOperationException>();
         }
         finally
         {
+            TaskbarEmbedder.ExplorerTrayWndOverride = null;
             TaskbarEmbedder.ThrowInQueryAppListLeftEdgeFromAutomationForTesting = false;
         }
 
