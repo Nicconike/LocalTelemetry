@@ -487,15 +487,15 @@
 
         <div class="import-card">
             <div class="card-header">
-                <span class="card-title">Traffic Database (.dat format)</span>
+                <span class="card-title">Traffic Database & Backup</span>
                 <span class="card-desc"
-                    >Import external backup files (.dat plain-text format)</span
+                    >Import backup files (.jsonl or legacy .dat format)</span
                 >
             </div>
             <div class="dat-row">
                 <input
                     type="file"
-                    accept=".dat"
+                    accept=".jsonl,.dat"
                     class="file-input"
                     id="dat-file-input"
                     onchange={(e) => {
@@ -510,7 +510,7 @@
                     }}
                 />
                 <label for="dat-file-input" class="file-label"
-                    >Select .dat file</label
+                    >Select .jsonl or .dat file</label
                 >
                 {#if $importResult}
                     <span

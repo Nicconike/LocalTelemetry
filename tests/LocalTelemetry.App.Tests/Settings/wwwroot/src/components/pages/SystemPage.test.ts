@@ -177,6 +177,9 @@ describe('SystemPage.svelte', () => {
             batteryDeviceName: 'UX8406-BAT',
             batteryDesignCapacity: '75000 mWh',
             batteryFullChargedCapacity: '73500 mWh',
+            batteryHealthPct: 98,
+            batteryWearLevelPct: 2,
+            batteryCycleCount: 42,
             disks: [],
             gpus: [],
             nics: []
@@ -192,6 +195,9 @@ describe('SystemPage.svelte', () => {
         expect(document.body.textContent).toContain('SMP');
         expect(document.body.textContent).toContain('UX8406-BAT');
         expect(document.body.textContent).toContain('75000 mWh');
+        expect(document.body.textContent).toContain('98%');
+        expect(document.body.textContent).toContain('2%');
+        expect(document.body.textContent).toContain('42 cycle(s)');
     });
 
     it('renders storage bus types and handles missing memory, cpu, and gpu optional fields', async () => {

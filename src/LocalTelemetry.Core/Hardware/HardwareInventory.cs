@@ -99,6 +99,7 @@ public static class HardwareInventory
             osVersion,
             formFactor,
             motherboardLine,
+            processorLine,
             gpuLines,
             diskLines,
             primaryDiskType,
@@ -241,6 +242,10 @@ public static class HardwareInventory
         if (string.IsNullOrEmpty(identity)) identity = "Standard Battery";
         if (!string.IsNullOrEmpty(design)) bParts.Add($"design capacity {design}");
         if (!string.IsNullOrEmpty(full)) bParts.Add($"full charge {full}");
+        int cycles = sysInfo.GetBatteryCycleCount();
+        if (cycles > 0) bParts.Add($"{cycles} cycles");
+        double health = sysInfo.GetBatteryHealthPct();
+        if (health > 0) bParts.Add($"health {health:F1}%");
         string capInfo = bParts.Count > 0 ? $" ({string.Join(", ", bParts)})" : "";
         string batteryLine = $"{identity}{capInfo}";
         string batteryFingerprint = !string.IsNullOrEmpty(design) ? $"{identity} (design capacity {design})" : identity;
@@ -269,6 +274,7 @@ public static class HardwareInventory
         string OsVersion,
         string FormFactor,
         string MotherboardLine,
+        string ProcessorLine,
         List<string> GpuLines,
         List<string> DiskLines,
         string PrimaryDiskType,
@@ -282,7 +288,8 @@ public static class HardwareInventory
         Log.Info($"Detected system {details.SystemLine}, OS {details.OsVersion}, form factor {details.FormFactor}");
         if (!string.IsNullOrWhiteSpace(details.MotherboardLine))
             Log.Info($"Detected motherboard {details.MotherboardLine}");
-        Log.Info("Detected processor (details redacted)");
+        if (!string.IsNullOrWhiteSpace(details.ProcessorLine))
+            Log.Info($"Detected processor {details.ProcessorLine}");
         foreach (var gpu in details.GpuLines)
             Log.Info($"Detected graphics adapter {gpu}");
         Log.Info($"Detected {details.DiskCount} physical drive(s), primary {details.PrimaryDiskType}");

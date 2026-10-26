@@ -38,6 +38,9 @@ public class SystemInfoWrapperTests
         wrapper.GetBatteryDeviceName().Should().NotBeNull();
         wrapper.GetBatteryDesignCapacity().Should().NotBeNull();
         wrapper.GetBatteryFullChargedCapacity().Should().NotBeNull();
+        wrapper.GetBatteryCycleCount().Should().BeGreaterThanOrEqualTo(0);
+        wrapper.GetBatteryHealthPct().Should().BeGreaterThanOrEqualTo(0);
+        wrapper.GetBatteryWearLevelPct().Should().BeGreaterThanOrEqualTo(0);
 
         wrapper.GetPsuName().Should().NotBeNull();
         wrapper.GetPsuMaxCapacity().Should().NotBeNull();

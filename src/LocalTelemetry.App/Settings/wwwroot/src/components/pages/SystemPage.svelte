@@ -323,6 +323,30 @@
                             >
                         </div>
                     {/if}
+                    {#if info.batteryHealthPct}
+                        <div class="hw-row">
+                            <span class="hw-label">Battery Health</span>
+                            <span class="hw-value"
+                                >{info.batteryHealthPct}%</span
+                            >
+                        </div>
+                    {/if}
+                    {#if info.batteryWearLevelPct !== undefined && info.batteryHealthPct}
+                        <div class="hw-row">
+                            <span class="hw-label">Wear Level</span>
+                            <span class="hw-value"
+                                >{info.batteryWearLevelPct}%</span
+                            >
+                        </div>
+                    {/if}
+                    {#if info.batteryCycleCount}
+                        <div class="hw-row">
+                            <span class="hw-label">Cycle Count</span>
+                            <span class="hw-value"
+                                >{info.batteryCycleCount} cycle(s)</span
+                            >
+                        </div>
+                    {/if}
                 {/if}
             </div>
         </div>

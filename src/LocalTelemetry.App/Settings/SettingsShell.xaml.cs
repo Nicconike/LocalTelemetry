@@ -92,6 +92,8 @@ public sealed partial class SettingsShell : Window
     };
 
     // Construction
+    /// <summary>Optional provider for taskbar slot constrained status and width.</summary>
+    public Func<(bool constrained, int availableWidth)>? TaskbarSlotStatusProvider { get; set; }
 
     public SettingsShell(AppSettings cfg, NetUsageLogger? _ = null)
     {
@@ -401,9 +403,9 @@ public sealed partial class SettingsShell : Window
 
         string url = urlEl.GetString() ?? string.Empty;
         if (Uri.TryCreate(url, UriKind.Absolute, out Uri? parsedUri) &&
-           (parsedUri.Scheme == Uri.UriSchemeHttp || parsedUri.Scheme == Uri.UriSchemeHttps))
+           (parsedUri.Scheme == Uri.UriSchemeHttp || parsedUri.Scheme == Uri.UriSchemeHttps || parsedUri.Scheme == "ms-settings"))
         {
-            Log.Info($"Opened external link in browser ({parsedUri.AbsoluteUri})");
+            Log.Info($"Opened external URI ({parsedUri.AbsoluteUri})");
             if (UrlLauncherAction is not null)
             {
                 UrlLauncherAction(parsedUri.AbsoluteUri);
@@ -418,7 +420,7 @@ public sealed partial class SettingsShell : Window
         }
         else
         {
-            Log.Error($"Rejecting invalid or non-HTTP openUrl request '{url}'");
+            Log.Error($"Rejecting invalid openUrl request '{url}'");
         }
     }
 
@@ -505,9 +507,10 @@ public sealed partial class SettingsShell : Window
 
     private void SendSettings()
     {
-        var dto = SettingsDtoMapping.ToDto(_cfg);
+        var (constrained, availableWidth) = TaskbarSlotStatusProvider?.Invoke() ?? (false, 0);
+        var dto = SettingsDtoMapping.ToDto(_cfg, constrained, availableWidth);
         var json = JsonSerializer.Serialize(new { type = "settings", payload = dto }, JsonOut);
-        Log.Debug($"Dispatched configuration to settings UI (overlay visible: {dto.Overlay.Visible})");
+        Log.Debug($"Dispatched configuration to settings UI (overlay visible: {dto.Overlay.Visible}, constrained: {constrained})");
         PostJson(json);
     }
 
@@ -664,7 +667,17 @@ public sealed partial class SettingsShell : Window
                 return;
             }
 
-            int days = DatImporter.Import(content);
+            int days;
+            string trimmed = content.TrimStart();
+            if (trimmed.StartsWith('{'))
+            {
+                days = JsonlTrafficImporter.Import(content);
+            }
+            else
+            {
+                days = DatImporter.Import(content);
+            }
+
             TrafficHistoryStore.Save();
             Log.Info($"User imported network usage database ({days} day{(days == 1 ? "" : "s")} recorded)");
 
@@ -910,6 +923,13 @@ public sealed partial class SettingsShell : Window
             if (!string.IsNullOrEmpty(dc)) payload["batteryDesignCapacity"] = dc;
             string fc = SystemInfo.GetBatteryFullChargedCapacity();
             if (!string.IsNullOrEmpty(fc)) payload["batteryFullChargedCapacity"] = fc;
+
+            double health = SystemInfo.GetBatteryHealthPct();
+            if (health > 0) payload["batteryHealthPct"] = health;
+            double wear = SystemInfo.GetBatteryWearLevelPct();
+            if (health > 0) payload["batteryWearLevelPct"] = wear;
+            int cycles = SystemInfo.GetBatteryCycleCount();
+            if (cycles > 0) payload["batteryCycleCount"] = cycles;
         }
         else
         {

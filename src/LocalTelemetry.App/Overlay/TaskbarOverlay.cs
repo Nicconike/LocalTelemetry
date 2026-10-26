@@ -29,7 +29,6 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
     private bool _flash;
     private DateTime _flashEnd = DateTime.MinValue;
 
-
     private System.Threading.Timer? _watchTimer;
     private System.Threading.Timer? _posTimer;
     private System.Threading.Timer? _themeTimer;
@@ -41,7 +40,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
     private bool _refreshLogged;
     private int _overlayWidth = 200;
     private int _overlayHeight = 30;
-
+    private float _autoScaleFactor = 1.0f;
 
     // Layout constants
     private const int ItemSpace = 3; // px gap between columns (DPI-scaled)
@@ -52,6 +51,12 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
 
     /// <summary>Gets the current deployment lifecycle state of the overlay.</summary>
     public OverlayDeploymentState DeploymentState => _embedder.State;
+
+    /// <summary>Gets whether the available taskbar space is narrower than the overlay width.</summary>
+    public bool IsTaskbarSpaceConstrained => _embedder.IsTaskbarSpaceConstrained;
+
+    /// <summary>Gets the measured width in pixels of the taskbar slot available for the overlay.</summary>
+    public int AvailableSlotWidth => _embedder.AvailableSlotWidth;
 
     internal static bool SkipShowWindowForTesting { get; set; }
     internal static bool SkipMouseHookForTesting { get; set; }
@@ -561,7 +566,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
 
         int vPad = (int)(8 * _dpi + 0.5f);
         int wndH = hasRow2 ? rowH * 2 + RowGap + vPad * 2 : rowH + vPad * 2;
-        int gap = (int)(ItemSpace * _dpi + 0.5f);
+        int gap = (int)(ItemSpace * _dpi * _autoScaleFactor + 0.5f);
 
         int yTop, yBot;
         if (hasRow2)
@@ -836,6 +841,19 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
 
     private Size MeasureSize()
     {
+        _autoScaleFactor = 1.0f;
+        var unconstrained = MeasureSizeInternal();
+        if (_embedder.AvailableSlotWidth > 0 && unconstrained.Width > _embedder.AvailableSlotWidth)
+        {
+            float ratio = (float)_embedder.AvailableSlotWidth / unconstrained.Width;
+            _autoScaleFactor = Math.Clamp(ratio, 0.75f, 1.0f);
+            return MeasureSizeInternal();
+        }
+        return unconstrained;
+    }
+
+    private Size MeasureSizeInternal()
+    {
         var oc = _cfg.Overlay;
         var mc = _cfg.Monitoring;
 
@@ -847,7 +865,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
         bool hasRow2 = oc.Row1.Count > 1;
         var flags = TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding;
         var cols = BuildColumns(g, font, flags, oc, mc, colCount);
-        int gap = (int)(ItemSpace * _dpi + 0.5f);
+        int gap = (int)(ItemSpace * _dpi * _autoScaleFactor + 0.5f);
         int w = gap;
         foreach (var col in cols)
             w += col.FullW + gap;
@@ -865,7 +883,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
     private Font BuildFont()
     {
         var oc = _cfg.Overlay;
-        float physPx = oc.FontSizePx * _dpi * (oc.ScalePct / 100f);
+        float physPx = oc.FontSizePx * _dpi * (oc.ScalePct / 100f) * _autoScaleFactor;
         string key = $"Calibri|{physPx:F1}|{oc.FontBold}";
         if (key == _fontCacheKey && _cachedFont is not null)
             return _cachedFont;
@@ -995,14 +1013,15 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
 
         bool trayChanged = current != _lastTrayHwnd;
         bool windowDead = Handle == IntPtr.Zero || !NativeMethods.IsWindow(Handle);
+        bool embedderRecovering = _embedder.State is OverlayDeploymentState.Recovering;
 
-        if (!trayChanged && !windowDead) return;
+        if (!trayChanged && !windowDead && !embedderRecovering) return;
         _lastTrayHwnd = current;
 
         _uiCtx.Post(_ =>
         {
             if (_disposed) return;
-            RecoverTaskbar(trayChanged ? "taskbar window change" : "taskbar window recovery");
+            RecoverTaskbar(trayChanged ? "taskbar window change" : (embedderRecovering ? "taskbar recovery transition" : "taskbar window recovery"));
         }, null);
     }
 

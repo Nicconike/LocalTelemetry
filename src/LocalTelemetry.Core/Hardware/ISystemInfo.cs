@@ -65,6 +65,12 @@ public interface ISystemInfo
 
     string GetBatteryFullChargedCapacity();
 
+    int GetBatteryCycleCount();
+
+    double GetBatteryHealthPct();
+
+    double GetBatteryWearLevelPct();
+
     string GetPsuName();
 
     string GetPsuMaxCapacity();

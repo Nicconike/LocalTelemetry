@@ -117,6 +117,12 @@ public sealed class OverlayDto
     /// <summary>Horizontal offset from the chosen position edge.</summary>
     public int OffsetX { get; set; } = 0;
 
+    /// <summary>Whether the available taskbar space is narrower than the overlay width.</summary>
+    public bool TaskbarSpaceConstrained { get; set; }
+
+    /// <summary>Measured width in pixels of the taskbar slot available for the overlay.</summary>
+    public int AvailableSlotWidth { get; set; }
+
     /// <summary>Overlay opacity percentage (0-100).</summary>
     public int Opacity { get; set; } = 100;
 
@@ -290,8 +296,10 @@ public static class SettingsDtoMapping
 {
     /// <summary>Converts an <see cref="AppSettings"/> domain object into a <see cref="SettingsDto"/> for the frontend.</summary>
     /// <param name="src">The source application settings.</param>
+    /// <param name="isSpaceConstrained">Whether the available taskbar space is narrower than the overlay.</param>
+    /// <param name="availableSlotWidth">Measured width in pixels of the available taskbar slot.</param>
     /// <returns>A new DTO populated from the source settings.</returns>
-    public static SettingsDto ToDto(AppSettings src)
+    public static SettingsDto ToDto(AppSettings src, bool isSpaceConstrained = false, int availableSlotWidth = 0)
     {
         return new SettingsDto
         {
@@ -344,6 +352,8 @@ public static class SettingsDtoMapping
                 UserCustomizedMetricColors = [.. src.Overlay.UserCustomizedMetricColors],
                 UserCustomizedGroupColors = [.. src.Overlay.UserCustomizedGroupColors],
                 Row1 = [.. src.Overlay.Row1],
+                TaskbarSpaceConstrained = isSpaceConstrained,
+                AvailableSlotWidth = availableSlotWidth,
             },
             Alerts = new AlertsDto
             {

@@ -55,6 +55,8 @@ export interface OverlayDto {
     row1: string[];
     userCustomizedMetricColors: string[];
     userCustomizedGroupColors: string[];
+    taskbarSpaceConstrained?: boolean;
+    availableSlotWidth?: number;
 }
 
 export interface AlertsDto {
@@ -172,6 +174,9 @@ export interface SystemInfo {
     batteryDeviceName?: string;
     batteryDesignCapacity?: string;
     batteryFullChargedCapacity?: string;
+    batteryHealthPct?: number;
+    batteryWearLevelPct?: number;
+    batteryCycleCount?: number;
     psu?: string;
     psuCapacity?: string;
 }

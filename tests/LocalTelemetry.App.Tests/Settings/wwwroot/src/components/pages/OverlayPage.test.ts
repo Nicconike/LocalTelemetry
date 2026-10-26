@@ -33,7 +33,7 @@ describe('OverlayPage.svelte', () => {
         component = mount(OverlayPage, { target: document.body });
         await tick();
 
-        expect(document.body.textContent).toContain('Overlay Visibility & Interaction');
+        expect(document.body.textContent).toContain('Visibility & Interaction');
     });
 
     it('disables overlay toggle when system tray icon is not visible to prevent lockout', async () => {
@@ -89,5 +89,30 @@ describe('OverlayPage.svelte', () => {
 
         expect(document.body.textContent).toContain('Next to Apps');
         expect(document.body.textContent).toContain('Before System Tray');
+    });
+
+    it('renders taskbar space constrained alert banner when flag is active', async () => {
+        settings.set({
+            showSystemTrayIcon: true,
+            overlay: {
+                visible: true,
+                position: 'left',
+                taskbarAlignment: 'center',
+                taskbarSpaceConstrained: true,
+                availableSlotWidth: 250,
+                doubleClickAction: 'none',
+                opacity: 100,
+                scale: 100,
+                fontSizePx: 18,
+                fontBold: false,
+                offsetX: 0,
+            },
+        } as any);
+
+        component = mount(OverlayPage, { target: document.body });
+        await tick();
+
+        expect(document.body.textContent).toContain('Taskbar space is constrained');
+        expect(document.body.textContent).toContain('Open Taskbar Settings');
     });
 });

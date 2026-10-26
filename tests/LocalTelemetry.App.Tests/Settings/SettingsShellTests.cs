@@ -265,6 +265,18 @@ public class SettingsShellTests
     }
 
     [WpfFact]
+    public void HandleWebMessageJson_OpenUrl_MsSettingsScheme_UsesUrlLauncher()
+    {
+        using var ctx = new ShellContext();
+        string? launched = null;
+        SettingsShell.UrlLauncherAction = url => launched = url;
+
+        ctx.Shell.HandleWebMessageJson("""{"type":"openUrl","payload":{"url":"ms-settings:taskbar"}}""");
+
+        launched.Should().Be("ms-settings:taskbar");
+    }
+
+    [WpfFact]
     public void HandleWebMessageJson_OpenUrl_NonHttpScheme_DoesNotLaunch()
     {
         using var ctx = new ShellContext();

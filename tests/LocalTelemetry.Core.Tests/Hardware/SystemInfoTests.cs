@@ -89,9 +89,43 @@ public class SystemInfoTests
         dev.Should().NotContain("CRB Battery");
         SystemInfo.GetBatteryDesignCapacity().Should().NotBeNull();
         SystemInfo.GetBatteryFullChargedCapacity().Should().NotBeNull();
+        SystemInfo.GetBatteryCycleCount().Should().BeGreaterThanOrEqualTo(0);
+        SystemInfo.GetBatteryHealthPct().Should().BeInRange(0.0, 100.0);
+        SystemInfo.GetBatteryWearLevelPct().Should().BeInRange(0.0, 100.0);
         SystemInfo.HasBattery().Should().Be(SystemInfo.HasBattery());
         SystemInfo.GetPsuName().Should().NotBeNull();
         SystemInfo.GetPsuMaxCapacity().Should().NotBeNull();
+    }
+
+    [Fact]
+    public void SystemInfo_BatteryHealthAndCycles_Calculation_ReturnsExpectedMetrics()
+    {
+        SystemInfo.ResetCaches();
+        var origHasBattery = SystemInfo.HasBatteryOverride;
+        var origRootInt = SystemInfo.QueryRootWmiIntOverride;
+        try
+        {
+            SystemInfo.HasBatteryOverride = true;
+            SystemInfo.QueryRootWmiIntOverride = (cls, prop) =>
+            {
+                if (cls == "BatteryStaticData" && prop == "DesignedCapacity") return 50000;
+                if (cls == "BatteryFullChargedCapacity" && prop == "FullChargedCapacity") return 45000;
+                if (cls == "BatteryCycleCount" && prop == "CycleCount") return 120;
+                return 0;
+            };
+
+            SystemInfo.GetBatteryCycleCount().Should().Be(120);
+            SystemInfo.GetBatteryHealthPct().Should().Be(90.0);
+            SystemInfo.GetBatteryWearLevelPct().Should().Be(10.0);
+            SystemInfo.GetBatteryDesignCapacity().Should().Be("50000 mWh");
+            SystemInfo.GetBatteryFullChargedCapacity().Should().Be("45000 mWh");
+        }
+        finally
+        {
+            SystemInfo.HasBatteryOverride = origHasBattery;
+            SystemInfo.QueryRootWmiIntOverride = origRootInt;
+            SystemInfo.ResetCaches();
+        }
     }
 
     [Fact]

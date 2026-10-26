@@ -79,6 +79,11 @@ internal static class NativeMethods
     // Monitor From Window Flags
     public const uint MONITOR_DEFAULTTONEAREST = 2;
 
+    // GetAncestor Flags
+    public const uint GA_PARENT = 1;
+    public const uint GA_ROOT = 2;
+    public const uint GA_ROOTOWNER = 3;
+
     // Structs
 #pragma warning disable S101 // Win32 SDK P/Invoke struct naming convention matches Windows API definitions
     /// <summary>Contains information about a display monitor.</summary>
@@ -205,6 +210,10 @@ internal static class NativeMethods
     /// <summary>Determines whether a window handle is valid.</summary>
     [DllImport("user32.dll")]
     public static extern bool IsWindow(IntPtr hWnd);
+
+    /// <summary>Retrieves the handle to the ancestor of the specified window.</summary>
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetAncestor(IntPtr hWnd, uint gaFlags);
 
     /// <summary>Determines whether the specified window is visible.</summary>
     [DllImport("user32.dll")]

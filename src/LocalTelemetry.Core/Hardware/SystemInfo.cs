@@ -52,6 +52,9 @@ public static class SystemInfo
     private static string? _batteryDeviceNameCache;
     private static string? _batteryDesignCapacityCache;
     private static string? _batteryFullChargeCapacityCache;
+    private static int? _batteryDesignCapacityMwhCache;
+    private static int? _batteryFullChargeCapacityMwhCache;
+    private static int? _batteryCycleCountCache;
 
     private static string QueryWmiFirst(string query, string property)
     {
@@ -1206,7 +1209,23 @@ public static class SystemInfo
 
                 string partNumber = (mo["PartNumber"] as string ?? "").Trim();
                 string serial = (mo["SerialNumber"] as string ?? "").Trim();
-                uint speed = Convert.ToUInt32(mo["Speed"] ?? 0U);
+                uint configuredSpeed = Convert.ToUInt32(mo["ConfiguredClockSpeed"] ?? 0U);
+                uint ratedSpeed = Convert.ToUInt32(mo["Speed"] ?? 0U);
+                uint activeSpeed = configuredSpeed > 0 ? configuredSpeed : ratedSpeed;
+                string speedDisplay;
+                if (configuredSpeed > 0 && ratedSpeed > 0 && configuredSpeed != ratedSpeed)
+                {
+                    speedDisplay = $"{configuredSpeed} MT/s (rated {ratedSpeed} MT/s)";
+                }
+                else if (activeSpeed > 0)
+                {
+                    speedDisplay = $"{activeSpeed} MT/s";
+                }
+                else
+                {
+                    speedDisplay = "";
+                }
+
                 ushort ff = Convert.ToUInt16(mo["FormFactor"] ?? (ushort)0);
                 ushort mt = Convert.ToUInt16(mo["MemoryType"] ?? (ushort)0);
                 if (mt == 0)
@@ -1218,7 +1237,9 @@ public static class SystemInfo
                     ["partNumber"] = partNumber,
                     ["serial"] = serial,
                     ["sizeGb"] = capacity / (1024.0 * 1024.0 * 1024.0),
-                    ["speed"] = speed > 0 ? $"{speed} MT/s" : "",
+                    ["speed"] = speedDisplay,
+                    ["configuredSpeed"] = configuredSpeed,
+                    ["ratedSpeed"] = ratedSpeed,
                     ["ecc"] = false,
                     ["formFactor"] = FormFactorLabel(ff),
                     ["type"] = MemoryTypeLabel(mt),
@@ -1490,6 +1511,9 @@ public static class SystemInfo
         _batteryDeviceNameCache = null;
         _batteryDesignCapacityCache = null;
         _batteryFullChargeCapacityCache = null;
+        _batteryDesignCapacityMwhCache = null;
+        _batteryFullChargeCapacityMwhCache = null;
+        _batteryCycleCountCache = null;
         _hasBatteryCache = null;
         _nicsCache = null;
         _osVersionCache = null;
@@ -1671,22 +1695,43 @@ public static class SystemInfo
         return _batteryDeviceNameCache = "";
     }
 
+    /// <summary>Gets the battery design capacity in mWh as integer.</summary>
+    /// <returns>Integer design capacity in mWh or 0 if unavailable.</returns>
+    public static int GetBatteryDesignCapacityMwh()
+    {
+        if (!HasBattery()) return 0;
+        if (_batteryDesignCapacityMwhCache.HasValue) return _batteryDesignCapacityMwhCache.Value;
+
+        // 1. Live ACPI battery static data from root\wmi
+        int staticMwh = QueryRootWmiInt("BatteryStaticData", "DesignedCapacity");
+        if (staticMwh > 0) return (_batteryDesignCapacityMwhCache = staticMwh).Value;
+
+        // 2. SMBIOS Type 22 (Portable Battery)
+        int smbiosMwh = GetSmbiosBatteryWord(0x0A);
+        if (smbiosMwh > 0) return (_batteryDesignCapacityMwhCache = smbiosMwh).Value;
+
+        return (_batteryDesignCapacityMwhCache = 0).Value;
+    }
+
+    /// <summary>Gets the battery full charged capacity in mWh as integer.</summary>
+    /// <returns>Integer full charged capacity in mWh or 0 if unavailable.</returns>
+    public static int GetBatteryFullChargedCapacityMwh()
+    {
+        if (!HasBattery()) return 0;
+        if (_batteryFullChargeCapacityMwhCache.HasValue) return _batteryFullChargeCapacityMwhCache.Value;
+        int fccWmi = QueryRootWmiInt("BatteryFullChargedCapacity", "FullChargedCapacity");
+        if (fccWmi > 0) return (_batteryFullChargeCapacityMwhCache = fccWmi).Value;
+        return (_batteryFullChargeCapacityMwhCache = 0).Value;
+    }
+
     /// <summary>Gets the battery design capacity in mWh.</summary>
     /// <returns>e.g. <c>50000 mWh</c> or empty if unavailable.</returns>
     public static string GetBatteryDesignCapacity()
     {
         if (!HasBattery()) return "";
         if (_batteryDesignCapacityCache is not null) return _batteryDesignCapacityCache;
-
-        // 1. Live ACPI battery static data from root\wmi
-        int staticMwh = QueryRootWmiInt("BatteryStaticData", "DesignedCapacity");
-        if (staticMwh > 0) return _batteryDesignCapacityCache = $"{staticMwh} mWh";
-
-        // 2. SMBIOS Type 22 (Portable Battery)
-        int smbiosMwh = GetSmbiosBatteryWord(0x0A);
-        if (smbiosMwh > 0) return _batteryDesignCapacityCache = $"{smbiosMwh} mWh";
-
-        return _batteryDesignCapacityCache = "";
+        int mwh = GetBatteryDesignCapacityMwh();
+        return _batteryDesignCapacityCache = mwh > 0 ? $"{mwh} mWh" : "";
     }
 
     /// <summary>Gets the battery full charged capacity in mWh from WMI.</summary>
@@ -1695,9 +1740,40 @@ public static class SystemInfo
     {
         if (!HasBattery()) return "";
         if (_batteryFullChargeCapacityCache is not null) return _batteryFullChargeCapacityCache;
-        int fccWmi = QueryRootWmiInt("BatteryFullChargedCapacity", "FullChargedCapacity");
-        if (fccWmi > 0) return _batteryFullChargeCapacityCache = $"{fccWmi} mWh";
-        return _batteryFullChargeCapacityCache = "";
+        int mwh = GetBatteryFullChargedCapacityMwh();
+        return _batteryFullChargeCapacityCache = mwh > 0 ? $"{mwh} mWh" : "";
+    }
+
+    /// <summary>Gets the battery charge cycle count from WMI.</summary>
+    /// <returns>Cycle count or 0 if unavailable.</returns>
+    public static int GetBatteryCycleCount()
+    {
+        if (!HasBattery()) return 0;
+        if (_batteryCycleCountCache.HasValue) return _batteryCycleCountCache.Value;
+        int cycles = QueryRootWmiInt("BatteryCycleCount", "CycleCount");
+        return (_batteryCycleCountCache = cycles > 0 ? cycles : 0).Value;
+    }
+
+    /// <summary>Gets the battery health percentage based on full charge vs design capacity.</summary>
+    /// <returns>Health percentage (e.g. 94.5), or 0 if unavailable.</returns>
+    public static double GetBatteryHealthPct()
+    {
+        if (!HasBattery()) return 0;
+        int designMwh = GetBatteryDesignCapacityMwh();
+        int fullMwh = GetBatteryFullChargedCapacityMwh();
+        if (designMwh <= 0 || fullMwh <= 0) return 0;
+        return Math.Min(100.0, Math.Round((double)fullMwh / designMwh * 100.0, 1));
+    }
+
+    /// <summary>Gets the battery wear level percentage based on full charge vs design capacity.</summary>
+    /// <returns>Wear level percentage (e.g. 5.5), or 0 if unavailable or no wear.</returns>
+    public static double GetBatteryWearLevelPct()
+    {
+        if (!HasBattery()) return 0;
+        int designMwh = GetBatteryDesignCapacityMwh();
+        int fullMwh = GetBatteryFullChargedCapacityMwh();
+        if (designMwh <= 0 || fullMwh <= 0) return 0;
+        return Math.Max(0.0, Math.Round((1.0 - ((double)fullMwh / designMwh)) * 100.0, 1));
     }
 
     // PSU (SMBIOS Type 39)
