@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com), and this project adheres to [Semantic Versioning](https://semver.org) & [Conventional Commits](https://conventionalcommits.org).
 
+## [1.3.0-beta.2](https://github.com/Nicconike/LocalTelemetry/compare/v1.3.0-beta.1...v1.3.0-beta.2) (2026-10-31)
+
+### Bug Fixes
+
+* **overlay:** dismiss context menu on outside click and purge floating fallback code ([bb672c2](https://github.com/Nicconike/LocalTelemetry/commit/bb672c28fde60aa5c785f12a76f671ce43199162))
+
 ## [1.3.0-beta.1](https://github.com/Nicconike/LocalTelemetry/compare/v1.2.0...v1.3.0-beta.1) (2026-10-31)
 
 ### Features
