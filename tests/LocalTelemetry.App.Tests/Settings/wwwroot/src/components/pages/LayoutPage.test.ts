@@ -95,6 +95,11 @@ describe('LayoutPage.svelte', () => {
         const select = document.body.querySelector('select.add-select') as HTMLSelectElement;
         expect(select).not.toBeNull();
 
+        // Select empty string (-- Select --)
+        select.value = '';
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        await tick();
+
         select.value = 'battery_pct';
         select.dispatchEvent(new Event('change', { bubbles: true }));
         await tick();

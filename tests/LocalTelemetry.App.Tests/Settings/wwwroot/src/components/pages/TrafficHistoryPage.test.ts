@@ -143,9 +143,17 @@ describe('TrafficHistoryPage.svelte', () => {
         await tick();
 
         const presetBtns = Array.from(document.body.querySelectorAll('.preset-btn')) as HTMLButtonElement[];
+        const preset7 = presetBtns.find(b => b.textContent?.includes('Last 7 Days'));
+        const preset14 = presetBtns.find(b => b.textContent?.includes('Last 14 Days'));
         const preset30 = presetBtns.find(b => b.textContent?.includes('Last 30 Days'));
+        expect(preset7).toBeDefined();
+        expect(preset14).toBeDefined();
         expect(preset30).toBeDefined();
 
+        preset7!.click();
+        await tick();
+        preset14!.click();
+        await tick();
         preset30!.click();
         await tick();
 
@@ -155,6 +163,18 @@ describe('TrafficHistoryPage.svelte', () => {
         importBtn.click();
         await tick();
         expect(importUsageSpy).toHaveBeenCalled();
+
+        // Also test import with already-formatted DD-MM-YYYY date strings (triggers toDmy non-ISO fallback)
+        const dateInputs = document.body.querySelectorAll<HTMLInputElement>('.date-picker-row input');
+        if (dateInputs.length >= 2) {
+            dateInputs[0].value = '01-10-2026';
+            dateInputs[0].dispatchEvent(new Event('input', { bubbles: true }));
+            dateInputs[1].value = '10-10-2026';
+            dateInputs[1].dispatchEvent(new Event('input', { bubbles: true }));
+            await tick();
+            importBtn.click();
+            await tick();
+        }
     });
 
     it('displays windows import result status when set in store', async () => {

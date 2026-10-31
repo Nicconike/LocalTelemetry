@@ -286,17 +286,17 @@ describe('AppearancePage.svelte', () => {
         await tick();
         expect(get(settings)!.windowTheme).not.toBe('default');
 
-        // Test Enter key press on card
-        cards[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        // "Reset to Default Theme" button appears
+        const resetThemeBtn = Array.from(document.body.querySelectorAll<HTMLButtonElement>('.reset-btn')).find(b => b.textContent?.includes('Reset to Default Theme'));
+        expect(resetThemeBtn).toBeDefined();
+        resetThemeBtn!.click();
         await tick();
+        expect(get(settings)!.windowTheme).toBe('default');
 
-        // If not default, "Reset to Default Theme" button appears
-        const resetBtn = document.body.querySelector<HTMLButtonElement>('.reset-btn');
-        if (resetBtn && resetBtn.textContent?.includes('Reset to Default Theme')) {
-            resetBtn.click();
-            await tick();
-            expect(get(settings)!.windowTheme).toBe('default');
-        }
+        // Test Enter key press on non-default card to set theme again
+        cards[1].dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        await tick();
+        expect(get(settings)!.windowTheme).not.toBe('default');
     });
 
     it('toggles follow windows taskbar theme checkbox', async () => {
@@ -778,6 +778,10 @@ describe('AppearancePage.svelte', () => {
         if (darkIdx !== -1) themes.splice(darkIdx, 1);
         const lightIdx = themes.indexOf(emptyLight);
         if (lightIdx !== -1) themes.splice(lightIdx, 1);
+
+        expect(themes).not.toContain(emptyDark);
+        expect(themes).not.toContain(emptyLight);
+        expect(get(settings)!.overlay.userCustomizedMetricColors).toHaveLength(0);
     });
 });
 

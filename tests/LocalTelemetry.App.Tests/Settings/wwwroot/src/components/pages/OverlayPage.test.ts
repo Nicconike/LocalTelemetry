@@ -115,6 +115,13 @@ describe('OverlayPage.svelte', () => {
         expect(document.body.textContent).toContain('Taskbar space is constrained');
         expect(document.body.textContent).toContain('Open Taskbar Settings');
         expect(document.body.textContent).toContain('Dismiss');
+
+        const openSettingsBtn = Array.from(document.querySelectorAll<HTMLButtonElement>('.banner-btn')).find(
+            b => b.textContent?.includes('Open Taskbar Settings')
+        );
+        expect(openSettingsBtn).toBeDefined();
+        openSettingsBtn?.click();
+        await tick();
     });
 
     it('dismisses warning banner when dismiss button is clicked', async () => {

@@ -4,12 +4,8 @@
     import Slider from "../ui/Slider.svelte";
     import SectionCard from "../ui/SectionCard.svelte";
 
-    function onMasterToggleChange(e) {
-        if (!$settings?.alerts) return;
-        const isChecked = e?.target
-            ? e.target.checked
-            : $settings.alerts.enabled;
-        if (!isChecked) return;
+    function onMasterToggleChange() {
+        if (!$settings?.alerts?.enabled) return;
 
         // If user is enabling alerts and no metric is selected, auto-enable sensible safety defaults
         const anyActive =

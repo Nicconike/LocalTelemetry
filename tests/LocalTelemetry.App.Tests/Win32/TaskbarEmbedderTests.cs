@@ -476,17 +476,27 @@ public class TaskbarEmbedderTests
     [WpfFact]
     public void TaskbarEmbedder_Embed_InvalidTaskbarGeometry_SetsFailedStateAndReturnsFalse()
     {
+        using var fakeTray = new Form { Bounds = new Rectangle(0, 1000, 1920, 48) };
         using var overlayForm = new Form();
-        var cfg = new AppSettings();
-        var embedder = new TaskbarEmbedder(cfg);
+        TaskbarEmbedder.ExplorerTrayWndOverride = () => fakeTray.Handle;
+        TaskbarEmbedder.FailGetClientRectForTesting = true;
 
-        typeof(TaskbarEmbedder).GetField("_taskbarRect", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, Rectangle.Empty);
+        try
+        {
+            var cfg = new AppSettings();
+            var embedder = new TaskbarEmbedder(cfg);
 
-        var result = embedder.Embed(overlayForm.Handle, new Size(200, 30));
+            var result = embedder.Embed(overlayForm.Handle, new Size(200, 30));
 
-        result.Should().BeFalse();
-        embedder.State.Should().Be(OverlayDeploymentState.Failed);
-        embedder.IsEmbedded.Should().BeFalse();
+            result.Should().BeFalse();
+            embedder.State.Should().Be(OverlayDeploymentState.Failed);
+            embedder.IsEmbedded.Should().BeFalse();
+        }
+        finally
+        {
+            TaskbarEmbedder.ExplorerTrayWndOverride = null;
+            TaskbarEmbedder.FailGetClientRectForTesting = false;
+        }
     }
 
     [WpfFact]
@@ -715,32 +725,33 @@ public class TaskbarEmbedderTests
     [Fact]
     public void TaskbarEmbedder_LeftWidgetPositioning_BandAndFloat()
     {
+        using var fakeTray = new Form { Bounds = new Rectangle(0, 0, 1920, 48) };
         var cfg = new AppSettings();
         var embedder = new TaskbarEmbedder(cfg);
 
-        IntPtr tray = TaskbarEmbedder.FindExplorerTrayWnd();
-        if (tray == IntPtr.Zero)
-            tray = NativeMethods.FindWindowEx(IntPtr.Zero, IntPtr.Zero, "Progman", null);
-
-        typeof(TaskbarEmbedder).GetField("_parentHwnd", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, tray);
+        typeof(TaskbarEmbedder).GetField("_parentHwnd", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, fakeTray.Handle);
         typeof(TaskbarEmbedder).GetField("_isWin11", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, true);
-        typeof(TaskbarEmbedder).GetField("_taskbarRect", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, new Rectangle(0, 1000, 1920, 48));
+        typeof(TaskbarEmbedder).GetField("_taskbarRect", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, new Rectangle(0, 0, 1920, 48));
 
         cfg.Overlay.Placement = "left";
         cfg.Overlay.PlacementOffset = 10;
 
         TaskbarEmbedder.IsTaskbarCenteredOverride = () => true;
+        TaskbarEmbedder.AppListLeftEdgeOverride = () => 600;
+        TaskbarEmbedder.LeftWidgetRightEdgeOverride = () => -1;
         try
         {
             var computeBandX = typeof(TaskbarEmbedder).GetMethod("ComputeBandX", BindingFlags.NonPublic | BindingFlags.Instance);
             var parentRect = new NativeMethods.RECT { Left = 0, Top = 0, Right = 1920, Bottom = 48 };
 
             // 1. When widget is present on left at X=180
+            TaskbarEmbedder.LeftWidgetRightEdgeOverride = () => 180;
             typeof(TaskbarEmbedder).GetField("_leftWidgetRightEdge", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, 180);
             int bandXWithWidget = (int)computeBandX!.Invoke(embedder, [parentRect, new Size(200, 30)])!;
             bandXWithWidget.Should().BeGreaterThan(0);
 
             // 2. When no widget is present (_leftWidgetRightEdge = -1)
+            TaskbarEmbedder.LeftWidgetRightEdgeOverride = () => -1;
             typeof(TaskbarEmbedder).GetField("_leftWidgetRightEdge", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, -1);
             int bandXNoWidget = (int)computeBandX.Invoke(embedder, [parentRect, new Size(200, 30)])!;
             bandXNoWidget.Should().Be(10);
@@ -748,6 +759,8 @@ public class TaskbarEmbedderTests
         finally
         {
             TaskbarEmbedder.IsTaskbarCenteredOverride = null;
+            TaskbarEmbedder.AppListLeftEdgeOverride = null;
+            TaskbarEmbedder.LeftWidgetRightEdgeOverride = null;
         }
     }
 

@@ -70,7 +70,7 @@ if (Test-Path $setupIssFile) {
     (Get-Content $setupIssFile -Raw) `
         -replace '(?m)^#define AppVersion\s+".*"$', "#define AppVersion `"$Version`"" `
         -replace '(?m)^#define AppVersionInfoVersion\s+".*"$', "#define AppVersionInfoVersion `"$numVer`"" |
-        Set-Content $setupIssFile -Encoding utf8
+        Set-Content $setupIssFile -Encoding utf8 -NoNewline
     Write-Host "Updated $setupIssFile with version $Version ($numVer)."
 }
 
@@ -135,7 +135,7 @@ if (-not $isPrerelease) {
 
     if (Test-Path $wingetVersionFile) {
         (Get-Content $wingetVersionFile -Raw) -replace '(?m)^PackageVersion:\s*.*$', "PackageVersion: $Version" |
-            Set-Content $wingetVersionFile -Encoding utf8
+            Set-Content $wingetVersionFile -Encoding utf8 -NoNewline
         Write-Host "Updated $wingetVersionFile with version $Version."
     }
 
@@ -145,13 +145,13 @@ if (-not $isPrerelease) {
             -replace '(?m)^PackageVersion:\s*.*$', "PackageVersion: $Version" `
             -replace '(?m)^\s*InstallerUrl:\s*.*$', "    InstallerUrl: $setupUrl" `
             -replace '(?m)^\s*InstallerSha256:\s*.*$', "    InstallerSha256: $setupHash" |
-            Set-Content $wingetInstallerFile -Encoding utf8
+            Set-Content $wingetInstallerFile -Encoding utf8 -NoNewline
         Write-Host "Updated $wingetInstallerFile with version $Version and hash $setupHash."
     }
 
     if (Test-Path $wingetLocaleFile) {
         (Get-Content $wingetLocaleFile -Raw) -replace '(?m)^PackageVersion:\s*.*$', "PackageVersion: $Version" |
-            Set-Content $wingetLocaleFile -Encoding utf8
+            Set-Content $wingetLocaleFile -Encoding utf8 -NoNewline
         Write-Host "Updated $wingetLocaleFile with version $Version."
     }
 }
@@ -168,7 +168,7 @@ $packageFiles = @(
 foreach ($pkgFile in $packageFiles) {
     if (Test-Path $pkgFile) {
         (Get-Content $pkgFile -Raw) -replace '(?m)^(\s*"version":\s*")[^"]*(")', "`${1}$Version`${2}" |
-            Set-Content $pkgFile -Encoding utf8
+            Set-Content $pkgFile -Encoding utf8 -NoNewline
         Write-Host "Updated $pkgFile with version $Version."
     }
 }

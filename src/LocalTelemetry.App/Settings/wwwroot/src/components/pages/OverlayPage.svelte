@@ -36,10 +36,6 @@
             dismissed = false;
         }
     });
-
-    function apply() {
-        saveSettings($settings);
-    }
 </script>
 
 {#if $settings}
@@ -79,8 +75,7 @@
                         <button
                             type="button"
                             class="banner-btn banner-btn-dismiss"
-                            onclick={() => (dismissed = true)}
-                            >Dismiss</button
+                            onclick={() => (dismissed = true)}>Dismiss</button
                         >
                     </div>
                 </div>

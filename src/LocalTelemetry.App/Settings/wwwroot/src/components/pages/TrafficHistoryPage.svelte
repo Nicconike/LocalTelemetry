@@ -36,10 +36,9 @@
     function toDmy(isoStr) {
         if (!isoStr) return "";
         const parts = isoStr.split("-");
-        if (parts.length === 3 && parts[0].length === 4) {
-            return `${parts[2]}-${parts[1]}-${parts[0]}`;
-        }
-        return isoStr;
+        return parts.length === 3 && parts[0].length === 4
+            ? `${parts[2]}-${parts[1]}-${parts[0]}`
+            : isoStr;
     }
 
     function validateDateString(str) {

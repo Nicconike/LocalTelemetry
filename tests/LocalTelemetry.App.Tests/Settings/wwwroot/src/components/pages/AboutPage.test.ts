@@ -196,11 +196,17 @@ describe('AboutPage.svelte', () => {
         expect(document.body.textContent).toContain('08:15 AM');
         unmount(component);
 
-        // 6. 1.0.0.0 version trimming to 1.0
+        // 6. 1.0.0.0 version trimming to 1.0 and 1.2.3.0 trimming to 1.2.3
         systemInfo.set({ version: '1.0.0.0', exeDir: '', dataDir: '', logsDir: '' } as any);
         component = mount(AboutPage, { target: document.body });
         await tick();
         expect(document.body.textContent).toContain('v1.0');
+        unmount(component);
+
+        systemInfo.set({ version: '1.2.3.0', exeDir: '', dataDir: '', logsDir: '' } as any);
+        component = mount(AboutPage, { target: document.body });
+        await tick();
+        expect(document.body.textContent).toContain('v1.2.3');
         unmount(component);
 
         // 7. Missing version renders dash
