@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com), and this project adheres to [Semantic Versioning](https://semver.org) & [Conventional Commits](https://conventionalcommits.org).
 
+## [1.3.0-beta.1](https://github.com/Nicconike/LocalTelemetry/compare/v1.2.0...v1.3.0-beta.1) (2026-10-31)
+
+### Features
+
+* **release:** add develop pre-release channel and overlay space auto-recovery ([572b12e](https://github.com/Nicconike/LocalTelemetry/commit/572b12e2996e790dba8e53db67cdeca5bec63203))
+
+### Code Refactoring
+
+* **quality:** decompose complex methods and resolve Sonar code smells ([9f1a58e](https://github.com/Nicconike/LocalTelemetry/commit/9f1a58e83d523b8d6d1c069c12673b1edff47492))
+
+### Tests
+
+* **taskbar:** assert simulated automation exception in button coverage test ([0064ecd](https://github.com/Nicconike/LocalTelemetry/commit/0064ecd5a9cfd7268e456343f8290fbb31f20685))
+* **hardware:** isolate pawnio installer seams and disable test parallelization ([31a6487](https://github.com/Nicconike/LocalTelemetry/commit/31a6487104f10edbdd1abddb46d62da575eb65a5))
+
 ## [1.2.0](https://github.com/Nicconike/LocalTelemetry/compare/v1.1.0...v1.2.0) (2026-10-26)
 
 ### Features
