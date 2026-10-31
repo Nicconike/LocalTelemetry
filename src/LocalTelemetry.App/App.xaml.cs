@@ -524,10 +524,23 @@ public sealed partial class App : WpfApplication
                 _settingsShell = new SettingsShell(_cfg, _netLogger!);
             }
             _settingsShell.TaskbarSlotStatusProvider = () => (_overlay?.IsTaskbarSpaceConstrained ?? false, _overlay?.AvailableSlotWidth ?? 0);
+            Action<bool, int> slotChangedHandler = (constrained, width) =>
+            {
+                _settingsShell?.NotifyTaskbarSlotChanged(constrained, width);
+            };
+            if (_overlay is not null)
+            {
+                _overlay.TaskbarSpaceConstraintChanged += slotChangedHandler;
+            }
+
             Log.Debug("SettingsShell created");
             _settingsShell.SettingsApplied += HandleSettingsApplied;
             _settingsShell.Closed += (_, _) =>
             {
+                if (_overlay is not null)
+                {
+                    _overlay.TaskbarSpaceConstraintChanged -= slotChangedHandler;
+                }
                 Log.Debug("SettingsShell closed, clearing reference");
                 _settingsShell = null;
             };

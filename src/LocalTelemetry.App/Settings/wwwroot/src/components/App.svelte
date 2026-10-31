@@ -162,6 +162,26 @@
                 requestTrafficMonths();
             });
 
+            const unsubSlot = onMessage("taskbarSlotChanged", (payload) => {
+                if (!payload || typeof payload !== "object") return;
+                const slot = payload;
+                settings.update((s) => {
+                    if (!s || !s.overlay) return s;
+                    return {
+                        ...s,
+                        overlay: {
+                            ...s.overlay,
+                            taskbarSpaceConstrained:
+                                slot.taskbarSpaceConstrained ??
+                                s.overlay.taskbarSpaceConstrained,
+                            availableSlotWidth:
+                                slot.availableSlotWidth ??
+                                s.overlay.availableSlotWidth,
+                        },
+                    };
+                });
+            });
+
             requestSettings();
             requestNics();
             requestSystemInfo();
@@ -177,6 +197,7 @@
                 unsub7();
                 unsub8();
                 unsub9();
+                unsubSlot();
             };
         }
     });

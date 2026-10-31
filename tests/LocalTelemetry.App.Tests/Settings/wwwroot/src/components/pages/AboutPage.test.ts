@@ -454,4 +454,51 @@ describe('AboutPage.svelte', () => {
         await tick();
         expect(document.body.textContent).toContain('CustomBuildTimestamp');
     });
+
+    it('renders Beta badge when available update is a pre-release', async () => {
+        component = mount(AboutPage, { target: document.body });
+        await tick();
+
+        const msgEvent = new MessageEvent('message', {
+            data: {
+                type: 'updateCheckResult',
+                payload: {
+                    isUpdateAvailable: true,
+                    isPrerelease: true,
+                    latestVersion: '1.2.0-beta.1',
+                    releaseUrl: 'https://github.com/Nicconike/LocalTelemetry/releases/tag/v1.2.0-beta.1',
+                },
+            },
+        });
+        wv.dispatchEvent(msgEvent);
+        await tick();
+
+        expect(document.body.textContent).toContain('v1.2.0-beta.1 Available');
+        const betaBadge = document.querySelector('.update-badge.beta');
+        expect(betaBadge).not.toBeNull();
+        expect(betaBadge?.textContent).toBe('Beta');
+    });
+
+    it('does not render Beta badge when available update is a stable release', async () => {
+        component = mount(AboutPage, { target: document.body });
+        await tick();
+
+        const msgEvent = new MessageEvent('message', {
+            data: {
+                type: 'updateCheckResult',
+                payload: {
+                    isUpdateAvailable: true,
+                    isPrerelease: false,
+                    latestVersion: '1.2.0',
+                    releaseUrl: 'https://github.com/Nicconike/LocalTelemetry/releases/tag/v1.2.0',
+                },
+            },
+        });
+        wv.dispatchEvent(msgEvent);
+        await tick();
+
+        expect(document.body.textContent).toContain('v1.2.0 Available');
+        const betaBadge = document.querySelector('.update-badge.beta');
+        expect(betaBadge).toBeNull();
+    });
 });

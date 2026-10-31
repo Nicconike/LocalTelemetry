@@ -2,7 +2,7 @@ name: Release
 
 on:
     push:
-        branches: [master]
+        branches: [master, develop]
         paths:
             - ".github/release/**"
             - ".github/workflows/release.yml"
@@ -122,7 +122,7 @@ jobs:
                   bun run ./.github/release/run.ts --extends ./.github/release/release.config.mjs
 
             - name: Submit to WinGet Community Repo
-              if: env.RELEASE_TAG != ''
+              if: env.RELEASE_TAG != '' && github.ref == 'refs/heads/master'
               continue-on-error: true
               shell: pwsh
               env:

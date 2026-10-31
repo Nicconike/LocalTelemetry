@@ -837,4 +837,55 @@ public class TaskbarOverlayTests
             TaskbarOverlay.SkipEmbedForTesting = origSkipEmbed;
         }
     }
+
+    [Fact]
+    public void TaskbarOverlay_CheckAndNotifySpaceConstraint_FiresEventWhenStateChanges()
+    {
+        var cfg = new AppSettings();
+        var embedder = new TaskbarEmbedder(cfg);
+        using var overlay = new TaskbarOverlay(cfg, embedder);
+
+        bool? notifiedConstrained = null;
+        int? notifiedWidth = null;
+        int eventCount = 0;
+
+        overlay.TaskbarSpaceConstraintChanged += (constrained, width) =>
+        {
+            notifiedConstrained = constrained;
+            notifiedWidth = width;
+            eventCount++;
+        };
+
+        // Initially _lastReportedSpaceConstrained is false and _lastReportedSlotWidth is -1
+        overlay.CheckAndNotifySpaceConstraint();
+        eventCount.Should().Be(1);
+        notifiedConstrained.Should().Be(false);
+        notifiedWidth.Should().Be(0);
+
+        // Calling again without change should not re-fire
+        overlay.CheckAndNotifySpaceConstraint();
+        eventCount.Should().Be(1);
+
+        // Simulate change in embedder constraint state
+        typeof(TaskbarEmbedder).GetField("<IsTaskbarSpaceConstrained>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(embedder, true);
+        typeof(TaskbarEmbedder).GetField("<AvailableSlotWidth>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(embedder, 180);
+
+        overlay.CheckAndNotifySpaceConstraint();
+        eventCount.Should().Be(2);
+        notifiedConstrained.Should().Be(true);
+        notifiedWidth.Should().Be(180);
+
+        // Simulate returning to normal (unconstrained, wider slot)
+        typeof(TaskbarEmbedder).GetField("<IsTaskbarSpaceConstrained>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(embedder, false);
+        typeof(TaskbarEmbedder).GetField("<AvailableSlotWidth>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(embedder, 500);
+
+        overlay.CheckAndNotifySpaceConstraint();
+        eventCount.Should().Be(3);
+        notifiedConstrained.Should().Be(false);
+        notifiedWidth.Should().Be(500);
+    }
 }

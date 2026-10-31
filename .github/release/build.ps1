@@ -105,51 +105,58 @@ if ($env:GITHUB_ENV) {
     "RELEASE_TAG=$actualTag" | Out-File -FilePath $env:GITHUB_ENV -Append
 }
 
-# 6. Update Scoop Bucket Manifest
-Write-Host "Updating Scoop bucket manifest..."
-$manifestFile = "bucket/localtelemetry.json"
-if (Test-Path $manifestFile) {
-    $zipUrl = "https://github.com/$repo/releases/download/$actualTag/LocalTelemetry-win-x64.zip"
-    $node = [System.Text.Json.Nodes.JsonNode]::Parse((Get-Content $manifestFile -Raw))
-    $node["version"] = $Version
-    $node["architecture"]["64bit"]["url"] = $zipUrl
-    $node["architecture"]["64bit"]["hash"] = $zipHash
-    $jsonOptions = [System.Text.Json.JsonSerializerOptions]::new()
-    $jsonOptions.WriteIndented = $true
-    $jsonOptions.IndentSize = 4
-    $node.ToJsonString($jsonOptions) | Set-Content $manifestFile -Encoding utf8
-    Write-Host "Updated $manifestFile with version $Version."
+$isPrerelease = $Version.Contains('-')
+
+if (-not $isPrerelease) {
+    # 6. Update Scoop Bucket Manifest
+    Write-Host "Updating Scoop bucket manifest..."
+    $manifestFile = "bucket/localtelemetry.json"
+    if (Test-Path $manifestFile) {
+        $zipUrl = "https://github.com/$repo/releases/download/$actualTag/LocalTelemetry-win-x64.zip"
+        $node = [System.Text.Json.Nodes.JsonNode]::Parse((Get-Content $manifestFile -Raw))
+        $node["version"] = $Version
+        $node["architecture"]["64bit"]["url"] = $zipUrl
+        $node["architecture"]["64bit"]["hash"] = $zipHash
+        $jsonOptions = [System.Text.Json.JsonSerializerOptions]::new()
+        $jsonOptions.WriteIndented = $true
+        $jsonOptions.IndentSize = 4
+        $node.ToJsonString($jsonOptions) | Set-Content $manifestFile -Encoding utf8
+        Write-Host "Updated $manifestFile with version $Version."
+    }
+    else {
+        Write-Warning "Manifest file $manifestFile not found."
+    }
+
+    # 7. Update WinGet Package Manifests (Multi-file v1.12.0)
+    Write-Host "Updating WinGet package manifests..."
+    $wingetVersionFile = "packaging/winget/Nicconike.LocalTelemetry.yaml"
+    $wingetInstallerFile = "packaging/winget/Nicconike.LocalTelemetry.installer.yaml"
+    $wingetLocaleFile = "packaging/winget/Nicconike.LocalTelemetry.locale.en-US.yaml"
+
+    if (Test-Path $wingetVersionFile) {
+        (Get-Content $wingetVersionFile -Raw) -replace '(?m)^PackageVersion:\s*.*$', "PackageVersion: $Version" |
+            Set-Content $wingetVersionFile -Encoding utf8
+        Write-Host "Updated $wingetVersionFile with version $Version."
+    }
+
+    if (Test-Path $wingetInstallerFile) {
+        $setupUrl = "https://github.com/$repo/releases/download/$actualTag/LocalTelemetrySetup.exe"
+        (Get-Content $wingetInstallerFile -Raw) `
+            -replace '(?m)^PackageVersion:\s*.*$', "PackageVersion: $Version" `
+            -replace '(?m)^\s*InstallerUrl:\s*.*$', "    InstallerUrl: $setupUrl" `
+            -replace '(?m)^\s*InstallerSha256:\s*.*$', "    InstallerSha256: $setupHash" |
+            Set-Content $wingetInstallerFile -Encoding utf8
+        Write-Host "Updated $wingetInstallerFile with version $Version and hash $setupHash."
+    }
+
+    if (Test-Path $wingetLocaleFile) {
+        (Get-Content $wingetLocaleFile -Raw) -replace '(?m)^PackageVersion:\s*.*$', "PackageVersion: $Version" |
+            Set-Content $wingetLocaleFile -Encoding utf8
+        Write-Host "Updated $wingetLocaleFile with version $Version."
+    }
 }
 else {
-    Write-Warning "Manifest file $manifestFile not found."
-}
-
-# 7. Update WinGet Package Manifests (Multi-file v1.12.0)
-Write-Host "Updating WinGet package manifests..."
-$wingetVersionFile = "packaging/winget/Nicconike.LocalTelemetry.yaml"
-$wingetInstallerFile = "packaging/winget/Nicconike.LocalTelemetry.installer.yaml"
-$wingetLocaleFile = "packaging/winget/Nicconike.LocalTelemetry.locale.en-US.yaml"
-
-if (Test-Path $wingetVersionFile) {
-    (Get-Content $wingetVersionFile -Raw) -replace '(?m)^PackageVersion:\s*.*$', "PackageVersion: $Version" |
-        Set-Content $wingetVersionFile -Encoding utf8
-    Write-Host "Updated $wingetVersionFile with version $Version."
-}
-
-if (Test-Path $wingetInstallerFile) {
-    $setupUrl = "https://github.com/$repo/releases/download/$actualTag/LocalTelemetrySetup.exe"
-    (Get-Content $wingetInstallerFile -Raw) `
-        -replace '(?m)^PackageVersion:\s*.*$', "PackageVersion: $Version" `
-        -replace '(?m)^\s*InstallerUrl:\s*.*$', "    InstallerUrl: $setupUrl" `
-        -replace '(?m)^\s*InstallerSha256:\s*.*$', "    InstallerSha256: $setupHash" |
-        Set-Content $wingetInstallerFile -Encoding utf8
-    Write-Host "Updated $wingetInstallerFile with version $Version and hash $setupHash."
-}
-
-if (Test-Path $wingetLocaleFile) {
-    (Get-Content $wingetLocaleFile -Raw) -replace '(?m)^PackageVersion:\s*.*$', "PackageVersion: $Version" |
-        Set-Content $wingetLocaleFile -Encoding utf8
-    Write-Host "Updated $wingetLocaleFile with version $Version."
+    Write-Host "Pre-release version detected ($Version). Skipping Scoop and WinGet package manifest updates."
 }
 
 # 8. Synchronize Package Versions (Docs and Frontend UI)

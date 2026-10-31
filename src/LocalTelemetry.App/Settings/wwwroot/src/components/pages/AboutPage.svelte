@@ -261,6 +261,9 @@
                                     ? ""
                                     : "v"}{updateResult?.latestVersion} Available
                             </span>
+                            {#if updateResult?.isPrerelease}
+                                <span class="update-badge beta">Beta</span>
+                            {/if}
                             <button
                                 class="download-btn"
                                 onclick={() =>
@@ -714,6 +717,15 @@
     .update-badge.error {
         color: #ff3b30;
         background: rgba(255, 59, 48, 0.12);
+    }
+    .update-badge.beta {
+        color: #b388ff;
+        background: rgba(179, 136, 255, 0.15);
+        border: 1px solid rgba(179, 136, 255, 0.3);
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 10px;
+        letter-spacing: 0.5px;
     }
     .update-found-box {
         display: flex;

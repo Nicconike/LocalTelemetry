@@ -90,6 +90,9 @@ const
           '}' + #13#10 +
           '& sc.exe stop PawnIO *>&1 | Add-Content $log' + #13#10 +
           '& sc.exe delete PawnIO *>&1 | Add-Content $log' + #13#10 +
+          '''[PawnIO cleanup] cleaning temporary directories'' | Add-Content $log' + #13#10 +
+          'Get-ChildItem -Path (Join-Path $env:windir ''Temp'') -Filter ''PawnIO_*'' -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue' + #13#10 +
+          'Get-ChildItem -Path ''C:\Users\*\AppData\Local\Temp'' -Filter ''PawnIO_*'' -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue' + #13#10 +
           'if ($rebootNeeded) { exit 3010 } else { exit 0 }';
 
 var
@@ -142,6 +145,25 @@ begin
           Result := True;
           Break;
         end;
+      until not FindNext(FindRec);
+    finally
+      FindClose(FindRec);
+    end;
+  end;
+end;
+
+procedure DeleteTempPawnIoFiles(const TargetDir: string);
+var
+  FindRec: TFindRec;
+begin
+  if (TargetDir <> '') and DirExists(TargetDir) and FindFirst(TargetDir + '\PawnIO_*', FindRec) then
+  begin
+    try
+      repeat
+        if (FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0 then
+          DelTree(TargetDir + '\' + FindRec.Name, True, True, True)
+        else
+          DeleteFile(TargetDir + '\' + FindRec.Name);
       until not FindNext(FindRec);
     finally
       FindClose(FindRec);
@@ -289,6 +311,10 @@ begin
                         Log('PawnIO installer returned unexpected exit code: ' + IntToStr(ResultCode));
                     end;
                 end;
+
+                // Clean up temporary extraction files left by PawnIO_setup.exe
+                DeleteTempPawnIoFiles(ExpandConstant('{win}\Temp'));
+                DeleteTempPawnIoFiles(ExpandConstant('{tmp}'));
 
                 // Step 3: Start the service immediately so the app can use it on first launch
                 if not RequiresReboot then
@@ -752,6 +778,8 @@ begin
 
         RegDeleteKeyIncludingSubkeys(HKLM, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO');
         RegDeleteKeyIncludingSubkeys(HKLM, 'SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO');
+        DeleteTempPawnIoFiles(ExpandConstant('{win}\Temp'));
+        DeleteTempPawnIoFiles(ExpandConstant('{tmp}'));
         if DirExists('C:\Program Files\PawnIO') then
             DelTree('C:\Program Files\PawnIO', True, True, True);
 

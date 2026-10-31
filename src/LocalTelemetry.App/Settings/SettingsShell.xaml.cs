@@ -514,6 +514,26 @@ public sealed partial class SettingsShell : Window
         SendSettings();
     }
 
+    /// <summary>
+    /// Notifies the settings UI that the taskbar space constraint state or available slot width has changed.
+    /// </summary>
+    /// <param name="constrained">Whether the taskbar slot is narrower than the overlay width.</param>
+    /// <param name="availableWidth">The measured width in pixels available for the overlay.</param>
+    public void NotifyTaskbarSlotChanged(bool constrained, int availableWidth)
+    {
+        var envelope = new
+        {
+            type = "taskbarSlotChanged",
+            payload = new
+            {
+                taskbarSpaceConstrained = constrained,
+                availableSlotWidth = availableWidth
+            }
+        };
+        PostJson(JsonSerializer.Serialize(envelope, JsonOut));
+        Log.Debug($"Dispatched taskbar slot constraint update to settings UI (constrained: {constrained}, availableWidth: {availableWidth})");
+    }
+
     private void SendSettings()
     {
         var (constrained, availableWidth) = TaskbarSlotStatusProvider?.Invoke() ?? (false, 0);

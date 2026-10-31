@@ -9,7 +9,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const commitPluginPath = resolve(__dirname, 'github-commit-plugin.ts');
 
 export default {
-    branches: ['master'],
+    branches: [
+        'master',
+        { name: 'develop', prerelease: 'beta' },
+    ],
     tagFormat: 'v${version}',
     plugins: [
         [

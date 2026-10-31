@@ -41,6 +41,8 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
     private int _overlayWidth = 200;
     private int _overlayHeight = 30;
     private float _autoScaleFactor = 1.0f;
+    private bool _lastReportedSpaceConstrained;
+    private int _lastReportedSlotWidth = -1;
 
     // Layout constants
     private const int ItemSpace = 3; // px gap between columns (DPI-scaled)
@@ -72,6 +74,21 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
     public Action? OnToggleOverlayRequested { get; set; }
     /// <summary>Fired when the user requests exiting the application from the overlay context menu.</summary>
     public Action? OnExitRequested { get; set; }
+
+    /// <summary>Fired when the taskbar space constraint state or available slot width changes.</summary>
+    public event Action<bool, int>? TaskbarSpaceConstraintChanged;
+
+    internal void CheckAndNotifySpaceConstraint()
+    {
+        bool constrained = _embedder.IsTaskbarSpaceConstrained;
+        int slotWidth = _embedder.AvailableSlotWidth;
+        if (constrained != _lastReportedSpaceConstrained || slotWidth != _lastReportedSlotWidth)
+        {
+            _lastReportedSpaceConstrained = constrained;
+            _lastReportedSlotWidth = slotWidth;
+            TaskbarSpaceConstraintChanged?.Invoke(constrained, slotWidth);
+        }
+    }
 
     /// <summary>
     /// Initialises a new overlay instance. The window is not created until <see cref="Show"/> is called.
@@ -232,6 +249,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
             _overlayHeight = sz.Height;
             _embedder.Reposition(Handle, sz);
         }
+        CheckAndNotifySpaceConstraint();
     }
 
     private static bool ValuesChanged(TelemetrySnapshot a, TelemetrySnapshot b)
@@ -312,6 +330,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
             _overlayWidth = sz.Width;
             _overlayHeight = sz.Height;
             _embedder.Reposition(Handle, sz);
+            CheckAndNotifySpaceConstraint();
             if (_embedder.IsChildMode) Invalidate();
             else RenderFloat();
         }, null);
@@ -456,6 +475,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
         _overlayWidth = sz.Width;
         _overlayHeight = sz.Height;
         _embedder.Reposition(Handle, sz);
+        CheckAndNotifySpaceConstraint();
         if (_embedder.IsChildMode) Invalidate();
         else RenderFloat();
     }
@@ -930,6 +950,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
                 _overlayHeight = sz.Height;
             }
             _embedder.Reposition(Handle, sz);
+            CheckAndNotifySpaceConstraint();
         }, null);
     }
 

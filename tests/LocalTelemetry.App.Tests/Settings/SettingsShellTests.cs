@@ -549,6 +549,9 @@ public class SettingsShellTests
         ctx.Shell.SendUpdatedSettings();
         posted.Should().Contain(s => s.Contains("\"type\":\"settings\""));
 
+        ctx.Shell.NotifyTaskbarSlotChanged(true, 180);
+        posted.Should().Contain(s => s.Contains("\"type\":\"taskbarSlotChanged\"") && s.Contains("\"taskbarSpaceConstrained\":true") && s.Contains("\"availableSlotWidth\":180"));
+
         ctx.Shell.HandleWebMessageJson("""{"type":"openFolder","payload":{"target":"app"}}""");
         ctx.Shell.HandleWebMessageJson("""{"type":"openFolder","payload":{"target":"data"}}""");
         ctx.Shell.HandleWebMessageJson("""{"type":"getSettings"}""");

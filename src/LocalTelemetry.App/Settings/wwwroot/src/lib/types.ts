@@ -249,7 +249,8 @@ export type BridgeEventType =
     | "trafficToday"
     | "importDatResult"
     | "windowsUsageImportResult"
-    | "updateCheckResult";
+    | "updateCheckResult"
+    | "taskbarSlotChanged";
 
 export interface BridgeMessage<T = unknown> {
     type: BridgeMessageType;
