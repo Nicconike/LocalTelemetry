@@ -278,4 +278,19 @@ public class UpdateCheckServiceTests
         Assert.True(UpdateCheckService.IsVersionNewer("v1.0.0+build1", "v1.1.0+build2"));
         Assert.False(UpdateCheckService.IsVersionNewer("v1.1.0+build1", "v1.0.0+build2"));
     }
+
+    [Fact]
+    public void IsPrereleaseVersion_IdentifiesBetaAndStableVersionsCorrectly()
+    {
+        Assert.True(UpdateCheckService.IsPrereleaseVersion("1.3.0-beta.1"));
+        Assert.True(UpdateCheckService.IsPrereleaseVersion("1.0.0-rc.2"));
+        Assert.True(UpdateCheckService.IsPrereleaseVersion("v2.0.0-alpha.5"));
+        Assert.False(UpdateCheckService.IsPrereleaseVersion("1.3.0"));
+        Assert.False(UpdateCheckService.IsPrereleaseVersion("v1.0.0"));
+        Assert.False(UpdateCheckService.IsPrereleaseVersion("2.1.4"));
+
+        // Current version evaluation (should not throw)
+        bool currentIsPrerelease = UpdateCheckService.IsPrereleaseVersion();
+        Assert.Equal(UpdateCheckService.GetCurrentVersionString().Contains('-'), currentIsPrerelease);
+    }
 }

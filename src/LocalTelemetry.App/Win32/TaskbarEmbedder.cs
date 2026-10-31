@@ -9,15 +9,13 @@ using LocalTelemetry.Core.Models;
 namespace LocalTelemetry.App.Win32;
 
 /// <summary>
-/// Embeds the overlay window into the Windows taskbar, either as a child of the
-/// taskband (Approach A) or as a floating layered window (Approach B fallback).
+/// Embeds the overlay window directly into the Windows taskbar as a native child window.
 /// Handles Win10 / Win11 taskbar structure differences and repositioning on resize.
 /// </summary>
 [SupportedOSPlatform("windows")]
 public sealed class TaskbarEmbedder(AppSettings cfg)
 {
     private readonly AppSettings _cfg = cfg;
-
 
     private IntPtr _parentHwnd = IntPtr.Zero;
     private IntPtr _taskBandHwnd = IntPtr.Zero;
@@ -28,7 +26,6 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
     private Rectangle _taskbarRect;
     private uint _taskbarEdge;
     private int _lastShrinkWidth = -1;
-    private Rectangle _lastFloatRect = Rectangle.Empty;
 
     /// <summary>
     /// Gets or sets the transparency color key for the layered overlay window (child mode only).
@@ -40,20 +37,8 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
     /// <summary>Gets the current deployment lifecycle state of the overlay.</summary>
     public OverlayDeploymentState State { get; private set; } = OverlayDeploymentState.Uninitialized;
 
-    /// <summary>Gets whether the overlay is currently embedded in the taskbar (either approach).</summary>
+    /// <summary>Gets whether the overlay is currently embedded in the taskbar.</summary>
     public bool IsEmbedded { get; private set; }
-
-    /// <summary>
-    /// Gets whether the overlay is using the floating layered-window approach (Approach B)
-    /// rather than the child-window approach (Approach A).
-    /// </summary>
-    public bool IsFallback { get; private set; }
-
-    /// <summary>Gets the last calculated X coordinate for the floating overlay window.</summary>
-    public int LastComputedFloatX { get; private set; }
-
-    /// <summary>Gets the last calculated Y coordinate for the floating overlay window.</summary>
-    public int LastComputedFloatY { get; private set; }
 
     /// <summary>Gets whether the available taskbar space is narrower than the overlay width.</summary>
     public bool IsTaskbarSpaceConstrained { get; private set; }
@@ -68,20 +53,16 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
     // Reposition() runs on a 200ms timer; PositionInBand() computes the same position every
     // tick, so only emit a log line when the position message actually changes.
     private string? _lastPositionInBandLog;
-    private string? _lastPositionFloatLog;
 
     /// <summary>
-    /// Attempts to embed the overlay window into the taskbar. Tries the child-window
-    /// approach first; falls back to a layered floating window on failure.
+    /// Attempts to embed the overlay window into the taskbar as a native child window.
     /// </summary>
     /// <param name="overlayHwnd">Handle to the overlay window.</param>
     /// <param name="overlaySize">Desired size of the overlay.</param>
-    /// <returns><c>true</c> if Approach A succeeded; <c>false</c> if fallback was used.</returns>
+    /// <returns><c>true</c> if embedded as a child window successfully; otherwise, <c>false</c>.</returns>
     public bool Embed(IntPtr overlayHwnd, Size overlaySize)
     {
         IsEmbedded = false;
-        IsFallback = false;
-        _lastFloatRect = Rectangle.Empty;
 
         if (overlayHwnd == IntPtr.Zero || !NativeMethods.IsWindow(overlayHwnd))
         {
@@ -101,29 +82,17 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
             if (PositionInBand(overlayHwnd, overlaySize))
             {
                 IsEmbedded = true;
-                IsFallback = false;
                 State = OverlayDeploymentState.Active;
                 Log.Info($"Overlay embedded into taskbar (child mode, {overlaySize.Width}x{overlaySize.Height})");
                 return true;
             }
 
-            Log.Warn("PositionInBand failed after SetParent; detaching and falling back to floating mode");
+            Log.Warn("PositionInBand failed after SetParent; detaching from parent");
             NativeMethods.SetParent(overlayHwnd, IntPtr.Zero);
         }
 
-        RestoreLayeredStyles(overlayHwnd);
-        if (PositionFloat(overlayHwnd, overlaySize))
-        {
-            IsEmbedded = true;
-            IsFallback = true;
-            State = OverlayDeploymentState.Active;
-            Log.Info($"Taskbar overlay active (floating mode, {overlaySize.Width}x{overlaySize.Height})");
-            return false;
-        }
-
-        Log.Error("Taskbar overlay failed to deploy into active state (both child and floating positioning failed).");
+        Log.Warn("Taskbar overlay failed to embed into taskbar band; will retry on next layout tick");
         IsEmbedded = false;
-        IsFallback = false;
         State = OverlayDeploymentState.Failed;
         return false;
     }
@@ -136,11 +105,6 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
         RefreshTaskbarInfo();
         _trayLeftEdge = GetTrayLeftEdge();
         UpdateWidgetsEdges();
-        if (IsFallback)
-        {
-            PositionFloat(overlayHwnd, overlaySize);
-            return;
-        }
 
         if (_taskBandHwnd != IntPtr.Zero && NativeMethods.IsWindow(_taskBandHwnd) && overlaySize.Width != _lastShrinkWidth)
         {
@@ -156,11 +120,10 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
     public void Detach(IntPtr overlayHwnd)
     {
         RestoreTaskBand();
-        if (!IsFallback)
+        if (overlayHwnd != IntPtr.Zero && NativeMethods.IsWindow(overlayHwnd))
+        {
             NativeMethods.SetParent(overlayHwnd, IntPtr.Zero);
-        else if (overlayHwnd != IntPtr.Zero && NativeMethods.IsWindow(overlayHwnd))
-            NativeMethods.SetWindowLongPtr(overlayHwnd, NativeMethods.GWLP_HWNDPARENT, IntPtr.Zero);
-        _lastFloatRect = Rectangle.Empty;
+        }
         _leftWidgetRightEdge = -1;
         _rightWidgetLeftEdge = -1;
         IsTaskbarSpaceConstrained = false;
@@ -184,7 +147,6 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
         _parentHwnd = IntPtr.Zero;
         _lastShrinkWidth = -1;
         _lastPositionInBandLog = null;
-        _lastPositionFloatLog = null;
         ResetStaticEdgeCaches();
         _cachedAppListRightEdge = -1;
         _lastAppListQueryTicks = 0;
@@ -192,11 +154,10 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
         _lastAppListLeftQueryTicks = 0;
         IsTaskbarSpaceConstrained = false;
         AvailableSlotWidth = 0;
-        _lastFloatRect = Rectangle.Empty;
         Embed(overlayHwnd, overlaySize);
     }
 
-    public bool IsChildMode => IsEmbedded && !IsFallback;
+    public bool IsChildMode => IsEmbedded;
     public IntPtr ParentHwnd => _parentHwnd;
 
     /// <summary>
@@ -228,7 +189,6 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
     internal static bool ThrowInIsWidgetsFeatureEnabledForTesting { get; set; }
     internal static bool ThrowInExplorerLookupForTesting { get; set; }
     internal static bool FailGetClientRectForTesting { get; set; }
-    internal static bool FailPositionFloatForTesting { get; set; }
     internal static bool ThrowInQueryWidgetsButtonEdgeForTesting { get; set; }
     internal static bool ThrowInQueryAppListLeftEdgeFromAutomationForTesting { get; set; }
     internal static bool ThrowInQueryAppListRightEdgeFromAutomationForTesting { get; set; }
@@ -943,7 +903,7 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to attach overlay window to taskbar; switching to floating window fallback");
+            Log.Error(ex, "Failed to attach overlay window to taskbar");
             return false;
         }
     }
@@ -1266,226 +1226,10 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
         return Math.Clamp(preferredRightX, minRightX, maxRightX);
     }
 
-    private bool PositionFloat(IntPtr overlayHwnd, Size sz)
-    {
-        if (FailPositionFloatForTesting)
-            return false;
-
-        if (_cfg.Overlay.FloatX >= 0 && _cfg.Overlay.FloatY >= 0)
-        {
-            return PositionCustomFloat(overlayHwnd, sz);
-        }
-
-        if (_taskbarRect.Width <= 0 || _taskbarRect.Height <= 0)
-        {
-            Log.Error($"Taskbar bounds are invalid ({_taskbarRect.Width}x{_taskbarRect.Height}); skipping overlay repositioning until taskbar geometry is resolved");
-            State = OverlayDeploymentState.Failed;
-            return false;
-        }
-
-        return PositionTaskbarFloat(overlayHwnd, sz);
-    }
-
-    private bool PositionCustomFloat(IntPtr overlayHwnd, Size sz)
-    {
-        LastComputedFloatX = _cfg.Overlay.FloatX;
-        LastComputedFloatY = _cfg.Overlay.FloatY;
-        if (overlayHwnd == IntPtr.Zero || !NativeMethods.IsWindow(overlayHwnd))
-        {
-            return false;
-        }
-
-        var targetRect = new Rectangle(_cfg.Overlay.FloatX, _cfg.Overlay.FloatY, sz.Width, sz.Height);
-        return ApplyFloatWindowPos(overlayHwnd, targetRect, $"custom float positioning ({_cfg.Overlay.FloatX}, {_cfg.Overlay.FloatY})");
-    }
-
-    private bool PositionTaskbarFloat(IntPtr overlayHwnd, Size sz)
-    {
-        bool horizontal = _taskbarEdge is NativeMethods.ABE_BOTTOM or NativeMethods.ABE_TOP;
-        int x = horizontal ? ComputeHorizontalTaskbarFloatX(sz.Width) : _taskbarRect.Left + 4;
-        int y = _taskbarRect.Top + (_taskbarRect.Height - sz.Height) / 2;
-
-        LastComputedFloatX = x;
-        LastComputedFloatY = y;
-
-        string floatLog = $"Positioned floating overlay ({sz.Width}x{sz.Height} at {x},{y}, offset {_cfg.Overlay.PlacementOffset}, placement '{_cfg.Overlay.Placement}')";
-        if (floatLog != _lastPositionFloatLog)
-        {
-            _lastPositionFloatLog = floatLog;
-            Log.Debug(floatLog);
-        }
-
-        var newFloatRect = new Rectangle(x, y, sz.Width, sz.Height);
-        return ApplyFloatWindowPos(overlayHwnd, newFloatRect, $"floating positioning at ({x}, {y})");
-    }
-
-    private int ComputeHorizontalTaskbarFloatX(int width)
-    {
-        int offset = _cfg.Overlay.PlacementOffset;
-        int x = (_isWin11 && !IsTaskbarCentered())
-            ? ComputeLeftAlignedFloatX(width, offset)
-            : ComputeCenteredFloatX(width, offset);
-
-        int minX = (_isWin11 && !IsTaskbarCentered()) ? GetAppListRightEdge() : _taskbarRect.Left;
-        int boundary = GetRightSideBoundary();
-        int maxX = Math.Max(minX, (boundary > 0 ? boundary : _taskbarRect.Right) - width);
-
-        if (x < minX || x > maxX)
-        {
-            Log.Warn($"Calculated floating X coordinate ({x}) for width {width} is out of taskbar horizontal range [{minX}, {maxX}]. Clamping to taskbar.");
-            x = Math.Clamp(x, minX, maxX);
-        }
-
-        return x;
-    }
-
-    private int ComputeLeftAlignedFloatX(int width, int offset)
-    {
-        int appRight = GetAppListRightEdge();
-        int rightBoundary = GetRightSideBoundary();
-        int limitRight = rightBoundary > 0 ? rightBoundary : _taskbarRect.Right;
-        int availableWidth = Math.Max(0, limitRight - appRight - (2 * offset));
-        AvailableSlotWidth = availableWidth;
-        IsTaskbarSpaceConstrained = availableWidth > 0 && width > availableWidth;
-
-        return _cfg.Overlay.Placement is "beside_apps" or "left"
-            ? ComputeLeftFloatX()
-            : ComputeRightFloatX(width);
-    }
-
-    private int ComputeCenteredFloatX(int width, int offset)
-    {
-        if (_cfg.Overlay.Placement == "left")
-        {
-            return ComputeCenteredLeftFloatX(width, offset);
-        }
-
-        if (_cfg.Overlay.Placement == "center")
-        {
-            return _taskbarRect.Left + (_taskbarRect.Width - width) / 2 + offset;
-        }
-
-        return ComputeCenteredRightFloatX(width, offset);
-    }
-
-    private int ComputeCenteredLeftFloatX(int width, int offset)
-    {
-        int leftEdge = _leftWidgetRightEdge > 0 ? _leftWidgetRightEdge : GetLeftWidgetRightEdge();
-        int defaultLeftBase = leftEdge > _taskbarRect.Left ? leftEdge : _taskbarRect.Left;
-        int appLeft = GetAppListLeftEdge();
-        int availableWidth = Math.Max(0, appLeft - defaultLeftBase - (2 * offset));
-        AvailableSlotWidth = availableWidth;
-        IsTaskbarSpaceConstrained = availableWidth > 0 && width > availableWidth;
-
-        int x = ComputeLeftFloatX();
-        if (x < appLeft)
-        {
-            int maxLeftFloatX = Math.Max(defaultLeftBase, appLeft - width - offset);
-            x = Math.Clamp(x, defaultLeftBase, maxLeftFloatX);
-        }
-
-        return x;
-    }
-
-    private int ComputeCenteredRightFloatX(int width, int offset)
-    {
-        int appRight = GetAppListRightEdge();
-        int rightBoundary = GetRightSideBoundary();
-        int limitRight = rightBoundary > 0 ? rightBoundary : _taskbarRect.Right;
-        int availableWidth = Math.Max(0, limitRight - appRight - (2 * offset));
-        AvailableSlotWidth = availableWidth;
-        IsTaskbarSpaceConstrained = availableWidth > 0 && width > availableWidth;
-
-        return ComputeRightFloatX(width);
-    }
-
-    private bool ApplyFloatWindowPos(IntPtr overlayHwnd, Rectangle targetRect, string errorContext)
-    {
-        if (_lastFloatRect == targetRect)
-        {
-            return true;
-        }
-
-        uint flags = NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_SHOWWINDOW;
-        if (_lastFloatRect.IsEmpty)
-        {
-            flags |= NativeMethods.SWP_FRAMECHANGED;
-        }
-
-        ApplyLayeredAttributes(overlayHwnd);
-        bool success = NativeMethods.SetWindowPos(
-            overlayHwnd, NativeMethods.HWND_TOPMOST,
-            targetRect.X, targetRect.Y, targetRect.Width, targetRect.Height,
-            flags);
-        if (!success)
-        {
-            int err = Marshal.GetLastWin32Error();
-            Log.Error($"SetWindowPos failed with Win32 error {err} during {errorContext}.");
-            State = OverlayDeploymentState.Failed;
-            return false;
-        }
-
-        _lastFloatRect = targetRect;
-        return true;
-    }
-
-    private int ComputeLeftFloatX()
-    {
-        if (_isWin11 && !IsTaskbarCentered())
-        {
-            int appRight = GetAppListRightEdge();
-            int leftBase = appRight > _taskbarRect.Left
-                ? appRight
-                : _taskbarRect.Left + WindowHelpers.Scale(360, 1f);
-            return leftBase + _cfg.Overlay.PlacementOffset;
-        }
-
-        int leftEdge = _leftWidgetRightEdge > 0 ? _leftWidgetRightEdge : GetLeftWidgetRightEdge();
-        int defaultLeftBase = leftEdge > _taskbarRect.Left
-            ? leftEdge
-            : _taskbarRect.Left;
-
-        return defaultLeftBase + _cfg.Overlay.PlacementOffset;
-    }
-
-    private int ComputeRightFloatX(int widgetWidth)
-    {
-        int rightBoundary = GetRightSideBoundary();
-        if (rightBoundary > 0)
-        {
-            int x = rightBoundary - widgetWidth - _cfg.Overlay.PlacementOffset;
-            return Math.Max(x, _taskbarRect.Left);
-        }
-
-        int trayWidth = EstimateTrayWidth();
-        return _taskbarRect.Right - widgetWidth - trayWidth - _cfg.Overlay.PlacementOffset;
-    }
-
     private static int EstimateTrayWidth()
     {
         int iconW = NativeMethods.GetSystemMetrics(NativeMethods.SM_CXSMICON);
         int dpiScaledBase = WindowHelpers.Scale(360, 1f);
         return Math.Max(iconW * 11 + 120, dpiScaledBase);
-    }
-
-    private static void RestoreLayeredStyles(IntPtr overlayHwnd)
-    {
-        NativeMethods.SetParent(overlayHwnd, IntPtr.Zero);
-
-        int ex = NativeMethods.GetWindowLong(overlayHwnd, NativeMethods.GWL_EXSTYLE);
-        ex |= NativeMethods.WS_EX_LAYERED | NativeMethods.WS_EX_NOACTIVATE
-             | NativeMethods.WS_EX_TOOLWINDOW;
-        NativeMethods.SetWindowLong(overlayHwnd, NativeMethods.GWL_EXSTYLE, ex);
-
-        int style = NativeMethods.GetWindowLong(overlayHwnd, NativeMethods.GWL_STYLE);
-        style &= ~NativeMethods.WS_CHILD;
-        style |= NativeMethods.WS_POPUP;
-        NativeMethods.SetWindowLong(overlayHwnd, NativeMethods.GWL_STYLE, style);
-
-        IntPtr tray = FindExplorerTrayWnd();
-        if (tray != IntPtr.Zero)
-        {
-            NativeMethods.SetWindowLongPtr(overlayHwnd, NativeMethods.GWLP_HWNDPARENT, tray);
-        }
     }
 }

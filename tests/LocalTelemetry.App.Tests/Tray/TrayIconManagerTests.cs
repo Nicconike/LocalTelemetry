@@ -444,4 +444,45 @@ public class TrayIconManagerTests
             TrayIconManager.SkipUiForTesting = priorSkipUi;
         }
     }
+
+    [WpfFact]
+    public void MouseHookCallback_DismissesContextMenuWhenClickOutside()
+    {
+        using var tray = new TrayIconManager();
+        var createMenu = typeof(TrayIconManager).GetMethod("CreateBaseContextMenu", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        using var ctx = (ContextMenuStrip)createMenu.Invoke(tray, null)!;
+
+        // Set active context menu
+        var activeMenuField = typeof(TrayIconManager).GetField("_activeContextMenu", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        activeMenuField.SetValue(tray, ctx);
+
+        var hookCallback = typeof(TrayIconManager).GetMethod("MouseHookCallback", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+        // Simulate hook struct at (500, 500)
+        var hookStruct = new LocalTelemetry.App.Win32.NativeMethods.MSLLHOOKSTRUCT
+        {
+            pt = new LocalTelemetry.App.Win32.NativeMethods.POINT { X = 500, Y = 500 }
+        };
+        IntPtr ptr = System.Runtime.InteropServices.Marshal.AllocHGlobal(System.Runtime.InteropServices.Marshal.SizeOf(hookStruct));
+        try
+        {
+            System.Runtime.InteropServices.Marshal.StructureToPtr(hookStruct, ptr, false);
+
+            // Test non-button down msg (WM_MOUSEMOVE = 0x200)
+            var resMove = hookCallback.Invoke(tray, [0, (IntPtr)0x0200, ptr]);
+            resMove.Should().NotBeNull();
+
+            // Test outside click (WM_LBUTTONDOWN = 0x201)
+            var resClick = hookCallback.Invoke(tray, [0, (IntPtr)0x0201, ptr]);
+            resClick.Should().NotBeNull();
+
+            // Test with negative nCode
+            var resNegative = hookCallback.Invoke(tray, [-1, (IntPtr)0x0201, ptr]);
+            resNegative.Should().NotBeNull();
+        }
+        finally
+        {
+            System.Runtime.InteropServices.Marshal.FreeHGlobal(ptr);
+        }
+    }
 }

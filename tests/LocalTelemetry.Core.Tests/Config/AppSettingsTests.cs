@@ -275,8 +275,6 @@ public sealed class AppSettingsTests : IDisposable
             Visible = true,
             Placement = "right",
             PlacementOffset = 10,
-            FloatX = 100,
-            FloatY = 200,
             DoubleClickAction = "taskmanager",
             Opacity = 80,
             ScalePct = 120,
@@ -297,8 +295,6 @@ public sealed class AppSettingsTests : IDisposable
         overlay.Visible.Should().BeTrue();
         overlay.Placement.Should().Be("right");
         overlay.PlacementOffset.Should().Be(10);
-        overlay.FloatX.Should().Be(100);
-        overlay.FloatY.Should().Be(200);
         overlay.DoubleClickAction.Should().Be("taskmanager");
         overlay.Opacity.Should().Be(80);
         overlay.ScalePct.Should().Be(120);
@@ -396,5 +392,51 @@ public sealed class AppSettingsTests : IDisposable
 
         AppSettings.LastDirectoryError.Should().NotBeNull();
         AppSettings.LogsDir.Should().Be(subDir);
+    }
+
+    [Fact]
+    public void UpdateConfig_DefaultIncludePrereleases_RespectsVersionAndExplicitOverrides()
+    {
+        bool originalDefault = UpdateConfig.DefaultIncludePrereleases;
+        try
+        {
+            // Test beta mode default
+            UpdateConfig.DefaultIncludePrereleases = true;
+            var betaCfg = new UpdateConfig();
+            betaCfg.IncludePrereleases.Should().BeTrue();
+            betaCfg.UserExplicitlySetIncludePrereleases.Should().BeFalse();
+
+            // Explicit user toggle
+            betaCfg.IncludePrereleases = false;
+            betaCfg.UserExplicitlySetIncludePrereleases = true;
+            betaCfg.IncludePrereleases.Should().BeFalse();
+
+            // Test stable mode default
+            UpdateConfig.DefaultIncludePrereleases = false;
+            var stableCfg = new UpdateConfig();
+            stableCfg.IncludePrereleases.Should().BeFalse();
+
+            // Test config migration when running beta build
+            UpdateConfig.DefaultIncludePrereleases = true;
+            var appSettings = new AppSettings();
+            appSettings.Updates.IncludePrereleases = false;
+            appSettings.Updates.UserExplicitlySetIncludePrereleases = false;
+            appSettings.Save();
+
+            var loaded = AppSettings.Load();
+            loaded.Updates.IncludePrereleases.Should().BeTrue();
+
+            // Test config migration respects explicit user setting
+            loaded.Updates.IncludePrereleases = false;
+            loaded.Updates.UserExplicitlySetIncludePrereleases = true;
+            loaded.Save();
+
+            var loadedExplicit = AppSettings.Load();
+            loadedExplicit.Updates.IncludePrereleases.Should().BeFalse();
+        }
+        finally
+        {
+            UpdateConfig.DefaultIncludePrereleases = originalDefault;
+        }
     }
 }

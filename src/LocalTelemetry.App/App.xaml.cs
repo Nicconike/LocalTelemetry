@@ -172,6 +172,7 @@ public sealed partial class App : WpfApplication
 
         string exeDir = ExeDirOverride ?? AppContext.BaseDirectory;
         AppSettings.InitPaths(exeDir);
+        UpdateConfig.DefaultIncludePrereleases = UpdateCheckService.IsPrereleaseVersion();
         bool isFreshConfig = !File.Exists(AppSettings.ConfigPath);
         _cfg = AppSettings.Load();
         if (isFreshConfig && !TaskbarEmbedder.IsTaskbarCentered())

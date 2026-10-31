@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using LocalTelemetry.Core.Diagnostics;
@@ -134,6 +135,14 @@ public sealed class AppSettings
             cfg.Save();
             Log.Debug($"Configuration migration completed: populated {gc.Count} group color entries");
         }
+        // Ensure pre-release updates are enabled by default on beta / pre-release builds
+        // unless the user explicitly configured their preference in settings.
+        if (UpdateConfig.DefaultIncludePrereleases && !cfg.Updates.UserExplicitlySetIncludePrereleases && !cfg.Updates.IncludePrereleases)
+        {
+            cfg.Updates.IncludePrereleases = true;
+            cfg.Save();
+            Log.Debug("Configuration migration: enabled pre-release updates by default for pre-release build");
+        }
     }
 
     /// <summary>Serializes this instance to <see cref="ConfigPath"/> as JSON.</summary>
@@ -244,10 +253,6 @@ public sealed class OverlayConfig
     public string Placement { get; set; } = "left";
     /// <summary>Horizontal offset in pixels from the chosen placement.</summary>
     public int PlacementOffset { get; set; } = 0;
-    /// <summary>Saved drag X for Approach-B float (-1 = auto).</summary>
-    public int FloatX { get; set; } = -1;
-    /// <summary>Saved drag Y for Approach-B float (-1 = auto).</summary>
-    public int FloatY { get; set; } = -1;
     /// <summary>Action on double-click: <c>"none"</c>, <c>"taskmanager"</c>, <c>"settings"</c>.</summary>
     public string DoubleClickAction { get; set; } = "settings";
     /// <summary>Overlay opacity percentage (0-100).</summary>
@@ -401,11 +406,41 @@ public sealed class NetUsageConfig
 /// <summary>Update checking configuration.</summary>
 public sealed class UpdateConfig
 {
+    private bool? _includePrereleases;
+
     /// <summary>Update check frequency: "weekly", "monthly", or "manual". Default is "manual" for new installs.</summary>
     public string CheckFrequency { get; set; } = "manual";
 
     /// <summary>Whether to include pre-release and Release Candidate (RC) builds when checking for updates.</summary>
-    public bool IncludePrereleases { get; set; } = false;
+    public bool IncludePrereleases
+    {
+        get => _includePrereleases ?? DefaultIncludePrereleases;
+        set => _includePrereleases = value;
+    }
+
+    /// <summary>Whether the user has explicitly changed the pre-release setting in the UI.</summary>
+    public bool UserExplicitlySetIncludePrereleases { get; set; }
+
+    /// <summary>Default value for IncludePrereleases based on whether the running version is a pre-release build.</summary>
+    public static bool DefaultIncludePrereleases { get; set; } = DetectPrereleaseBuild();
+
+    private static bool DetectPrereleaseBuild()
+    {
+        try
+        {
+            var asm = System.Reflection.Assembly.GetEntryAssembly() ?? typeof(AppSettings).Assembly;
+            var infoAttr = asm.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>();
+            string ver = infoAttr?.InformationalVersion ?? asm.GetName().Version?.ToString() ?? string.Empty;
+            int plusIdx = ver.IndexOf('+');
+            if (plusIdx > 0)
+                ver = ver[..plusIdx];
+            return ver.Contains('-');
+        }
+        catch
+        {
+            return false;
+        }
+    }
 
     /// <summary>UTC timestamp of the last update check.</summary>
     public DateTime LastCheckUtc { get; set; } = DateTime.MinValue;

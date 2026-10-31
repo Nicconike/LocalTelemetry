@@ -287,7 +287,7 @@ public sealed class UpdateConfigDto
     public string CheckFrequency { get; set; } = "manual";
 
     /// <summary>Whether to include pre-release and Release Candidate (RC) builds.</summary>
-    public bool IncludePrereleases { get; set; } = true;
+    public bool IncludePrereleases { get; set; } = UpdateConfig.DefaultIncludePrereleases;
 }
 
 // SettingsDtoMapping
@@ -499,6 +499,10 @@ public static class SettingsDtoMapping
         if (dto.Updates is not null)
         {
             settings.Updates.CheckFrequency = dto.Updates.CheckFrequency ?? "weekly";
+            if (settings.Updates.IncludePrereleases != dto.Updates.IncludePrereleases)
+            {
+                settings.Updates.UserExplicitlySetIncludePrereleases = true;
+            }
             settings.Updates.IncludePrereleases = dto.Updates.IncludePrereleases;
         }
         settings.WindowTheme = dto.WindowTheme;

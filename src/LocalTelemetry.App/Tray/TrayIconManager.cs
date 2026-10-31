@@ -20,6 +20,9 @@ public sealed class TrayIconManager : IDisposable
     private ToolStripMenuItem? _trayOverlayToggleItem;
     private ToolStripMenuItem? _overlayOverlayToggleItem;
     private ContextMenuStrip? _overlayContextMenu;
+    private IntPtr _mouseHook = IntPtr.Zero;
+    private readonly NativeMethods.LowLevelMouseHookCallback _mouseHookProc;
+    private ContextMenuStrip? _activeContextMenu;
 
     public event Action? OpenSettingsRequested;
     public event Action? QuitRequested;
@@ -46,6 +49,7 @@ public sealed class TrayIconManager : IDisposable
         // Dedicated top-level message window to own popup menus, handle outside-click dismissal, and catch TaskbarCreated broadcast
         _menuOwner = new HiddenMenuOwnerForm();
         _menuOwner.TaskbarCreated += () => TaskbarCreated?.Invoke();
+        _mouseHookProc = MouseHookCallback;
         if (!SkipUiForTesting)
         {
             _menuOwner.Show();
@@ -82,6 +86,10 @@ public sealed class TrayIconManager : IDisposable
             Log.Debug($"Context menu opened at screen position ({screenPos.X}, {screenPos.Y})");
             if (!SkipUiForTesting)
             {
+                if (_overlayContextMenu.Visible)
+                {
+                    _overlayContextMenu.Close();
+                }
                 NativeMethods.SetForegroundWindow(_menuOwner.Handle);
                 _overlayContextMenu.Show(screenPos);
             }
@@ -268,10 +276,19 @@ public sealed class TrayIconManager : IDisposable
             {
                 Log.Debug(ex, "DWM styling failed on context menu");
             }
+
+            _activeContextMenu = ctx;
+            InstallOutsideClickHook();
         };
 
         ctx.Closed += (_, _) =>
         {
+            if (ReferenceEquals(_activeContextMenu, ctx))
+            {
+                _activeContextMenu = null;
+            }
+            UninstallOutsideClickHook();
+
             try
             {
                 NativeMethods.PostMessage(_menuOwner.Handle, 0, IntPtr.Zero, IntPtr.Zero);
@@ -283,6 +300,92 @@ public sealed class TrayIconManager : IDisposable
         };
 
         return ctx;
+    }
+
+    private void InstallOutsideClickHook()
+    {
+        if (SkipUiForTesting || _mouseHook != IntPtr.Zero) return;
+
+        try
+        {
+            IntPtr moduleHandle = NativeMethods.GetModuleHandle(null);
+
+            _mouseHook = NativeMethods.SetWindowsHookEx(
+                NativeMethods.WH_MOUSE_LL,
+                _mouseHookProc,
+                moduleHandle,
+                0);
+
+            if (_mouseHook == IntPtr.Zero)
+            {
+                Log.Debug("Failed to install low-level mouse hook for context menu outside-click dismissal");
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Exception while installing mouse hook for context menu");
+        }
+    }
+
+    private void UninstallOutsideClickHook()
+    {
+        if (_mouseHook != IntPtr.Zero)
+        {
+            try
+            {
+                NativeMethods.UnhookWindowsHookEx(_mouseHook);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "Exception while removing mouse hook for context menu");
+            }
+            finally
+            {
+                _mouseHook = IntPtr.Zero;
+            }
+        }
+    }
+
+    private static bool IsDismissMouseButtonMessage(int msg) =>
+        msg is NativeMethods.WM_LBUTTONDOWN or NativeMethods.WM_RBUTTONDOWN or NativeMethods.WM_MBUTTONDOWN
+            or NativeMethods.WM_NCLBUTTONDOWN or NativeMethods.WM_NCRBUTTONDOWN or NativeMethods.WM_NCMBUTTONDOWN;
+
+    private static void DismissIfClickedOutside(ContextMenuStrip menu, IntPtr lParam)
+    {
+        try
+        {
+            var hookStruct = Marshal.PtrToStructure<NativeMethods.MSLLHOOKSTRUCT>(lParam);
+            var clickPt = new Point(hookStruct.pt.X, hookStruct.pt.Y);
+            if (!menu.Bounds.Contains(clickPt))
+            {
+                CloseMenu(menu);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Error processing mouse hook click for context menu dismissal");
+        }
+    }
+
+    private static void CloseMenu(ContextMenuStrip menu)
+    {
+        if (menu.InvokeRequired)
+        {
+            menu.BeginInvoke(new Action(() => menu.Close()));
+        }
+        else
+        {
+            menu.Close();
+        }
+    }
+
+    private IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+    {
+        if (nCode >= 0 && _activeContextMenu is { Visible: true } menu && IsDismissMouseButtonMessage(wParam.ToInt32()))
+        {
+            DismissIfClickedOutside(menu, lParam);
+        }
+        return NativeMethods.CallNextHookEx(_mouseHook, nCode, wParam, lParam);
     }
 
     // Updates & Notifications
@@ -313,6 +416,7 @@ public sealed class TrayIconManager : IDisposable
     /// <summary>Releases the tray icon and its associated resources.</summary>
     public void Dispose()
     {
+        UninstallOutsideClickHook();
         _tray.Visible = false;
         _tray.Icon = null;
         _baseIcon.Dispose();

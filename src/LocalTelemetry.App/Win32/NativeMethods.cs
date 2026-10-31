@@ -300,9 +300,19 @@ internal static class NativeMethods
     public static extern bool RemoveWindowSubclass(IntPtr hWnd, SUBCLASSPROC pfnSubclass, UIntPtr uIdSubclass);
 
     // Mouse Hook & Cursor Constants & Declarations
+    public const int WH_MOUSE_LL = 14;
     public const int WM_SETCURSOR = 0x0020;
     public const int WM_MOUSEMOVE = 0x0200;
     public const int IDC_ARROW = 32512;
+
+    public delegate IntPtr LowLevelMouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    public static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseHookCallback lpfn, IntPtr hMod, uint dwThreadId);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool UnhookWindowsHookEx(IntPtr hhk);
 
 #pragma warning disable S101 // Win32 SDK P/Invoke struct naming convention matches Windows API definitions
     [StructLayout(LayoutKind.Sequential)]

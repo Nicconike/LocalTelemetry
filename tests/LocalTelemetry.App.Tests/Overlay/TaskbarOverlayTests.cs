@@ -266,11 +266,7 @@ public class TaskbarOverlayTests
         clickedAction.Should().Be("settings");
 
         // Reflection invocations for timer handlers & rendering
-        typeof(TaskbarEmbedder).GetProperty("IsFallback", BindingFlags.Public | BindingFlags.Instance)!.GetSetMethod(true)!.Invoke(embedder, [false]);
         typeof(TaskbarEmbedder).GetProperty("IsEmbedded", BindingFlags.Public | BindingFlags.Instance)!.GetSetMethod(true)!.Invoke(embedder, [false]);
-
-        var renderFloat = typeof(TaskbarOverlay).GetMethod("RenderFloat", BindingFlags.NonPublic | BindingFlags.Instance);
-        renderFloat!.Invoke(overlay, null);
 
         var posTick = typeof(TaskbarOverlay).GetMethod("PosTick", BindingFlags.NonPublic | BindingFlags.Instance);
         posTick!.Invoke(overlay, null);
@@ -361,7 +357,7 @@ public class TaskbarOverlayTests
         getDiskLabel.Should().NotBeNull();
 
         // Disks of same type get numbered
-        ((string)getDiskLabel!.Invoke(overlay, ["disk_disk0_read"])!).Should().Be("NVMe1R");
+        ((string)getDiskLabel.Invoke(overlay, ["disk_disk0_read"])!).Should().Be("NVMe1R");
         ((string)getDiskLabel.Invoke(overlay, ["disk_disk1_write"])!).Should().Be("NVMe2W");
         ((string)getDiskLabel.Invoke(overlay, ["disk_disk2_read"])!).Should().Be("SATAR");
         ((string)getDiskLabel.Invoke(overlay, ["disk_disk3_write"])!).Should().Be("HDDW");
@@ -420,7 +416,7 @@ public class TaskbarOverlayTests
 
         // WM_SETCURSOR / WM_MOUSEMOVE
         object[] setCursorArgs = [NativeMethods.WM_SETCURSOR, IntPtr.Zero];
-        ((bool)handleMouse!.Invoke(overlay, setCursorArgs)!).Should().BeFalse();
+        ((bool)handleMouse.Invoke(overlay, setCursorArgs)!).Should().BeFalse();
 
         // WM_RBUTTONDOWN
         object[] rBtnDownArgs = [NativeMethods.WM_RBUTTONDOWN, IntPtr.Zero];
@@ -493,7 +489,6 @@ public class TaskbarOverlayTests
         overlay.Show();
 
         typeof(TaskbarEmbedder).GetProperty("IsEmbedded", BindingFlags.Public | BindingFlags.Instance)!.GetSetMethod(true)!.Invoke(embedder, [true]);
-        typeof(TaskbarEmbedder).GetProperty("IsFallback", BindingFlags.Public | BindingFlags.Instance)!.GetSetMethod(true)!.Invoke(embedder, [false]);
 
         // Exercise PosTick when IsChildMode is true and DPI changes
         typeof(TaskbarOverlay).GetField("_dpi", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(overlay, 0.5f);
@@ -642,6 +637,9 @@ public class TaskbarOverlayTests
         bool priorEmbed = TaskbarOverlay.SkipEmbedForTesting;
         bool priorMouse = TaskbarOverlay.SkipMouseHookForTesting;
 
+        using var fakeTray = new Form { Bounds = new Rectangle(0, 1000, 1920, 48) };
+        TaskbarEmbedder.ExplorerTrayWndOverride = () => fakeTray.Handle;
+
         TaskbarOverlay.SkipShowWindowForTesting = false;
         TaskbarOverlay.SkipEmbedForTesting = false;
         TaskbarOverlay.SkipMouseHookForTesting = false;
@@ -677,6 +675,7 @@ public class TaskbarOverlayTests
         }
         finally
         {
+            TaskbarEmbedder.ExplorerTrayWndOverride = null;
             TaskbarOverlay.SkipShowWindowForTesting = priorShow;
             TaskbarOverlay.SkipEmbedForTesting = priorEmbed;
             TaskbarOverlay.SkipMouseHookForTesting = priorMouse;

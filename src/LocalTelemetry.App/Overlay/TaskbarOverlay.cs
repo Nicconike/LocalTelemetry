@@ -10,7 +10,7 @@ using Microsoft.Win32;
 namespace LocalTelemetry.App.Overlay;
 
 /// <summary>
-/// A transparent overlay window embedded in or floating above the Windows taskbar.
+/// A transparent overlay window embedded directly in the Windows taskbar.
 /// Renders hardware telemetry metrics using GDI+ and supports click-through,
 /// DPI awareness and a flash alert effect.
 /// </summary>
@@ -94,7 +94,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
     /// Initialises a new overlay instance. The window is not created until <see cref="Show"/> is called.
     /// </summary>
     /// <param name="cfg">Application settings used for layout, colors and behaviour.</param>
-    /// <param name="embedder">Taskbar embedding strategy (child-window or layered float).</param>
+    /// <param name="embedder">Taskbar embedding strategy (native child window).</param>
     public TaskbarOverlay(AppSettings cfg, TaskbarEmbedder embedder)
     {
         _cfg = cfg;
@@ -136,7 +136,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
         }
 
         ActivateOverlayWindow();
-        Log.Info($"Taskbar overlay shown ({sz.Width}x{sz.Height}, {(_embedder.IsChildMode ? "child" : "floating")} mode)");
+        Log.Info($"Taskbar overlay shown ({sz.Width}x{sz.Height})");
     }
 
     private void TryReshowExistingWindow()
@@ -230,10 +230,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
 
                 ApplyOverlayDimensions(MeasureSize());
 
-                if (_embedder.IsChildMode)
-                    Invalidate();
-                else
-                    RenderFloat();
+                Invalidate();
 
                 _lastRenderedSnap = snap;
             }
@@ -302,8 +299,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
         if (Handle == IntPtr.Zero || _disposed) return;
         _uiCtx.Post(_ =>
         {
-            if (_embedder.IsChildMode) Invalidate();
-            else RenderFloat();
+            Invalidate();
         }, null);
     }
 
@@ -331,8 +327,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
             _overlayHeight = sz.Height;
             _embedder.Reposition(Handle, sz);
             CheckAndNotifySpaceConstraint();
-            if (_embedder.IsChildMode) Invalidate();
-            else RenderFloat();
+            Invalidate();
         }, null);
     }
 
@@ -376,6 +371,10 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
                 m.Result = (IntPtr)NativeMethods.HTCLIENT;
                 return;
             case NativeMethods.WM_LBUTTONDOWN:
+                if (IsContextMenuOpen?.Invoke() == true)
+                {
+                    CloseContextMenuAction?.Invoke();
+                }
                 HandleLButtonDown();
                 return;
             case NativeMethods.WM_LBUTTONDBLCLK:
@@ -476,8 +475,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
         _overlayHeight = sz.Height;
         _embedder.Reposition(Handle, sz);
         CheckAndNotifySpaceConstraint();
-        if (_embedder.IsChildMode) Invalidate();
-        else RenderFloat();
+        Invalidate();
     }
 
     private void DetectSystemTheme()
@@ -850,13 +848,6 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
         var brush = new SolidBrush(c);
         _brushCache[argb] = brush;
         return brush;
-    }
-
-    private void RenderFloat()
-    {
-        if (Handle == IntPtr.Zero || !Visible || !_cfg.Overlay.Visible || _overlayWidth <= 0 || _overlayHeight <= 0) return;
-        if (SkipShowWindowForTesting) return;
-        Invalidate();
     }
 
     private Size MeasureSize()
