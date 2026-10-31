@@ -2,7 +2,7 @@ name: SonarQube Analysis
 
 on:
     push:
-        branches: [master, develop]
+        branches: [master]
         paths:
             - "src/**"
             - "tests/**"
@@ -62,10 +62,12 @@ jobs:
                       ${{ runner.os }}-sonar-v1-
                       ${{ runner.os }}-sonar-
 
-            - name: Build Frontend
+            - name: Build & Test Frontend
               run: |
                   bun install --frozen-lockfile --ignore-scripts
                   bun run build
+                  bun install --frozen-lockfile --ignore-scripts --cwd ../../../../tests/LocalTelemetry.App.Tests/Settings/wwwroot
+                  bun run --cwd ../../../../tests/LocalTelemetry.App.Tests/Settings/wwwroot test:coverage
               working-directory: src/LocalTelemetry.App/Settings/wwwroot
 
             - name: Install SonarScanner
@@ -86,6 +88,7 @@ jobs:
                       /d:sonar.host.url="https://sonarcloud.io" `
                       /d:sonar.token="$env:SONAR_TOKEN" `
                       /d:sonar.cs.cobertura.reportsPaths="**/TestResults/**/coverage.cobertura.xml" `
+                      /d:sonar.javascript.lcov.reportPaths="tests/LocalTelemetry.App.Tests/Settings/wwwroot/coverage/lcov.info" `
                       /d:sonar.scanner.scanAll=false `
                       /d:sonar.exclusions="**/wwwroot/dist/**,**/bin/**,**/obj/**"
 

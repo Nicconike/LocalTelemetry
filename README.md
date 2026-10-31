@@ -131,9 +131,10 @@
 
 ### Option 1: Standard Installer (Recommended)
 
+> [!NOTE]
+> To test preview builds, download the latest Beta installer (`vX.Y.Z-beta.N`) or turn on **Include pre-release & rc builds** in **Settings > About**.
+
 1. Download the latest `LocalTelemetrySetup.exe` from [**GitHub Releases**](https://github.com/Nicconike/LocalTelemetry/releases).
-   > [!NOTE]
-   > To test preview builds, download the latest Beta installer (`vX.Y.Z-beta.N`) or turn on **Include pre-release & rc builds** in **Settings > About**.
 2. Run the installer and follow the setup wizard instructions.
 3. LocalTelemetry starts automatically after installation.
 
