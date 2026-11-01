@@ -4,7 +4,16 @@ on:
     issues:
         types: [opened, closed, reopened, assigned, unassigned]
     pull_request_target:
-        types: [opened, synchronize, reopened, closed, ready_for_review, converted_to_draft, review_requested]
+        types:
+            [
+                opened,
+                synchronize,
+                reopened,
+                closed,
+                ready_for_review,
+                converted_to_draft,
+                review_requested,
+            ]
     workflow_dispatch:
 
 permissions:
@@ -24,7 +33,7 @@ jobs:
               env:
                   PROJECTS: ${{ secrets.PROJECTS }}
               with:
-                  github-token: ${{ secrets.PROJECTS || secrets.GITHUB_TOKEN }}
+                  github-token: ${{ secrets.PROJECTS }}
                   script: |
                       const action = context.payload.action;
                       const isIssue = !!context.payload.issue;

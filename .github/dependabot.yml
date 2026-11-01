@@ -5,12 +5,13 @@ updates:
     # 1. .NET / C# NuGet Dependencies
     - package-ecosystem: "nuget"
       directory: "/"
+      target-branch: "develop"
       schedule:
           interval: "monthly"
           day: "monday"
           time: "06:00"
           timezone: "Asia/Kolkata" # GMT+5:30
-      open-pull-requests-limit: 5
+      open-pull-requests-limit: 3
       rebase-strategy: "auto"
       commit-message:
           prefix: "build(deps)"
@@ -29,39 +30,16 @@ updates:
               patterns:
                   - "*"
 
-    # 2. .NET SDK Version (global.json)
-    - package-ecosystem: "dotnet-sdk"
-      directory: "/"
-      schedule:
-          interval: "monthly"
-          day: "monday"
-          time: "06:00"
-          timezone: "Asia/Kolkata" # GMT+5:30
-      open-pull-requests-limit: 5
-      rebase-strategy: "auto"
-      commit-message:
-          prefix: "build(deps)"
-      labels:
-          - "dependencies"
-          - "dependabot"
-          - "scope:ci"
-      ignore:
-          - dependency-name: "*"
-            update-types: ["version-update:semver-patch"]
-      groups:
-          sdk-deps:
-              patterns:
-                  - "*"
-
-    # 3. Svelte 5 / Vite Frontend Dependencies (Bun)
+    # 2. Svelte 5 / Vite Frontend Dependencies (Bun)
     - package-ecosystem: "bun"
       directory: "/src/LocalTelemetry.App/Settings/wwwroot"
+      target-branch: "develop"
       schedule:
           interval: "monthly"
           day: "monday"
           time: "06:00"
           timezone: "Asia/Kolkata" # GMT+5:30
-      open-pull-requests-limit: 5
+      open-pull-requests-limit: 3
       rebase-strategy: "auto"
       commit-message:
           prefix: "build(deps)"
@@ -78,15 +56,16 @@ updates:
               patterns:
                   - "*"
 
-    # 4. Svelte 5 / Vite Test Frontend Dependencies (Bun)
+    # 3. Svelte 5 / Vite Test Frontend Dependencies (Bun)
     - package-ecosystem: "bun"
       directory: "/tests/LocalTelemetry.App.Tests/Settings/wwwroot"
+      target-branch: "develop"
       schedule:
           interval: "monthly"
           day: "monday"
           time: "06:00"
           timezone: "Asia/Kolkata" # GMT+5:30
-      open-pull-requests-limit: 5
+      open-pull-requests-limit: 3
       rebase-strategy: "auto"
       commit-message:
           prefix: "build(deps)"
@@ -103,15 +82,16 @@ updates:
               patterns:
                   - "*"
 
-    # 5. Documentation Site Dependencies (Bun)
+    # 4. Documentation Site Dependencies (Bun)
     - package-ecosystem: "bun"
       directory: "/docs"
+      target-branch: "develop"
       schedule:
           interval: "monthly"
           day: "monday"
           time: "06:00"
           timezone: "Asia/Kolkata" # GMT+5:30
-      open-pull-requests-limit: 5
+      open-pull-requests-limit: 3
       rebase-strategy: "auto"
       commit-message:
           prefix: "build(deps)"
@@ -128,15 +108,16 @@ updates:
               patterns:
                   - "*"
 
-    # 6. Release Automation Dependencies (Bun)
+    # 5. Release Automation Dependencies (Bun)
     - package-ecosystem: "bun"
       directory: "/.github/release"
+      target-branch: "develop"
       schedule:
           interval: "monthly"
           day: "monday"
           time: "06:00"
           timezone: "Asia/Kolkata" # GMT+5:30
-      open-pull-requests-limit: 5
+      open-pull-requests-limit: 3
       rebase-strategy: "auto"
       commit-message:
           prefix: "ci(deps)"
@@ -153,40 +134,16 @@ updates:
               patterns:
                   - "*"
 
-    # 7. Discord Webhook Dependencies (Bun)
-    - package-ecosystem: "bun"
-      directory: "/.discord"
-      schedule:
-          interval: "monthly"
-          day: "monday"
-          time: "06:00"
-          timezone: "Asia/Kolkata" # GMT+5:30
-      open-pull-requests-limit: 5
-      rebase-strategy: "auto"
-      commit-message:
-          prefix: "ci(deps)"
-          prefix-development: "ci(deps-dev)"
-      labels:
-          - "dependencies"
-          - "dependabot"
-          - "scope:ci"
-      ignore:
-          - dependency-name: "*"
-            update-types: ["version-update:semver-patch"]
-      groups:
-          discord-deps:
-              patterns:
-                  - "*"
-
-    # 8. GitHub Actions Workflows (.github/workflows/*.yml)
+    # 6. GitHub Actions Workflows (.github/workflows/*.yml)
     - package-ecosystem: "github-actions"
       directory: "/"
+      target-branch: "develop"
       schedule:
           interval: "monthly"
           day: "monday"
           time: "06:00"
           timezone: "Asia/Kolkata" # GMT+5:30
-      open-pull-requests-limit: 5
+      open-pull-requests-limit: 3
       rebase-strategy: "auto"
       commit-message:
           prefix: "ci(deps)"
