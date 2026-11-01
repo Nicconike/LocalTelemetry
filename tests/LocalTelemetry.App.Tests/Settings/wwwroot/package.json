@@ -14,7 +14,7 @@
         "happy-dom": "^21.0.4"
     },
     "dependencies": {
-        "@lucide/svelte": "^1.59.0",
+        "@lucide/svelte": "^1.63.0",
         "lucide-svelte": "^1.0.1"
     },
     "overrides": {
