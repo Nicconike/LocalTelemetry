@@ -85,6 +85,7 @@ flowchart TD
 To read CPU package temperatures, MSR (Model-Specific Register) values, and AMD Ryzen SMU metrics, LocalTelemetry utilizes the **PawnIo** kernel driver interface located in [`src/LocalTelemetry.Core/Hardware/PawnIo/`](https://github.com/Nicconike/LocalTelemetry/tree/master/src/LocalTelemetry.Core/Hardware/PawnIo):
 
 - **Silent Elevation Setup**: `PawnIoDevice.TryInstall` executes `PawnIO_setup.exe -install -silent` and configures the `PawnIO` kernel service. Because the host process is elevated at launch via `app.manifest`, the installation runs without prompting for additional UAC confirmations.
+- **Temporary Extraction Cleanup**: `PawnIoDevice.DeletePawnIoTempFiles` deletes transient `PawnIO_*` extraction directories from `%TEMP%` and `%windir%\Temp` after installation and cleanup.
 - **Embedded Binary Scripts (`.bin` Resources)**:
   `LocalTelemetry.Core` embeds pre-compiled PawnIO hardware definition micro-scripts uploaded to the driver on initialization:
   - `AMDFamily0F.bin`, `AMDFamily10.bin`, `AMDFamily17.bin`: AMD CPU family models and MSR/SMU routines

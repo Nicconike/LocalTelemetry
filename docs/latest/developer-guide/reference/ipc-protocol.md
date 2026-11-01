@@ -161,7 +161,7 @@ Triggers an update check against the GitHub Releases API.
 
 ## :log-out: Outbound WebMessage Catalog (C# Host -> Frontend)
 
-The C# controller emits 10 outbound event types.
+The C# controller emits 11 outbound event types.
 
 ### 1. `settings`
 
@@ -192,7 +192,7 @@ interface OverlayDto {
 
 interface UpdateConfigDto {
     checkFrequency: 'manual' | 'weekly' | 'monthly';
-    includePrereleases: boolean; // default: false
+    includePrereleases: boolean; // default: false (stable) / true (beta)
     lastCheckUtc: string;
 }
 ```
@@ -362,12 +362,26 @@ Dispatched upon completion of an update check.
 {
   "isUpdateAvailable": true,
   "isPrerelease": false,
-  "currentVersion": "1.0.0-rc.1",
-  "latestVersion": "1.0.0",
-  "releaseUrl": "https://github.com/Nicconike/LocalTelemetry/releases/tag/v1.0.0",
+  "currentVersion": "1.2.0",
+  "latestVersion": "1.3.0",
+  "releaseUrl": "https://github.com/Nicconike/LocalTelemetry/releases/tag/v1.3.0",
   "releaseNotes": "Official release notes markdown...",
-  "publishedAt": "2026-10-03T12:00:00Z",
+  "publishedAt": "2026-10-31T12:00:00Z",
   "errorMessage": null
+}
+```
+
+### 11. `taskbarSlotChanged`
+
+Dispatched when the taskbar space constraint state or available slot width changes in real time.
+
+- **Type:** `"taskbarSlotChanged"`
+- **Payload Schema:**
+
+```json
+{
+  "taskbarSpaceConstrained": true,
+  "availableSlotWidth": 320
 }
 ```
 

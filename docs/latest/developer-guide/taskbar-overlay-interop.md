@@ -29,14 +29,12 @@ flowchart TD
     Tray --> Win11Bridge
 
     %% 3. EMBEDDING STRATEGY
-    subgraph EmbeddingStrategy["TaskbarEmbedder Strategy Resolution"]
+    subgraph EmbeddingStrategy["TaskbarEmbedder Native Child Embedding"]
         direction TB
         ShrinkBand["<b>ShrinkTaskBand Interop</b><br/>Reserves Pixel Space on Win10"]
-        ChildMode["<b>Tier 1: Child Mode (SetParent HWND)</b><br/>WS_CHILD • WS_EX_TOOLWINDOW • WS_EX_LAYERED"]
-        FallbackMode["<b>Tier 2: Layered Fallback Window</b><br/>WS_EX_TOPMOST • WS_EX_NOACTIVATE • WS_EX_LAYERED"]
+        ChildMode["<b>Native Child Window (SetParent HWND)</b><br/>WS_CHILD • WS_EX_TOOLWINDOW • WS_EX_LAYERED"]
 
         ShrinkBand --> ChildMode
-        ChildMode -.->|"SetParent Fails"| FallbackMode
     end
 
     TaskSw --> ShrinkBand
@@ -54,7 +52,6 @@ flowchart TD
     end
 
     ChildMode --> GdiSurface
-    FallbackMode --> GdiSurface
 
     %% 5. DEPLOYMENT STATE MACHINE
     subgraph DeploymentStateMachine["OverlayDeploymentState Lifecycle"]
@@ -76,7 +73,7 @@ flowchart TD
     class Desktop,Tray,ReBar,TaskSw,Win11Bridge shellNode
     class ShrinkBand,Watchdog,MouseHook toolNode
     class ChildMode,StateActive childNode
-    class FallbackMode,StateFailed fallbackNode
+    class StateFailed fallbackNode
     class GdiSurface,StateRecov surfaceNode
     class StateInit initNode
 
@@ -88,22 +85,17 @@ flowchart TD
     classDef initNode fill:#374151,stroke:#9ca3af,stroke-width:1.5px,color:#f3f4f6
 ```
 
-## :settings: Taskbar Embedding Strategies
+## :settings: Native Taskbar Embedding Strategy
 
-Implemented in [`TaskbarEmbedder.cs`](https://github.com/Nicconike/LocalTelemetry/blob/master/src/LocalTelemetry.App/Win32/TaskbarEmbedder.cs), LocalTelemetry provides a 2-tier embedding engine to guarantee compatibility across all Windows 10 and 11 builds:
+Implemented in [`TaskbarEmbedder.cs`](https://github.com/Nicconike/LocalTelemetry/blob/master/src/LocalTelemetry.App/Win32/TaskbarEmbedder.cs), LocalTelemetry embeds the overlay directly into the Windows taskbar shell as a native child window:
 
-### :shield-alert: Child-Window Reparenting (`IsChildMode`)
+### :shield-check: Child-Window Reparenting (`IsChildMode`)
 
 - **Find Taskbar HWND**: `FindWindow("Shell_TrayWnd", null)` locates the primary taskbar window handle.
 - **Find ReBar / TaskBand**: `FindWindowEx(trayHwnd, IntPtr.Zero, "ReBarWindow32", null)` retrieves the control container and taskband (`MSTaskSwWClass`).
 - **Reparent Window (`SetParent`)**: Calls Win32 `SetParent(overlayHwnd, parentHwnd)` to reparent the overlay window as a native child control of the taskbar.
-- **Shrink TaskBand (`ShrinkTaskBand`)**: Dynamically reduces taskband width to reserve dedicated space for the overlay metrics on the taskbar.
+- **Shrink TaskBand (`ShrinkTaskBand`)**: Dynamically reduces taskband width on Windows 10 classic taskbars to reserve dedicated space for the overlay metrics.
 - **Apply Window Styles (`SetWindowLong`)**: Sets `WS_CHILD`, `WS_EX_TOOLWINDOW` (hides from Alt+Tab), `WS_EX_NOACTIVATE`, and `WS_EX_LAYERED`.
-
-### :panel-bottom: Layered Floating Window Fallback (`IsFallback`)
-
-- Activated if reparenting fails due to third-party shell software or security policies.
-- Restores top-level window styles (`WS_POPUP`, `WS_EX_TOPMOST`) and positions a transparent layered floating window precisely over the taskbar bounding rectangle.
 
 ---
 
@@ -163,7 +155,7 @@ public OverlayDeploymentState State { get; private set; } = OverlayDeploymentSta
 ```
 
 1. **`Uninitialized`**: Overlay is hidden or has not yet completed initial taskbar discovery.
-2. **`Active`**: Taskbar handle verified and overlay successfully positioned (either as child or layered fallback).
+2. **`Active`**: Taskbar handle verified and overlay successfully positioned as a native child window.
 3. **`Failed`**: Taskbar handle not found or `SetParent` call failed.
 4. **`Recovering`**: Watchdog detected that `explorer.exe` restarted; attempting re-embedding cycle.
 
@@ -183,6 +175,17 @@ Implemented in [`TaskbarOverlay.cs`](https://github.com/Nicconike/LocalTelemetry
 ## :monitor: High-DPI Awareness & Scaling
 
 Queries `GetDpiForWindow` to dynamically scale font rendering, text margins, and line heights for 4K displays and custom DPI scaling settings (100%, 125%, 150%, 175%, 200%+).
+
+---
+
+## :square-mouse-pointer: Low-Level Mouse Hooks & Outside-Click Dismissal
+
+To ensure context menus close reliably when users click outside their bounds, `TrayIconManager.cs` installs a temporary low-level mouse hook (`WH_MOUSE_LL`):
+
+- **Hook Installation**: Installed via `SetWindowsHookEx(WH_MOUSE_LL, ...)` upon opening any tray or overlay context menu.
+- **Click Detection**: Listens for mouse-down messages (`WM_LBUTTONDOWN`, `WM_RBUTTONDOWN`, `WM_MBUTTONDOWN`, and non-client equivalents).
+- **Outside-Click Check**: Compares the screen click point (`MSLLHOOKSTRUCT.pt`) against the active menu bounds (`menu.Bounds.Contains(clickPt)`). If the click occurred outside the menu, it invokes `menu.Close()`.
+- **Automatic Cleanup**: Unhooks immediately via `UnhookWindowsHookEx` when the menu closes or the manager is disposed.
 
 ---
 

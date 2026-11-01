@@ -48,7 +48,7 @@ LocalTelemetry/
 │   │   │       ├── src/         # Svelte components (App, Sidebar, 10 Pages, UI primitives, types, utils)
 │   │   │       └── package.json # Frontend dependencies
 │   │   ├── Tray/                # TrayIconManager.cs (WinForms NotifyIcon & custom dark context menus)
-│   │   ├── Win32/               # TaskbarEmbedder.cs (SetParent reparenting & floating fallback)
+│   │   ├── Win32/               # TaskbarEmbedder.cs (SetParent taskbar child reparenting & positioning)
 │   │   ├── App.xaml.cs          # WPF application entry point, UAC elevation & DI container
 │   │   └── Uninstall.bat        # Portable mode driver, service & registry cleanup script
 │   └── LocalTelemetry.Notifier/ # Standalone toast notification helper executable

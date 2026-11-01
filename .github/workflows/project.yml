@@ -458,7 +458,7 @@ jobs:
                           } else if (action === 'reopened') {
                               targetStatus = (item.assignees && item.assignees.length > 0) ? 'In Progress' : 'Todo';
                           } else if (action === 'opened') {
-                              targetStatus = title.toLowerCase().includes('backlog') ? 'Backlog' : 'Todo';
+                              targetStatus = 'Todo';
                           }
                       } else {
                           // Pull Request Lifecycle Stages

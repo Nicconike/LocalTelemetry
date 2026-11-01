@@ -49,8 +49,6 @@ The mode is determined at launch by checking for the `app.mode` marker file in t
     "visible": false,
     "placement": "left",
     "placementOffset": 0,
-    "floatX": -1,
-    "floatY": -1,
     "doubleClickAction": "settings",
     "opacity": 100,
     "scalePct": 100,
@@ -189,8 +187,6 @@ The mode is determined at launch by checking for the `app.mode` marker file in t
 | `visible` | `boolean` | `true`, `false` | `false` | Controls taskbar overlay visibility. |
 | `placement` | `string` | `"left"`, `"center"`, `"right"`, `"beside_apps"` | `"left"` | Taskbar anchor placement (`"beside_apps"` positions after app icons on left-aligned taskbars). |
 | `placementOffset` | `integer` | `-500` to `500` | `0` | Horizontal pixel offset from anchor. |
-| `floatX` | `integer` | `-1` (Auto) or coordinate | `-1` | Saved drag position X coordinate for floating mode. |
-| `floatY` | `integer` | `-1` (Auto) or coordinate | `-1` | Saved drag position Y coordinate for floating mode. |
 | `doubleClickAction` | `string` | `"none"`, `"taskmanager"`, `"settings"` | `"settings"` | Overlay double-click trigger action. |
 | `opacity` | `integer` | `10` to `100` | `100` | Layered window opacity percentage. |
 | `scalePct` | `integer` | `50` to `200` | `100` | Geometry scaling percentage. |
@@ -247,7 +243,7 @@ The mode is determined at launch by checking for the `app.mode` marker file in t
 | Property | Type | Valid Values | Default | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | `checkFrequency` | `string` | `"manual"`, `"weekly"`, `"monthly"` | `"manual"` | Interval for automated background update checks. |
-| `includePrereleases` | `boolean` | `true`, `false` | `false` | Includes Release Candidate (`-rc`) and beta builds. |
+| `includePrereleases` | `boolean` | `true`, `false` | `false` (stable) / `true` (beta) | Includes pre-release and beta builds when checking for updates. |
 | `lastCheckUtc` | `string` (ISO 8601) | Datetime string | MinValue | Timestamp of the last completed update check. |
 
 ---

@@ -31,7 +31,7 @@ The settings panel is organized into 10 dedicated tabs matching the exact naviga
 - **Opacity**: Adjust overlay opacity (`20%` to `100%`).
 - **Scale**: Adjust overlay scaling multiplier (`80%` to `200%`).
 - **Double-Click Action**: Configure what happens when double-clicking the overlay (`None`, `Open Task Manager`, or `Open Settings`).
-- **Taskbar Space Constraint Banner**: Warns when the available taskbar slot is narrower than the overlay. LocalTelemetry scales down and clamps coordinates to prevent overlap. Includes a button to open Windows Taskbar Settings (`ms-settings:taskbar`) to hide Windows Widgets.
+- **Taskbar Space Constraint Banner**: Warns when the available taskbar slot is narrower than the overlay. LocalTelemetry scales down and clamps coordinates to prevent overlap. Includes a **Dismiss** button and a link to open Windows Taskbar Settings (`ms-settings:taskbar`). The banner resets automatically when space constraints ease.
 
 ![Overlay Settings Tab](/images/overlay-settings.png)
 *Overlay settings tab for configuring taskbar placement, edge offset, opacity, scaling, and double-click behavior.*
@@ -121,7 +121,7 @@ The settings panel is organized into 10 dedicated tabs matching the exact naviga
 
 ### :info: About
 
-- **Software Updates**: Check for newer releases via the GitHub Releases API on demand (**Check for Updates** button), configure update check frequency (**Weekly**, **Monthly**, or **Manual**), and toggle **Include pre-release & RC builds** (disabled by default). If an update is detected, a direct **Download** button links straight to the release.
+- **Software Updates**: Check for newer releases via the GitHub Releases API on demand (**Check for Updates** button), configure update check frequency (**Weekly**, **Monthly**, or **Manual**), and toggle **Include pre-release & RC builds** (enabled by default on pre-release builds, disabled by default on stable releases). If an update is detected, a direct **Download** button links straight to the release, with a **Beta** badge shown for pre-releases.
 - **Application Metadata**: Displays the active version (`vX.Y.Z`), deployment mode (`Standard` vs `Portable`), build date, target runtime (.NET 10), and platform (Windows x64).
 - **Application Directories**: Single-click "→" buttons open the application folders directly in Windows File Explorer:
   - **Standard Mode**: Quick access to the Installation Folder (`C:\Program Files\LocalTelemetry`), Settings & Data Folder (`%LOCALAPPDATA%\LocalTelemetry`), and Logs Folder (`%LOCALAPPDATA%\LocalTelemetry\logs`).

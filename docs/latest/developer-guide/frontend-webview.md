@@ -71,7 +71,7 @@ sequenceDiagram
 
 ## :bridge: IPC Bridge Message Catalog Summary
 
-The WebView2 bridge supports 11 inbound requests from JavaScript and 10 outbound responses/events from C#:
+The WebView2 bridge supports 11 inbound requests from JavaScript and 11 outbound responses/events from C#:
 
 ### :log-in: Inbound Messages (Frontend `postMessage` -> C# Host)
 
@@ -103,6 +103,7 @@ The WebView2 bridge supports 11 inbound requests from JavaScript and 10 outbound
 | `importDatResult` | `{ daysImported, error? }` | Reports count of imported records or error message. |
 | `windowsUsageImportResult` | `{ success, daysImported, downBytes, upBytes, message }` | Reports count of imported ESE database records and byte totals. |
 | `updateCheckResult` | `UpdateCheckResultDto` | Update availability status, latest version tag, and release URL. |
+| `taskbarSlotChanged` | `{ taskbarSpaceConstrained, availableSlotWidth }` | Real-time notification when taskbar space constraint or measured slot width changes. |
 
 ::: tip Protocol Reference
 For full JSON schema payloads, field-by-field definitions, and TypeScript interfaces, see the [WebView2 & Named Pipe IPC Protocol Reference](reference/ipc-protocol.md).

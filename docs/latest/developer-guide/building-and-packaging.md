@@ -50,6 +50,7 @@ The configuration script is located at [`setup.iss`](https://github.com/Nicconik
 - **PawnIO Driver Provisioning**: Stops and deletes any stale `PawnIO` service, executes `PawnIO_setup.exe -install -silent`, retries if Windows returns error 1072 (service marked for deletion), and flags for reboot if needed.
 - **Scheduled Task Registration**: Uses the Task Scheduler COM API to create `LocalTelemetry Startup` with `TASK_RUNLEVEL_HIGHEST`, `DisallowStartIfOnBatteries = false`, `StopIfGoingOnBatteries = false`, and `ExecutionTimeLimit = "PT0S"` (infinite runtime).
 - **App Mode Marker**: Creates `{app}\app.mode` so the application routes user settings to `%LOCALAPPDATA%\LocalTelemetry`.
+- **Temporary Extraction File Cleanup**: Calls `DeleteTempPawnIoFiles` on install and uninstall to remove temporary `PawnIO_*` extraction folders from `%windir%\Temp` and `%TEMP%`.
 - **Complete Driver & Registry Cleanup on Uninstall**: Closes processes, removes the scheduled task, stops the service, and invokes PowerShell with `pnputil.exe /delete-driver /uninstall /force` to purge `pawnio.inf` from the Windows DriverStore. If Windows returns code `3010`, it warns the user that a restart is required to release the driver from memory.
 - **Selective User Data Cleanup**: Presents a custom cleanup form (`PromptUserDataCleanup`) to selectively remove Application Settings (`settings.json`), Cache & Diagnostic Logs (`logs/`, `webview2_data/`), and Traffic History (`internet_usage.jsonl`), preserving bandwidth history by default.
 

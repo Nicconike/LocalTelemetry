@@ -26,7 +26,7 @@ flowchart TD
     %% COLUMN 1: CONTINUOUS INTEGRATION
     subgraph TrackCI["1. Continuous Integration (ci.yml)"]
         direction TB
-        TriggerCI["<b>Push / Pull Request</b><br/>Targets master branch"]
+        TriggerCI["<b>Push / Pull Request</b><br/>Targets master & develop branches"]
         Commitlint["<b>1. Commitlint</b><br/>Enforces Conventional Commits"]
         Vitest["<b>2. Bun Vitest</b><br/>Svelte 5 Runes Unit Tests"]
         DotNetBuild["<b>3. .NET 10 Build</b><br/>dotnet build & format --verify"]
@@ -60,13 +60,13 @@ flowchart TD
     %% COLUMN 3: AUTOMATED RELEASE PIPELINE
     subgraph TrackRelease["3. Automated Release (release.yml)"]
         direction TB
-        TriggerRelease["<b>Push to master</b><br/>release/* and src/* changes"]
-        SemRel["<b>Semantic Release</b><br/>Analyzes commits & tags version"]
+        TriggerRelease["<b>Push to master / develop</b><br/>release/* & src/* changes"]
+        SemRel["<b>Semantic Release</b><br/>Calculates version (stable or beta)"]
         BuildPkg["<b>Build & Inno Setup</b><br/>build.ps1 publishes win-x64 & installer"]
         CosignSign["<b>Cosign Signing</b><br/>Sigstore keyless OIDC bundles"]
         SignedCommit["<b>Signed Release Commit</b><br/>github-commit-plugin via REST API"]
         GHRelease["<b>GitHub Release</b><br/>Publishes installer, ZIP & SHA256"]
-        WinGet["<b>WinGet Submission</b><br/>Official wingetcreate CLI"]
+        WinGet["<b>WinGet & Scoop Update</b><br/>master only (skipped on beta)"]
         Attestation["<b>SLSA Provenance</b><br/>Build provenance & release asset upload"]
 
         TriggerRelease --> SemRel
@@ -93,7 +93,7 @@ flowchart TD
 
 ## :zap: Continuous Integration Workflow
 
-The continuous integration pipeline is defined in [`.github/workflows/ci.yml`](https://github.com/Nicconike/LocalTelemetry/blob/master/.github/workflows/ci.yml). It triggers on every `push` and `pull_request` targeting the `master` branch.
+The continuous integration pipeline is defined in [`.github/workflows/ci.yml`](https://github.com/Nicconike/LocalTelemetry/blob/master/.github/workflows/ci.yml). It triggers on every `push` and `pull_request` targeting the `master` and `develop` branches.
 
 ### 1. Commit Linting (`commitlint`)
 
@@ -118,7 +118,7 @@ Validates commit messages against Conventional Commits rules defined in `commitl
 
 ## :rocket: Automated Release Pipeline
 
-The release pipeline is defined in [`.github/workflows/release.yml`](https://github.com/Nicconike/LocalTelemetry/blob/master/.github/workflows/release.yml). It triggers automatically on every push to the `master` branch that modifies release paths or source code:
+The release pipeline is defined in [`.github/workflows/release.yml`](https://github.com/Nicconike/LocalTelemetry/blob/master/.github/workflows/release.yml). It triggers automatically on every push to the `master` or `develop` branch that modifies release paths or source code:
 
 ### Pipeline Execution Flow
 
@@ -126,7 +126,7 @@ The release pipeline is defined in [`.github/workflows/release.yml`](https://git
 2. **Environment Setup**: Fetches all Git tags (`git fetch --tags --force`), sets up Bun and the .NET 10 SDK, and installs release dependencies.
 3. **Unified `semantic-release` Runner**:
    - Executes `bun run ./.github/release/run.ts --extends ./.github/release/release.config.mjs`.
-   - **Commit Analysis (`@semantic-release/commit-analyzer`)**: Parses Conventional Commits to calculate the next semantic release version (`patch`, `minor`, `major`).
+   - **Commit Analysis (`@semantic-release/commit-analyzer`)**: Parses Conventional Commits to calculate the next semantic release version (`patch`, `minor`, `major` on `master`, or `beta` pre-release on `develop`).
    - **Changelog Generation (`@semantic-release/release-notes-generator` & `@semantic-release/changelog`)**: Groups commits into categorized sections and prepends release notes to `CHANGELOG.md`.
    - **Binary Compilation & Packaging (`@semantic-release/exec`)**:
      - Executes `pwsh -File ./.github/release/build.ps1 -Version "${nextRelease.version}" -Tag "${nextRelease.gitTag}"`.
@@ -140,11 +140,11 @@ The release pipeline is defined in [`.github/workflows/release.yml`](https://git
      - Packages the portable archive `LocalTelemetry-win-x64.zip`.
      - Generates SHA-256 cryptographic hashes in `checksums.txt`.
      - Signs release artifacts with Cosign (Sigstore keyless OIDC) to generate `.sigstore.json` bundles.
-     - Injects updated version and checksum values into `bucket/localtelemetry.json`, `docs/.vitepress/versions.mjs`, and multi-file WinGet manifests (`packaging/winget/Nicconike.LocalTelemetry.*.yaml`), and synchronizes package versions.
-   - **Repository State Commit (`github-commit-plugin.ts`)**: Uploads file blobs and creates a signed commit via the GitHub REST API. This step updates `master` with web-flow signing and bypasses branch protections cleanly.
+     - For production releases on `master`, updates `bucket/localtelemetry.json`, `docs/.vitepress/versions.mjs`, and multi-file WinGet manifests (`packaging/winget/Nicconike.LocalTelemetry.*.yaml`). Pre-release builds skip package manifest updates.
+   - **Repository State Commit (`github-commit-plugin.ts`)**: Uploads file blobs and creates a signed commit via the GitHub REST API. This step updates the branch with web-flow signing and bypasses branch protections cleanly.
    - **Release Publication (`@semantic-release/github`)**: Creates the GitHub Release tag pointing to the new commit. Attaches `LocalTelemetrySetup.exe`, `LocalTelemetry-win-x64.zip`, `checksums.txt`, and Cosign bundles.
    - **WinGet Package Submission (`wingetcreate`)**:
-     - Updates `Nicconike.LocalTelemetry` in the official Microsoft WinGet Community Repository using `wingetcreate update`, falling back to manifest directory submission.
+     - For production releases on `master`, updates `Nicconike.LocalTelemetry` in the official Microsoft WinGet Community Repository using `wingetcreate`. Beta pre-releases skip this step.
 4. **Cryptographic Signatures & Provenance Attestations**:
    - Signs release binaries using Sigstore Cosign keyless OIDC certificates.
    - Generates SLSA Level 3 build provenance attestations for `LocalTelemetrySetup.exe` and `LocalTelemetry-win-x64.zip` via `actions/attest-build-provenance`.
@@ -176,6 +176,7 @@ The documentation site deployment pipeline is defined in [`.github/workflows/doc
 ## :shield-check: Security & Quality Workflows
 
 - **CodeQL (`codeql.yml`)**: Scans C# and JavaScript/TypeScript code for security vulnerabilities and injection risks.
-- **SonarCloud (`sonar.yml`)**: Runs static code analysis and maintains the SonarCloud Clean Code quality gate.
+- **SonarCloud (`sonar.yml`)**: Runs static code analysis and maintains the SonarCloud Clean Code quality gate. Collects C# Cobertura coverage from xUnit tests and JavaScript/TypeScript LCOV coverage from Vitest (`test:coverage`).
 - **OpenSSF Scorecard (`scorecard.yml`)**: Audits supply-chain security, dependency pinning, and branch protections.
+- **Pull Request Synchronization (`sync.yml`)**: Synchronizes pull requests targeting `master` and `develop` with upstream branches and verifies Dependabot updates.
 - **GitHub Projects Automation (`project.yml`)**: Automates triage, status transitions, sprint planning, and effort sizing in GitHub Projects v2.

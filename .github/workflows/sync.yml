@@ -2,7 +2,7 @@ name: Sync PRs
 
 on:
     push:
-        branches: [master]
+        branches: [master, develop]
         paths:
             - ".github/**"
             - "src/**"
@@ -47,7 +47,7 @@ jobs:
                   GH_TOKEN: ${{ steps.app_token.outputs.token }}
                   REPO: ${{ github.repository }}
               run: |
-                  prs=$(gh pr list --repo "$REPO" --state open --json number,headRefName,author,title --jq '.[]')
+                  prs=$(gh pr list --repo "$REPO" --base "${{ github.ref_name }}" --state open --json number,headRefName,author,title --jq '.[]')
                   if [ -z "$prs" ]; then
                       echo "No open pull requests found."
                       exit 0
@@ -109,9 +109,6 @@ jobs:
                       gh api --method PATCH "repos/$REPO/pulls/$PR_NUMBER" -f title="$clean_title" || true
                   fi
 
-                  echo "Enabling auto-merge for PR #$PR_NUMBER (requires owner approval and passing checks)..."
-                  gh pr merge "$PR_NUMBER" --repo "$REPO" --auto --squash --subject "$clean_title" --body "" || true
-
             - name: Verify and Merge Passing PR on Workflow Completion
               if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
               env:
@@ -155,11 +152,19 @@ jobs:
                       gh api --method PATCH "repos/$REPO/pulls/$pr_number" -f title="$clean_title" || true
                   fi
 
-                  echo "Checking if PR #$pr_number has required code owner approval..."
-                  review_decision=$(gh pr view "$pr_number" --repo "$REPO" --json reviewDecision --jq '.reviewDecision')
-                  if [ "$review_decision" != "APPROVED" ]; then
-                      echo "PR #$pr_number is not approved yet (reviewDecision: $review_decision). Waiting for code owner review."
-                      exit 0
+                  pr_author=$(gh pr view "$pr_number" --repo "$REPO" --json author --jq '.author.login')
+                  echo "PR #$pr_number author: $pr_author"
+
+                  if [ "$pr_author" = "app/dependabot" ] || [ "$pr_author" = "dependabot" ] || [ "$pr_author" = "dependabot[bot]" ]; then
+                      echo "Dependabot PR verified. Auto-approving..."
+                      gh pr review "$pr_number" --repo "$REPO" --approve --body "Dependabot checks verified successfully." || true
+                  else
+                      echo "Checking if PR #$pr_number has required code owner approval..."
+                      review_decision=$(gh pr view "$pr_number" --repo "$REPO" --json reviewDecision --jq '.reviewDecision')
+                      if [ "$review_decision" != "APPROVED" ]; then
+                          echo "PR #$pr_number is not approved yet (reviewDecision: $review_decision). Waiting for code owner review."
+                          exit 0
+                      fi
                   fi
 
                   echo "Merging approved and verified PR #$pr_number..."
