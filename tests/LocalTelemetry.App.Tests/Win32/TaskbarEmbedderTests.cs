@@ -1574,8 +1574,7 @@ public class TaskbarEmbedderTests
             fakeTray.Show();
 
             // UIAutomation find WidgetsButton
-            typeof(TaskbarEmbedder).GetField("_cachedLeftWidgetRightEdge", BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, -1);
-            typeof(TaskbarEmbedder).GetField("_cachedRightWidgetLeftEdge", BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, -1);
+            TaskbarEmbedder.InvalidateCaches();
             var autoWidgetRes = ((int, int))queryWidgets?.Invoke(null, [fakeTray.Handle, 1920])!;
             autoWidgetRes.Should().NotBe((-1, -1));
 

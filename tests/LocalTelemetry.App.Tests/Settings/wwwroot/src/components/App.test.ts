@@ -443,6 +443,7 @@ describe('App.svelte', () => {
         expect(get(activePage)).toBe('overlay');
 
         // Test bottom bar discard with invalid JSON
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
         pristineSettings.set('invalid json');
         settings.update(s => {
             if (s) s.monitoring.intervalMs = 9999;
@@ -453,6 +454,7 @@ describe('App.svelte', () => {
         expect(barDiscardBtn).not.toBeNull();
         barDiscardBtn.click();
         await tick();
+        consoleErrorSpy.mockRestore();
 
         delete (globalThis as any).window.chrome;
     });

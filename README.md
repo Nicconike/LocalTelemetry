@@ -22,7 +22,7 @@
 
 <p align="center">
     <details>
-        <summary><strong>Continuous Integration, Code Quality & Security Audits</strong></summary>
+        <summary align="center"><strong>Continuous Integration, Code Quality & Security Audits</strong></summary>
         <br />
         <p align="center">
             <a href="https://github.com/Nicconike/LocalTelemetry/actions/workflows/ci.yml">
