@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com), and this project adheres to [Semantic Versioning](https://semver.org) & [Conventional Commits](https://conventionalcommits.org).
 
+## [1.3.0-beta.3](https://github.com/Nicconike/LocalTelemetry/compare/v1.3.0-beta.2...v1.3.0-beta.3) (14-11-2026)
+
+### Features
+
+* **layout,traffic,overlay:** add layout presets, JSONL network traffic import, unique high-contrast themes, and resilient taskbar embedding ([20507fd](https://github.com/Nicconike/LocalTelemetry/commit/20507fdd629ed5a2e5205b7bfaf871bfd0ad98a6))
+
+### Continuous Integration
+
+* **workflows:** restrict auto-approval to dependabot and sync develop ([fed8a04](https://github.com/Nicconike/LocalTelemetry/commit/fed8a049b0b086c6732d292ee117b707c96ef376))
+* **workflows:** enforce app token attribution and target develop in dependabot ([d4dd765](https://github.com/Nicconike/LocalTelemetry/commit/d4dd76546b5ea72ab755467d3d7e7b2532881f2d))
+* **sonar:** restrict push trigger to master and feed frontend coverage ([35596c7](https://github.com/Nicconike/LocalTelemetry/commit/35596c779f0274475c983b90c732cd80644a7b11))
+* **release:** prevent duplicate trailing newlines and expand test coverage ([20d84ca](https://github.com/Nicconike/LocalTelemetry/commit/20d84cac557822e51f29ca9689be20970f7c3788))
+
 ## [1.3.0-beta.2](https://github.com/Nicconike/LocalTelemetry/compare/v1.3.0-beta.1...v1.3.0-beta.2) (2026-10-31)
 
 ### Bug Fixes
