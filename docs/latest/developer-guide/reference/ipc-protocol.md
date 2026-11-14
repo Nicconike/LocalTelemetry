@@ -25,7 +25,7 @@ interface WebMessageEnvelope<T = unknown> {
 
 ## :log-in: Inbound WebMessage Catalog (Frontend -> C# Host)
 
-The C# controller handles 11 inbound message types in `SettingsShell.xaml.cs`.
+The C# controller handles 13 inbound message types in `SettingsShell.xaml.cs`.
 
 ### 1. `getSettings`
 
@@ -157,11 +157,43 @@ Triggers an update check against the GitHub Releases API.
 
 - **Response:** Dispatches outbound `updateCheckResult` message.
 
+### 12. `exportDatabase`
+
+Prompts the user with a Windows Save File Dialog to export all network usage history to a standalone `.jsonl` file.
+
+- **Payload:**
+
+```json
+{
+  "type": "exportDatabase",
+  "payload": {
+    "content": "raw_jsonl_records_string",
+    "defaultFileName": "internet_usage_backup.jsonl"
+  }
+}
+```
+
+### 13. `log`
+
+Forwards frontend diagnostic events and caught exceptions to the C# application logger (`Log.Error` or `Log.Debug`).
+
+- **Payload:**
+
+```json
+{
+  "type": "log",
+  "payload": {
+    "level": "error",
+    "message": "Detailed error context string"
+  }
+}
+```
+
 ---
 
 ## :log-out: Outbound WebMessage Catalog (C# Host -> Frontend)
 
-The C# controller emits 11 outbound event types.
+The C# controller emits 12 outbound event types.
 
 ### 1. `settings`
 
@@ -174,7 +206,7 @@ Supplies the current application settings DTO to hydrate the Svelte store.
 interface OverlayDto {
     visible: boolean;
     doubleClickAction: 'settings' | 'taskmanager' | 'none';
-    position: 'left' | 'right' | 'beside_apps';
+    position: 'left' | 'right';
     taskbarAlignment?: 'left' | 'center'; // Dynamically detected Windows 11 alignment
     taskbarSpaceConstrained?: boolean; // True when available taskbar slot is narrower than overlay
     availableSlotWidth?: number; // Measured pixel width of available taskbar slot
@@ -187,7 +219,43 @@ interface OverlayDto {
     metricColors: Record<string, string>;
     groupColors: Record<string, string>;
     followWindowsTheme: boolean;
+    layoutPreset: 'default' | 'gaming' | 'compact' | 'full' | 'custom';
     row1: string[];
+}
+
+interface AlertsDto {
+    enabled: boolean;
+    alertCpuTemp: boolean;
+    cpuTempMaxC: number;
+    alertCpuUsage: boolean;
+    cpuUsageMaxPct: number;
+    alertCpuFreq: boolean;
+    cpuFreqMaxGhz: number;
+    alertCpuPower: boolean;
+    cpuPowerMaxW: number;
+    alertGpuTemp: boolean;
+    gpuTempMaxC: number;
+    alertGpuUsage: boolean;
+    gpuUsageMaxPct: number;
+    alertGpuVram: boolean;
+    gpuVramMaxPct: number;
+    alertGpuFreq: boolean;
+    gpuFreqMaxMhz: number;
+    alertGpuPower: boolean;
+    gpuPowerMaxW: number;
+    alertRamUsage: boolean;
+    ramUsageMaxPct: number;
+    alertBatteryLow: boolean;
+    batteryLowPct: number;
+    alertNetDaily: boolean;
+    netDailyMaxGb: number;
+    alertNetMonthly: boolean;
+    netMonthlyMaxGb: number;
+    showToastNotif: boolean;
+    flashOverlay: boolean;
+    sustainedSecs: number; // default: 3
+    cooldownSecs: number; // default: 60
+    fireOncePerSession: boolean;
 }
 
 interface UpdateConfigDto {
@@ -382,6 +450,38 @@ Dispatched when the taskbar space constraint state or available slot width chang
 {
   "taskbarSpaceConstrained": true,
   "availableSlotWidth": 320
+}
+```
+
+### 12. `exportDatabaseResult`
+
+Dispatched upon completion, cancellation, or failure of a database export operation.
+
+- **Type:** `"exportDatabaseResult"`
+- **Payload Schema:**
+
+```json
+{
+  "success": true,
+  "filePath": "C:\\Users\\User\\Downloads\\internet_usage_2026-11-14.jsonl",
+  "fileName": "internet_usage_2026-11-14.jsonl"
+}
+```
+
+When cancelled by the user:
+
+```json
+{
+  "cancelled": true
+}
+```
+
+When the export encounters a file system error:
+
+```json
+{
+  "success": false,
+  "error": "Access to the path is denied."
 }
 ```
 

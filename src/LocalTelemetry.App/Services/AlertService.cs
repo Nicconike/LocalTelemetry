@@ -17,17 +17,20 @@ public sealed class AlertService(
     AppSettings cfg,
     TaskbarOverlay overlay,
     NotificationClient notifClient,
-    NetUsageLogger? netLogger = null)
+    NetUsageLogger? netLogger = null,
+    TimeProvider? timeProvider = null)
 {
     private readonly AppSettings _cfg = cfg;
     private readonly TaskbarOverlay _overlay = overlay;
     private readonly NotificationClient _notifClient = notifClient;
     private readonly NetUsageLogger? _netLogger = netLogger;
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
     private readonly Dictionary<string, DateTime> _cooldowns = [];
     private readonly HashSet<string> _firedOnce = [];
     private readonly HashSet<string> _activeAlerts = [];
     private readonly Dictionary<string, float> _lastAlertedValue = [];
-    private readonly DateTime _startupTime = DateTime.UtcNow;
+    private readonly Dictionary<string, DateTime> _breachStartTimes = [];
+    private readonly DateTime _startupTime = (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime;
 
 
     // Evaluation
@@ -38,9 +41,24 @@ public sealed class AlertService(
     /// <param name="snap">The latest telemetry snapshot to evaluate.</param>
     public void Evaluate(TelemetrySnapshot snap)
     {
-        if (!_cfg.Alerts.Enabled) return;
+        if (!_cfg.Alerts.Enabled)
+        {
+            if (_activeAlerts.Count > 0)
+            {
+                foreach (var id in _activeAlerts)
+                {
+                    _overlay.SetAlertActive(id, false);
+                }
+                _activeAlerts.Clear();
+                _lastAlertedValue.Clear();
+                _breachStartTimes.Clear();
+            }
+            return;
+        }
+
+        DateTime now = _timeProvider.GetUtcNow().UtcDateTime;
         // Skip alerts for first 10 seconds to let the notification process start
-        if ((DateTime.UtcNow - _startupTime).TotalSeconds < 10) return;
+        if ((now - _startupTime).TotalSeconds < 10) return;
 
         bool f = _cfg.Monitoring.UseFahrenheit;
 
@@ -48,7 +66,41 @@ public sealed class AlertService(
         EvaluateGpuAlerts(snap, f);
         EvaluateRamAndMiscAlerts(snap);
         EvaluateNetAlerts();
+
+        CleanupInactiveAlerts();
     }
+
+    private void CleanupInactiveAlerts()
+    {
+        if (_activeAlerts.Count == 0) return;
+
+        var toRemove = _activeAlerts.Where(metricId => !IsMetricAlertEnabled(metricId)).ToList();
+        foreach (var metricId in toRemove)
+        {
+            _activeAlerts.Remove(metricId);
+            _lastAlertedValue.Remove(metricId);
+            _breachStartTimes.Remove(metricId);
+            _overlay.SetAlertActive(metricId, false);
+        }
+    }
+
+    private bool IsMetricAlertEnabled(string metricId) => metricId switch
+    {
+        Metrics.CpuTemp => _cfg.Alerts.AlertCpuTemp,
+        Metrics.CpuPct => _cfg.Alerts.AlertCpuUsage,
+        Metrics.CpuFreq => _cfg.Alerts.AlertCpuFreq,
+        Metrics.CpuPower => _cfg.Alerts.AlertCpuPower,
+        Metrics.GpuTemp => _cfg.Alerts.AlertGpuTemp,
+        Metrics.GpuPct => _cfg.Alerts.AlertGpuUsage,
+        Metrics.GpuVram => _cfg.Alerts.AlertGpuVram,
+        Metrics.GpuFreq => _cfg.Alerts.AlertGpuFreq,
+        Metrics.GpuPower => _cfg.Alerts.AlertGpuPower,
+        Metrics.RamPct => _cfg.Alerts.AlertRamUsage,
+        Metrics.BatteryPct => _cfg.Alerts.AlertBatteryLow,
+        "net_daily" => _cfg.Alerts.AlertNetDaily,
+        "net_monthly" => _cfg.Alerts.AlertNetMonthly,
+        _ => false
+    };
 
     private void EvaluateCpuAlerts(TelemetrySnapshot snap, bool useFahrenheit)
     {
@@ -58,7 +110,7 @@ public sealed class AlertService(
                 displayValue: Metrics.TempString(snap.CpuTempPackageC, useFahrenheit),
                 displayThreshold: Metrics.TempString(_cfg.Alerts.CpuTempMaxC, useFahrenheit))
             {
-                Hysteresis = 6f,
+                Hysteresis = 10f,
                 EscalationDelta = 5f
             });
 
@@ -101,7 +153,7 @@ public sealed class AlertService(
                 displayValue: Metrics.TempString(snap.GpuTempC, useFahrenheit),
                 displayThreshold: Metrics.TempString(_cfg.Alerts.GpuTempMaxC, useFahrenheit))
             {
-                Hysteresis = 6f,
+                Hysteresis = 10f,
                 EscalationDelta = 5f
             });
 
@@ -243,11 +295,31 @@ public sealed class AlertService(
 
         if (isBreached)
         {
+            if (!wasActive && _cfg.Alerts.SustainedSecs > 0)
+            {
+                DateTime now = _timeProvider.GetUtcNow().UtcDateTime;
+                if (!_breachStartTimes.TryGetValue(ctx.MetricId, out var startTime))
+                {
+                    _breachStartTimes[ctx.MetricId] = now;
+                    return;
+                }
+
+                if ((now - startTime).TotalSeconds < _cfg.Alerts.SustainedSecs)
+                {
+                    return;
+                }
+            }
+
             HandleBreach(ctx, wasActive);
         }
-        else if (wasActive)
+        else
         {
-            HandleRecovery(ctx);
+            _breachStartTimes.Remove(ctx.MetricId);
+
+            if (wasActive)
+            {
+                HandleRecovery(ctx);
+            }
         }
     }
 
@@ -255,16 +327,21 @@ public sealed class AlertService(
     {
         if (!wasActive)
         {
-            if (!CanFireAlert(ctx.MetricId)) return;
-
             _activeAlerts.Add(ctx.MetricId);
             _lastAlertedValue[ctx.MetricId] = ctx.Value;
+            _overlay.SetAlertActive(ctx.MetricId, true);
+
+            if (!CanFireAlert(ctx.MetricId)) return;
 
             string title = GetAlertTitle(ctx.MetricId, ctx.MetricName, ctx.LowAlert);
             string direction = ctx.LowAlert ? "low" : "high";
             string body = $"{ctx.MetricName} {direction} at {ctx.DisplayValue} (limit: {ctx.DisplayThreshold})";
 
-            DispatchAlert(ctx.MetricId, title, body, $"{ctx.MetricName} reached {ctx.DisplayValue} (limit: {ctx.DisplayThreshold})");
+            string logSummary = ctx.LowAlert
+                ? $"{ctx.MetricName} dropped to {ctx.DisplayValue} (threshold: {ctx.DisplayThreshold})"
+                : $"{ctx.MetricName} reached {ctx.DisplayValue} (threshold: {ctx.DisplayThreshold})";
+
+            DispatchAlert(title, body, logSummary);
             return;
         }
 
@@ -285,7 +362,7 @@ public sealed class AlertService(
             _lastAlertedValue[ctx.MetricId] = ctx.Value;
             string title = $"{ctx.MetricName} Critical";
             string body = $"Surged to {ctx.DisplayValue} (was {lastVal:F0} {ctx.Unit}, limit: {ctx.DisplayThreshold})";
-            DispatchAlert(ctx.MetricId, title, body, $"{ctx.MetricName} critical surge at {ctx.DisplayValue} (limit: {ctx.DisplayThreshold})");
+            DispatchAlert(title, body, $"{ctx.MetricName} surged to {ctx.DisplayValue} (threshold: {ctx.DisplayThreshold})");
         }
     }
 
@@ -299,7 +376,9 @@ public sealed class AlertService(
         {
             _activeAlerts.Remove(ctx.MetricId);
             _lastAlertedValue.Remove(ctx.MetricId);
-            Log.Info($"Alert normalized for {ctx.MetricName}, dropped to {ctx.DisplayValue} (recovered below {ctx.DisplayThreshold})");
+            _breachStartTimes.Remove(ctx.MetricId);
+            _overlay.SetAlertActive(ctx.MetricId, false);
+            Log.Info($"{ctx.MetricName} normalized to {ctx.DisplayValue} (threshold: {ctx.DisplayThreshold})");
         }
     }
 
@@ -320,14 +399,14 @@ public sealed class AlertService(
             : $"{metricName} High";
     }
 
-    private void DispatchAlert(string metricId, string title, string body, string logSummary)
+    private void DispatchAlert(string title, string body, string logSummary)
     {
         var actions = new List<string>();
         if (_cfg.Alerts.ShowToastNotif) actions.Add("Toast");
         if (_cfg.Alerts.FlashOverlay) actions.Add("Overlay Flash");
         string actionStr = actions.Count > 0 ? string.Join(", ", actions) : "None (Muted)";
 
-        Log.Warn($"Alert [{metricId}] triggered for {logSummary} [Actions: {actionStr}]");
+        Log.Warn($"{logSummary} [Actions: {actionStr}]");
 
         if (_cfg.Alerts.FlashOverlay)
             _overlay.Flash(TimeSpan.FromMilliseconds(800));
@@ -338,7 +417,7 @@ public sealed class AlertService(
 
     private bool CanFireAlert(string metricId)
     {
-        DateTime now = DateTime.UtcNow;
+        DateTime now = _timeProvider.GetUtcNow().UtcDateTime;
 
         if (_cfg.Alerts.FireOncePerSession)
             return _firedOnce.Add(metricId);

@@ -24,7 +24,7 @@
         requestTrafficHistoryAll,
         logError,
     } from "../lib/bridge.ts";
-    import { deepClone } from "../lib/utils.ts";
+    import { deepClone, sanitizeSettingsForDirtyCheck } from "../lib/utils.ts";
     import { applyThemeVars } from "../lib/themes.ts";
     import Sidebar from "./Sidebar.svelte";
     import GeneralPage from "./pages/GeneralPage.svelte";
@@ -45,12 +45,27 @@
 
     let isDirty = $derived.by(() => {
         if (!$settings || !$pristineSettings) return false;
-        return JSON.stringify($settings) !== $pristineSettings;
+        try {
+            const currentClean = sanitizeSettingsForDirtyCheck($settings);
+            const pristineClean = sanitizeSettingsForDirtyCheck(
+                JSON.parse($pristineSettings),
+            );
+            return (
+                JSON.stringify(currentClean) !== JSON.stringify(pristineClean)
+            );
+        } catch {
+            return JSON.stringify($settings) !== $pristineSettings;
+        }
     });
 
     $effect(() => {
         $activePage;
         scrollToTop();
+    });
+    $effect(() => {
+        if ($settings?.windowTheme) {
+            applyThemeVars($settings.windowTheme);
+        }
     });
     function scrollToTop() {
         const el = document.getElementById("main-content");
@@ -89,7 +104,9 @@
             });
 
             const unsub5 = onMessage("trafficHistoryAll", (payload) => {
-                const records = payload.records ?? [];
+                const records = Array.isArray(payload)
+                    ? payload
+                    : (payload?.records ?? []);
                 allTrafficHistory.set(records);
                 const now = new Date();
                 const currentMonth = records.filter((r) => {
@@ -102,8 +119,8 @@
                 });
                 trafficHistory.set(currentMonth);
                 trafficToday.set({
-                    downBytes: payload.todayDown ?? 0,
-                    upBytes: payload.todayUp ?? 0,
+                    downBytes: payload?.todayDown ?? 0,
+                    upBytes: payload?.todayUp ?? 0,
                 });
             });
 
@@ -180,6 +197,22 @@
                         },
                     };
                 });
+                pristineSettings.update((p) => {
+                    if (!p) return p;
+                    try {
+                        const parsed = JSON.parse(p);
+                        if (parsed?.overlay) {
+                            parsed.overlay.taskbarSpaceConstrained =
+                                slot.taskbarSpaceConstrained ??
+                                parsed.overlay.taskbarSpaceConstrained;
+                            parsed.overlay.availableSlotWidth =
+                                slot.availableSlotWidth ??
+                                parsed.overlay.availableSlotWidth;
+                            return JSON.stringify(parsed);
+                        }
+                    } catch {}
+                    return p;
+                });
             });
 
             requestSettings();
@@ -206,6 +239,7 @@
         if (!$settings || saving) return;
         saving = true;
         saveStatus.set("saving");
+        pristineSettings.set(JSON.stringify(deepClone($settings)));
         saveSettings($settings);
     }
 
@@ -377,14 +411,14 @@
     .content {
         flex: 1;
         overflow-y: auto;
-        padding: 10px var(--space-6);
+        padding: 12px var(--space-4);
     }
 
     .save-bar {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: var(--space-3) var(--space-6);
+        padding: var(--space-2) var(--space-4);
         background: var(--color-surface);
         border-top: 1px solid var(--color-divider);
         transform: translateY(100%);
@@ -403,7 +437,7 @@
     }
     .save-bar.auto-save {
         height: auto;
-        padding: var(--space-1) var(--space-6);
+        padding: var(--space-1) var(--space-4);
         border: none;
         justify-content: center;
     }

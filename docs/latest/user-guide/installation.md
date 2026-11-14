@@ -53,15 +53,7 @@ In accordance with official [Microsoft Windows 11 Specifications](https://www.mi
 > [!IMPORTANT]
 > **Internet Connection for First-Time Setup**: Because most users will not have the .NET 10 Desktop Runtime installed, an active internet connection is required during initial setup so the installer can fetch the runtime package. Once installed, all subsequent launches, driver initialization, and telemetry operations run completely offline.
 
-### :package: Method 2: Windows Package Manager (WinGet)
-
-Install via [WinGet](https://learn.microsoft.com/en-us/windows/package-manager/winget/):
-
-```powershell
-winget install --id Nicconike.LocalTelemetry
-```
-
-### :inbox: Method 3: Scoop Package Manager (Direct Repository Bucket)
+### :inbox: Method 2: Scoop Package Manager (Direct Repository Bucket)
 
 Install directly from the GitHub repository via [Scoop](https://scoop.sh/):
 
@@ -77,7 +69,7 @@ To update LocalTelemetry to the latest release at any time:
 scoop update localtelemetry
 ```
 
-### :folder-archive: Method 4: Portable ZIP (Zero Installation)
+### :folder-archive: Method 3: Portable ZIP (Zero Installation)
 
 1. **Install Prerequisites**: Because portable mode does not include an installation wizard to auto-fetch runtimes, ensure you have installed:
     - [**Microsoft .NET 10 Desktop Runtime (x64)**](https://aka.ms/dotnet/10.0/windowsdesktop-runtime-win-x64.exe)

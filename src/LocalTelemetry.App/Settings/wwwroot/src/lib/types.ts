@@ -89,6 +89,7 @@ export interface AlertsDto {
     netMonthlyMaxGb: number;
     showToastNotif: boolean;
     flashOverlay: boolean;
+    sustainedSecs: number;
     cooldownSecs: number;
     fireOncePerSession: boolean;
 }
@@ -236,6 +237,7 @@ export type BridgeMessageType =
     | "checkForUpdates"
     | "openFolder"
     | "openUrl"
+    | "exportDatabase"
     | "log";
 
 export type BridgeEventType =
@@ -249,6 +251,7 @@ export type BridgeEventType =
     | "trafficToday"
     | "importDatResult"
     | "windowsUsageImportResult"
+    | "exportDatabaseResult"
     | "updateCheckResult"
     | "taskbarSlotChanged";
 

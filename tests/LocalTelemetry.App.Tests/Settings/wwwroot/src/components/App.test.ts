@@ -82,6 +82,7 @@ function makePayload(): SettingsDto {
             netMonthlyMaxGb: 1000,
             showToastNotif: true,
             flashOverlay: true,
+            sustainedSecs: 3,
             cooldownSecs: 30,
             fireOncePerSession: false,
         },
@@ -104,6 +105,7 @@ describe('App.svelte', () => {
         document.body.innerHTML = '';
         settings.set(null);
         pristineSettings.set('');
+        saveStatus.set('idle');
         activePage.set('alerts');
     });
 
@@ -486,6 +488,8 @@ describe('App.svelte', () => {
         await tick();
         expect(get(settings)?.overlay.taskbarSpaceConstrained).toBe(true);
         expect(get(settings)?.overlay.availableSlotWidth).toBe(260);
+        const saveBar = document.querySelector('.save-bar');
+        expect(saveBar?.classList.contains('visible')).toBe(false);
 
         // When settings is null
         settings.set(null as any);

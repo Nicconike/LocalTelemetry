@@ -463,7 +463,7 @@ public static class WindowsNetworkUsageProvider
         if (historicalAdded > 0)
             Diagnostics.Log.Info($"Imported {historicalAdded} days of network usage history ({start:dd-MM-yyyy} to {end:dd-MM-yyyy})");
         else
-            Diagnostics.Log.Info("Network usage history is up to date");
+            Diagnostics.Log.Debug("Network usage history is up to date");
 
         return historicalAdded;
     }
@@ -505,7 +505,7 @@ public static class WindowsNetworkUsageProvider
                 {
                     historyFile.SetDay(todayDate.Year, todayDate.Month, todayDate.Day, tr.DownBytes, tr.UpBytes, tr.InterfaceType, "WindowsImport");
                     todayUpdated = true;
-                    Diagnostics.Log.Info($"Today's network usage baseline with download {Metrics.Format("net_down", new() { NetDownBps = tr.DownBytes }, false, false).Replace("/s", "")}, upload {Metrics.Format("net_up", new() { NetUpBps = tr.UpBytes }, false, false).Replace("/s", "")}");
+                    Diagnostics.Log.Debug($"Today's network usage baseline with download {Metrics.Format("net_down", new() { NetDownBps = tr.DownBytes }, false, false).Replace("/s", "")}, upload {Metrics.Format("net_up", new() { NetUpBps = tr.UpBytes }, false, false).Replace("/s", "")}");
                 }
                 else
                 {
@@ -517,7 +517,7 @@ public static class WindowsNetworkUsageProvider
                         long finalUp = Math.Max(curToday.Value.UpBytes, tr.UpBytes);
                         historyFile.SetDay(todayDate.Year, todayDate.Month, todayDate.Day, finalDown, finalUp, tr.InterfaceType, "WindowsImport");
                         todayUpdated = true;
-                        Diagnostics.Log.Info($"Updated today's network usage baseline with download {Metrics.Format("net_down", new() { NetDownBps = finalDown }, false, false).Replace("/s", "")}, upload {Metrics.Format("net_up", new() { NetUpBps = finalUp }, false, false).Replace("/s", "")}");
+                        Diagnostics.Log.Debug($"Updated today's network usage baseline with download {Metrics.Format("net_down", new() { NetDownBps = finalDown }, false, false).Replace("/s", "")}, upload {Metrics.Format("net_up", new() { NetUpBps = finalUp }, false, false).Replace("/s", "")}");
                     }
                 }
             }

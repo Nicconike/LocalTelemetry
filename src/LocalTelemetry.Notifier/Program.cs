@@ -128,14 +128,14 @@ internal static class Program
             {
                 using var server = CreatePipeServer();
 
-                NotifierLog.Info("Waiting for connection...");
+                NotifierLog.Debug("Waiting for connection...");
                 await server.WaitForConnectionAsync(ct);
-                NotifierLog.Info("Client connected");
+                NotifierLog.Debug("Client connected");
 
                 using var reader = new StreamReader(server.Stream, Encoding.UTF8);
                 await ProcessMessageStreamAsync(reader, cts, toastDispatcher);
 
-                NotifierLog.Info("Client disconnected");
+                NotifierLog.Debug("Client disconnected");
             }
             catch (OperationCanceledException) { throw; }
             catch (Exception ex)

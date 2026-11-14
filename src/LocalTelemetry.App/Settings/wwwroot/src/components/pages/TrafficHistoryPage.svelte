@@ -12,12 +12,32 @@
         importDatContent,
         importWindowsUsage,
         requestTrafficHistoryAll,
+        exportDatabase,
+        openFolder,
+        onMessage,
     } from "../../lib/bridge.ts";
 
+    let exportModalData = $state(null);
+    let exportError = $state(null);
+
     onMount(() => {
-        if ($allTrafficHistory.length === 0) {
-            requestTrafficHistoryAll();
-        }
+        requestTrafficHistoryAll();
+
+        const unsubExport = onMessage("exportDatabaseResult", (payload) => {
+            if (payload?.cancelled) return;
+            if (payload?.success && payload?.filePath) {
+                exportModalData = {
+                    filePath: payload.filePath,
+                    fileName: payload.fileName || "internet_usage.jsonl",
+                };
+            } else if (payload?.error) {
+                exportError = payload.error;
+            }
+        });
+
+        return () => {
+            unsubExport();
+        };
     });
 
     function formatDateInput(date) {
@@ -31,7 +51,6 @@
     let winStartDate = $state(formatDateInput(sevenDaysAgo));
     let winEndDate = $state(formatDateInput(today));
     let isWindowsImporting = $state(false);
-    let dismissTimer = null;
 
     function toDmy(isoStr) {
         if (!isoStr) return "";
@@ -43,9 +62,14 @@
 
     function validateDateString(str) {
         if (!str || !str.trim()) return "Date is required.";
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(str))
+        let y, m, d;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+            [y, m, d] = str.split("-").map(Number);
+        } else if (/^\d{2}-\d{2}-\d{4}$/.test(str)) {
+            [d, m, y] = str.split("-").map(Number);
+        } else {
             return "Invalid date (use DD-MM-YYYY).";
-        const [y, m, d] = str.split("-").map(Number);
+        }
         if (y < 2000 || y > 2100 || m < 1 || m > 12 || d < 1 || d > 31)
             return "Invalid date.";
         const dateObj = new Date(y, m - 1, d);
@@ -103,12 +127,41 @@
     $effect(() => {
         if ($windowsImportResult) {
             isWindowsImporting = false;
-            if (dismissTimer) clearTimeout(dismissTimer);
-            dismissTimer = setTimeout(() => {
+            const timer = setTimeout(() => {
                 windowsImportResult.set(null);
             }, 6000);
+            return () => clearTimeout(timer);
         }
     });
+
+    $effect(() => {
+        if ($importResult) {
+            const timer = setTimeout(() => {
+                importResult.set(null);
+            }, 6000);
+            return () => clearTimeout(timer);
+        }
+    });
+
+    function handleExportDatabase() {
+        if (!$allTrafficHistory || $allTrafficHistory.length === 0) return;
+        const lines = $allTrafficHistory
+            .map((r) =>
+                JSON.stringify({
+                    date: r.date,
+                    download_bytes: r.downBytes,
+                    upload_bytes: r.upBytes,
+                    total_bytes: r.downBytes + r.upBytes,
+                    interface: r.interfaceName || "Ethernet",
+                    source: r.source || "LocalTelemetry",
+                }),
+            )
+            .join("\n");
+
+        const now = new Date();
+        const dateTag = `${String(now.getDate()).padStart(2, "0")}-${String(now.getMonth() + 1).padStart(2, "0")}-${now.getFullYear()}`;
+        exportDatabase(lines + "\n", `internet_usage_${dateTag}.jsonl`);
+    }
 
     const _initDate = new Date();
     let currentYear = $state(_initDate.getFullYear());
@@ -488,29 +541,51 @@
             <div class="card-header">
                 <span class="card-title">Traffic Database & Backup</span>
                 <span class="card-desc"
-                    >Import backup files (.jsonl or legacy .dat format)</span
+                    >Import or export backup files (.jsonl or legacy .dat
+                    format)</span
                 >
             </div>
             <div class="dat-row">
                 <input
                     type="file"
-                    accept=".jsonl,.dat"
+                    accept=".jsonl,.dat,.json"
                     class="file-input"
                     id="dat-file-input"
                     onchange={(e) => {
-                        const file = e.target?.files?.[0];
+                        const target = e.target;
+                        const file = target?.files?.[0];
                         if (!file) return;
+                        importResult.set(null);
                         const reader = new FileReader();
                         reader.onload = () => {
-                            importDatContent(reader.result);
+                            if (typeof reader.result === "string") {
+                                importDatContent(reader.result);
+                            }
+                        };
+                        reader.onerror = () => {
+                            importResult.set({
+                                daysImported: 0,
+                                error:
+                                    "Failed to read file: " +
+                                    (reader.error?.message || "Unknown error"),
+                            });
+                        };
+                        reader.onloadend = () => {
+                            target.value = "";
                         };
                         reader.readAsText(file);
-                        e.target.value = "";
                     }}
                 />
                 <label for="dat-file-input" class="file-label"
                     >Select .jsonl or .dat file</label
                 >
+                <button
+                    type="button"
+                    class="action-btn"
+                    onclick={handleExportDatabase}
+                >
+                    Export Database (.jsonl)
+                </button>
                 {#if $importResult}
                     <span
                         class="import-status"
@@ -527,6 +602,76 @@
         </div>
     </div>
 </div>
+
+{#if exportModalData}
+    <div
+        class="modal-overlay"
+        role="button"
+        tabindex="-1"
+        aria-label="Close export dialog"
+        onclick={() => (exportModalData = null)}
+        onkeydown={(e) => {
+            if (e.key === "Escape") exportModalData = null;
+        }}
+    >
+        <div
+            class="export-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="export-modal-title"
+            tabindex="-1"
+            onclick={(e) => e.stopPropagation()}
+            onkeydown={(e) => {
+                if (e.key === "Escape") exportModalData = null;
+                e.stopPropagation();
+            }}
+        >
+            <div class="modal-header">
+                <span class="modal-icon-badge" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none">
+                        <path
+                            d="M20 6L9 17L4 12"
+                            stroke="currentColor"
+                            stroke-width="2.5"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        />
+                    </svg>
+                </span>
+                <h3 id="export-modal-title">Database Exported</h3>
+            </div>
+            <p class="modal-msg">
+                Your network usage data backup was saved successfully.
+            </p>
+            <div class="file-summary-card">
+                <div class="file-summary-name">{exportModalData.fileName}</div>
+                <div class="file-summary-path" title={exportModalData.filePath}>
+                    {exportModalData.filePath}
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button
+                    type="button"
+                    class="btn-open-folder"
+                    onclick={() => {
+                        if (exportModalData?.filePath) {
+                            openFolder({ path: exportModalData.filePath });
+                        }
+                    }}
+                >
+                    Open Folder
+                </button>
+                <button
+                    type="button"
+                    class="btn-close"
+                    onclick={() => (exportModalData = null)}
+                >
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+{/if}
 
 <style>
     .page {
@@ -969,5 +1114,111 @@
     }
     .import-status.error {
         color: var(--color-danger);
+    }
+
+    .modal-overlay {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: oklch(0 0 0 / 0.55);
+        backdrop-filter: blur(4px);
+        z-index: 100;
+    }
+    .export-modal {
+        width: min(420px, calc(100% - 48px));
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-lg);
+        padding: var(--space-5);
+        box-shadow: var(--shadow-md);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+    }
+    .modal-header {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+    }
+    .modal-icon-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: oklch(0.7 0.18 145 / 0.15);
+        color: var(--color-success);
+        flex-shrink: 0;
+    }
+    .modal-header h3 {
+        font-size: var(--text-base);
+        font-weight: 600;
+        color: var(--color-text);
+        margin: 0;
+    }
+    .modal-msg {
+        font-size: var(--text-sm);
+        color: var(--color-text-muted);
+        line-height: 1.4;
+        margin: 0;
+    }
+    .file-summary-card {
+        background: var(--color-bg);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
+        padding: var(--space-3);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+        overflow: hidden;
+    }
+    .file-summary-name {
+        font-size: var(--text-sm);
+        font-weight: 600;
+        color: var(--color-text);
+        word-break: break-all;
+    }
+    .file-summary-path {
+        font-size: var(--text-xs);
+        color: var(--color-text-muted);
+        word-break: break-all;
+        font-family: monospace;
+    }
+    .modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: var(--space-2);
+        margin-top: var(--space-2);
+    }
+    .btn-open-folder {
+        padding: var(--space-2) var(--space-4);
+        border-radius: var(--radius-md);
+        font-size: var(--text-sm);
+        font-weight: 500;
+        border: 1px solid var(--color-border);
+        background: transparent;
+        color: var(--color-text);
+        cursor: pointer;
+        transition: background var(--transition);
+    }
+    .btn-open-folder:hover {
+        background: var(--color-surface-dynamic);
+    }
+    .btn-close {
+        padding: var(--space-2) var(--space-4);
+        border-radius: var(--radius-md);
+        font-size: var(--text-sm);
+        font-weight: 500;
+        border: none;
+        background: var(--color-primary);
+        color: #ffffff;
+        cursor: pointer;
+        transition: opacity var(--transition);
+    }
+    .btn-close:hover {
+        opacity: 0.9;
     }
 </style>

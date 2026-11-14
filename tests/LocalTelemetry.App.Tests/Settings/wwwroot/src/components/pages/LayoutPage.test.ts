@@ -357,4 +357,188 @@ describe('LayoutPage.svelte', () => {
             await tick();
         }
     });
+
+    it('renders layout presets and row badges correctly', async () => {
+        component = mount(LayoutPage, { target: document.body });
+        await tick();
+
+        const pills = document.body.querySelectorAll('.preset-pill') as NodeListOf<HTMLButtonElement>;
+        expect(pills.length).toBeGreaterThanOrEqual(4);
+        expect(document.body.textContent).toContain('Default');
+        expect(document.body.textContent).toContain('Gaming');
+        expect(document.body.textContent).toContain('Compact');
+        expect(document.body.textContent).toContain('Full Telemetry');
+
+        // Verify initial custom indicator exists when row1 does not match a preset
+        const customCard = document.body.querySelector('.custom-card');
+        expect(customCard).not.toBeNull();
+        expect(customCard!.textContent).toContain('Custom');
+
+        // Row badges check (even = Top Row, odd = Bottom Row)
+        const rowBadges = document.body.querySelectorAll('.row-badge');
+        expect(rowBadges[0].textContent?.trim()).toBe('Top Row');
+        expect(rowBadges[1].textContent?.trim()).toBe('Bottom Row');
+        expect(rowBadges[2].textContent?.trim()).toBe('Top Row');
+    });
+
+    it('switches between presets and updates active preset indicator', async () => {
+        component = mount(LayoutPage, { target: document.body });
+        await tick();
+
+        const pills = Array.from(document.body.querySelectorAll('.preset-pill')) as HTMLButtonElement[];
+        const gamingBtn = pills.find(p => p.textContent?.includes('Gaming'));
+        const compactBtn = pills.find(p => p.textContent?.includes('Compact'));
+        const defaultBtn = pills.find(p => p.textContent?.includes('Default'));
+        const fullBtn = pills.find(p => p.textContent?.includes('Full'));
+
+        expect(gamingBtn).toBeDefined();
+        expect(compactBtn).toBeDefined();
+        expect(defaultBtn).toBeDefined();
+        expect(fullBtn).toBeDefined();
+
+        // 1. Click Gaming preset: CPU columns first, then GPU, RAM, Network
+        gamingBtn!.click();
+        await tick();
+
+        let row1 = get(settings)!.overlay.row1;
+        expect(row1[0]).toBe('cpu_pct'); // Col 0 Top
+        expect(row1[1]).toBe('cpu_temp'); // Col 0 Bot
+        expect(row1[2]).toBe('cpu_freq'); // Col 1 Top
+        expect(row1[3]).toBe('cpu_power'); // Col 1 Bot
+        expect(row1[4]).toBe('gpu_pct'); // Col 2 Top
+        expect(row1[5]).toBe('gpu_temp'); // Col 2 Bot
+        expect(gamingBtn!.classList.contains('active')).toBe(true);
+
+        // 2. Click Compact preset
+        compactBtn!.click();
+        await tick();
+
+        row1 = get(settings)!.overlay.row1;
+        expect(row1).toEqual(['cpu_pct', 'gpu_pct', 'ram_pct', 'gpu_vram', 'net_down', 'net_up']);
+        expect(compactBtn!.classList.contains('active')).toBe(true);
+
+        // 3. Click Full Telemetry preset
+        fullBtn!.click();
+        await tick();
+
+        row1 = get(settings)!.overlay.row1;
+        expect(row1.length).toBeGreaterThan(10);
+        expect(fullBtn!.classList.contains('active')).toBe(true);
+
+        // 4. Click Default preset
+        defaultBtn!.click();
+        await tick();
+
+        row1 = get(settings)!.overlay.row1;
+        expect(row1).toContain('cpu_pct');
+        expect(row1).toContain('cpu_temp');
+        expect(defaultBtn!.classList.contains('active')).toBe(true);
+
+        // 5. Test new presets: Thermals & Power, Workstation, Network & Traffic, Micro
+        const thermalsBtn = pills.find(p => p.textContent?.includes('Thermals'));
+        const workstationBtn = pills.find(p => p.textContent?.includes('Workstation'));
+        const networkBtn = pills.find(p => p.textContent?.includes('Network'));
+        const microBtn = pills.find(p => p.textContent?.includes('Micro'));
+
+        expect(thermalsBtn).toBeDefined();
+        expect(workstationBtn).toBeDefined();
+        expect(networkBtn).toBeDefined();
+        expect(microBtn).toBeDefined();
+
+        // Thermals: CPU Usage over Temp, CPU Clock over Power, GPU Usage over Temp, GPU Clock over Power
+        thermalsBtn!.click();
+        await tick();
+        row1 = get(settings)!.overlay.row1;
+        expect(row1).toEqual(['cpu_pct', 'cpu_temp', 'cpu_freq', 'cpu_power', 'gpu_pct', 'gpu_temp', 'gpu_freq', 'gpu_power']);
+        expect(thermalsBtn!.classList.contains('active')).toBe(true);
+
+        // Workstation: CPU over Temp, RAM % over Used, Net Down over Up, Disk Read over Write
+        workstationBtn!.click();
+        await tick();
+        row1 = get(settings)!.overlay.row1;
+        expect(row1).toEqual(['cpu_pct', 'cpu_temp', 'ram_pct', 'ram_used', 'net_down', 'net_up', 'disk_disk0_read', 'disk_disk0_write']);
+        expect(workstationBtn!.classList.contains('active')).toBe(true);
+
+        // Network: CPU % over RAM %, Net Down over Up, Net Total over RAM Used
+        networkBtn!.click();
+        await tick();
+        row1 = get(settings)!.overlay.row1;
+        expect(row1).toEqual(['cpu_pct', 'ram_pct', 'net_down', 'net_up', 'net_total', 'ram_used']);
+        expect(networkBtn!.classList.contains('active')).toBe(true);
+
+        // Micro: CPU % over GPU %, RAM % over Net Down
+        microBtn!.click();
+        await tick();
+        row1 = get(settings)!.overlay.row1;
+        expect(row1).toEqual(['cpu_pct', 'gpu_pct', 'ram_pct', 'net_down']);
+        expect(microBtn!.classList.contains('active')).toBe(true);
+
+        // 6. Custom edit un-highlights preset and shows 'Custom' badge
+        const moveDownBtns = document.body.querySelectorAll('button[title="Move down"]') as NodeListOf<HTMLButtonElement>;
+        moveDownBtns[0].click();
+        await tick();
+
+        expect(document.body.textContent).toContain('Custom');
+        expect(microBtn!.classList.contains('active')).toBe(false);
+    });
+
+    it('renders live mini-taskbar preview and allows swapping top and bottom metrics within a column', async () => {
+        component = mount(LayoutPage, { target: document.body });
+        await tick();
+
+        // Check mini taskbar widget exists
+        const preview = document.body.querySelector('.mini-taskbar-widget');
+        expect(preview).not.toBeNull();
+        expect(preview!.textContent).toContain('CPU %');
+
+        // Check column cards exist
+        const colCards = document.body.querySelectorAll('.column-card');
+        expect(colCards.length).toBeGreaterThanOrEqual(2);
+
+        // Click swap button in Column 1 (swapping cpu_pct and ram_pct)
+        const swapBtn = document.body.querySelector('button.btn-swap') as HTMLButtonElement | null;
+        expect(swapBtn).not.toBeNull();
+
+        swapBtn!.click();
+        await tick();
+
+        const row1 = get(settings)!.overlay.row1;
+        expect(row1[0]).toBe('ram_pct');
+        expect(row1[1]).toBe('cpu_pct');
+    });
+
+    it('moves entire column left and right via column reorder buttons', async () => {
+        settings.set({
+            monitoring: { trackCpu: true, trackGpu: true, trackRam: true, trackNet: true },
+            overlay: { row1: ['cpu_pct', 'cpu_temp', 'gpu_pct', 'gpu_temp'] },
+        } as any);
+
+        component = mount(LayoutPage, { target: document.body });
+        await tick();
+
+        // Col 0: cpu_pct, cpu_temp | Col 1: gpu_pct, gpu_temp
+        const moveRightBtns = document.body.querySelectorAll('button[title="Move column right"]') as NodeListOf<HTMLButtonElement>;
+        expect(moveRightBtns.length).toBeGreaterThanOrEqual(1);
+
+        // Move Col 0 to the right
+        moveRightBtns[0].click();
+        await tick();
+
+        let row1 = get(settings)!.overlay.row1;
+        expect(row1[0]).toBe('gpu_pct');
+        expect(row1[1]).toBe('gpu_temp');
+        expect(row1[2]).toBe('cpu_pct');
+        expect(row1[3]).toBe('cpu_temp');
+
+        // Move Col 1 back to the left
+        const moveLeftBtns = document.body.querySelectorAll('button[title="Move column left"]') as NodeListOf<HTMLButtonElement>;
+        moveLeftBtns[1].click();
+        await tick();
+
+        row1 = get(settings)!.overlay.row1;
+        expect(row1[0]).toBe('cpu_pct');
+        expect(row1[1]).toBe('cpu_temp');
+        expect(row1[2]).toBe('gpu_pct');
+        expect(row1[3]).toBe('gpu_temp');
+    });
 });

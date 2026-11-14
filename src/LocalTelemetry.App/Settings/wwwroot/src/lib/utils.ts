@@ -30,6 +30,23 @@ export function deepClone<T>(obj: T): T {
 }
 
 /**
+ * Strips runtime-only status properties (such as taskbar slot constraints and alignment)
+ * so that environmental measurements do not mark user configuration as dirty.
+ */
+export function sanitizeSettingsForDirtyCheck<T extends Record<string, unknown> | null | undefined>(s: T): T {
+    if (!s) return s;
+    const clone = deepClone(s) as Record<string, unknown>;
+    if (clone.overlay && typeof clone.overlay === 'object') {
+        const overlay = { ...(clone.overlay as Record<string, unknown>) };
+        delete overlay.taskbarSpaceConstrained;
+        delete overlay.availableSlotWidth;
+        delete overlay.taskbarAlignment;
+        clone.overlay = overlay;
+    }
+    return clone as T;
+}
+
+/**
  * Formats a date string ("DD-MM-YYYY", "YYYY-MM-DD", or ISO timestamp) into "DD-MM-YYYY" format.
  */
 export function formatDate(dateStr: string | null | undefined): string {

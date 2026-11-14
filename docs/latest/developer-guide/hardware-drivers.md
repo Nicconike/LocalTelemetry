@@ -187,7 +187,7 @@ When Windows display adapters restart (e.g. driver update, GPU TDR recovery, or 
 - Read and write speeds are polled directly through Windows `PhysicalDisk` Performance Counters:
   - `\PhysicalDisk(_Total)\Disk Read Bytes/sec` & `Disk Write Bytes/sec`
   - Per-disk instance counters: `\PhysicalDisk(0 C:)\...`, `\PhysicalDisk(1 D:)\...`
-- Disks are registered dynamically in `Metrics.RegisterDisk("disk0", "DISK0")` to allow per-drive layout customization.
+- Disks are registered dynamically using normalized architecture labels (`ComputeDiskArchitectureLabels`, e.g. `NVMe 1`, `NVMe 2`, `SATA`) in `Metrics.RegisterDisk("disk0", label)` to allow per-drive layout customization.
 
 ### :hard-drive: Win32 Storage IOCTL & Boot Drive Detection (DiskQuery)
 
@@ -207,7 +207,7 @@ When Windows display adapters restart (e.g. driver update, GPU TDR recovery, or 
   - Scans table `{973F5D5C-1D90-4944-BE8E-24B94231A174}` for network interface data usage.
   - Maps interface GUIDs to physical adapter names.
   - Feeds historical daily upload and download octets into `TrafficHistoryStore.cs` for calendar display.
-- **Backup Importer Subsystems**: `JsonlTrafficImporter.cs` parses line-delimited JSON usage records from `internet_usage.jsonl` backup files. `DatImporter.cs` parses legacy plaintext `.dat` files. Both merge records into `TrafficHistoryStore.cs`.
+- **Backup Importer Subsystems**: `JsonlTrafficImporter.cs` parses line-delimited JSON usage records or JSON arrays from `internet_usage.jsonl` backup files. `DatImporter.cs` parses legacy plaintext `.dat` files. Both merge records into `TrafficHistoryStore.cs`.
 
 ---
 

@@ -1,4 +1,4 @@
-import { clamp, formatBytes, formatTrafficBytes, deepClone, debounce, formatDate } from '../../../../../../src/LocalTelemetry.App/Settings/wwwroot/src/lib/utils';
+import { clamp, formatBytes, formatTrafficBytes, deepClone, debounce, formatDate, sanitizeSettingsForDirtyCheck } from '../../../../../../src/LocalTelemetry.App/Settings/wwwroot/src/lib/utils';
 
 describe('utils.ts', () => {
     it('clamp should constrain numbers within range', () => {
@@ -56,5 +56,25 @@ describe('utils.ts', () => {
         expect(formatDate('2026/2/1')).toBe('01-02-2026');
         expect(formatDate('October 21, 2026')).toBe('21-10-2026');
         expect(formatDate('not-a-date-value')).toBe('not-a-date-value');
+    });
+
+    it('sanitizeSettingsForDirtyCheck should strip runtime overlay properties', () => {
+        expect(sanitizeSettingsForDirtyCheck(null)).toBeNull();
+        expect(sanitizeSettingsForDirtyCheck(undefined)).toBeUndefined();
+
+        const input = {
+            monitoring: { intervalMs: 1000 },
+            overlay: {
+                scale: 100,
+                taskbarSpaceConstrained: true,
+                availableSlotWidth: 240,
+                taskbarAlignment: 'center',
+            },
+        };
+        const cleaned = sanitizeSettingsForDirtyCheck(input as any);
+        expect(cleaned.overlay.scale).toBe(100);
+        expect('taskbarSpaceConstrained' in cleaned.overlay).toBe(false);
+        expect('availableSlotWidth' in cleaned.overlay).toBe(false);
+        expect('taskbarAlignment' in cleaned.overlay).toBe(false);
     });
 });

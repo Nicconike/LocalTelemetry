@@ -11,7 +11,7 @@ namespace LocalTelemetry.Core.Diagnostics;
 /// </summary>
 public static class Log
 {
-    private static readonly object _lock = new();
+    private static readonly System.Threading.Lock _lock = new();
     private static StreamWriter? _sysWriter;
     private static StreamWriter? _metricWriter;
     private static string? _systemLogPath;
@@ -58,7 +58,11 @@ public static class Log
             _loggedMessages.Clear();
 
             RotateSystemLog(systemLogPath);
-            try { _sysWriter = new StreamWriter(systemLogPath, append: true) { AutoFlush = true }; }
+            try
+            {
+                var fs = new FileStream(systemLogPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
+                _sysWriter = new StreamWriter(fs) { AutoFlush = true };
+            }
             catch (Exception ex)
             {
                 LastInitError = ex;
@@ -126,7 +130,11 @@ public static class Log
 
     private static void OpenMetricsWriter()
     {
-        try { _metricWriter = new StreamWriter(_metricsPath!, append: true) { AutoFlush = true }; }
+        try
+        {
+            var fs = new FileStream(_metricsPath!, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
+            _metricWriter = new StreamWriter(fs) { AutoFlush = true };
+        }
         catch (Exception ex)
         {
             LastMetricError = ex;
@@ -404,7 +412,11 @@ public static class Log
 
                 RotateSystemLog(_systemLogPath);
 
-                try { _sysWriter = new StreamWriter(_systemLogPath, append: true) { AutoFlush = true }; }
+                try
+                {
+                    var fs = new FileStream(_systemLogPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
+                    _sysWriter = new StreamWriter(fs) { AutoFlush = true };
+                }
                 catch (Exception ex)
                 {
                     LastInitError = ex;
@@ -429,16 +441,10 @@ public static class Log
             try
             {
                 string timestamp = DateTime.Now.ToString("dd-MM-yyyy hh:mm:ss.fff tt");
-                string osDesc = !string.IsNullOrWhiteSpace(osName)
-                    ? osName
-                    : System.Runtime.InteropServices.RuntimeInformation.OSDescription;
                 string divider = new('-', 80);
 
                 _sysWriter.WriteLine(divider);
-                _sysWriter.WriteLine($"  LocalTelemetry v{version} Started | Session: {timestamp}");
-                _sysWriter.WriteLine($"  OS: {osDesc} | Admin: {(isAdmin ? "Yes" : "No")} | Mode: {mode}");
-                _sysWriter.WriteLine($"  Config: {configPath}");
-                _sysWriter.WriteLine(divider);
+                _sysWriter.WriteLine($"LocalTelemetry v{version} Started | Session: {timestamp} | Admin: {(isAdmin ? "Yes" : "No")} | Mode: {mode}");
             }
             catch (Exception ex)
             {
@@ -461,13 +467,7 @@ public static class Log
                 string uptimeStr = uptime.TotalHours >= 1
                     ? $"{(int)uptime.TotalHours}h {uptime.Minutes}m {uptime.Seconds}s"
                     : $"{uptime.Minutes}m {uptime.Seconds}s";
-
-                string divider = new('-', 80);
-
-                _sysWriter.WriteLine(divider);
-                _sysWriter.WriteLine($"  LocalTelemetry Terminated | Reason: {reason}");
-                _sysWriter.WriteLine($"  Timestamp: {timestamp} | Session Uptime: {uptimeStr}");
-                _sysWriter.WriteLine(divider);
+                _sysWriter.WriteLine($"LocalTelemetry Terminated | Reason: {reason} | Timestamp: {timestamp} | Session Uptime: {uptimeStr}");
             }
             catch (Exception ex)
             {

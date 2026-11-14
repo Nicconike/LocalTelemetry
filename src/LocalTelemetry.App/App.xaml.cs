@@ -3,6 +3,7 @@ using System.IO;
 using System.Runtime.Versioning;
 using System.Security.Principal;
 using System.Windows;
+using System.Windows.Interop;
 using LocalTelemetry.App.Overlay;
 using LocalTelemetry.App.Services;
 using LocalTelemetry.App.Settings;
@@ -36,11 +37,38 @@ public sealed partial class App : WpfApplication
     private AlertService? _alerts;
     private SettingsShell? _settingsShell;
     private AppSettings _cfg = new AppSettings();
-    private SynchronizationContext? _uiCtx;
     private NotificationClient? _notifClient;
     private Process? _notifierProcess;
     private bool _notifierLaunched;
     private DateTime _startupUtc;
+    private Mutex? _singleInstanceMutex;
+    private EventWaitHandle? _singleInstanceEvent;
+    private RegisteredWaitHandle? _singleInstanceWaitHandle;
+    internal static string SingleInstanceMutexName { get; set; } = @"Local\LocalTelemetry_App_SingleInstance";
+    internal static string SingleInstanceEventName { get; set; } = @"Local\LocalTelemetry_App_ShowSettingsEvent";
+    internal const string ShowSettingsMessageName = "LocalTelemetry_ShowSettingsWindow_Message";
+    internal static bool EnforceSingleInstance { get; set; } = true;
+
+    // Out-of-process Settings synchronization
+    private bool _isSettingsProcess;
+    private Mutex? _settingsMutex;
+    private EventWaitHandle? _settingsShowEvent;
+    private RegisteredWaitHandle? _settingsShowWaitHandle;
+    private EventWaitHandle? _settingsCloseEvent;
+    private RegisteredWaitHandle? _settingsCloseWaitHandle;
+    private EventWaitHandle? _settingsReloadEvent;
+    private RegisteredWaitHandle? _settingsReloadWaitHandle;
+    private EventWaitHandle? _settingsTrafficUpdatedEvent;
+    private RegisteredWaitHandle? _settingsTrafficUpdatedWaitHandle;
+    private Process? _settingsProcess;
+
+    internal static string SettingsMutexName { get; set; } = @"Local\LocalTelemetry_Settings_SingleInstance";
+    internal static string SettingsShowEventName { get; set; } = @"Local\LocalTelemetry_Settings_ShowEvent";
+    internal static string SettingsReloadEventName { get; set; } = @"Local\LocalTelemetry_Settings_ReloadEvent";
+    internal static string SettingsCloseEventName { get; set; } = @"Local\LocalTelemetry_Settings_CloseEvent";
+    internal static string SettingsTrafficUpdatedEventName { get; set; } = @"Local\LocalTelemetry_Settings_TrafficUpdatedEvent";
+    internal static bool LaunchSettingsOutOfProcess { get; set; } = false;
+    internal static Action<ProcessStartInfo>? SettingsProcessLauncher { get; set; }
 
     // Test seams
     internal static Func<bool>? IsAdministratorCheck { get; set; }
@@ -135,14 +163,97 @@ public sealed partial class App : WpfApplication
             Environment.Exit(0);
     }
 
+    private static void SignalRunningMainInstance()
+    {
+        Log.Info("Another instance of LocalTelemetry is already running. Signaling it to open Settings.");
+        try
+        {
+            NativeMethods.AllowSetForegroundWindow(NativeMethods.ASFW_ANY);
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "AllowSetForegroundWindow failed");
+        }
+
+        try
+        {
+            if (EventWaitHandle.TryOpenExisting(SingleInstanceEventName, out var showEvent))
+            {
+                using (showEvent)
+                {
+                    showEvent.Set();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to signal single-instance event");
+        }
+    }
+
+    private void RegisterSingleInstanceWaitHandle()
+    {
+        try
+        {
+            _singleInstanceEvent = new EventWaitHandle(false, EventResetMode.AutoReset, SingleInstanceEventName);
+            _singleInstanceWaitHandle = ThreadPool.RegisterWaitForSingleObject(
+                _singleInstanceEvent,
+                (state, timedOut) =>
+                {
+                    if (!timedOut)
+                    {
+                        Dispatcher.InvokeAsync(OpenSettings);
+                    }
+                },
+                null,
+                -1,
+                false);
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to register single-instance EventWaitHandle");
+        }
+    }
+
+    private bool TryAcquireMainSingleInstance()
+    {
+        if (!EnforceSingleInstance) return true;
+
+        _singleInstanceMutex = new Mutex(true, SingleInstanceMutexName, out bool isNewInstance);
+        if (!isNewInstance)
+        {
+            SignalRunningMainInstance();
+            if (ExitHandler is not null)
+                ExitHandler(0);
+            else
+                Environment.Exit(0);
+            return false;
+        }
+
+        RegisterSingleInstanceWaitHandle();
+        return true;
+    }
+
     // Startup
     protected override void OnStartup(WpfStartupEventArgs e)
     {
         base.OnStartup(e);
 
+        bool isSettingsMode = Array.Exists(e.Args, a => string.Equals(a, "--settings", StringComparison.OrdinalIgnoreCase));
+        if (isSettingsMode)
+        {
+            StartSettingsMode(e.Args);
+            return;
+        }
+
         if (!IsAdministrator() && !Array.Exists(e.Args, a => a == "--elevated"))
         {
             ElevateAndExit(e.Args);
+            return;
+        }
+
+        if (!TryAcquireMainSingleInstance())
+        {
             return;
         }
 
@@ -157,6 +268,251 @@ public sealed partial class App : WpfApplication
         StartBackgroundInitialization(historyFile);
     }
 
+    private static void SignalRunningSettingsInstance()
+    {
+        Log.Info("Another instance of Settings is already running. Signaling it to foreground.");
+        try
+        {
+            NativeMethods.AllowSetForegroundWindow(NativeMethods.ASFW_ANY);
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "AllowSetForegroundWindow failed");
+        }
+
+        try
+        {
+            if (EventWaitHandle.TryOpenExisting(SettingsShowEventName, out var showEvent))
+            {
+                using (showEvent)
+                {
+                    showEvent.Set();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to signal settings show event");
+        }
+    }
+
+    private bool TryAcquireSettingsSingleInstance()
+    {
+        if (!EnforceSingleInstance) return true;
+
+        _settingsMutex = new Mutex(true, SettingsMutexName, out bool isNewInstance);
+        if (!isNewInstance)
+        {
+            SignalRunningSettingsInstance();
+            if (ExitHandler is not null)
+                ExitHandler(0);
+            else
+                Environment.Exit(0);
+            return false;
+        }
+
+        return true;
+    }
+
+    private void ActivateSettingsShellWindow()
+    {
+        if (_settingsShell is null) return;
+        if (_settingsShell.WindowState == WindowState.Minimized)
+        {
+            _settingsShell.WindowState = WindowState.Normal;
+        }
+        _settingsShell.Show();
+        _settingsShell.Activate();
+        _settingsShell.Focus();
+        var hwnd = new WindowInteropHelper(_settingsShell).Handle;
+        if (hwnd != IntPtr.Zero)
+        {
+            NativeMethods.ShowWindow(hwnd, NativeMethods.SW_RESTORE);
+            NativeMethods.SetForegroundWindow(hwnd);
+        }
+    }
+
+    private void RegisterSettingsWaitHandles()
+    {
+        if (!EnforceSingleInstance) return;
+
+        try
+        {
+            _settingsShowEvent = new EventWaitHandle(false, EventResetMode.AutoReset, SettingsShowEventName);
+            _settingsShowWaitHandle = ThreadPool.RegisterWaitForSingleObject(
+                _settingsShowEvent,
+                (state, timedOut) =>
+                {
+                    if (!timedOut)
+                    {
+                        Dispatcher.InvokeAsync(ActivateSettingsShellWindow);
+                    }
+                },
+                null,
+                -1,
+                false);
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to register settings show EventWaitHandle");
+        }
+
+        try
+        {
+            _settingsCloseEvent = new EventWaitHandle(false, EventResetMode.AutoReset, SettingsCloseEventName);
+            _settingsCloseWaitHandle = ThreadPool.RegisterWaitForSingleObject(
+                _settingsCloseEvent,
+                (state, timedOut) =>
+                {
+                    if (!timedOut)
+                    {
+                        Dispatcher.InvokeAsync(() =>
+                        {
+                            _settingsShell?.Close();
+                            Shutdown(0);
+                        });
+                    }
+                },
+                null,
+                -1,
+                false);
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to register settings close EventWaitHandle");
+        }
+
+        try
+        {
+            _settingsTrafficUpdatedEvent = new EventWaitHandle(false, EventResetMode.AutoReset, SettingsTrafficUpdatedEventName);
+            _settingsTrafficUpdatedWaitHandle = ThreadPool.RegisterWaitForSingleObject(
+                _settingsTrafficUpdatedEvent,
+                (state, timedOut) =>
+                {
+                    if (!timedOut)
+                    {
+                        Dispatcher.InvokeAsync(() =>
+                        {
+                            if (_settingsShell is not null)
+                            {
+                                Log.Debug("Settings process received cross-process traffic update notification");
+                                _settingsShell.RefreshTrafficHistory();
+                            }
+                        });
+                    }
+                },
+                null,
+                -1,
+                false);
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to register settings traffic updated EventWaitHandle");
+        }
+    }
+
+    private void SetupSettingsProcessMainWindow()
+    {
+        RegisterExceptionHandlers();
+        ShutdownMode = ShutdownMode.OnMainWindowClose;
+
+        string exeDir = ExeDirOverride ?? AppContext.BaseDirectory;
+        AppSettings.InitPaths(exeDir);
+        UpdateConfig.DefaultIncludePrereleases = UpdateCheckService.IsPrereleaseVersion();
+        _cfg = AppSettings.Load();
+        ApplyVendorColors(_cfg);
+
+        Log.Init(AppSettings.SystemLogPath, AppSettings.MetricsLogPath, _cfg.EnableFileLogging);
+        Log.SystemLevel = Log.ParseLevel(_cfg.SystemLogLevel);
+
+        var historyFile = new TrafficHistoryFile(AppSettings.NetUsagePath);
+        historyFile.Load();
+        TrafficHistoryStore.Initialize(historyFile);
+
+        _settingsShell = new SettingsShell(_cfg);
+        MainWindow = _settingsShell;
+
+        _settingsShell.SettingsApplied += () =>
+        {
+            try
+            {
+                if (EventWaitHandle.TryOpenExisting(SettingsReloadEventName, out var reloadEvent))
+                {
+                    using (reloadEvent)
+                    {
+                        reloadEvent.Set();
+                    }
+                    Log.Debug("Signaled daemon to reload configuration");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "Failed to signal settings reload event to daemon");
+            }
+        };
+
+        _settingsShell.Closed += (_, _) =>
+        {
+            _settingsShell = null;
+            Shutdown(0);
+        };
+
+        if (!SuppressSettingsWindowForTesting)
+        {
+            _settingsShell.Show();
+            _settingsShell.Activate();
+        }
+    }
+
+    private void StartSettingsMode(string[] args)
+    {
+        _isSettingsProcess = true;
+        if (!IsAdministrator() && !Array.Exists(args, a => a == "--elevated"))
+        {
+            ElevateAndExit(args);
+            return;
+        }
+
+        if (!TryAcquireSettingsSingleInstance())
+        {
+            return;
+        }
+
+        RegisterSettingsWaitHandles();
+        SetupSettingsProcessMainWindow();
+    }
+
+    private void RegisterSettingsReloadListener()
+    {
+        try
+        {
+            _settingsReloadEvent = new EventWaitHandle(false, EventResetMode.AutoReset, SettingsReloadEventName);
+            _settingsReloadWaitHandle = ThreadPool.RegisterWaitForSingleObject(
+                _settingsReloadEvent,
+                (state, timedOut) =>
+                {
+                    if (!timedOut)
+                    {
+                        Dispatcher.InvokeAsync(() =>
+                        {
+                            Log.Info("Configuration change detected from Settings process; reloading.");
+                            var reloaded = AppSettings.Load();
+                            _cfg.CopyFrom(reloaded);
+                            ApplyVendorColors(_cfg);
+                            HandleSettingsApplied();
+                        });
+                    }
+                },
+                null,
+                -1,
+                false);
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to register settings reload EventWaitHandle");
+        }
+    }
+
     private void RegisterExceptionHandlers()
     {
         AppDomain.CurrentDomain.UnhandledException += HandleUnhandledException;
@@ -168,7 +524,6 @@ public sealed partial class App : WpfApplication
     private bool InitializeConfigurationAndLogging()
     {
         _startupUtc = DateTime.UtcNow;
-        _uiCtx = SynchronizationContext.Current;
 
         string exeDir = ExeDirOverride ?? AppContext.BaseDirectory;
         AppSettings.InitPaths(exeDir);
@@ -209,7 +564,7 @@ public sealed partial class App : WpfApplication
         _alerts = _services.GetRequiredService<AlertService>();
         _monitor = _services.GetRequiredService<HardwareMonitor>();
         _notifClient = _services.GetRequiredService<NotificationClient>();
-        Log.Info("Core services initialized");
+        Log.Debug("Core services initialized");
 
         var historyFile = new TrafficHistoryFile(AppSettings.NetUsagePath);
         historyFile.Load();
@@ -218,15 +573,17 @@ public sealed partial class App : WpfApplication
         Log.Debug("Traffic history logger initialized");
 
         TrafficHistoryStore.Initialize(historyFile);
+        TrafficHistoryStore.HistoryUpdated += SignalTrafficUpdated;
         Log.Debug("Traffic history store initialized");
 
         if (fileRunAtStartup != _cfg.RunAtStartup)
         {
             _cfg.Save();
-            Log.Info($"Synchronized Windows startup state (startup {(_cfg.RunAtStartup ? "enabled" : "disabled")})");
+            Log.Debug($"Synchronized Windows startup state (startup {(_cfg.RunAtStartup ? "enabled" : "disabled")})");
         }
 
         WireEvents();
+        RegisterSettingsReloadListener();
         return historyFile;
     }
 
@@ -346,6 +703,7 @@ public sealed partial class App : WpfApplication
             if (SrumImporterAction is not null)
             {
                 SrumImporterAction(historyFile.FilePath).GetAwaiter().GetResult();
+                SignalTrafficUpdated();
                 return;
             }
 
@@ -356,10 +714,30 @@ public sealed partial class App : WpfApplication
                 TaskScheduler.Default).Unwrap();
             srumTask.GetAwaiter().GetResult();
             Log.Debug("Historical network usage import completed");
+            SignalTrafficUpdated();
         }
         catch (Exception ex)
         {
             Log.Error(ex, "Failed to import network usage history");
+        }
+    }
+
+    private static void SignalTrafficUpdated()
+    {
+        try
+        {
+            if (EventWaitHandle.TryOpenExisting(SettingsTrafficUpdatedEventName, out var trafficEvent))
+            {
+                using (trafficEvent)
+                {
+                    trafficEvent.Set();
+                }
+                Log.Debug("Signaled Settings process that traffic history was updated");
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to signal traffic history updated event");
         }
     }
 
@@ -440,6 +818,7 @@ public sealed partial class App : WpfApplication
         };
 
         _overlay.IsContextMenuOpen = () => _tray.IsOverlayContextMenuOpen;
+        _overlay.IsPointInsideContextMenu = pt => _tray.IsPointInsideOverlayContextMenu(pt);
         _overlay.GetContextMenuBounds = () => _tray.OverlayContextMenuBounds;
         _overlay.CloseContextMenuAction = () => _tray.CloseOverlayContextMenu();
 
@@ -461,7 +840,6 @@ public sealed partial class App : WpfApplication
             }
             else if (string.Equals(action, "settings", StringComparison.OrdinalIgnoreCase))
             {
-                Log.Info("Opened Settings (double-click)");
                 OpenSettings();
             }
         };
@@ -506,7 +884,7 @@ public sealed partial class App : WpfApplication
         _overlay!.UpdateSnapshot(snap);
 
         if (_tray is not null)
-            _uiCtx?.Post(_ => _tray.Update(snap), null);
+            Dispatcher.InvokeAsync(() => _tray.Update(snap));
     }
 
     // Tray action handlers
@@ -514,41 +892,194 @@ public sealed partial class App : WpfApplication
     {
         if (SuppressSettingsWindowForTesting) return;
 
-        if (_settingsShell is null || !_settingsShell.IsLoaded)
+        if (Dispatcher is not null && !Dispatcher.CheckAccess())
         {
-            if (SettingsShellFactory is not null)
+            Dispatcher.InvokeAsync(OpenSettings);
+            return;
+        }
+
+        if (SettingsShellFactory is not null || !LaunchSettingsOutOfProcess)
+        {
+            RunInProcessSettings();
+            return;
+        }
+
+        LaunchSettingsProcess();
+    }
+
+    private void LaunchSettingsProcess()
+    {
+        try
+        {
+            NativeMethods.AllowSetForegroundWindow(NativeMethods.ASFW_ANY);
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "AllowSetForegroundWindow failed");
+        }
+
+        bool settingsRunning = false;
+        try
+        {
+            if (Mutex.TryOpenExisting(SettingsMutexName, out var mutex))
             {
-                _settingsShell = SettingsShellFactory(_cfg, _netLogger!);
+                using (mutex)
+                {
+                    settingsRunning = true;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to check existing Settings mutex");
+        }
+
+        if (settingsRunning)
+        {
+            try
+            {
+                if (EventWaitHandle.TryOpenExisting(SettingsShowEventName, out var showEvent))
+                {
+                    using (showEvent)
+                    {
+                        showEvent.Set();
+                        Log.Info("Settings process already running; signaled show event");
+                        return;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "Failed to signal show event to existing Settings process");
+            }
+        }
+
+        try
+        {
+            if (_settingsProcess is { HasExited: true })
+            {
+                _settingsProcess.Dispose();
+                _settingsProcess = null;
+            }
+
+            string exePath = Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "LocalTelemetry.exe");
+            var psi = new ProcessStartInfo
+            {
+                FileName = exePath,
+                Arguments = "--settings",
+                UseShellExecute = true,
+            };
+
+            if (SettingsProcessLauncher is not null)
+            {
+                SettingsProcessLauncher(psi);
+            }
+            else if (ProcessStarter is not null)
+            {
+                _settingsProcess = ProcessStarter(psi);
             }
             else
             {
-                _settingsShell = new SettingsShell(_cfg, _netLogger!);
+                _settingsProcess = Process.Start(psi);
             }
+
+            Log.Info("Launched Settings process");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to launch Settings process");
+        }
+    }
+
+    private bool TryActivateExistingSettingsShell()
+    {
+        if (_settingsShell is null) return false;
+
+        var handle = new WindowInteropHelper(_settingsShell).Handle;
+        if (handle != IntPtr.Zero && NativeMethods.IsWindow(handle))
+        {
+            if (_settingsShell.WindowState == WindowState.Minimized)
+            {
+                _settingsShell.WindowState = WindowState.Normal;
+            }
+            _settingsShell.Show();
+            _settingsShell.Activate();
+            _settingsShell.Focus();
+            NativeMethods.ShowWindow(handle, NativeMethods.SW_RESTORE);
+            NativeMethods.SetForegroundWindow(handle);
+            return true;
+        }
+
+        _settingsShell = null;
+        return false;
+    }
+
+    private void WireSettingsShellLifecycle(Action<bool, int> slotChangedHandler)
+    {
+        if (_overlay is not null)
+        {
+            _overlay.TaskbarSpaceConstraintChanged += slotChangedHandler;
+        }
+
+        Log.Debug("SettingsShell created");
+        _settingsShell!.SettingsApplied += HandleSettingsApplied;
+        _settingsShell.Closed += (_, _) =>
+        {
+            if (_overlay is not null)
+            {
+                _overlay.TaskbarSpaceConstraintChanged -= slotChangedHandler;
+            }
+            Log.Debug("SettingsShell closed, clearing reference and trimming working set");
+            _settingsShell = null;
+
+            try
+            {
+                NativeMethods.EmptyWorkingSet(Process.GetCurrentProcess().Handle);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "Failed to trim working set after SettingsShell closed");
+            }
+        };
+    }
+
+    private void RunInProcessSettings()
+    {
+        try
+        {
+            Log.Info("Opening Settings window in-process");
+
+            if (TryActivateExistingSettingsShell())
+            {
+                return;
+            }
+
+            _settingsShell = SettingsShellFactory is not null
+                ? SettingsShellFactory(_cfg, _netLogger!)
+                : new SettingsShell(_cfg, _netLogger!);
+
             _settingsShell.TaskbarSlotStatusProvider = () => (_overlay?.IsTaskbarSpaceConstrained ?? false, _overlay?.AvailableSlotWidth ?? 0);
             Action<bool, int> slotChangedHandler = (constrained, width) =>
             {
                 _settingsShell?.NotifyTaskbarSlotChanged(constrained, width);
             };
-            if (_overlay is not null)
+
+            WireSettingsShellLifecycle(slotChangedHandler);
+
+            _settingsShell.Show();
+            _settingsShell.Activate();
+            _settingsShell.Focus();
+            var hwnd = new WindowInteropHelper(_settingsShell).Handle;
+            if (hwnd != IntPtr.Zero)
             {
-                _overlay.TaskbarSpaceConstraintChanged += slotChangedHandler;
+                NativeMethods.ShowWindow(hwnd, NativeMethods.SW_RESTORE);
+                NativeMethods.SetForegroundWindow(hwnd);
             }
-
-            Log.Debug("SettingsShell created");
-            _settingsShell.SettingsApplied += HandleSettingsApplied;
-            _settingsShell.Closed += (_, _) =>
-            {
-                if (_overlay is not null)
-                {
-                    _overlay.TaskbarSpaceConstraintChanged -= slotChangedHandler;
-                }
-                Log.Debug("SettingsShell closed, clearing reference");
-                _settingsShell = null;
-            };
         }
-
-        _settingsShell.Show();
-        _settingsShell.Activate();
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to open in-process settings window");
+        }
     }
 
     private int _lastPollIntervalMs;
@@ -605,7 +1136,22 @@ public sealed partial class App : WpfApplication
     /// <summary>Full quit - stops monitor, saves settings, exits process.</summary>
     private void QuitApp()
     {
+        Log.Info("Application quit requested by user");
         QuitAppAction?.Invoke();
+        try
+        {
+            if (EventWaitHandle.TryOpenExisting(SettingsCloseEventName, out var closeEvent))
+            {
+                using (closeEvent)
+                {
+                    closeEvent.Set();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to signal settings close event during QuitApp");
+        }
         _settingsShell?.Close();
         Shutdown();
     }
@@ -706,9 +1252,164 @@ public sealed partial class App : WpfApplication
         }
     }
 
+    private void ExitSettingsProcess(WpfExitEventArgs e)
+    {
+        Log.Debug("Settings process exiting cleanly");
+        _settingsShowWaitHandle?.Unregister(null);
+        _settingsShowWaitHandle = null;
+        _settingsShowEvent?.Dispose();
+        _settingsShowEvent = null;
+
+        _settingsCloseWaitHandle?.Unregister(null);
+        _settingsCloseWaitHandle = null;
+        _settingsCloseEvent?.Dispose();
+        _settingsCloseEvent = null;
+
+        _settingsTrafficUpdatedWaitHandle?.Unregister(null);
+        _settingsTrafficUpdatedWaitHandle = null;
+        _settingsTrafficUpdatedEvent?.Dispose();
+        _settingsTrafficUpdatedEvent = null;
+
+        if (_settingsMutex is not null)
+        {
+            try
+            {
+                _settingsMutex.ReleaseMutex();
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "Exception releasing settings mutex");
+            }
+            _settingsMutex.Dispose();
+            _settingsMutex = null;
+        }
+
+        base.OnExit(e);
+    }
+
+    private void SendGracefulShutdownToNotifier()
+    {
+        if (_notifClient is null) return;
+        try
+        {
+            _notifClient.SendShutdownAsync()
+                .Wait(TimeSpan.FromSeconds(2));
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Shutdown notification to notifier process failed");
+        }
+        _notifClient.Dispose();
+    }
+
+    private void CloseExternalSettingsProcess()
+    {
+        try
+        {
+            if (EventWaitHandle.TryOpenExisting(SettingsCloseEventName, out var closeEvent))
+            {
+                using (closeEvent)
+                {
+                    closeEvent.Set();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to signal settings close event");
+        }
+
+        if (_settingsProcess is { HasExited: false })
+        {
+            try
+            {
+                if (!_settingsProcess.WaitForExit(500))
+                {
+                    _settingsProcess.Kill();
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "Exception terminating settings process");
+            }
+            finally
+            {
+                _settingsProcess.Dispose();
+                _settingsProcess = null;
+            }
+        }
+        else
+        {
+            _settingsProcess?.Dispose();
+            _settingsProcess = null;
+        }
+    }
+
+    private void CleanUpIpcAndInstanceHandles()
+    {
+        _settingsReloadWaitHandle?.Unregister(null);
+        _settingsReloadWaitHandle = null;
+        _settingsReloadEvent?.Dispose();
+        _settingsReloadEvent = null;
+
+        _settingsShowWaitHandle?.Unregister(null);
+        _settingsShowWaitHandle = null;
+        _settingsShowEvent?.Dispose();
+        _settingsShowEvent = null;
+
+        _settingsCloseWaitHandle?.Unregister(null);
+        _settingsCloseWaitHandle = null;
+        _settingsCloseEvent?.Dispose();
+        _settingsCloseEvent = null;
+
+        _settingsTrafficUpdatedWaitHandle?.Unregister(null);
+        _settingsTrafficUpdatedWaitHandle = null;
+        _settingsTrafficUpdatedEvent?.Dispose();
+        _settingsTrafficUpdatedEvent = null;
+
+        if (_settingsMutex is not null)
+        {
+            try
+            {
+                _settingsMutex.ReleaseMutex();
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "Exception releasing settings mutex");
+            }
+            _settingsMutex.Dispose();
+            _settingsMutex = null;
+        }
+
+        _singleInstanceWaitHandle?.Unregister(null);
+        _singleInstanceWaitHandle = null;
+        _singleInstanceEvent?.Dispose();
+        _singleInstanceEvent = null;
+
+        if (_singleInstanceMutex is not null)
+        {
+            try
+            {
+                _singleInstanceMutex.ReleaseMutex();
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "Exception releasing single-instance mutex");
+            }
+            _singleInstanceMutex.Dispose();
+            _singleInstanceMutex = null;
+        }
+    }
+
     // Shutdown
     protected override void OnExit(WpfExitEventArgs e)
     {
+        if (_isSettingsProcess)
+        {
+            ExitSettingsProcess(e);
+            return;
+        }
+
         // Stop the monitor first so no new snapshots arrive during teardown.
         _monitor?.Stop();
 
@@ -722,25 +1423,15 @@ public sealed partial class App : WpfApplication
         _netLogger?.Dispose();
         _monitor?.Dispose();
 
-        // Send graceful shutdown to the notifier via named pipe.
-        // The notifier also monitors our PID and self-terminates if we crash.
-        if (_notifClient is not null)
-        {
-            try
-            {
-                _notifClient.SendShutdownAsync()
-                    .Wait(TimeSpan.FromSeconds(2));
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Shutdown notification to notifier process failed");
-            }
-            _notifClient.Dispose();
-        }
+        SendGracefulShutdownToNotifier();
 
         _services?.Dispose();
         _cfg.Save();
         Log.Shutdown();
+
+        CloseExternalSettingsProcess();
+        CleanUpIpcAndInstanceHandles();
+
         base.OnExit(e);
     }
 }

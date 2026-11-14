@@ -201,6 +201,33 @@ public class TaskbarOverlayTests
     }
 
     [WpfFact]
+    public void SetAlertActive_UpdatesAlertStateAndChangesBrushColor()
+    {
+        var cfg = new AppSettings();
+        var embedder = new TaskbarEmbedder(cfg);
+        using var overlay = new TaskbarOverlay(cfg, embedder);
+
+        overlay.IsAlertActive(Metrics.CpuTemp).Should().BeFalse();
+
+        var makeBrush = typeof(TaskbarOverlay).GetMethod("MakeValueBrush", BindingFlags.NonPublic | BindingFlags.Instance);
+        var normalBrush = (SolidBrush)makeBrush!.Invoke(overlay, [Metrics.CpuTemp, cfg.Overlay])!;
+
+        overlay.SetAlertActive(Metrics.CpuTemp, true);
+        overlay.IsAlertActive(Metrics.CpuTemp).Should().BeTrue();
+
+        var alertBrush = (SolidBrush)makeBrush.Invoke(overlay, [Metrics.CpuTemp, cfg.Overlay])!;
+        alertBrush.Color.R.Should().Be(255);
+        alertBrush.Color.G.Should().Be(68);
+        alertBrush.Color.B.Should().Be(68);
+
+        overlay.SetAlertActive(Metrics.CpuTemp, false);
+        overlay.IsAlertActive(Metrics.CpuTemp).Should().BeFalse();
+
+        var revertedBrush = (SolidBrush)makeBrush.Invoke(overlay, [Metrics.CpuTemp, cfg.Overlay])!;
+        revertedBrush.Color.Should().Be(normalBrush.Color);
+    }
+
+    [WpfFact]
     public void TaskbarOverlay_FullWindowLifecycleAndWndProc()
     {
         var cfg = new AppSettings();
@@ -317,8 +344,9 @@ public class TaskbarOverlayTests
         {
             System.Runtime.InteropServices.Marshal.StructureToPtr(new NativeMethods.MSLLHOOKSTRUCT { pt = new NativeMethods.POINT { X = 10, Y = 10 } }, structPtr, false);
 
-            // WM_RBUTTONUP (context menu)
-            mouseProc!.Invoke(overlay, [0, (IntPtr)NativeMethods.WM_RBUTTONUP, structPtr]);
+            // WM_RBUTTONDOWN then WM_RBUTTONUP (context menu)
+            mouseProc!.Invoke(overlay, [0, (IntPtr)NativeMethods.WM_RBUTTONDOWN, structPtr]);
+            mouseProc.Invoke(overlay, [0, (IntPtr)NativeMethods.WM_RBUTTONUP, structPtr]);
 
             // WM_LBUTTONDOWN & WM_LBUTTONDBLCLK
             mouseProc.Invoke(overlay, [0, (IntPtr)NativeMethods.WM_LBUTTONDOWN, structPtr]);
@@ -434,6 +462,22 @@ public class TaskbarOverlayTests
         // Unhandled
         object[] unhandledArgs = [0x9999, IntPtr.Zero];
         ((bool)handleMouse.Invoke(overlay, unhandledArgs)!).Should().BeFalse();
+    }
+
+    [WpfFact]
+    public void TaskbarOverlay_IsOverlayOrTaskbarAtPoint_ValidatesPointHierarchy()
+    {
+        var cfg = new AppSettings();
+        var embedder = new TaskbarEmbedder(cfg);
+        using var overlay = new TaskbarOverlay(cfg, embedder);
+        overlay.Show();
+
+        var method = typeof(TaskbarOverlay).GetMethod("IsOverlayOrTaskbarAtPoint", BindingFlags.NonPublic | BindingFlags.Instance);
+        method.Should().NotBeNull();
+
+        // In test mode (SkipEmbedForTesting || SkipShowWindowForTesting), returns true
+        var result = (bool)method.Invoke(overlay, [new NativeMethods.POINT { X = 50, Y = 50 }])!;
+        result.Should().BeTrue();
     }
 
     [WpfFact]

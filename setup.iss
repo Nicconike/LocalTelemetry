@@ -51,7 +51,7 @@ Name: desktopicon; Description: "Create a &Desktop shortcut"; GroupDescription: 
 Name: startup; Description: "Run LocalTelemetry at Windows &startup"; GroupDescription: "System options:"
 
 [Files]
-Source: "publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "Uninstall.bat,*.xml,*.pdb"
+Source: "publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "Uninstall.bat,*.xml,*.pdb,*.log,Microsoft.Windows.SDK.NET.dll,WinRT.Runtime.dll"
 
 [Icons]
 Name: "{group}\LocalTelemetry"; Filename: "{app}\LocalTelemetry.exe"; Tasks: startmenuicon

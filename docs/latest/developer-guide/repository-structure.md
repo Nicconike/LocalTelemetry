@@ -31,8 +31,7 @@ LocalTelemetry/
 │   ├── scripts/                 # Documentation snapshot & versioning build scripts
 │   ├── package.json             # Documentation dependencies (Bun runtime)
 │   └── tsconfig.json            # Documentation TypeScript compiler configuration
-├── packaging/                   # Third-party distribution manifests
-│   └── winget/                  # Windows Package Manager manifests (Nicconike.LocalTelemetry.*.yaml)
+├── packaging/                   # Third-party distribution packaging
 ├── src/                         # Production source code (.NET 10 + Svelte 5)
 │   ├── LocalTelemetry.Core/     # Hardware polling engine, PawnIO, SystemInfo, Config
 │   │   ├── Config/              # AppSettings.cs, schema migration & atomic persistence

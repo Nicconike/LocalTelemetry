@@ -9,10 +9,11 @@ public sealed class NetUsageLogger : IDisposable
 {
     private readonly AppSettings _cfg;
     private readonly TrafficHistoryFile _historyFile;
-    private readonly object _lock = new();
+    private readonly System.Threading.Lock _lock = new();
     private readonly Dictionary<string, (double down, double up)> _perInterface = [];
     private DateTime _lastDate;
     private DateTime _lastSnapTime;
+    private DateTime _lastFlushTime = DateTime.UtcNow;
 
     public TrafficHistoryFile HistoryFile => _historyFile;
 
@@ -60,6 +61,8 @@ public sealed class NetUsageLogger : IDisposable
     public void Record(TelemetrySnapshot snap)
     {
         if (!_cfg.NetUsage.Enabled) return;
+        if (double.IsNaN(snap.NetDownBps) || double.IsNaN(snap.NetUpBps)) return;
+        if (snap.NetDownBps < 0 || snap.NetUpBps < 0) return;
 
         string activeNic = snap.NetInterfaceName;
         double actualDt = CalculateDeltaSeconds(snap.Timestamp);
@@ -80,15 +83,34 @@ public sealed class NetUsageLogger : IDisposable
 
             var val = _perInterface[activeNic];
             _historyFile.SetDay(today.Year, today.Month, today.Day, (long)val.down, (long)val.up, activeNic, "LocalTelemetry");
+
+            if ((DateTime.UtcNow - _lastFlushTime).TotalSeconds >= 60)
+            {
+                _lastFlushTime = DateTime.UtcNow;
+                _historyFile.Save();
+            }
         }
     }
 
     private double CalculateDeltaSeconds(DateTime timestamp)
     {
-        double dt = _lastSnapTime == default
-            ? _cfg.Monitoring.PollIntervalMs / 1000.0
-            : (timestamp - _lastSnapTime).TotalSeconds;
+        double normalDt = _cfg.Monitoring.PollIntervalMs / 1000.0;
+        if (_lastSnapTime == default)
+        {
+            _lastSnapTime = timestamp;
+            return normalDt;
+        }
+
+        double dt = (timestamp - _lastSnapTime).TotalSeconds;
         _lastSnapTime = timestamp;
+
+        // If clock jumped backwards or excessive pause occurred (e.g. system sleep/hibernation),
+        // clamp dt to poll interval to prevent huge anomalous traffic spikes.
+        if (dt <= 0 || dt > normalDt * 3.0)
+        {
+            return normalDt;
+        }
+
         return dt;
     }
 
@@ -107,6 +129,7 @@ public sealed class NetUsageLogger : IDisposable
         _lastDate = today;
 
         SeedTodayRecords(today);
+        TrafficHistoryStore.NotifyHistoryUpdated();
     }
 
     private void SeedTodayRecords(DateTime today)

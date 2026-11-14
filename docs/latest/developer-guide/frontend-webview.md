@@ -71,7 +71,7 @@ sequenceDiagram
 
 ## :bridge: IPC Bridge Message Catalog Summary
 
-The WebView2 bridge supports 11 inbound requests from JavaScript and 11 outbound responses/events from C#:
+The WebView2 bridge supports 13 inbound requests from JavaScript and 12 outbound responses/events from C#:
 
 ### :log-in: Inbound Messages (Frontend `postMessage` -> C# Host)
 
@@ -88,6 +88,8 @@ The WebView2 bridge supports 11 inbound requests from JavaScript and 11 outbound
 | `importDat` | `{ content: string }` | Imports `.jsonl` backup files or legacy plaintext `.dat` bandwidth logs. |
 | `importWindowsUsage` | `{ startDate: string, endDate: string }` | Direct JET/ESE database extraction from Windows `SRUDB.dat`. |
 | `checkForUpdates` | `{ force: boolean }` | Triggers a GitHub Releases update query (forced or cached). |
+| `exportDatabase` | `{ content: string, defaultFileName: string }` | Prompts native Windows Save File Dialog to export bandwidth history to `.jsonl`. |
+| `log` | `{ level: string, message: string, detail?: string }` | Forwards frontend diagnostic events and caught exceptions to application logger. |
 
 ### :log-out: Outbound Messages (C# Host `PostWebMessageAsJson` -> Frontend)
 
@@ -104,6 +106,7 @@ The WebView2 bridge supports 11 inbound requests from JavaScript and 11 outbound
 | `windowsUsageImportResult` | `{ success, daysImported, downBytes, upBytes, message }` | Reports count of imported ESE database records and byte totals. |
 | `updateCheckResult` | `UpdateCheckResultDto` | Update availability status, latest version tag, and release URL. |
 | `taskbarSlotChanged` | `{ taskbarSpaceConstrained, availableSlotWidth }` | Real-time notification when taskbar space constraint or measured slot width changes. |
+| `exportDatabaseResult` | `{ success?: boolean, filePath?: string, fileName?: string, cancelled?: boolean, error?: string }` | Reports database export status with saved file path, cancellation, or error. |
 
 ::: tip Protocol Reference
 For full JSON schema payloads, field-by-field definitions, and TypeScript interfaces, see the [WebView2 & Named Pipe IPC Protocol Reference](reference/ipc-protocol.md).

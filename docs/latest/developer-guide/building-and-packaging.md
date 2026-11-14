@@ -1,6 +1,6 @@
-# :package: Building & Packaging (Inno Setup 7, WinGet & Scoop)
+# :package: Building & Packaging (Inno Setup 7 & Scoop)
 
-This guide explains how to produce production builds of **LocalTelemetry**, compile application binaries, configure Inno Setup 7, generate WinGet and Scoop manifests, and execute uninstallation scripts.
+This guide explains how to produce production builds of **LocalTelemetry**, compile application binaries, configure Inno Setup 7, generate Scoop manifests, and execute uninstallation scripts.
 
 ## :hammer: Building Production Binaries
 
@@ -56,7 +56,7 @@ The configuration script is located at [`setup.iss`](https://github.com/Nicconik
 
 ### :terminal: Compiling via ISCC CLI
 
-If Inno Setup 7 is installed on your system (via `winget install --id JRSoftware.InnoSetup.7`):
+If Inno Setup 7 is installed on your system:
 
 ```powershell
 & "C:\Program Files\Inno Setup 7\ISCC.exe" /DAppVersion=1.2.0 /DAppVersionInfoVersion=1.2.0.0 setup.iss
@@ -76,17 +76,6 @@ For portable installations, [`Uninstall.bat`](https://github.com/Nicconike/Local
 4. **DriverStore Purge**: Scans `pnputil.exe /enum-drivers` for `pawnio.inf` and executes `pnputil /delete-driver <oem.inf> /uninstall /force`. If Windows returns exit code `3010`, a message box informs the user that a restart is required.
 5. **Registry Cleanup**: Removes startup keys from `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` and the `LocalTelemetry Startup` scheduled task.
 6. **Residual Folder Removal**: Deletes `C:\Program Files\PawnIO`, `%ProgramData%\LocalTelemetry`, and `%LocalAppData%\Temp\PawnIo`.
-
----
-
-## :package-check: WinGet Packaging Specifications
-
-The repository maintains the official multi-file Windows Package Manager manifests in `packaging/winget/`:
-
-- **Version Manifest (`Nicconike.LocalTelemetry.yaml`)**: Defines the package identifier (`Nicconike.LocalTelemetry`), version, and default locale.
-- **Installer Manifest (`Nicconike.LocalTelemetry.installer.yaml`)**: Defines the Inno Setup installer type, architecture (`x64`), download URL, SHA-256 hash, and silent switches (`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-`).
-- **Locale Manifest (`Nicconike.LocalTelemetry.locale.en-US.yaml`)**: Contains package metadata, description, license, tags, and release notes URL.
-- **Automated Workflow**: When a release is published via `.github/workflows/release.yml`, `build.ps1` updates all three manifest files. The release workflow then submits the update to the official Microsoft WinGet Community Repository via `wingetcreate`.
 
 ---
 

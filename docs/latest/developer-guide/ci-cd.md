@@ -66,7 +66,7 @@ flowchart TD
         CosignSign["<b>Cosign Signing</b><br/>Sigstore keyless OIDC bundles"]
         SignedCommit["<b>Signed Release Commit</b><br/>github-commit-plugin via REST API"]
         GHRelease["<b>GitHub Release</b><br/>Publishes installer, ZIP & SHA256"]
-        WinGet["<b>WinGet & Scoop Update</b><br/>master only (skipped on beta)"]
+        Scoop["<b>Scoop Bucket Update</b><br/>master only (skipped on beta)"]
         Attestation["<b>SLSA Provenance</b><br/>Build provenance & release asset upload"]
 
         TriggerRelease --> SemRel
@@ -74,12 +74,12 @@ flowchart TD
         BuildPkg --> CosignSign
         CosignSign --> SignedCommit
         SignedCommit --> GHRelease
-        GHRelease --> WinGet
-        WinGet --> Attestation
+        GHRelease --> Scoop
+        Scoop --> Attestation
     end
 
     class TriggerCI,TriggerQuality,TriggerRelease triggerNode
-    class Commitlint,Vitest,CodeQL,Sonar,Scorecard,SyncPR,Triage,SemRel,CosignSign,SignedCommit,WinGet,Attestation stepNode
+    class Commitlint,Vitest,CodeQL,Sonar,Scorecard,SyncPR,Triage,SemRel,CosignSign,SignedCommit,Scoop,Attestation stepNode
     class DotNetBuild,DotNetTest,BuildPkg,GHRelease buildNode
     class Coverage dataNode
 
@@ -127,7 +127,7 @@ The release pipeline is defined in [`.github/workflows/release.yml`](https://git
 3. **Unified `semantic-release` Runner**:
    - Executes `bun run ./.github/release/run.ts --extends ./.github/release/release.config.mjs`.
    - **Commit Analysis (`@semantic-release/commit-analyzer`)**: Parses Conventional Commits to calculate the next semantic release version (`patch`, `minor`, `major` on `master`, or `beta` pre-release on `develop`).
-   - **Changelog Generation (`@semantic-release/release-notes-generator` & `@semantic-release/changelog`)**: Groups commits into categorized sections and prepends release notes to `CHANGELOG.md`.
+   - **Changelog Generation (`changelog-domains.ts` & `@semantic-release/changelog`)**: Groups commits into functional subsystem domains in ASD-STE100 Simplified Technical English, sorting sections by importance and prepending release notes to `CHANGELOG.md`.
    - **Binary Compilation & Packaging (`@semantic-release/exec`)**:
      - Executes `pwsh -File ./.github/release/build.ps1 -Version "${nextRelease.version}" -Tag "${nextRelease.gitTag}"`.
      - Compiles single-file Windows x64 binaries:
@@ -140,11 +140,9 @@ The release pipeline is defined in [`.github/workflows/release.yml`](https://git
      - Packages the portable archive `LocalTelemetry-win-x64.zip`.
      - Generates SHA-256 cryptographic hashes in `checksums.txt`.
      - Signs release artifacts with Cosign (Sigstore keyless OIDC) to generate `.sigstore.json` bundles.
-     - For production releases on `master`, updates `bucket/localtelemetry.json`, `docs/.vitepress/versions.mjs`, and multi-file WinGet manifests (`packaging/winget/Nicconike.LocalTelemetry.*.yaml`). Pre-release builds skip package manifest updates.
+     - For production releases on `master`, updates `bucket/localtelemetry.json` and `docs/.vitepress/versions.mjs`. Pre-release builds skip package manifest updates.
    - **Repository State Commit (`github-commit-plugin.ts`)**: Uploads file blobs and creates a signed commit via the GitHub REST API. This step updates the branch with web-flow signing and bypasses branch protections cleanly.
    - **Release Publication (`@semantic-release/github`)**: Creates the GitHub Release tag pointing to the new commit. Attaches `LocalTelemetrySetup.exe`, `LocalTelemetry-win-x64.zip`, `checksums.txt`, and Cosign bundles.
-   - **WinGet Package Submission (`wingetcreate`)**:
-     - For production releases on `master`, updates `Nicconike.LocalTelemetry` in the official Microsoft WinGet Community Repository using `wingetcreate`. Beta pre-releases skip this step.
 4. **Cryptographic Signatures & Provenance Attestations**:
    - Signs release binaries using Sigstore Cosign keyless OIDC certificates.
    - Generates SLSA Level 3 build provenance attestations for `LocalTelemetrySetup.exe` and `LocalTelemetry-win-x64.zip` via `actions/attest-build-provenance`.

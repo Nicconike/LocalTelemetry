@@ -29,6 +29,7 @@ public sealed class TrayIconManager : IDisposable
     public event Action? ToggleOverlayRequested;
     public event Action? TaskManagerRequested;
     public event Action? TaskbarCreated;
+    public event Action? OverlayContextMenuClosed;
     internal void RaiseTaskbarCreated() => TaskbarCreated?.Invoke();
 
     internal static bool SkipUiForTesting { get; set; }
@@ -66,6 +67,7 @@ public sealed class TrayIconManager : IDisposable
         BuildOverlayContextMenu();
 
         _tray.DoubleClick += (_, _) => OpenSettingsRequested?.Invoke();
+        _menuOwner.ShowSettingsRequested += () => OpenSettingsRequested?.Invoke();
     }
 
     /// <summary>
@@ -83,7 +85,7 @@ public sealed class TrayIconManager : IDisposable
 
         try
         {
-            Log.Debug($"Context menu opened at screen position ({screenPos.X}, {screenPos.Y})");
+            Log.Debug($"Overlay context menu opened at ({screenPos.X}, {screenPos.Y})");
             if (!SkipUiForTesting)
             {
                 if (_overlayContextMenu.Visible)
@@ -103,8 +105,37 @@ public sealed class TrayIconManager : IDisposable
     /// <summary>Gets whether the overlay context menu is currently open and visible.</summary>
     public bool IsOverlayContextMenuOpen => _overlayContextMenu?.Visible == true;
 
-    /// <summary>Gets the current screen bounds of the overlay context menu, or empty if not open.</summary>
-    public Rectangle OverlayContextMenuBounds => _overlayContextMenu?.Visible == true ? _overlayContextMenu.Bounds : Rectangle.Empty;
+    /// <summary>Gets the current screen bounds of the overlay context menu in physical screen pixels, or empty if not open.</summary>
+    public Rectangle OverlayContextMenuBounds
+    {
+        get
+        {
+            if (_overlayContextMenu is null || !_overlayContextMenu.Visible) return Rectangle.Empty;
+
+            if (_overlayContextMenu.Handle != IntPtr.Zero &&
+                NativeMethods.GetWindowRect(_overlayContextMenu.Handle, out var rect))
+            {
+                return new Rectangle(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
+            }
+
+            return _overlayContextMenu.Bounds;
+        }
+    }
+
+    /// <summary>Checks whether a screen point in physical coordinates is inside the overlay context menu.</summary>
+    internal bool IsPointInsideOverlayContextMenu(NativeMethods.POINT pt)
+    {
+        if (_overlayContextMenu is null || !_overlayContextMenu.Visible) return false;
+
+        if (_overlayContextMenu.Handle != IntPtr.Zero &&
+            NativeMethods.GetWindowRect(_overlayContextMenu.Handle, out var rect))
+        {
+            return pt.X >= rect.Left && pt.X <= rect.Right && pt.Y >= rect.Top && pt.Y <= rect.Bottom;
+        }
+
+        var clickPt = new Point(pt.X, pt.Y);
+        return _overlayContextMenu.Bounds.Contains(clickPt);
+    }
 
     /// <summary>Closes the overlay context menu if it is currently open.</summary>
     public void CloseOverlayContextMenu()
@@ -158,6 +189,7 @@ public sealed class TrayIconManager : IDisposable
 
         _trayOverlayToggleItem = new ToolStripMenuItem("Hide Overlay", null, (_, _) =>
         {
+            Log.Info("User toggled overlay visibility from tray menu");
             ToggleOverlayRequested?.Invoke();
         })
         {
@@ -168,6 +200,7 @@ public sealed class TrayIconManager : IDisposable
 
         var settingsItem = new ToolStripMenuItem("Open Settings", null, (_, _) =>
         {
+            Log.Info("User clicked 'Open Settings' from tray menu");
             OpenSettingsRequested?.Invoke();
         })
         {
@@ -176,7 +209,7 @@ public sealed class TrayIconManager : IDisposable
 
         var quitItem = new ToolStripMenuItem("Quit", null, (_, _) =>
         {
-            Log.Info("Application exit requested (system tray)");
+            Log.Info("User clicked 'Quit' from tray menu");
             QuitRequested?.Invoke();
         })
         {
@@ -206,6 +239,7 @@ public sealed class TrayIconManager : IDisposable
 
         _overlayOverlayToggleItem = new ToolStripMenuItem("Hide Overlay", null, (_, _) =>
         {
+            Log.Info("User toggled overlay visibility from overlay context menu");
             ToggleOverlayRequested?.Invoke();
         })
         {
@@ -216,6 +250,7 @@ public sealed class TrayIconManager : IDisposable
 
         var settingsItem = new ToolStripMenuItem("Open Settings", null, (_, _) =>
         {
+            Log.Info("User clicked 'Open Settings' from overlay context menu");
             OpenSettingsRequested?.Invoke();
         })
         {
@@ -224,6 +259,7 @@ public sealed class TrayIconManager : IDisposable
 
         var taskmgrItem = new ToolStripMenuItem("Task Manager", null, (_, _) =>
         {
+            Log.Info("User clicked 'Task Manager' from overlay context menu");
             TaskManagerRequested?.Invoke();
         })
         {
@@ -232,7 +268,7 @@ public sealed class TrayIconManager : IDisposable
 
         var quitItem = new ToolStripMenuItem("Quit", null, (_, _) =>
         {
-            Log.Info("Application exit requested (context menu)");
+            Log.Info("User clicked 'Quit' from overlay context menu");
             QuitRequested?.Invoke();
         })
         {
@@ -268,9 +304,9 @@ public sealed class TrayIconManager : IDisposable
             try
             {
                 int cornerPref = 2; // DWMWCP_ROUND
-                DwmSetWindowAttribute(ctx.Handle, 33, ref cornerPref, sizeof(int));
+                NativeMethods.DwmSetWindowAttribute(ctx.Handle, 33, ref cornerPref, sizeof(int));
                 int darkMode = 1; // DWMWA_USE_IMMERSIVE_DARK_MODE
-                DwmSetWindowAttribute(ctx.Handle, 20, ref darkMode, sizeof(int));
+                NativeMethods.DwmSetWindowAttribute(ctx.Handle, 20, ref darkMode, sizeof(int));
             }
             catch (Exception ex)
             {
@@ -278,7 +314,10 @@ public sealed class TrayIconManager : IDisposable
             }
 
             _activeContextMenu = ctx;
-            InstallOutsideClickHook();
+            if (ReferenceEquals(ctx, _overlayContextMenu))
+            {
+                InstallOutsideClickHook();
+            }
         };
 
         ctx.Closed += (_, _) =>
@@ -288,14 +327,17 @@ public sealed class TrayIconManager : IDisposable
                 _activeContextMenu = null;
             }
             UninstallOutsideClickHook();
-
             try
             {
                 NativeMethods.PostMessage(_menuOwner.Handle, 0, IntPtr.Zero, IntPtr.Zero);
             }
             catch (Exception ex)
             {
-                Log.Debug(ex, "Failed to post message to menu owner on context menu close");
+                Log.Debug(ex, "Failed to post null message after context menu close");
+            }
+            if (ReferenceEquals(ctx, _overlayContextMenu))
+            {
+                OverlayContextMenuClosed?.Invoke();
             }
         };
 
@@ -355,10 +397,21 @@ public sealed class TrayIconManager : IDisposable
         try
         {
             var hookStruct = Marshal.PtrToStructure<NativeMethods.MSLLHOOKSTRUCT>(lParam);
-            var clickPt = new Point(hookStruct.pt.X, hookStruct.pt.Y);
-            if (!menu.Bounds.Contains(clickPt))
+            if (menu.Handle != IntPtr.Zero && NativeMethods.GetWindowRect(menu.Handle, out var rect))
             {
-                CloseMenu(menu);
+                if (hookStruct.pt.X < rect.Left || hookStruct.pt.X > rect.Right ||
+                    hookStruct.pt.Y < rect.Top || hookStruct.pt.Y > rect.Bottom)
+                {
+                    CloseMenu(menu);
+                }
+            }
+            else
+            {
+                var clickPt = new Point(hookStruct.pt.X, hookStruct.pt.Y);
+                if (!menu.Bounds.Contains(clickPt))
+                {
+                    CloseMenu(menu);
+                }
             }
         }
         catch (Exception ex)
@@ -375,7 +428,7 @@ public sealed class TrayIconManager : IDisposable
         }
         else
         {
-            menu.Close();
+            menu.BeginInvoke(new Action(() => menu.Close()));
         }
     }
 
@@ -409,9 +462,6 @@ public sealed class TrayIconManager : IDisposable
         return text.Length > 63 ? text[..63] : text;
     }
 
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
-
     // Disposal
     /// <summary>Releases the tray icon and its associated resources.</summary>
     public void Dispose()
@@ -434,14 +484,14 @@ internal sealed class DarkTrayRenderer : ToolStripProfessionalRenderer
     protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
     {
         e.Graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
-        var rect = e.TextRectangle;
-        rect.Offset(4, 0);
+        var rect = new Rectangle(e.TextRectangle.X + 4, e.TextRectangle.Y, Math.Max(0, e.TextRectangle.Width - 4), e.TextRectangle.Height);
+        Color textColor = e.Item.Enabled ? e.Item.ForeColor : Color.FromArgb(142, 142, 147);
         TextRenderer.DrawText(
             e.Graphics,
             e.Text,
             e.TextFont,
             rect,
-            e.TextColor,
+            textColor,
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
     }
 
@@ -490,15 +540,19 @@ internal sealed class TrayMenuTheme : ProfessionalColorTable
 internal sealed class HiddenMenuOwnerForm : Form
 {
     private static readonly uint WmTaskbarCreated = NativeMethods.RegisterWindowMessage("TaskbarCreated");
+    private static readonly uint WmShowSettings = NativeMethods.RegisterWindowMessage(App.ShowSettingsMessageName);
 
     public event Action? TaskbarCreated;
+    public event Action? ShowSettingsRequested;
     internal void RaiseTaskbarCreated() => TaskbarCreated?.Invoke();
+    internal void RaiseShowSettingsRequested() => ShowSettingsRequested?.Invoke();
 
     public HiddenMenuOwnerForm()
     {
         FormBorderStyle = FormBorderStyle.None;
         ShowInTaskbar = false;
         WindowState = FormWindowState.Normal;
+        StartPosition = FormStartPosition.Manual;
         Size = new Size(1, 1);
         Location = new Point(-2000, -2000);
         Opacity = 0;
@@ -506,6 +560,10 @@ internal sealed class HiddenMenuOwnerForm : Form
         if (WmTaskbarCreated != 0)
         {
             NativeMethods.ChangeWindowMessageFilter(WmTaskbarCreated, NativeMethods.MSGFLT_ADD);
+        }
+        if (WmShowSettings != 0)
+        {
+            NativeMethods.ChangeWindowMessageFilter(WmShowSettings, NativeMethods.MSGFLT_ADD);
         }
     }
 
@@ -515,6 +573,10 @@ internal sealed class HiddenMenuOwnerForm : Form
         if (WmTaskbarCreated != 0 && Handle != IntPtr.Zero)
         {
             NativeMethods.ChangeWindowMessageFilterEx(Handle, WmTaskbarCreated, NativeMethods.MSGFLT_ALLOW, IntPtr.Zero);
+        }
+        if (WmShowSettings != 0 && Handle != IntPtr.Zero)
+        {
+            NativeMethods.ChangeWindowMessageFilterEx(Handle, WmShowSettings, NativeMethods.MSGFLT_ALLOW, IntPtr.Zero);
         }
     }
 
@@ -535,6 +597,11 @@ internal sealed class HiddenMenuOwnerForm : Form
         {
             Log.Info("Windows Explorer taskbar recreation detected (TaskbarCreated message received)");
             TaskbarCreated?.Invoke();
+        }
+        else if (WmShowSettings != 0 && m.Msg == WmShowSettings)
+        {
+            Log.Info("ShowSettings broadcast received from secondary instance; activating Settings window");
+            ShowSettingsRequested?.Invoke();
         }
         base.WndProc(ref m);
     }

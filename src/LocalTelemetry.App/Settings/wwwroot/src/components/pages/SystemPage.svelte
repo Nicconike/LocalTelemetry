@@ -172,12 +172,6 @@
                         <span class="hw-value">{info.ramMfr}</span>
                     </div>
                 {/if}
-                {#if info.ramSpeed}
-                    <div class="hw-row">
-                        <span class="hw-label">Speed</span>
-                        <span class="hw-value">{info.ramSpeed}</span>
-                    </div>
-                {/if}
                 {#if info.ramType}
                     <div class="hw-row">
                         <span class="hw-label">Type</span>

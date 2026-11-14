@@ -36,6 +36,7 @@ function makeAlertPayload() {
             netMonthlyMaxGb: 1000,
             showToastNotif: true,
             flashOverlay: true,
+            sustainedSecs: 3,
             cooldownSecs: 30,
             fireOncePerSession: false,
         },
@@ -95,8 +96,9 @@ describe('AlertsPage.svelte', () => {
         let currentAlerts: any;
         settings.subscribe((s) => (currentAlerts = s?.alerts))();
         expect(currentAlerts.alertCpuTemp).toBe(true);
-        expect(currentAlerts.alertRamUsage).toBe(true);
-        expect(currentAlerts.alertGpuTemp).toBe(true);
+        expect(currentAlerts.cpuTempMaxC).toBe(90);
+        expect(currentAlerts.alertRamUsage).toBe(false);
+        expect(currentAlerts.alertGpuTemp).toBe(false);
     });
 
     it('displays battery alert controls when device has a battery', async () => {
@@ -131,5 +133,12 @@ describe('AlertsPage.svelte', () => {
         settings.set(null as any);
         await tick();
         expect(document.querySelector('.page')).toBeNull();
+    });
+
+    it('renders sustained breach duration slider in actions section', async () => {
+        component = mount(AlertsPage, { target: document.body });
+        await tick();
+
+        expect(document.body.textContent).toContain('Sustained breach duration');
     });
 });

@@ -535,8 +535,8 @@
     .page-container {
         display: flex;
         flex-direction: column;
-        gap: var(--space-4);
-        max-width: 540px;
+        gap: var(--space-3);
+        max-width: 100%;
         min-height: 100%;
     }
 
@@ -544,8 +544,8 @@
     .brand-hero {
         display: flex;
         align-items: center;
-        gap: var(--space-5);
-        padding: var(--space-6);
+        gap: var(--space-4);
+        padding: var(--space-4) var(--space-5);
         background: linear-gradient(
             135deg,
             var(--color-surface-2) 0%,
@@ -594,7 +594,7 @@
         background: var(--color-surface);
         border: 1px solid var(--color-border);
         border-radius: var(--radius-lg);
-        padding: var(--space-5);
+        padding: var(--space-4);
         box-shadow: var(--shadow-sm);
         display: flex;
         flex-direction: column;

@@ -180,12 +180,13 @@ Queries `GetDpiForWindow` to dynamically scale font rendering, text margins, and
 
 ## :square-mouse-pointer: Low-Level Mouse Hooks & Outside-Click Dismissal
 
-To ensure context menus close reliably when users click outside their bounds, `TrayIconManager.cs` installs a temporary low-level mouse hook (`WH_MOUSE_LL`):
+To ensure context menus close reliably on outside clicks and to capture user interactions on child overlay windows, `TrayIconManager.cs` and `TaskbarOverlay.cs` install temporary low-level mouse hooks (`WH_MOUSE_LL`):
 
-- **Hook Installation**: Installed via `SetWindowsHookEx(WH_MOUSE_LL, ...)` upon opening any tray or overlay context menu.
-- **Click Detection**: Listens for mouse-down messages (`WM_LBUTTONDOWN`, `WM_RBUTTONDOWN`, `WM_MBUTTONDOWN`, and non-client equivalents).
-- **Outside-Click Check**: Compares the screen click point (`MSLLHOOKSTRUCT.pt`) against the active menu bounds (`menu.Bounds.Contains(clickPt)`). If the click occurred outside the menu, it invokes `menu.Close()`.
-- **Automatic Cleanup**: Unhooks immediately via `UnhookWindowsHookEx` when the menu closes or the manager is disposed.
+- **Hook Installation**: Installed via `SetWindowsHookEx(WH_MOUSE_LL, ...)` upon opening any tray or overlay context menu, and active while the overlay window is visible.
+- **Click Detection**: Listens for mouse messages (`WM_LBUTTONDOWN`, `WM_RBUTTONDOWN`, `WM_LBUTTONDBLCLK`, and non-client equivalents).
+- **Overlay Interactions**: Intercepts right-clicks on the overlay region to display the context menu and double-clicks to execute the configured action (`Open Settings` or `Open Task Manager`).
+- **Outside-Click Check**: Compares the screen click point (`MSLLHOOKSTRUCT.pt`) against the active menu bounds. If the click occurred outside the menu, it invokes `menu.Close()`.
+- **Automatic Cleanup**: Unhooks immediately via `UnhookWindowsHookEx` when menus close, the overlay hides, or components dispose.
 
 ---
 

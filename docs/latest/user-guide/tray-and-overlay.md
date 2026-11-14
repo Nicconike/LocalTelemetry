@@ -16,6 +16,7 @@ The taskbar overlay is a borderless, transparent window positioned directly on y
 - **DPI-Aware Scaling**: Automatically detects and adapts to display scaling levels (100%, 125%, 150%, 175%, 200%, and multi-monitor mixed DPI setups).
 - **Automatic Theme Contrast & Key Color Sync**: When **Follow Windows Theme** is enabled, a 2-second background timer detects Windows light/dark taskbar changes (`SystemUsesLightTheme`). It dynamically synchronizes the overlay transparency key color (`#f0f0f0` for light theme, `#1c1b19` or custom hex for dark theme) and adjusts text luminosity for high-contrast legibility against any taskbar color.
 - **Visual Alert Flash Effect**: When any hardware metric crosses a critical threshold configured in **Alerts**, the overlay triggers an instantaneous translucent orange warning flash (`rgba(255, 80, 0, 0.24)`) across the buffer to alert you visually without stealing window focus.
+- **In-Overlay Warning Highlighting**: When an alert breach is sustained, the overlay renders the affected metric value in bright Coral Red (`#FF4444`) until the sensor returns to safe levels.
 - **Taskbar Space Congestion Detection & Clamping**: Measures available taskbar space between open apps and system widgets or notification area. If available width is narrower than the overlay, it clamps coordinates to prevent overlap and alerts in Settings.
 - **Native Child Window Embedding**: Embeds directly into the Windows taskbar shell as a native child control with automatic repositioning and watchdog recovery on Explorer restarts.
 
@@ -49,6 +50,16 @@ LocalTelemetry automatically inspects your hardware components at startup (`Syst
 > [!TIP]
 > You can customize any of these colors at any time in **Settings -> Appearance**, or click **Reset All to Defaults** to re-apply the automatic vendor color scheme.
 > If your hardware manufacturer is not yet recognized or uses a fallback color, you can contribute official brand colors by following the [Hardware Brand Color Contribution Guidelines](../developer-guide/contributing.md#palette-contributing-hardware-brand-colors).
+
+## :layout-dashboard: Overlay Layout Presets
+
+LocalTelemetry provides five curated layout presets in **Settings -> Layout** to quickly tailor telemetry to your workflow:
+
+- **Default (10 Metrics)**: Balanced 5-column dual-row overview (CPU Usage & Temp, GPU Usage & Temp, GPU VRAM & Net Total, RAM Usage & Used, Download & Upload).
+- **Gaming (12 Metrics)**: Performance-focused layout featuring CPU/GPU clocks and wattage alongside temperatures, utilization, and dedicated GPU VRAM.
+- **Compact (6 Metrics)**: Minimalist low-profile single-row layout displaying core load percentages and network throughput.
+- **Full Telemetry (20+ Metrics)**: Complete system monitoring tracking all available hardware sensors including per-drive NVMe/SATA I/O and battery telemetry.
+- **Custom**: Fully customizable layout created by adding, removing, or reordering metrics in the layout designer.
 
 ## :layout-dashboard: Customized & Expanded Setups
 
@@ -110,7 +121,7 @@ In the settings dashboard under the **Overlay** tab, you can customize layout, g
     - `Left Side`: Anchors the overlay to the left side of the taskbar, adjacent to the Widgets button.
     - `Right Side`: Anchors the overlay to the right side, directly to the left of the system tray.
   - **Left-Aligned Taskbar Icons**:
-    - `Next to Apps` (`beside_apps`): Detects the right edge of running application icons. It places the overlay immediately after your last pinned or active app.
+    - `Next to Apps` (`left`): Detects the right edge of running application icons. It places the overlay immediately after your last pinned or active app.
     - `Before System Tray` (`right`): Anchors the overlay immediately to the left of the system notification area.
     - *Fresh Setup Default*: On left-aligned taskbars, fresh setups default to `Before System Tray` to avoid overlapping pinned applications.
 - :ruler: **Offset from Edge**: Adjust horizontal pixel distance from the chosen taskbar anchor (`0px` to `200px`).

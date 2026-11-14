@@ -50,10 +50,6 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
     private int _leftWidgetRightEdge = -1;
     private int _rightWidgetLeftEdge = -1;
 
-    // Reposition() runs on a 200ms timer; PositionInBand() computes the same position every
-    // tick, so only emit a log line when the position message actually changes.
-    private string? _lastPositionInBandLog;
-
     /// <summary>
     /// Attempts to embed the overlay window into the taskbar as a native child window.
     /// </summary>
@@ -83,7 +79,6 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
             {
                 IsEmbedded = true;
                 State = OverlayDeploymentState.Active;
-                Log.Info($"Overlay embedded into taskbar (child mode, {overlaySize.Width}x{overlaySize.Height})");
                 return true;
             }
 
@@ -122,6 +117,7 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
         RestoreTaskBand();
         if (overlayHwnd != IntPtr.Zero && NativeMethods.IsWindow(overlayHwnd))
         {
+            NativeMethods.SetWindowLongPtr(overlayHwnd, NativeMethods.GWLP_HWNDPARENT, IntPtr.Zero);
             NativeMethods.SetParent(overlayHwnd, IntPtr.Zero);
         }
         _leftWidgetRightEdge = -1;
@@ -146,7 +142,6 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
         _taskBandHwnd = IntPtr.Zero;
         _parentHwnd = IntPtr.Zero;
         _lastShrinkWidth = -1;
-        _lastPositionInBandLog = null;
         ResetStaticEdgeCaches();
         _cachedAppListRightEdge = -1;
         _lastAppListQueryTicks = 0;
@@ -181,9 +176,11 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
     internal static Func<bool>? IsWidgetsFeatureEnabledOverride { get; set; }
     internal static Func<int, int>? AppListLeftEdgeAutomationOverride { get; set; }
     internal static Func<int, int>? AppListRightEdgeAutomationOverride { get; set; }
+    internal static Func<int, int>? TrayLeftEdgeAutomationOverride { get; set; }
     internal static bool ThrowInAttachChildForTesting { get; set; }
     internal static bool ThrowInDumpTaskbarHierarchyForTesting { get; set; }
     internal static bool ThrowInTrayLeftEdgeForTesting { get; set; }
+    internal static bool ThrowInTrayLeftEdgeAutomationForTesting { get; set; }
     internal static bool ThrowInAppListLeftEdgeForTesting { get; set; }
     internal static bool ThrowInAppListRightEdgeForTesting { get; set; }
     internal static bool ThrowInIsWidgetsFeatureEnabledForTesting { get; set; }
@@ -326,6 +323,26 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
         }
     }
 
+    private static int FindNativeTrayLeft(IntPtr tray, NativeMethods.RECT trayRect)
+    {
+        int minLeft = int.MaxValue;
+        IntPtr trayNotify = SafeFindWindowEx(tray, IntPtr.Zero, "TrayNotifyWnd", null);
+        if (trayNotify != IntPtr.Zero && NativeMethods.GetWindowRect(trayNotify, out var notifyRect) && notifyRect.Width > 0)
+        {
+            minLeft = Math.Min(minLeft, notifyRect.Left);
+        }
+
+        IntPtr clock = SafeFindWindowEx(tray, IntPtr.Zero, "TrayClockWClass", null);
+        if (clock == IntPtr.Zero)
+            clock = SafeFindWindowEx(tray, IntPtr.Zero, "ClockCompWidget", null);
+        if (clock != IntPtr.Zero && NativeMethods.GetWindowRect(clock, out var clockRect) && clockRect.Width > 0)
+        {
+            minLeft = Math.Min(minLeft, clockRect.Left);
+        }
+
+        return Math.Min(minLeft, FindRightmostChildTrayLeft(tray, trayRect));
+    }
+
     private static int GetTrayLeftEdge()
     {
         try
@@ -334,51 +351,157 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
                 throw new InvalidOperationException("Simulated tray left edge error");
 
             IntPtr tray = FindExplorerTrayWnd();
-            if (tray == IntPtr.Zero) return -1;
-
-            int minLeft = int.MaxValue;
-
-            // 1. TrayNotifyWnd exists on Win10 and most Win11 builds (order: icons | clock)
-            IntPtr trayNotify = SafeFindWindowEx(tray, IntPtr.Zero, "TrayNotifyWnd", null);
-            if (trayNotify != IntPtr.Zero && NativeMethods.GetWindowRect(trayNotify, out var notifyRect) && notifyRect.Width > 0)
+            if (tray == IntPtr.Zero || !NativeMethods.GetWindowRect(tray, out var trayRect) || trayRect.Width <= 0)
             {
-                minLeft = Math.Min(minLeft, notifyRect.Left);
+                LogTrayEdgeChange(-1, "no tray marker found, returning -1");
+                return -1;
             }
 
-            // 2. Win11: clock widget
-            IntPtr clock = SafeFindWindowEx(tray, IntPtr.Zero, "TrayClockWClass", null);
-            if (clock == IntPtr.Zero)
-                clock = SafeFindWindowEx(tray, IntPtr.Zero, "ClockCompWidget", null);
-            if (clock != IntPtr.Zero && NativeMethods.GetWindowRect(clock, out var clockRect) && clockRect.Width > 0)
+            if (TrayLeftEdgeAutomationOverride is not null)
             {
-                minLeft = Math.Min(minLeft, clockRect.Left);
-            }
-
-            // 3. Win11: inspect any visible child windows on the right half of the taskbar
-            if (NativeMethods.GetWindowRect(tray, out var trayRect) && trayRect.Width > 0)
-            {
-                minLeft = Math.Min(minLeft, FindRightmostChildTrayLeft(tray, trayRect));
-
-                if (minLeft != int.MaxValue)
+                int automatedLeft = TrayLeftEdgeAutomationOverride(trayRect.Width);
+                if (automatedLeft > 0)
                 {
-                    LogTrayEdgeChange(minLeft, $"resolved tray left={minLeft}");
-                    return minLeft;
+                    LogTrayEdgeChange(automatedLeft, $"UIAutomation tray left={automatedLeft}");
+                    return automatedLeft;
                 }
-
-                int estimatedTrayWidth = EstimateTrayWidth();
-                int fallbackEdge = trayRect.Right - estimatedTrayWidth;
-                LogTrayEdgeChange(fallbackEdge, $"fallback estimate from right={trayRect.Right}, width={estimatedTrayWidth}");
-                return fallbackEdge;
             }
 
-            LogTrayEdgeChange(-1, "no tray marker found, returning -1");
-            return -1;
+            int minLeft = FindNativeTrayLeft(tray, trayRect);
+            if (minLeft != int.MaxValue)
+            {
+                LogTrayEdgeChange(minLeft, $"resolved tray left={minLeft}");
+                return minLeft;
+            }
+
+            int fallbackLeft = QueryTrayLeftEdgeFromAutomation(tray, trayRect.Width);
+            if (fallbackLeft > 0)
+            {
+                LogTrayEdgeChange(fallbackLeft, $"UIAutomation tray left={fallbackLeft}");
+                return fallbackLeft;
+            }
+
+            int estimatedTrayWidth = EstimateTrayWidth();
+            int fallbackEdge = trayRect.Right - estimatedTrayWidth;
+            LogTrayEdgeChange(fallbackEdge, $"fallback estimate from right={trayRect.Right}, width={estimatedTrayWidth}");
+            return fallbackEdge;
         }
         catch (Exception ex)
         {
             Log.Debug(ex, "Failed to determine tray left edge");
             return -1;
         }
+    }
+
+    private static int FindChevronLeft(AutomationElement trayElem, int midX)
+    {
+        var chevronCond = new PropertyCondition(AutomationElement.AutomationIdProperty, "NotificationChevron");
+        var chevron = trayElem.FindFirst(TreeScope.Descendants, chevronCond);
+        if (chevron is not null)
+        {
+            var cr = chevron.Current.BoundingRectangle;
+            if (!cr.IsEmpty && cr.Width > 0 && cr.Height > 0 && (int)cr.Left >= midX)
+            {
+                return (int)cr.Left;
+            }
+        }
+        return -1;
+    }
+
+    private static List<System.Windows.Rect> CollectCandidateAutomationRects(AutomationElement trayElem, int midX)
+    {
+        var candidateRects = new List<System.Windows.Rect>();
+        string[] targetIds =
+        [
+            "SystemPromotedNotificationArea",
+            "NotificationArea",
+            "SystemTrayFrameGrid",
+            "SystemTrayIcons",
+            "ControlCenterButton",
+            "ClockButton"
+        ];
+
+        foreach (string id in targetIds)
+        {
+            var cond = new PropertyCondition(AutomationElement.AutomationIdProperty, id);
+            var elem = trayElem.FindFirst(TreeScope.Descendants, cond);
+            if (elem is null) continue;
+
+            var rect = elem.Current.BoundingRectangle;
+            if (!rect.IsEmpty && rect.Width > 0 && rect.Height > 0)
+            {
+                candidateRects.Add(rect);
+                if ((int)rect.Left >= midX) break;
+            }
+        }
+        return candidateRects;
+    }
+
+    private static int QueryTrayLeftEdgeWorker(IntPtr tray, int taskbarWidth)
+    {
+        var trayElem = AutomationElement.FromHandle(tray);
+        if (trayElem is null) return -1;
+
+        int midX = taskbarWidth > 0 ? (taskbarWidth / 2) : 0;
+        int chevronLeft = FindChevronLeft(trayElem, midX);
+        if (chevronLeft > 0) return chevronLeft;
+
+        var candidateRects = CollectCandidateAutomationRects(trayElem, midX);
+        return CalculateTrayLeft(candidateRects, taskbarWidth);
+    }
+
+    private static int QueryTrayLeftEdgeFromAutomation(IntPtr tray, int taskbarWidth)
+    {
+        if (ThrowInTrayLeftEdgeAutomationForTesting)
+            throw new InvalidOperationException("Simulated tray left edge automation error");
+
+        long now = Stopwatch.GetTimestamp();
+        if (_lastTrayAutomationQueryTicks > 0 && (now - _lastTrayAutomationQueryTicks) < (Stopwatch.Frequency * 30))
+        {
+            return _cachedTrayLeftAutomation;
+        }
+
+        try
+        {
+            var queryTask = Task.Run(() => QueryTrayLeftEdgeWorker(tray, taskbarWidth));
+
+            if (queryTask.Wait(TimeSpan.FromMilliseconds(150)))
+            {
+                int calculatedLeft = queryTask.Result;
+                if (calculatedLeft > 0)
+                {
+                    _cachedTrayLeftAutomation = calculatedLeft;
+                    _lastTrayAutomationQueryTicks = now;
+                    return calculatedLeft;
+                }
+            }
+            else
+            {
+                Log.Debug("UIAutomation query for tray left edge timed out; avoiding explorer deadlock");
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "UIAutomation query for tray left edge failed");
+        }
+
+        _cachedTrayLeftAutomation = -1;
+        _lastTrayAutomationQueryTicks = now;
+        return -1;
+    }
+
+    internal static int CalculateTrayLeft(IEnumerable<System.Windows.Rect> rects, int taskbarWidth)
+    {
+        int midX = taskbarWidth > 0 ? (taskbarWidth / 2) : 0;
+        int minLeft = int.MaxValue;
+        foreach (var cr in rects)
+        {
+            if (!cr.IsEmpty && cr.Width > 0 && cr.Height > 0 && (int)cr.Left >= midX)
+            {
+                minLeft = Math.Min(minLeft, (int)cr.Left);
+            }
+        }
+        return minLeft == int.MaxValue ? -1 : minLeft;
     }
 
     private static int FindRightmostChildTrayLeft(IntPtr tray, NativeMethods.RECT trayRect)
@@ -415,11 +538,19 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
     private static int _cachedLeftWidgetRightEdge = -1;
     private static int _cachedRightWidgetLeftEdge = -1;
     private static long _lastWidgetQueryTicks = 0;
+    private static long _lastWidgetNegativeQueryTicks = 0;
+    private static int _cachedTrayLeftAutomation = -1;
+    private static long _lastTrayAutomationQueryTicks = 0;
 
     private int _cachedAppListRightEdge = -1;
     private long _lastAppListQueryTicks = 0;
     private int _cachedAppListLeftEdge = -1;
     private long _lastAppListLeftQueryTicks = 0;
+
+    internal static void InvalidateCaches()
+    {
+        ResetStaticEdgeCaches();
+    }
 
     private static void ResetStaticEdgeCaches()
     {
@@ -428,6 +559,9 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
         _cachedLeftWidgetRightEdge = -1;
         _cachedRightWidgetLeftEdge = -1;
         _lastWidgetQueryTicks = 0;
+        _lastWidgetNegativeQueryTicks = 0;
+        _cachedTrayLeftAutomation = -1;
+        _lastTrayAutomationQueryTicks = 0;
     }
 
     private static void LogWidgetEdgeChange(int edge, string message)
@@ -443,7 +577,7 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
             return AppListRightEdgeOverride();
 
         long now = Stopwatch.GetTimestamp();
-        if (_cachedAppListRightEdge >= 0 && (now - _lastAppListQueryTicks) < (Stopwatch.Frequency * 2))
+        if (_cachedAppListRightEdge >= 0 && (now - _lastAppListQueryTicks) < (Stopwatch.Frequency * 30))
         {
             return _cachedAppListRightEdge;
         }
@@ -477,10 +611,42 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
             Log.Debug(ex, "Failed to determine app list right edge via UIAutomation");
         }
 
-        int fallback = _taskbarRect.Left + WindowHelpers.Scale(360, 1f);
+        int fallback = !IsTaskbarCentered()
+            ? _taskbarRect.Left + WindowHelpers.Scale(360, 1f)
+            : _taskbarRect.Left + (_taskbarRect.Width / 2) + WindowHelpers.Scale(220, 1f);
         _cachedAppListRightEdge = fallback;
         _lastAppListQueryTicks = now;
         return fallback;
+    }
+
+    private static int TryResolveAppListRightEdge(AutomationElement listElem, int taskbarWidth)
+    {
+        int maxChildRight = FindMaxButtonRight(listElem);
+        if (maxChildRight > 0) return maxChildRight;
+
+        var rect = listElem.Current.BoundingRectangle;
+        int maxAllowed = taskbarWidth > 0 ? (int)(taskbarWidth * 0.75) : 1400;
+        if (!rect.IsEmpty && rect.Width > 0 && rect.Width < maxAllowed)
+        {
+            return (int)rect.Right;
+        }
+
+        return -1;
+    }
+
+    private static int SearchAppListRightEdge(AutomationElement trayElem, int taskbarWidth)
+    {
+        string[] targetIds = ["TaskList", "TaskbarItemsContainer"];
+        foreach (string id in targetIds)
+        {
+            var cond = new PropertyCondition(AutomationElement.AutomationIdProperty, id);
+            var listElem = trayElem.FindFirst(TreeScope.Descendants, cond);
+            if (listElem is null) continue;
+
+            int edge = TryResolveAppListRightEdge(listElem, taskbarWidth);
+            if (edge > 0) return edge;
+        }
+        return -1;
     }
 
     private static int QueryAppListRightEdgeFromAutomation(int taskbarWidth)
@@ -488,28 +654,25 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
         IntPtr tray = FindExplorerTrayWnd();
         if (tray == IntPtr.Zero) return -1;
 
-        if (ThrowInQueryAppListRightEdgeFromAutomationForTesting)
-            throw new InvalidOperationException("Simulated app list right edge automation error");
-
-        var trayElem = AutomationElement.FromHandle(tray);
-        if (trayElem is null) return -1;
-
-        string[] targetIds = ["TaskbarItemsContainer", "TaskList"];
-        foreach (string id in targetIds)
+        try
         {
-            var cond = new PropertyCondition(AutomationElement.AutomationIdProperty, id);
-            var listElem = trayElem.FindFirst(TreeScope.Descendants, cond);
-            if (listElem is null) continue;
+            if (ThrowInQueryAppListRightEdgeFromAutomationForTesting)
+                throw new InvalidOperationException("Simulated app list right edge automation error");
 
-            int maxChildRight = FindMaxButtonRight(listElem);
-            if (maxChildRight > 0) return maxChildRight;
-
-            var rect = listElem.Current.BoundingRectangle;
-            int maxAllowed = taskbarWidth > 0 ? (int)(taskbarWidth * 0.75) : 1400;
-            if (!rect.IsEmpty && rect.Width > 0 && rect.Width < maxAllowed)
+            var task = Task.Run(() =>
             {
-                return (int)rect.Right;
+                var trayElem = AutomationElement.FromHandle(tray);
+                return trayElem is not null ? SearchAppListRightEdge(trayElem, taskbarWidth) : -1;
+            });
+
+            if (task.Wait(TimeSpan.FromMilliseconds(150)))
+            {
+                return task.Result;
             }
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "UIAutomation query for AppListRightEdge failed");
         }
 
         return -1;
@@ -518,6 +681,10 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
     private static int FindMaxButtonRight(AutomationElement listElem)
     {
         var children = listElem.FindAll(TreeScope.Children, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button));
+        if (children is null || children.Count == 0)
+        {
+            children = listElem.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button));
+        }
         if (children is null || children.Count == 0) return -1;
         var rects = new List<System.Windows.Rect>(children.Count);
         foreach (AutomationElement child in children)
@@ -544,7 +711,7 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
             return AppListLeftEdgeOverride();
 
         long now = Stopwatch.GetTimestamp();
-        if (_cachedAppListLeftEdge >= 0 && (now - _lastAppListLeftQueryTicks) < (Stopwatch.Frequency * 2))
+        if (_cachedAppListLeftEdge >= 0 && (now - _lastAppListLeftQueryTicks) < (Stopwatch.Frequency * 30))
         {
             return _cachedAppListLeftEdge;
         }
@@ -577,26 +744,32 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
             Log.Debug(ex, "Failed to determine app list left edge via UIAutomation");
         }
 
-        int fallback = _taskbarRect.Width > 0
-            ? _taskbarRect.Left + (int)(_taskbarRect.Width * 0.35)
-            : 600;
+        int fallback = !IsTaskbarCentered()
+            ? _taskbarRect.Left + WindowHelpers.Scale(48, 1f)
+            : _taskbarRect.Left + (_taskbarRect.Width / 2) - WindowHelpers.Scale(220, 1f);
         _cachedAppListLeftEdge = fallback;
         _lastAppListLeftQueryTicks = now;
         return fallback;
     }
 
-    private static int QueryAppListLeftEdgeFromAutomation()
+    private static int FindStartButtonLeft(AutomationElement trayElem)
     {
-        IntPtr tray = FindExplorerTrayWnd();
-        if (tray == IntPtr.Zero) return -1;
+        var startCond = new PropertyCondition(AutomationElement.AutomationIdProperty, "StartButton");
+        var startBtn = trayElem.FindFirst(TreeScope.Descendants, startCond);
+        if (startBtn is not null)
+        {
+            var sr = startBtn.Current.BoundingRectangle;
+            if (!sr.IsEmpty && sr.Width > 0 && (int)sr.Left > 0)
+            {
+                return (int)sr.Left;
+            }
+        }
+        return -1;
+    }
 
-        if (ThrowInQueryAppListLeftEdgeFromAutomationForTesting)
-            throw new InvalidOperationException("Simulated app list left edge automation error");
-
-        var trayElem = AutomationElement.FromHandle(tray);
-        if (trayElem is null) return -1;
-
-        string[] targetIds = ["TaskbarItemsContainer", "TaskList"];
+    private static int FindContainerLeftEdge(AutomationElement trayElem)
+    {
+        string[] targetIds = ["TaskList", "TaskbarItemsContainer"];
         foreach (string id in targetIds)
         {
             var cond = new PropertyCondition(AutomationElement.AutomationIdProperty, id);
@@ -607,10 +780,45 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
             if (minChildLeft > 0) return minChildLeft;
 
             var rect = listElem.Current.BoundingRectangle;
-            if (!rect.IsEmpty && rect.Width > 0)
+            if (!rect.IsEmpty && rect.Width > 0 && (int)rect.Left > 0)
             {
                 return (int)rect.Left;
             }
+        }
+        return -1;
+    }
+
+    private static int QueryAppListLeftEdgeWorker(IntPtr tray)
+    {
+        var trayElem = AutomationElement.FromHandle(tray);
+        if (trayElem is null) return -1;
+
+        int startLeft = FindStartButtonLeft(trayElem);
+        if (startLeft > 0) return startLeft;
+
+        return FindContainerLeftEdge(trayElem);
+    }
+
+    private static int QueryAppListLeftEdgeFromAutomation()
+    {
+        IntPtr tray = FindExplorerTrayWnd();
+        if (tray == IntPtr.Zero) return -1;
+
+        if (ThrowInQueryAppListLeftEdgeFromAutomationForTesting)
+            throw new InvalidOperationException("Simulated app list left edge automation error");
+
+        try
+        {
+            var task = Task.Run(() => QueryAppListLeftEdgeWorker(tray));
+
+            if (task.Wait(TimeSpan.FromMilliseconds(150)))
+            {
+                return task.Result;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "UIAutomation query for AppListLeftEdge failed");
         }
 
         return -1;
@@ -619,6 +827,10 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
     private static int FindMinButtonLeft(AutomationElement listElem)
     {
         var children = listElem.FindAll(TreeScope.Children, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button));
+        if (children is null || children.Count == 0)
+        {
+            children = listElem.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button));
+        }
         if (children is null || children.Count == 0) return -1;
         var rects = new List<System.Windows.Rect>(children.Count);
         foreach (AutomationElement child in children)
@@ -631,7 +843,7 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
         int minChildLeft = int.MaxValue;
         foreach (var cr in rects)
         {
-            if (!cr.IsEmpty && cr.Width > 0)
+            if (!cr.IsEmpty && cr.Width > 0 && (int)cr.Left >= 0)
             {
                 minChildLeft = Math.Min(minChildLeft, (int)cr.Left);
             }
@@ -741,12 +953,29 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
         }
     }
 
+    private static (int leftRightEdge, int rightLeftEdge) FindWidgetEdgesWorker(IntPtr tray, int taskbarWidth, long now)
+    {
+        var trayElem = AutomationElement.FromHandle(tray);
+        if (trayElem is null) return (-1, -1);
+
+        var cond = new PropertyCondition(AutomationElement.AutomationIdProperty, "WidgetsButton");
+        var widgetBtn = trayElem.FindFirst(TreeScope.Descendants, cond);
+        if (widgetBtn is null) return (-1, -1);
+
+        return ParseWidgetBoundingBox(widgetBtn, taskbarWidth, now);
+    }
+
     private static (int leftRightEdge, int rightLeftEdge) QueryWidgetsButtonEdge(IntPtr tray, int taskbarWidth)
     {
         long now = Stopwatch.GetTimestamp();
-        if ((_cachedLeftWidgetRightEdge >= 0 || _cachedRightWidgetLeftEdge >= 0) && (now - _lastWidgetQueryTicks) < (Stopwatch.Frequency * 2))
+        if ((_cachedLeftWidgetRightEdge >= 0 || _cachedRightWidgetLeftEdge >= 0) && (now - _lastWidgetQueryTicks) < (Stopwatch.Frequency * 30))
         {
             return (_cachedLeftWidgetRightEdge, _cachedRightWidgetLeftEdge);
+        }
+
+        if (_lastWidgetNegativeQueryTicks > 0 && (now - _lastWidgetNegativeQueryTicks) < (Stopwatch.Frequency * 30))
+        {
+            return (-1, -1);
         }
 
         try
@@ -754,19 +983,13 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
             if (ThrowInQueryWidgetsButtonEdgeForTesting)
                 throw new InvalidOperationException("Simulated query widgets button error");
 
-            var trayElem = AutomationElement.FromHandle(tray);
-            if (trayElem is not null)
+            var task = Task.Run(() => FindWidgetEdgesWorker(tray, taskbarWidth, now));
+
+            if (task.Wait(TimeSpan.FromMilliseconds(150)))
             {
-                var cond = new PropertyCondition(AutomationElement.AutomationIdProperty, "WidgetsButton");
-                var widgetBtn = trayElem.FindFirst(TreeScope.Descendants, cond);
-                if (widgetBtn is not null)
-                {
-                    var result = ParseWidgetBoundingBox(widgetBtn, taskbarWidth, now);
-                    if (result != (-1, -1))
-                    {
-                        return result;
-                    }
-                }
+                var res = task.Result;
+                if (res != (-1, -1))
+                    return res;
             }
         }
         catch (Exception ex)
@@ -777,6 +1000,7 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
         _cachedLeftWidgetRightEdge = -1;
         _cachedRightWidgetLeftEdge = -1;
         _lastWidgetQueryTicks = now;
+        _lastWidgetNegativeQueryTicks = now;
         return (-1, -1);
     }
 
@@ -792,6 +1016,7 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
             return (-1, -1);
         }
 
+        _lastWidgetNegativeQueryTicks = 0;
         int midX = taskbarWidth > 0 ? (taskbarWidth / 2) : 960;
         if (rect.Left < midX)
         {
@@ -863,11 +1088,19 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
                 return true;
 
             // Only if DesktopWindowContentBridge is absent AND ReBarWindow32 is present
-            // is a legacy Win10 taskbar replacement (e.g. ExplorerPatcher) active.
-            if (SafeFindWindowEx(tray, IntPtr.Zero, "ReBarWindow32", null) != IntPtr.Zero)
+            // AND an actual taskband window exists inside it is a legacy taskbar active
+            IntPtr rebar = SafeFindWindowEx(tray, IntPtr.Zero, "ReBarWindow32", null);
+            if (rebar != IntPtr.Zero)
             {
-                Log.Info("ReBarWindow32 detected without DesktopWindowContentBridge (ExplorerPatcher / legacy taskbar replacement active)");
-                return false;
+                IntPtr taskBand = SafeFindWindowEx(rebar, IntPtr.Zero, "MSTaskSwWClass", null);
+                if (taskBand == IntPtr.Zero)
+                    taskBand = SafeFindWindowEx(rebar, IntPtr.Zero, "MSTaskListWClass", null);
+
+                if (taskBand != IntPtr.Zero && NativeMethods.IsWindow(taskBand))
+                {
+                    Log.Debug("ReBarWindow32 and taskband detected without DesktopWindowContentBridge (ExplorerPatcher / legacy taskbar replacement active)");
+                    return false;
+                }
             }
         }
 
@@ -890,7 +1123,17 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
             SaveOriginalTaskBandRect();
             ConfigureOverlayWindowStyles(overlayHwnd);
 
-            NativeMethods.SetParent(overlayHwnd, _parentHwnd);
+            IntPtr prevParent = NativeMethods.SetParent(overlayHwnd, _parentHwnd);
+            if (prevParent == IntPtr.Zero)
+            {
+                int err = Marshal.GetLastWin32Error();
+                Log.Debug($"SetParent to taskbar (0x{_parentHwnd:X}) failed with Win32 error {err}; falling back to owned window on taskbar");
+                int s = NativeMethods.GetWindowLong(overlayHwnd, NativeMethods.GWL_STYLE);
+                s &= ~NativeMethods.WS_CHILD;
+                s |= NativeMethods.WS_POPUP;
+                NativeMethods.SetWindowLong(overlayHwnd, NativeMethods.GWL_STYLE, s);
+                NativeMethods.SetWindowLongPtr(overlayHwnd, NativeMethods.GWLP_HWNDPARENT, _parentHwnd);
+            }
 
             RestoreOverlayLayeredStyle(overlayHwnd);
             ApplyLayeredAttributes(overlayHwnd);
@@ -1081,28 +1324,34 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
 
         int y = Math.Max(0, (parentRect.Height - sz.Height) / 2);
 
-        string positionLog = $"Positioned overlay in taskbar band ({sz.Width}x{sz.Height} at {x},{y}, offset {_cfg.Overlay.PlacementOffset}, placement '{_cfg.Overlay.Placement}')";
-        if (positionLog != _lastPositionInBandLog)
+        int targetX = x;
+        int targetY = y;
+        IntPtr actualParent = NativeMethods.GetParent(overlayHwnd);
+        bool isActualChild = actualParent == _parentHwnd && _parentHwnd != IntPtr.Zero;
+        if (!isActualChild && _parentHwnd != IntPtr.Zero)
         {
-            _lastPositionInBandLog = positionLog;
-            Log.Debug(positionLog);
+            var pt = new NativeMethods.POINT { X = x, Y = y };
+            NativeMethods.ClientToScreen(_parentHwnd, ref pt);
+            targetX = pt.X;
+            targetY = pt.Y;
         }
 
+        IntPtr zOrder = isActualChild ? NativeMethods.HWND_TOP : NativeMethods.HWND_TOPMOST;
         bool success = NativeMethods.SetWindowPos(
-            overlayHwnd, NativeMethods.HWND_TOP,
-            x, y, sz.Width, sz.Height,
+            overlayHwnd, zOrder,
+            targetX, targetY, sz.Width, sz.Height,
             NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_SHOWWINDOW);
         if (!success)
         {
             int err = Marshal.GetLastWin32Error();
             if (err is 87 or 1400)
             {
-                Log.Debug($"SetWindowPos returned transient error {err} during band positioning at ({x}, {y}) (taskbar transition in progress).");
+                Log.Debug($"SetWindowPos returned transient error {err} during band positioning at ({targetX}, {targetY}) (taskbar transition in progress).");
                 State = OverlayDeploymentState.Recovering;
             }
             else
             {
-                Log.Error($"SetWindowPos failed with Win32 error {err} during band positioning at ({x}, {y}).");
+                Log.Error($"SetWindowPos failed with Win32 error {err} during band positioning at ({targetX}, {targetY}).");
                 State = OverlayDeploymentState.Failed;
             }
             return false;
@@ -1120,6 +1369,53 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
             overlayHwnd, crKey, alpha, flags);
 
         return true;
+    }
+
+    private int CalculateRightSlotWidth(NativeMethods.RECT parentRect, int offset)
+    {
+        int rightBoundary = GetRightSideBoundary();
+        int clientRightBoundary = rightBoundary > 0 ? rightBoundary : (parentRect.Width - EstimateTrayWidth());
+        int appRight = GetAppListRightEdge();
+        var appPt = new NativeMethods.POINT { X = appRight, Y = 0 };
+        NativeMethods.ScreenToClient(_parentHwnd, ref appPt);
+        int clientAppRight = Math.Max(0, appPt.X);
+        return Math.Max(0, clientRightBoundary - clientAppRight - (2 * offset));
+    }
+
+    private int CalculateLeftSlotWidth(int offset)
+    {
+        int leftEdge = _leftWidgetRightEdge > 0 ? _leftWidgetRightEdge : GetLeftWidgetRightEdge();
+        int clientLeftEdge = 0;
+        if (leftEdge > 0)
+        {
+            var pt = new NativeMethods.POINT { X = leftEdge, Y = 0 };
+            NativeMethods.ScreenToClient(_parentHwnd, ref pt);
+            clientLeftEdge = Math.Max(0, pt.X);
+        }
+
+        int appLeft = GetAppListLeftEdge();
+        var appPt = new NativeMethods.POINT { X = appLeft, Y = 0 };
+        NativeMethods.ScreenToClient(_parentHwnd, ref appPt);
+        int clientAppLeft = Math.Max(clientLeftEdge, appPt.X);
+
+        return Math.Max(0, clientAppLeft - clientLeftEdge - (2 * offset));
+    }
+
+    /// <summary>Computes the available width in pixels in the taskbar band for the current placement and taskbar geometry.</summary>
+    public int CalculateAvailableSlotWidth()
+    {
+        if (_parentHwnd == IntPtr.Zero || !NativeMethods.IsWindow(_parentHwnd) || !NativeMethods.GetClientRect(_parentHwnd, out var parentRect))
+        {
+            return AvailableSlotWidth > 0 ? AvailableSlotWidth : 0;
+        }
+
+        int offset = _cfg.Overlay.PlacementOffset;
+        if (IsTaskbarCentered() && _cfg.Overlay.Placement == "left")
+        {
+            return CalculateLeftSlotWidth(offset);
+        }
+
+        return CalculateRightSlotWidth(parentRect, offset);
     }
 
     private int ComputeBandX(NativeMethods.RECT parentRect, Size sz)
@@ -1229,7 +1525,8 @@ public sealed class TaskbarEmbedder(AppSettings cfg)
     private static int EstimateTrayWidth()
     {
         int iconW = NativeMethods.GetSystemMetrics(NativeMethods.SM_CXSMICON);
-        int dpiScaledBase = WindowHelpers.Scale(360, 1f);
-        return Math.Max(iconW * 11 + 120, dpiScaledBase);
+        if (iconW <= 0) iconW = 16;
+        int dpiScaledBase = WindowHelpers.Scale(200, 1f);
+        return Math.Max(iconW * 6 + 90, dpiScaledBase);
     }
 }

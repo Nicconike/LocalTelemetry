@@ -206,6 +206,38 @@ public class TrayIconManagerTests
     }
 
     [WpfFact]
+    public void OverlayContextMenu_RendersItemsToBitmap()
+    {
+        using var tray = new TrayIconManager();
+        var field = typeof(TrayIconManager).GetField("_overlayContextMenu", BindingFlags.Instance | BindingFlags.NonPublic);
+        var cms = (ContextMenuStrip)field!.GetValue(tray)!;
+
+        // Force handle creation and layout
+        var handle = cms.Handle;
+        handle.Should().NotBe(IntPtr.Zero);
+
+        using var bmp = new Bitmap(cms.Width > 0 ? cms.Width : 200, cms.Height > 0 ? cms.Height : 200);
+        cms.DrawToBitmap(bmp, new Rectangle(0, 0, bmp.Width, bmp.Height));
+
+        int nonBlackOrBg = 0;
+        for (int y = 0; y < bmp.Height; y++)
+        {
+            for (int x = 0; x < bmp.Width; x++)
+            {
+                var c = bmp.GetPixel(x, y);
+                // Check if text (white or light gray) is present
+                if (c.R > 100 && c.G > 100 && c.B > 100)
+                {
+                    nonBlackOrBg++;
+                }
+            }
+        }
+
+        // Output info via assertion or check
+        nonBlackOrBg.Should().BeGreaterThan(0, $"Expected rendered text pixels but found {nonBlackOrBg}. Size={cms.Width}x{cms.Height}");
+    }
+
+    [WpfFact]
     public void TrayIconManager_OverlayContextMenu_StateAndVisibilityLifecycle()
     {
         using var tray = new TrayIconManager();

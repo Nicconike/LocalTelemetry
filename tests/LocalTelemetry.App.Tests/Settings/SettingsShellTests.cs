@@ -621,7 +621,7 @@ public class SettingsShellTests
             "alerts.alertnetmonthly", "alerts.fireoncepersession", "alerts.cputempmaxc", "alerts.gputempmaxc",
             "alerts.cpuusagemaxpct", "alerts.ramusagemaxpct", "alerts.gpuusagemaxpct", "alerts.gpuvrammaxmb",
             "alerts.batterylowpct", "alerts.cpufreqminmhz", "alerts.cpupowermaxw", "alerts.gpufreqminmhz",
-            "alerts.gpupowermaxw", "alerts.netdailymaxgb", "alerts.netmonthlymaxgb", "alerts.cooldownsecs",
+            "alerts.gpupowermaxw", "alerts.netdailymaxgb", "alerts.netmonthlymaxgb", "alerts.sustainedsecs", "alerts.cooldownsecs",
             "alerts.showtoastnotif", "alerts.flashoverlay", "netusage.enabled",
             "updates.checkfrequency", "updates.includeprereleases",
             "custom.unknown.setting"
@@ -918,6 +918,67 @@ public class SettingsShellTests
         openedFolders.Should().NotBeEmpty();
     }
 
+    [WpfFact]
+    public void SettingsShell_HandleOpenFolder_WithFilePath_OpensFolder()
+    {
+        using var ctx = new ShellContext();
+        string? opened = null;
+        SettingsShell.FolderLauncherAction = path => opened = path;
+
+        string tempFile = Path.GetTempFileName();
+        try
+        {
+            string json = JsonSerializer.Serialize(new { payload = new { path = tempFile } });
+            using var doc = JsonDocument.Parse(json);
+            var method = typeof(SettingsShell).GetMethod("HandleOpenFolder", BindingFlags.NonPublic | BindingFlags.Static);
+            method!.Invoke(null, [doc.RootElement]);
+
+            opened.Should().Be(tempFile);
+        }
+        finally
+        {
+            SettingsShell.FolderLauncherAction = null;
+            if (File.Exists(tempFile)) File.Delete(tempFile);
+        }
+    }
+
+    [WpfFact]
+    public void SettingsShell_HandleExportDatabase_SuccessAndCancelled_PostsExpectedResult()
+    {
+        using var ctx = new ShellContext();
+        var posted = new List<string>();
+        SettingsShell.PostJsonActionOverride = posted.Add;
+
+        string targetFile = Path.Combine(Path.GetTempPath(), "test_export_" + Guid.NewGuid().ToString("N") + ".jsonl");
+        try
+        {
+            SettingsShell.SaveFileDialogOverride = _ => (true, targetFile);
+
+            ctx.Shell.HandleWebMessageJson("""
+                {"type":"exportDatabase","payload":{"content":"{\"test\":1}\n","defaultFileName":"test.jsonl"}}
+                """);
+
+            File.Exists(targetFile).Should().BeTrue();
+            File.ReadAllText(targetFile).Should().Contain("{\"test\":1}");
+            posted.Should().Contain(p => p.Contains("exportDatabaseResult") && p.Contains("\"success\":true"));
+
+            posted.Clear();
+            SettingsShell.SaveFileDialogOverride = _ => (false, null);
+
+            ctx.Shell.HandleWebMessageJson("""
+                {"type":"exportDatabase","payload":{"content":"{\"test\":2}\n","defaultFileName":"test2.jsonl"}}
+                """);
+
+            posted.Should().Contain(p => p.Contains("exportDatabaseResult") && p.Contains("\"cancelled\":true"));
+        }
+        finally
+        {
+            SettingsShell.SaveFileDialogOverride = null;
+            SettingsShell.PostJsonActionOverride = null;
+            if (File.Exists(targetFile)) File.Delete(targetFile);
+        }
+    }
+
     private sealed class MockThrowingHandler : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -1211,8 +1272,10 @@ public class SettingsShellTests
         ((string?)method.Invoke(null, ["overlay.showlabels", "overlay.showlabels", "", "true"])).Should().Be("Labels shown");
         ((string?)method.Invoke(null, ["overlay.showlabels", "overlay.showlabels", "", "false"])).Should().Be("Labels hidden");
         ((string?)method.Invoke(null, ["overlay.doubleclickaction", "overlay.doubleclickaction", "", "taskmanager"])).Should().Be("Double-click action set to Task Manager");
+        ((string?)method.Invoke(null, ["overlay.doubleclickaction", "overlay.doubleclickaction", "", "none"])).Should().Be("Double-click action set to None");
         ((string?)method.Invoke(null, ["overlay.doubleclickaction", "overlay.doubleclickaction", "", "settings"])).Should().Be("Double-click action set to Open Settings");
         ((string?)method.Invoke(null, ["overlay.followwindowstheme", "overlay.followwindowstheme", "", "true"])).Should().Be("Follow Windows theme enabled");
+        ((string?)method.Invoke(null, ["overlay.layoutpreset", "overlay.layoutpreset", "default", "gaming"])).Should().Be("Layout preset updated to 'Gaming'");
         ((string?)method.Invoke(null, ["overlay.row1", "overlay.row1", "", "[\"cpu_pct\",\"gpu_temp\"]"])).Should().Be("Metrics layout updated (2 metrics - CPU Usage, GPU Temperature)");
         ((string?)method.Invoke(null, ["overlay.row1", "overlay.row1", "", ""])).Should().Be("Metrics layout cleared (0 metrics)");
         ((string?)method.Invoke(null, ["overlay.row1", "overlay.row1", "", "val"])).Should().Be("Metrics layout updated (1 metric - val)");
@@ -1241,13 +1304,13 @@ public class SettingsShellTests
             "alerts.cputempmaxc", "alerts.gputempmaxc", "alerts.cpuusagemaxpct", "alerts.ramusagemaxpct",
             "alerts.gpuusagemaxpct", "alerts.gpuvrammaxmb", "alerts.batterylowpct", "alerts.cpufreqminmhz",
             "alerts.cpupowermaxw", "alerts.gpufreqminmhz", "alerts.gpupowermaxw", "alerts.netdailymaxgb",
-            "alerts.netmonthlymaxgb", "alerts.cooldownsecs", "alerts.showtoastnotif", "alerts.flashoverlay",
+            "alerts.netmonthlymaxgb", "alerts.sustainedsecs", "alerts.cooldownsecs", "alerts.showtoastnotif", "alerts.flashoverlay",
             "netusage.enabled", "updates.includeprereleases", "updates.checkfrequency"
         ];
 
         foreach (var p in paths)
         {
-            var res = (string?)method.Invoke(null, [p, p.Contains("max") || p.Contains("min") || p.Contains("cooldown") ? "50" : "true"]);
+            var res = (string?)method.Invoke(null, [p, p.Contains("max") || p.Contains("min") || p.Contains("cooldown") || p.Contains("sustained") ? "50" : "true"]);
             res.Should().NotBeNull();
         }
 
@@ -1355,6 +1418,81 @@ public class SettingsShellTests
         res10.Should().BeEmpty();
     }
 
+    [Fact]
+    public void SettingsShell_ConsolidateLayoutDiff_And_DiskArchitecture_Coverage()
+    {
+        var method = typeof(SettingsShell).GetMethod("ConsolidateLayoutDiff", BindingFlags.NonPublic | BindingFlags.Static);
+        method.Should().NotBeNull();
+
+        // 1. Preset updated to Gaming
+        var res1 = (List<string>?)method.Invoke(null, [new List<(string Path, string OldVal, string NewVal)>
+        {
+            ("overlay.layoutpreset", "default", "gaming"),
+            ("overlay.row1", "[\"cpu_pct\"]", "[\"cpu_pct\",\"gpu_pct\"]")
+        }]);
+        res1.Should().ContainSingle().Which.Should().Be("Layout preset updated to 'Gaming'");
+
+        // 2. Preset updated to Compact
+        var res2 = (List<string>?)method.Invoke(null, [new List<(string Path, string OldVal, string NewVal)>
+        {
+            ("overlay.layoutpreset", "gaming", "compact")
+        }]);
+        res2.Should().ContainSingle().Which.Should().Be("Layout preset updated to 'Compact'");
+
+        // 3. Preset updated to Full Telemetry
+        var res3 = (List<string>?)method.Invoke(null, [new List<(string Path, string OldVal, string NewVal)>
+        {
+            ("overlay.layoutpreset", "default", "full")
+        }]);
+        res3.Should().ContainSingle().Which.Should().Be("Layout preset updated to 'Full Telemetry'");
+
+        // 4. Preset updated to Default
+        var res4 = (List<string>?)method.Invoke(null, [new List<(string Path, string OldVal, string NewVal)>
+        {
+            ("overlay.layoutpreset", "custom", "default")
+        }]);
+        res4.Should().ContainSingle().Which.Should().Be("Layout preset updated to 'Default'");
+
+        // 5. Preset updated to Custom (with added metric)
+        var res5 = (List<string>?)method.Invoke(null, [new List<(string Path, string OldVal, string NewVal)>
+        {
+            ("overlay.layoutpreset", "gaming", "custom"),
+            ("overlay.row1", "[\"cpu_pct\"]", "[\"cpu_pct\",\"cpu_freq\"]")
+        }]);
+        res5.Should().ContainSingle().Which.Should().Be("Layout preset updated to 'Custom' (Added CPU Frequency)");
+
+        // 6. Preset updated to Custom (with removed metric)
+        var res6 = (List<string>?)method.Invoke(null, [new List<(string Path, string OldVal, string NewVal)>
+        {
+            ("overlay.layoutpreset", "gaming", "custom"),
+            ("overlay.row1", "[\"cpu_pct\",\"ram_used\"]", "[\"cpu_pct\"]")
+        }]);
+        res6.Should().ContainSingle().Which.Should().Be("Layout preset updated to 'Custom' (Removed RAM Used)");
+
+        // 7. Preset updated to Custom (with reorder)
+        var res7 = (List<string>?)method.Invoke(null, [new List<(string Path, string OldVal, string NewVal)>
+        {
+            ("overlay.layoutpreset", "gaming", "custom"),
+            ("overlay.row1", "[\"cpu_pct\",\"ram_used\"]", "[\"ram_used\",\"cpu_pct\"]")
+        }]);
+        res7.Should().ContainSingle().Which.Should().Be("Layout preset updated to 'Custom' (Metrics layout reordered)");
+
+        // 8. Row-only change (manual add)
+        var res8 = (List<string>?)method.Invoke(null, [new List<(string Path, string OldVal, string NewVal)>
+        {
+            ("overlay.row1", "[\"cpu_pct\"]", "[\"cpu_pct\",\"gpu_pct\"]")
+        }]);
+        res8.Should().ContainSingle().Which.Should().Be("Added metric to overlay (GPU Usage)");
+
+        // 9. Disk metric naming resolution
+        var getMetricNameMethod = typeof(SettingsShell).GetMethod("GetMetricName", BindingFlags.NonPublic | BindingFlags.Static);
+        getMetricNameMethod.Should().NotBeNull();
+        var diskName = (string?)getMetricNameMethod.Invoke(null, ["disk_disk0_read"]);
+        diskName.Should().NotBeNull();
+        diskName.Should().Contain("Read");
+        diskName.Should().NotStartWith("DISK0");
+    }
+
     [WpfFact]
     public void SettingsShell_TitleBar_MouseLeftButtonDown_And_CloseButton_Coverage()
     {
@@ -1457,7 +1595,7 @@ public class SettingsShellTests
             ("alerts.alertcpufreq", "false", "true")
         };
         string s1 = (string)method.Invoke(null, [changes1])!;
-        s1.Should().Contain("CPU throttle enabled");
+        s1.Should().Be("Alerts enabled: CPU throttle");
 
         // 2. Alert enabled: empty summaries (line 1006)
         var changes2 = new List<(string Path, string OldVal, string NewVal)>
@@ -1669,21 +1807,14 @@ public class SettingsShellTests
             var procField = typeof(SettingsShell).GetField("_currentProcess", BindingFlags.NonPublic | BindingFlags.Instance);
             procField?.SetValue(shell, System.Diagnostics.Process.GetCurrentProcess());
 
-            var tickMethod = typeof(SettingsShell).GetMethods(BindingFlags.NonPublic | BindingFlags.Instance)
-                .FirstOrDefault(m => m.Name.Contains("<OnLoaded>b__"));
-            tickMethod?.Invoke(shell, [null, EventArgs.Empty]);
+            shell.OnAppUsageTick(null, EventArgs.Empty);
             titleBlock.Text.Should().Contain("LocalTelemetry");
+            titleBlock.Text.Should().Contain("% CPU");
+            titleBlock.Text.Should().Contain("MB RAM");
+            shell.Title.Should().Contain("LocalTelemetry");
 
             procField?.SetValue(shell, null);
-            tickMethod?.Invoke(shell, [null, EventArgs.Empty]);
-
-            // 4. LocationChanged blur callback
-            var locMethod = typeof(SettingsShell).GetMethods(BindingFlags.NonPublic | BindingFlags.Instance)
-                .FirstOrDefault(m => m.Name.Contains("<.ctor>b__"));
-            typeof(SettingsShell).GetField("_webViewReady", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(shell, false);
-            locMethod?.Invoke(shell, [null, EventArgs.Empty]);
-            typeof(SettingsShell).GetField("_webViewReady", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(shell, true);
-            locMethod?.Invoke(shell, [null, EventArgs.Empty]);
+            shell.OnAppUsageTick(null, EventArgs.Empty);
 
             // 5. Timer callbacks for debounce & periodic push
             var timer1 = typeof(SettingsShell).GetMethod("<InitWebViewAsync>b__54_0", BindingFlags.NonPublic | BindingFlags.Instance);
@@ -1759,18 +1890,18 @@ public class SettingsShellTests
             method.Should().NotBeNull();
 
             // 1. Missing or invalid date formats
-            var invalidStart = JsonDocument.Parse("{\"startDate\":\"not-a-date\",\"endDate\":\"01-10-2026\"}").RootElement;
+            var invalidStart = JsonElement.Parse("{\"startDate\":\"not-a-date\",\"endDate\":\"01-10-2026\"}");
             await (Task)method.Invoke(shell, [invalidStart])!;
 
-            var invalidEnd = JsonDocument.Parse("{\"startDate\":\"01-10-2026\",\"endDate\":\"bad-end-date\"}").RootElement;
+            var invalidEnd = JsonElement.Parse("{\"startDate\":\"01-10-2026\",\"endDate\":\"bad-end-date\"}");
             await (Task)method.Invoke(shell, [invalidEnd])!;
 
             // 2. Valid dates with initialized store
-            var validRange = JsonDocument.Parse("{\"startDate\":\"01-10-2026\",\"endDate\":\"05-10-2026\"}").RootElement;
+            var validRange = JsonElement.Parse("{\"startDate\":\"01-10-2026\",\"endDate\":\"05-10-2026\"}");
             await (Task)method.Invoke(shell, [validRange])!;
 
             // 3. Exception in parsing (missing root properties causing exception)
-            var malformed = JsonDocument.Parse("{}").RootElement;
+            var malformed = JsonElement.Parse("{}");
             await (Task)method.Invoke(shell, [malformed])!;
 
             // 4. TrafficHistoryStore uninitialized error path
@@ -2004,7 +2135,7 @@ public class SettingsShellTests
     }
 
     [WpfFact]
-    public void SettingsShell_WindowIcon_And_LocationChanged_Coverage()
+    public void SettingsShell_WindowIcon_Coverage()
     {
         // 1. SetWindowIcon failure branch
         try
@@ -2016,30 +2147,6 @@ public class SettingsShellTests
         finally
         {
             SettingsShell.ThrowInSetWindowIconForTesting = false;
-        }
-
-        using var ctx = new ShellContext();
-        var onLoc = typeof(SettingsShell).GetMethod("HandleWindowLocationChanged", BindingFlags.NonPublic | BindingFlags.Instance);
-        typeof(SettingsShell).GetField("_webViewReady", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(ctx.Shell, true);
-
-        // 2. OnLocationChanged with ScriptExecutorAsyncOverride
-        try
-        {
-            string? capturedScript = null;
-            SettingsShell.ScriptExecutorOverride = null;
-            SettingsShell.ScriptExecutorAsyncOverride = s => { capturedScript = s; return Task.CompletedTask; };
-            onLoc?.Invoke(ctx.Shell, null);
-            capturedScript.Should().Contain("blur");
-
-            // 3. OnLocationChanged error catch branch
-            SettingsShell.ScriptExecutorAsyncOverride = _ => throw new InvalidOperationException("Simulated script blur failure");
-            var act = () => onLoc?.Invoke(ctx.Shell, null);
-            act.Should().NotThrow();
-        }
-        finally
-        {
-            SettingsShell.ScriptExecutorAsyncOverride = null;
-            SettingsShell.ScriptExecutorOverride = null;
         }
     }
 
@@ -2071,28 +2178,7 @@ public class SettingsShellTests
             SettingsShell.FolderProcessLauncher = origFolderLauncher;
         }
 
-        // 3. LocationChanged with ScriptExecutorOverride (normal + throwing)
-        var origScript = SettingsShell.ScriptExecutorOverride;
-        var onLocationChanged = typeof(Window).GetMethod("OnLocationChanged", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        typeof(SettingsShell).GetField("_webViewReady", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(ctx.Shell, true);
-        try
-        {
-            bool executedScript = false;
-            SettingsShell.ScriptExecutorOverride = _ => executedScript = true;
-            onLocationChanged.Invoke(ctx.Shell, [EventArgs.Empty]);
-            executedScript.Should().BeTrue();
-
-            // Throwing path (lines 124-125)
-            SettingsShell.ScriptExecutorOverride = _ => throw new InvalidOperationException("Simulated script error");
-            var actMove = () => onLocationChanged.Invoke(ctx.Shell, [EventArgs.Empty]);
-            actMove.Should().NotThrow();
-        }
-        finally
-        {
-            SettingsShell.ScriptExecutorOverride = origScript;
-        }
-
-        // 4. Show and Activate with SkipShowForTesting false (lines 38, 44)
+        // 3. Show and Activate with SkipShowForTesting false (lines 38, 44)
         var origSkipShow = SettingsShell.SkipShowForTesting;
         try
         {

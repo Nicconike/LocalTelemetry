@@ -79,6 +79,7 @@ The mode is determined at launch by checking for the `app.mode` marker file in t
     "followWindowsTheme": true,
     "userCustomizedMetricColors": [],
     "userCustomizedGroupColors": [],
+    "layoutPreset": "default",
     "row1": [
       "cpu_pct",
       "cpu_temp",
@@ -122,6 +123,7 @@ The mode is determined at launch by checking for the `app.mode` marker file in t
     "netMonthlyMaxGb": 1000.0,
     "showToastNotif": true,
     "flashOverlay": true,
+    "sustainedSecs": 3,
     "cooldownSecs": 60,
     "fireOncePerSession": false
   },
@@ -150,7 +152,7 @@ The mode is determined at launch by checking for the `app.mode` marker file in t
 | `showSystemTrayIcon` | `boolean` | `true` | Controls system tray notification icon visibility. |
 | `enableFileLogging` | `boolean` | `true` | Enables daily metric file logging (`logs/lt_DD-MM-YYYY.log`). System diagnostics remain enabled always. |
 | `systemLogLevel` | `string` | `"Info"` | Threshold severity for system diagnostics (`"Off"`, `"Error"`, `"Warning"`, `"Info"`, `"Debug"`). |
-| `windowTheme` | `string` | `"default"` | Sets settings UI window theme (`"default"`, `"dark"`, `"light"`). |
+| `windowTheme` | `string` | `"default"` | Sets settings UI window theme (`"default"`, `"default-light"`, `"midnight"`, `"midnight-light"`, `"emerald"`, `"emerald-light"`, `"amethyst"`, `"amethyst-light"`, `"rose"`, `"rose-light"`, `"amber"`, `"amber-light"`, `"oled"`, `"oled-light"`, `"nord"`, `"nord-light"`, `"cyberpunk"`, `"cyberpunk-light"`). |
 
 ---
 
@@ -185,7 +187,7 @@ The mode is determined at launch by checking for the `app.mode` marker file in t
 | Property | Type | Valid Range / Values | Default | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | `visible` | `boolean` | `true`, `false` | `false` | Controls taskbar overlay visibility. |
-| `placement` | `string` | `"left"`, `"center"`, `"right"`, `"beside_apps"` | `"left"` | Taskbar anchor placement (`"beside_apps"` positions after app icons on left-aligned taskbars). |
+| `placement` | `string` | `"left"`, `"center"`, `"right"` | `"left"` | Taskbar anchor placement (`"left"` positions beside apps on left-aligned taskbars or next to widgets on centered taskbars). |
 | `placementOffset` | `integer` | `-500` to `500` | `0` | Horizontal pixel offset from anchor. |
 | `doubleClickAction` | `string` | `"none"`, `"taskmanager"`, `"settings"` | `"settings"` | Overlay double-click trigger action. |
 | `opacity` | `integer` | `10` to `100` | `100` | Layered window opacity percentage. |
@@ -206,6 +208,7 @@ The mode is determined at launch by checking for the `app.mode` marker file in t
 > - `taskbarSpaceConstrained`: `boolean` (`true` when the available taskbar slot is narrower than the overlay width).
 > - `availableSlotWidth`: `integer` (measured width of the available taskbar slot in pixels).
 | `userCustomizedGroupColors` | `array` | Group key strings | `[]` | Group keys manually recolored by the user. |
+| `layoutPreset` | `string` | `"default"`, `"gaming"`, `"compact"`, `"full"`, `"custom"` | `"default"` | Active overlay arrangement preset. |
 | `row1` | `array` | Metric ID strings | 10 default IDs | Column metric layout (even indices = top, odd indices = bottom). |
 
 ---
@@ -215,24 +218,35 @@ The mode is determined at launch by checking for the `app.mode` marker file in t
 | Property | Type | Valid Range | Default | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | `enabled` | `boolean` | `true`, `false` | `false` | Master toggle for all threshold alerts. |
+| `alertCpuUsage` | `boolean` | `true`, `false` | `false` | High CPU usage alert toggle. |
+| `cpuUsageMaxPct` | `float` | `10.0` to `100.0` | `95.0` | CPU usage threshold in %. |
 | `alertCpuTemp` | `boolean` | `true`, `false` | `false` | High CPU temperature alert toggle. |
 | `cpuTempMaxC` | `float` | `40.0` to `115.0` | `90.0` | CPU temperature threshold in °C. |
 | `alertCpuFreq` | `boolean` | `true`, `false` | `false` | Low CPU frequency (throttling) alert toggle. |
 | `cpuFreqMinMhz` | `float` | `200.0` to `5000.0` | `800.0` | CPU frequency low threshold in MHz. |
 | `alertCpuPower` | `boolean` | `true`, `false` | `false` | High CPU package power alert toggle. |
 | `cpuPowerMaxW` | `float` | `10.0` to `500.0` | `65.0` | CPU package power threshold in Watts. |
+| `alertRamUsage` | `boolean` | `true`, `false` | `false` | High RAM usage alert toggle. |
+| `ramUsageMaxPct` | `float` | `10.0` to `100.0` | `90.0` | RAM usage threshold in %. |
+| `alertGpuUsage` | `boolean` | `true`, `false` | `false` | High GPU usage alert toggle. |
+| `gpuUsageMaxPct` | `float` | `10.0` to `100.0` | `95.0` | GPU usage threshold in %. |
+| `alertGpuVram` | `boolean` | `true`, `false` | `false` | High GPU VRAM usage alert toggle. |
+| `gpuVramMaxMb` | `float` | `256.0` to `65536.0` | `6000.0` | GPU VRAM threshold in MB. |
 | `alertGpuTemp` | `boolean` | `true`, `false` | `false` | High GPU temperature alert toggle. |
 | `gpuTempMaxC` | `float` | `40.0` to `110.0` | `85.0` | GPU temperature threshold in °C. |
 | `alertGpuFreq` | `boolean` | `true`, `false` | `false` | Low GPU frequency (throttling) alert toggle. |
 | `gpuFreqMinMhz` | `float` | `100.0` to `3500.0` | `300.0` | GPU frequency low threshold in MHz. |
 | `alertGpuPower` | `boolean` | `true`, `false` | `false` | High GPU power alert toggle. |
 | `gpuPowerMaxW` | `float` | `20.0` to `700.0` | `150.0` | GPU power threshold in Watts. |
+| `alertBatteryLow` | `boolean` | `true`, `false` | `false` | Low battery charge alert toggle. |
+| `batteryLowPct` | `float` | `5.0` to `50.0` | `20.0` | Low battery threshold in %. |
 | `alertNetDaily` | `boolean` | `true`, `false` | `false` | Daily network bandwidth quota alert toggle. |
 | `netDailyMaxGb` | `float` | `1.0` to `1000.0` | `50.0` | Daily data transfer limit in GB. |
 | `alertNetMonthly` | `boolean` | `true`, `false` | `false` | Monthly network bandwidth quota alert toggle. |
 | `netMonthlyMaxGb` | `float` | `10.0` to `10000.0` | `1000.0` | Monthly data transfer limit in GB. |
 | `showToastNotif` | `boolean` | `true`, `false` | `true` | Shows standalone desktop toast popups on alerts. |
 | `flashOverlay` | `boolean` | `true`, `false` | `true` | Flashes the taskbar overlay visually on alerts. |
+| `sustainedSecs` | `integer` | `1` to `10` | `3` | Continuous breach duration in seconds before triggering notifications. |
 | `cooldownSecs` | `integer` | `5` to `3600` | `60` | Minimum seconds between repeat notifications. |
 | `fireOncePerSession` | `boolean` | `true`, `false` | `false` | Alerts trigger only once per application run when true. |
 

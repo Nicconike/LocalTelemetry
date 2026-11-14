@@ -26,10 +26,6 @@
         if (!anyActive) {
             $settings.alerts.alertCpuTemp = true;
             $settings.alerts.cpuTempMaxC = 90;
-            $settings.alerts.alertRamUsage = true;
-            $settings.alerts.ramUsageMaxPct = 90;
-            $settings.alerts.alertGpuTemp = true;
-            $settings.alerts.gpuTempMaxC = 85;
         }
     }
 
@@ -57,7 +53,10 @@
     <div class="page">
         <h2>Alerts</h2>
 
-        <SectionCard title="Enable">
+        <SectionCard
+            title="Threshold Alerts"
+            description="Notify when hardware metrics breach safety or resource limits."
+        >
             <Toggle
                 bind:checked={$settings.alerts.enabled}
                 label="Enable Threshold Alerts"
@@ -256,6 +255,14 @@
                     label="Flash Overlay Briefly"
                 />
                 <Slider
+                    label="Sustained breach duration"
+                    bind:value={$settings.alerts.sustainedSecs}
+                    min={1}
+                    max={10}
+                    step={1}
+                    unit="s"
+                />
+                <Slider
                     label="Cooldown between alerts"
                     bind:value={$settings.alerts.cooldownSecs}
                     min={5}
@@ -276,7 +283,7 @@
     .page {
         display: flex;
         flex-direction: column;
-        gap: var(--space-5);
+        gap: var(--space-3);
     }
     h2 {
         font-size: var(--text-lg);
@@ -288,7 +295,7 @@
         text-transform: uppercase;
         letter-spacing: 0.05em;
         color: var(--color-text-muted);
-        margin: var(--space-3) 0 var(--space-2) 0;
+        margin: var(--space-2) 0 var(--space-1) 0;
     }
     h3.section-subtitle:first-of-type {
         margin-top: 0;
@@ -297,7 +304,7 @@
     .alert-row {
         display: flex;
         align-items: flex-start;
-        gap: var(--space-3);
+        gap: var(--space-2);
     }
 
     .alert-row > :global(.slider-wrap) {
