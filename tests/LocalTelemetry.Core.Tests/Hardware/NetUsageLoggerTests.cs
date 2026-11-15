@@ -246,4 +246,80 @@ public class NetUsageLoggerTests
             try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
     }
+
+    [Fact]
+    public void NetUsageLogger_Record_WithLargeTimeGap_ClampsDelta_ToAvoidSleepSpikes()
+    {
+        var cfg = new AppSettings();
+        cfg.NetUsage.Enabled = true;
+        cfg.Monitoring.PollIntervalMs = 1000;
+
+        string tempPath = Path.Combine(Path.GetTempPath(), $"TrafficClamp_{Guid.NewGuid():N}.dat");
+        var historyFile = new TrafficHistoryFile(tempPath);
+
+        try
+        {
+            using var logger = new NetUsageLogger(cfg, historyFile);
+
+            var snap1 = new TelemetrySnapshot
+            {
+                Timestamp = DateTime.Now,
+                NetInterfaceName = "Ethernet",
+                NetDownBps = 1_000_000,
+                NetUpBps = 500_000
+            };
+            logger.Record(snap1);
+
+            // Simulate resuming from sleep 3600 seconds later
+            var snap2 = new TelemetrySnapshot
+            {
+                Timestamp = snap1.Timestamp.AddSeconds(3600),
+                NetInterfaceName = "Ethernet",
+                NetDownBps = 1_000_000,
+                NetUpBps = 500_000
+            };
+            logger.Record(snap2);
+
+            // Delta should have been clamped to 1.0s rather than 3600s
+            // Snap 1 ~ 1MB down, Snap 2 ~ 1MB down => ~2MB down total
+            var (down, up) = historyFile.GetToday();
+            down.Should().BeLessThan(5_000_000);
+            up.Should().BeLessThan(2_500_000);
+        }
+        finally
+        {
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+        }
+    }
+
+    [Fact]
+    public void NetUsageLogger_Record_WithNegativeOrNaN_IsIgnored()
+    {
+        var cfg = new AppSettings();
+        cfg.NetUsage.Enabled = true;
+
+        string tempPath = Path.Combine(Path.GetTempPath(), $"TrafficNaN_{Guid.NewGuid():N}.dat");
+        var historyFile = new TrafficHistoryFile(tempPath);
+
+        try
+        {
+            using var logger = new NetUsageLogger(cfg, historyFile);
+
+            logger.Record(new TelemetrySnapshot
+            {
+                Timestamp = DateTime.Now,
+                NetInterfaceName = "Ethernet",
+                NetDownBps = double.NaN,
+                NetUpBps = -1000
+            });
+
+            var (down, up) = historyFile.GetToday();
+            down.Should().Be(0);
+            up.Should().Be(0);
+        }
+        finally
+        {
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+        }
+    }
 }

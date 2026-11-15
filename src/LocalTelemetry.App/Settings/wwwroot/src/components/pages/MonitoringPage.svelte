@@ -64,12 +64,12 @@
         </SectionCard>
 
         <SectionCard
-            title="CPU Monitoring Mode"
-            description="Customize how CPU frequency and utilization are calculated."
+            title="Computation Modes"
+            description="Customize CPU clock/utilization calculations and GPU reporting source."
         >
             <div class="log-grid" style="grid-template-columns: 1fr;">
                 <div class="log-card">
-                    <span class="log-label">Clock Mode</span>
+                    <span class="log-label">CPU Clock Mode</span>
                     <div class="btn-group">
                         {#each ["average", "max"] as val}
                             <button
@@ -88,7 +88,7 @@
                     </div>
                 </div>
                 <div class="log-card">
-                    <span class="log-label">Usage Source</span>
+                    <span class="log-label">CPU Usage Mode</span>
                     <div class="btn-group">
                         {#each ["overall", "max"] as val}
                             <button
@@ -106,28 +106,25 @@
                         {/each}
                     </div>
                 </div>
-            </div>
-        </SectionCard>
-
-        <SectionCard
-            title="GPU Usage Source"
-            description="Driver reports kernel busy time (NVML/ADL); WDDM reports max engine utilisation (like Task Manager)."
-        >
-            <div class="btn-group">
-                {#each ["driver", "wddm"] as val}
-                    <button
-                        class="btn-mode"
-                        class:active={$settings.monitoring.gpuUsageSource ===
-                            val}
-                        onclick={() => {
-                            $settings.monitoring.gpuUsageSource = val;
-                        }}
-                    >
-                        {val === "wddm"
-                            ? "WDDM (Task Manager)"
-                            : "Driver (NVML/ADL)"}
-                    </button>
-                {/each}
+                <div class="log-card">
+                    <span class="log-label">GPU Usage Source</span>
+                    <div class="btn-group">
+                        {#each ["driver", "wddm"] as val}
+                            <button
+                                class="btn-mode"
+                                class:active={$settings.monitoring
+                                    .gpuUsageSource === val}
+                                onclick={() => {
+                                    $settings.monitoring.gpuUsageSource = val;
+                                }}
+                            >
+                                {val === "wddm"
+                                    ? "WDDM (Task Manager)"
+                                    : "Driver (NVML/ADL)"}
+                            </button>
+                        {/each}
+                    </div>
+                </div>
             </div>
         </SectionCard>
 
@@ -192,7 +189,7 @@
     .page {
         display: flex;
         flex-direction: column;
-        gap: var(--space-5);
+        gap: var(--space-3);
     }
     h2 {
         font-size: var(--text-lg);

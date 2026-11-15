@@ -86,6 +86,7 @@ public class SettingsDtoTests
         dto.Alerts.AlertCpuTemp.Should().BeTrue();
         dto.Alerts.CpuTempMaxC.Should().Be(95f);
         dto.Alerts.CooldownSecs.Should().Be(120);
+        dto.Alerts.SustainedSecs.Should().Be(3);
     }
 
     [Fact]
@@ -175,6 +176,7 @@ public class SettingsDtoTests
                 Enabled = true,
                 AlertRamUsage = true,
                 RamUsageMaxPct = 88f,
+                SustainedSecs = 5,
                 CooldownSecs = 45
             }
         };
@@ -198,6 +200,7 @@ public class SettingsDtoTests
         target.Alerts.Enabled.Should().BeTrue();
         target.Alerts.AlertRamUsage.Should().BeTrue();
         target.Alerts.RamUsageMaxPct.Should().Be(88f);
+        target.Alerts.SustainedSecs.Should().Be(5);
     }
 
     [Fact]
@@ -240,12 +243,12 @@ public class SettingsDtoTests
         try
         {
             var dto = SettingsDtoMapping.ToDto(src);
-            dto.Overlay.Position.Should().Be("beside_apps");
+            dto.Overlay.Position.Should().Be("left");
             dto.Overlay.TaskbarAlignment.Should().Be("left");
 
             var target = new AppSettings();
             SettingsDtoMapping.ApplyTo(target, dto);
-            target.Overlay.Placement.Should().Be("beside_apps");
+            target.Overlay.Placement.Should().Be("left");
         }
         finally
         {

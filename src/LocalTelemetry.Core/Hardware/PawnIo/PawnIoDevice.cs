@@ -304,6 +304,8 @@ public sealed class PawnIoDevice : IPawnIoTransport
                 try { File.Delete(installerPath); } catch (Exception ex) { Log.Error(ex, "Failed to delete temporary installer file"); }
             }
 
+            DeletePawnIoTempFiles();
+
             Log.Info($"PawnIO installer completed with exit code {exitCode}");
 
             if (exitCode == 0)
@@ -386,6 +388,42 @@ public sealed class PawnIoDevice : IPawnIoTransport
 
         string programFilesPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "PawnIO");
         try { if (Directory.Exists(programFilesPath)) Directory.Delete(programFilesPath, true); } catch (Exception ex) { Log.Error(ex, "Delete Program Files cleanup failed"); }
+
+        DeletePawnIoTempFiles();
+    }
+
+    internal static void DeletePawnIoTempFiles()
+    {
+        var tempDirs = new List<string> { Path.GetTempPath() };
+        string winTemp = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Temp");
+        if (!tempDirs.Contains(winTemp, StringComparer.OrdinalIgnoreCase))
+            tempDirs.Add(winTemp);
+
+        foreach (string dir in tempDirs)
+        {
+            if (Directory.Exists(dir))
+                DeletePawnIoEntriesInDirectory(dir);
+        }
+    }
+
+    private static void DeletePawnIoEntriesInDirectory(string dir)
+    {
+        try
+        {
+            foreach (string file in Directory.EnumerateFiles(dir, "PawnIO_*"))
+            {
+                try { File.Delete(file); } catch (Exception ex) { Log.Debug(ex, $"Failed to delete temp file: {file}"); }
+            }
+
+            foreach (string subDir in Directory.EnumerateDirectories(dir, "PawnIO_*"))
+            {
+                try { Directory.Delete(subDir, true); } catch (Exception ex) { Log.Debug(ex, $"Failed to delete temp directory: {subDir}"); }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, $"Failed to enumerate temp files in: {dir}");
+        }
     }
 
     private static void RunSc(string args)

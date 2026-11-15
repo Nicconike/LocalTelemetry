@@ -108,7 +108,7 @@ public sealed class OverlayDto
     /// <summary>Action to perform on double-click ("settings" or "taskmanager").</summary>
     public string DoubleClickAction { get; set; } = "settings";
 
-    /// <summary>Overlay position relative to the taskbar ("left", "right", or "beside_apps").</summary>
+    /// <summary>Overlay position relative to the taskbar ("left" or "right").</summary>
     public string Position { get; set; } = "left";
 
     /// <summary>Detected Windows 11 taskbar alignment ("left" or "center").</summary>
@@ -159,6 +159,9 @@ public sealed class OverlayDto
 
     /// <summary>Whether to follow the Windows accent/theme color automatically.</summary>
     public bool FollowWindowsTheme { get; set; } = true;
+
+    /// <summary>Active layout preset name ("default", "gaming", "compact", "micro", "thermals", "workstation", "network", "full", or "custom").</summary>
+    public string LayoutPreset { get; set; } = "default";
 
     /// <summary>Metric IDs displayed in the first overlay row (top row).</summary>
     public List<string> Row1 { get; set; } = [];
@@ -264,6 +267,9 @@ public sealed class AlertsDto
     /// <summary>Whether to flash the overlay briefly on alert.</summary>
     public bool FlashOverlay { get; set; } = true;
 
+    /// <summary>Consecutive seconds a metric must continuously breach threshold before triggering alerts.</summary>
+    public int SustainedSecs { get; set; } = 3;
+
     /// <summary>Minimum seconds between repeated alerts for the same metric.</summary>
     public int CooldownSecs { get; set; } = 30;
 
@@ -287,7 +293,7 @@ public sealed class UpdateConfigDto
     public string CheckFrequency { get; set; } = "manual";
 
     /// <summary>Whether to include pre-release and Release Candidate (RC) builds.</summary>
-    public bool IncludePrereleases { get; set; } = true;
+    public bool IncludePrereleases { get; set; } = UpdateConfig.DefaultIncludePrereleases;
 }
 
 // SettingsDtoMapping
@@ -351,6 +357,7 @@ public static class SettingsDtoMapping
                 FollowWindowsTheme = src.Overlay.FollowWindowsTheme,
                 UserCustomizedMetricColors = [.. src.Overlay.UserCustomizedMetricColors],
                 UserCustomizedGroupColors = [.. src.Overlay.UserCustomizedGroupColors],
+                LayoutPreset = src.Overlay.LayoutPreset,
                 Row1 = [.. src.Overlay.Row1],
                 TaskbarSpaceConstrained = isSpaceConstrained,
                 AvailableSlotWidth = availableSlotWidth,
@@ -386,6 +393,7 @@ public static class SettingsDtoMapping
                 NetMonthlyMaxGb = src.Alerts.NetMonthlyMaxGb,
                 ShowToastNotif = src.Alerts.ShowToastNotif,
                 FlashOverlay = src.Alerts.FlashOverlay,
+                SustainedSecs = src.Alerts.SustainedSecs,
                 CooldownSecs = src.Alerts.CooldownSecs,
                 FireOncePerSession = src.Alerts.FireOncePerSession,
             },
@@ -461,6 +469,8 @@ public static class SettingsDtoMapping
         settings.Overlay.DefaultMetricColors = dto.Overlay.DefaultMetricColors is { Count: > 0 }
             ? new Dictionary<string, string>(dto.Overlay.DefaultMetricColors)
             : [];
+        if (!string.IsNullOrWhiteSpace(dto.Overlay.LayoutPreset))
+            settings.Overlay.LayoutPreset = dto.Overlay.LayoutPreset;
         settings.Overlay.Row1 = [.. dto.Overlay.Row1 ?? []];
 
         settings.Alerts.Enabled = dto.Alerts.Enabled;
@@ -492,6 +502,7 @@ public static class SettingsDtoMapping
         settings.Alerts.NetMonthlyMaxGb = dto.Alerts.NetMonthlyMaxGb;
         settings.Alerts.ShowToastNotif = dto.Alerts.ShowToastNotif;
         settings.Alerts.FlashOverlay = dto.Alerts.FlashOverlay;
+        settings.Alerts.SustainedSecs = dto.Alerts.SustainedSecs > 0 ? dto.Alerts.SustainedSecs : 3;
         settings.Alerts.CooldownSecs = dto.Alerts.CooldownSecs;
         settings.Alerts.FireOncePerSession = dto.Alerts.FireOncePerSession;
 
@@ -499,6 +510,10 @@ public static class SettingsDtoMapping
         if (dto.Updates is not null)
         {
             settings.Updates.CheckFrequency = dto.Updates.CheckFrequency ?? "weekly";
+            if (settings.Updates.IncludePrereleases != dto.Updates.IncludePrereleases)
+            {
+                settings.Updates.UserExplicitlySetIncludePrereleases = true;
+            }
             settings.Updates.IncludePrereleases = dto.Updates.IncludePrereleases;
         }
         settings.WindowTheme = dto.WindowTheme;
@@ -506,21 +521,20 @@ public static class SettingsDtoMapping
 
     private const string PositionLeft = "left";
     private const string PositionRight = "right";
-    private const string PositionBesideApps = "beside_apps";
 
     private static string MapPlacementToPosition(string placement) => placement switch
     {
-        PositionBesideApps => PositionBesideApps,
         PositionLeft => PositionLeft,
         "center" => PositionLeft,
+        "beside_apps" => PositionLeft,
         PositionRight => PositionRight,
         _ => PositionRight,
     };
 
     private static string MapPositionToPlacement(string position) => position switch
     {
-        PositionBesideApps => PositionBesideApps,
         PositionLeft => PositionLeft,
+        "beside_apps" => PositionLeft,
         _ => PositionRight,
     };
 }

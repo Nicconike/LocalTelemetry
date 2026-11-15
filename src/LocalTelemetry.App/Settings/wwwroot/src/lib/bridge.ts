@@ -78,6 +78,16 @@ export function requestHistoryMonths(): void { post('getHistoryMonths'); }
 export function importDatContent(content: string): void { post('importDat', { content }); }
 export function importWindowsUsage(startDate: string, endDate: string): void { post('importWindowsUsage', { startDate, endDate }); }
 
-export function openFolder(target: 'app' | 'data'): void { post('openFolder', { target }); }
+export function exportDatabase(content: string, defaultFileName: string): void {
+    post('exportDatabase', { content, defaultFileName });
+}
+
+export function openFolder(target: 'app' | 'data' | 'logs' | { path: string }): void {
+    if (typeof target === 'object' && target !== null && 'path' in target) {
+        post('openFolder', { path: target.path });
+    } else {
+        post('openFolder', { target });
+    }
+}
 export function openUrl(url: string): void { post('openUrl', { url }); }
 export function checkForUpdates(force = true): void { post('checkForUpdates', { force }); }

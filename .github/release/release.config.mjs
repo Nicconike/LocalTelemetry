@@ -4,12 +4,21 @@
  */
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import {
+    formatReleaseDate,
+    STANDARD_COMMIT_RANKS,
+    STANDARD_RELEASE_RULES,
+} from './changelog-domains.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const commitPluginPath = resolve(__dirname, 'github-commit-plugin.ts');
+const changelogDomainsPluginPath = resolve(__dirname, 'changelog-domains.ts');
 
 export default {
-    branches: ['master'],
+    branches: [
+        'master',
+        { name: 'develop', prerelease: 'beta' },
+    ],
     tagFormat: 'v${version}',
     plugins: [
         [
@@ -36,41 +45,21 @@ export default {
             '@semantic-release/release-notes-generator',
             {
                 preset: 'conventionalcommits',
-                presetConfig: {
-                    types: [
-                        { type: 'feat', section: 'Features' },
-                        { type: 'fix', section: 'Bug Fixes' },
-                        { type: 'perf', section: 'Performance Improvements' },
-                        { type: 'revert', section: 'Reverts' },
-                        { type: 'refactor', section: 'Code Refactoring' },
-                        { type: 'build', section: 'Build System' },
-                        { type: 'ci', section: 'Continuous Integration' },
-                        { type: 'test', section: 'Tests' },
-                        { type: 'style', section: 'Styles' },
-                        { type: 'docs', section: 'Documentation' },
-                        { type: 'chore', hidden: true },
-                    ],
-                },
+                presetConfig: STANDARD_RELEASE_RULES,
                 writerOpts: {
-                    commitGroupsSort: (a, b) => {
-                        const rank = {
-                            'Features': 10,
-                            'Bug Fixes': 9,
-                            'Performance Improvements': 8,
-                            'Reverts': 7,
-                            'Code Refactoring': 6,
-                            'Build System': 5,
-                            'Continuous Integration': 4,
-                            'Tests': 3,
-                            'Styles': 2,
-                            'Documentation': 1,
-                        };
-                        return (rank[b.title] ?? 0) - (rank[a.title] ?? 0);
-                    },
+                    commitGroupsSort: (a, b) =>
+                        (STANDARD_COMMIT_RANKS[b.title] ?? 0) - (STANDARD_COMMIT_RANKS[a.title] ?? 0),
                     commitsSort: (a, b) => {
                         const scopeCompare = (b.scope ?? '').localeCompare(a.scope ?? '');
                         if (scopeCompare !== 0) return scopeCompare;
                         return (b.subject ?? '').localeCompare(a.subject ?? '');
+                    },
+                    formatDate: formatReleaseDate,
+                    finalizeContext: (context) => {
+                        if (context.date) {
+                            context.date = formatReleaseDate(context.date);
+                        }
+                        return context;
                     },
                 },
             },
@@ -90,6 +79,7 @@ export default {
             },
         ],
         commitPluginPath,
+        changelogDomainsPluginPath,
         [
             '@semantic-release/github',
             {

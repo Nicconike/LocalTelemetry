@@ -4,10 +4,11 @@ LocalTelemetry features a proactive alert engine designed to warn you whenever t
 
 ## :package-check: Alert Delivery Mechanisms
 
-When a hardware metric crosses an enabled threshold, LocalTelemetry dispatches warnings through two configurable channels:
+When a hardware metric crosses an enabled threshold, LocalTelemetry dispatches warnings through three coordinated channels:
 
-1. **Visual Taskbar Flashing**: The affected metric label and value on the taskbar overlay flash with a translucent orange warning tint (`rgba(255, 80, 0, 0.24)`). This notifies you instantly without opening windows or stealing focus.
-2. **Desktop Toast Notifications**: An animated toast notification slides in near the bottom-right corner of your screen via the out-of-process notification helper (`LocalTelemetry.Notifier.exe`).
+1. **In-Overlay Warning Color**: When a threshold breach persists, the overlay displays the affected metric value in bright Coral Red (`#FF4444`). The metric keeps this warning color until the value normalizes.
+2. **Visual Taskbar Flashing**: The overlay flashes briefly with a translucent orange warning tint (`rgba(255, 80, 0, 0.24)`). This notifies you instantly without taking window focus.
+3. **Desktop Toast Notifications**: An animated toast notification slides in near the bottom-right corner of your screen via the helper process (`LocalTelemetry.Notifier.exe`).
 
 ![Standalone Toast Alert Notification](/images/toast-alert.png)
 *Non-intrusive desktop toast alert notifying about elevated hardware temperature.*
@@ -31,13 +32,11 @@ To inspect the asynchronous Named Pipe IPC protocol, notification packet seriali
 In **Settings -> Alerts**, switch on **Enable Threshold Alerts** to customize sensor limits.
 
 ::: tip Automatic Safety Defaults
-When you enable alerts without active selections, LocalTelemetry enables three sensible defaults automatically:
+When you enable threshold alerts for the first time, LocalTelemetry enables only one safety default automatically:
 
 - **CPU Temp**: Enabled at 90°C.
-- **RAM Usage**: Enabled at 90%.
-- **GPU Temp**: Enabled at 85°C.
 
-You can adjust or disable these defaults at any time.
+All other sensor alerts remain disabled until you turn them on. You can adjust or disable this default at any time.
 :::
 
 ![Alerts Configuration Interface](/images/alerts-settings.png)
@@ -75,11 +74,37 @@ The Battery alert section appears only on systems with a detected battery (`hasB
 
 - **Battery Low**: Alerts when laptop battery charge drops below the warning level (`5%` to `50%`) while actively discharging. Warnings are automatically suppressed while connected to AC power.
 
+## :shield-alert: Anti-Spike Filtering & Normalization Hysteresis
+
+To prevent false alarms and notification flapping, LocalTelemetry implements standard hardware monitoring safeguards:
+
+### :timer: Sustained Breach Duration Filter
+
+Momentary CPU turbo boosts can exceed thermal targets for 1 to 2 seconds during application startup. LocalTelemetry requires a sensor to breach its threshold continuously for a sustained duration before triggering notifications.
+Configure this duration with the **Sustained breach duration** slider (`1 s` to `10 s`, default: `3 s`). Transient spikes below this duration are ignored.
+
+### :thermometer-snowflake: 10°C Thermal Normalization Hysteresis
+
+When a temperature breach triggers an alert, the warning state remains active until temperature drops at least **10°C below** the threshold:
+
+- For example, if CPU Temp threshold is `90°C`, the alert triggers when temperature stays at or above 90°C for 3 seconds.
+- The alert clears and the Coral Red overlay color resets only when CPU temperature cools to **80°C or below**.
+- This hysteresis prevents repeated notifications when temperatures fluctuate rapidly near the limit.
+- Non-temperature metrics (Usage, Power, Battery) use a 2-unit hysteresis band.
+
+### :file-text: Structured Alert Audit Logging
+
+When an alert triggers or normalizes, LocalTelemetry writes structured entries to the active application log file (`%LOCALAPPDATA%\LocalTelemetry\logs\`):
+
+- **Breach Warning**: `[WARNING] CPU Temperature reached 92°C (threshold: 90°C) [Actions: Toast, Overlay Flash]`
+- **Normalization Info**: `[INFO] CPU Temperature normalized to 78°C (threshold: 90°C)`
+
 ## :octagon-alert: Alert Actions & Cooldown Controls
 
 Under the **Actions** section in **Settings -> Alerts**, you can fine-tune notification behavior:
 
 - **Show Tray Notification**: Toggles desktop toast popup notifications on or off.
 - **Flash Overlay Briefly**: Toggles in-place visual flashing on the taskbar overlay.
+- **Sustained breach duration**: Sets how many continuous seconds a sensor must breach its limit before triggering (`1 s` to `10 s`, default: `3 s`).
 - **Cooldown between alerts**: Configures the delay before repeat notifications are sent for the same sensor (`5 s` to `120 s`, default: `60 s`).
 - **Only fire once per session (ignores cooldown)**: Ignores cooldown and fires an alert only once per application run until LocalTelemetry is restarted.

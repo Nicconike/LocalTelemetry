@@ -27,6 +27,7 @@ namespace LocalTelemetry.App.Tests;
 public class AppTests
 {
     private static readonly string[] NonElevatedArgs = ["--minimized"];
+    private static readonly string[] SettingsElevatedArgs = ["--settings", "--elevated"];
 
     private static IPawnIoManager CreateMockPawnIoManager()
     {
@@ -49,6 +50,7 @@ public class AppTests
         }
 
         App.IsAdministratorCheck = () => true;
+        App.EnforceSingleInstance = false;
         App.ElevateAndExitAction = _ => { };
         App.NotifierLauncherAction = _ => { };
         App.TaskManagerLauncherAction = _ => { };
@@ -215,6 +217,7 @@ public class AppTests
         elevatedCalled.Should().BeTrue();
 
         App.IsAdministratorCheck = () => true;
+        App.EnforceSingleInstance = false;
         App.ElevateAndExitAction = _ => { };
         App.NotifierLauncherAction = null;
     }
@@ -767,6 +770,7 @@ public class AppTests
 
         // Restore
         App.IsAdministratorCheck = () => true;
+        App.EnforceSingleInstance = false;
         App.ElevateAndExitAction = _ => { };
     }
 
@@ -1799,5 +1803,166 @@ public class AppTests
         {
             try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true); } catch (IOException ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
         }
+    }
+
+    [Fact]
+    public void App_WhenInstanceAlreadyRunning_SignalsExistingInstanceAndExits()
+    {
+        InstallSafetyNet();
+        int exitCode = -1;
+        App.ExitHandler = code => exitCode = code;
+
+        string originalMutexName = App.SingleInstanceMutexName;
+        string originalEventName = App.SingleInstanceEventName;
+        string uniqueTestSuffix = Guid.NewGuid().ToString("N");
+        App.SingleInstanceMutexName = @"Local\LocalTelemetry_App_SingleInstance_Test_" + uniqueTestSuffix;
+        App.SingleInstanceEventName = @"Local\LocalTelemetry_App_ShowSettingsEvent_Test_" + uniqueTestSuffix;
+
+        using var existingMutex = new Mutex(true, App.SingleInstanceMutexName, out bool createdNew);
+        createdNew.Should().BeTrue();
+
+        try
+        {
+            App.EnforceSingleInstance = true;
+            var app = GetOrCreateApp();
+            var onStartup = typeof(App).GetMethod("OnStartup", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var startupEventArgs = (StartupEventArgs)RuntimeHelpers.GetUninitializedObject(typeof(StartupEventArgs));
+            typeof(StartupEventArgs).GetField("_args", BindingFlags.NonPublic | BindingFlags.Instance)?.SetValue(startupEventArgs, ElevatedArgs);
+
+            onStartup.Invoke(app, [startupEventArgs]);
+            exitCode.Should().Be(0);
+        }
+        finally
+        {
+            App.EnforceSingleInstance = false;
+            App.ExitHandler = null;
+            App.SingleInstanceMutexName = originalMutexName;
+            App.SingleInstanceEventName = originalEventName;
+        }
+    }
+
+    [WpfFact]
+    public void App_LaunchSettingsProcess_WhenCalled_LaunchesOutOfProcessSettings()
+    {
+        var app = GetOrCreateApp();
+        ProcessStartInfo? capturedPsi = null;
+        var origLauncher = App.SettingsProcessLauncher;
+        var origShowEvent = App.SettingsShowEventName;
+        string suffix = Guid.NewGuid().ToString("N");
+        App.SettingsShowEventName = @"Local\LocalTelemetry_Settings_ShowEvent_Test_" + suffix;
+
+        try
+        {
+            App.SettingsProcessLauncher = psi => capturedPsi = psi;
+            var launchMethod = typeof(App).GetMethod("LaunchSettingsProcess", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            launchMethod.Invoke(app, null);
+
+            capturedPsi.Should().NotBeNull();
+            capturedPsi!.Arguments.Should().Be("--settings");
+            capturedPsi.UseShellExecute.Should().BeTrue();
+        }
+        finally
+        {
+            App.SettingsProcessLauncher = origLauncher;
+            App.SettingsShowEventName = origShowEvent;
+        }
+    }
+
+    [WpfFact]
+    public void App_LaunchSettingsProcess_WhenSettingsAlreadyRunning_SignalsShowEvent()
+    {
+        var app = GetOrCreateApp();
+        bool launcherCalled = false;
+        var origLauncher = App.SettingsProcessLauncher;
+        var origShowEvent = App.SettingsShowEventName;
+        var origMutex = App.SettingsMutexName;
+        string suffix = Guid.NewGuid().ToString("N");
+        App.SettingsShowEventName = @"Local\LocalTelemetry_Settings_ShowEvent_Test_" + suffix;
+        App.SettingsMutexName = @"Local\LocalTelemetry_Settings_Mutex_Test_" + suffix;
+
+        using var mutex = new Mutex(true, App.SettingsMutexName);
+        using var showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, App.SettingsShowEventName);
+
+        try
+        {
+            App.SettingsProcessLauncher = _ => launcherCalled = true;
+            var launchMethod = typeof(App).GetMethod("LaunchSettingsProcess", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            launchMethod.Invoke(app, null);
+
+            launcherCalled.Should().BeFalse();
+        }
+        finally
+        {
+            App.SettingsProcessLauncher = origLauncher;
+            App.SettingsShowEventName = origShowEvent;
+            App.SettingsMutexName = origMutex;
+        }
+    }
+
+    [Fact]
+    public void App_StartSettingsMode_WhenAlreadyRunning_SignalsShowEventAndExits()
+    {
+        InstallSafetyNet();
+        int exitCode = -1;
+        App.ExitHandler = code => exitCode = code;
+
+        string origMutex = App.SettingsMutexName;
+        string origShowEvent = App.SettingsShowEventName;
+        string suffix = Guid.NewGuid().ToString("N");
+        App.SettingsMutexName = @"Local\LocalTelemetry_Settings_SingleInstance_Test_" + suffix;
+        App.SettingsShowEventName = @"Local\LocalTelemetry_Settings_ShowEvent_Test_" + suffix;
+
+        using var mutex = new Mutex(true, App.SettingsMutexName, out bool createdNew);
+        createdNew.Should().BeTrue();
+        using var showWait = new EventWaitHandle(false, EventResetMode.AutoReset, App.SettingsShowEventName);
+
+        try
+        {
+            App.EnforceSingleInstance = true;
+            var app = GetOrCreateApp();
+            var startSettings = typeof(App).GetMethod("StartSettingsMode", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            startSettings.Invoke(app, [SettingsElevatedArgs]);
+
+            exitCode.Should().Be(0);
+        }
+        finally
+        {
+            App.EnforceSingleInstance = false;
+            App.ExitHandler = null;
+            App.SettingsMutexName = origMutex;
+            App.SettingsShowEventName = origShowEvent;
+        }
+    }
+
+    [Fact]
+    public void AppSettings_CopyFrom_CopiesAllProperties()
+    {
+        var source = new AppSettings
+        {
+            RunAtStartup = true,
+            StartMinimized = true,
+            MinimizeToTrayOnClose = true,
+            ShowSystemTrayIcon = false,
+            EnableFileLogging = false,
+            SystemLogLevel = "Debug",
+            WindowTheme = "custom",
+        };
+        source.Monitoring.PollIntervalMs = 500;
+        source.Overlay.Visible = false;
+        source.Alerts.Enabled = false;
+
+        var target = new AppSettings();
+        target.CopyFrom(source);
+
+        target.RunAtStartup.Should().BeTrue();
+        target.StartMinimized.Should().BeTrue();
+        target.MinimizeToTrayOnClose.Should().BeTrue();
+        target.ShowSystemTrayIcon.Should().BeFalse();
+        target.EnableFileLogging.Should().BeFalse();
+        target.SystemLogLevel.Should().Be("Debug");
+        target.WindowTheme.Should().Be("custom");
+        target.Monitoring.PollIntervalMs.Should().Be(500);
+        target.Overlay.Visible.Should().BeFalse();
+        target.Alerts.Enabled.Should().BeFalse();
     }
 }

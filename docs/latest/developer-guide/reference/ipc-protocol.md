@@ -25,7 +25,7 @@ interface WebMessageEnvelope<T = unknown> {
 
 ## :log-in: Inbound WebMessage Catalog (Frontend -> C# Host)
 
-The C# controller handles 11 inbound message types in `SettingsShell.xaml.cs`.
+The C# controller handles 13 inbound message types in `SettingsShell.xaml.cs`.
 
 ### 1. `getSettings`
 
@@ -157,11 +157,43 @@ Triggers an update check against the GitHub Releases API.
 
 - **Response:** Dispatches outbound `updateCheckResult` message.
 
+### 12. `exportDatabase`
+
+Prompts the user with a Windows Save File Dialog to export all network usage history to a standalone `.jsonl` file.
+
+- **Payload:**
+
+```json
+{
+  "type": "exportDatabase",
+  "payload": {
+    "content": "raw_jsonl_records_string",
+    "defaultFileName": "internet_usage_backup.jsonl"
+  }
+}
+```
+
+### 13. `log`
+
+Forwards frontend diagnostic events and caught exceptions to the C# application logger (`Log.Error` or `Log.Debug`).
+
+- **Payload:**
+
+```json
+{
+  "type": "log",
+  "payload": {
+    "level": "error",
+    "message": "Detailed error context string"
+  }
+}
+```
+
 ---
 
 ## :log-out: Outbound WebMessage Catalog (C# Host -> Frontend)
 
-The C# controller emits 10 outbound event types.
+The C# controller emits 12 outbound event types.
 
 ### 1. `settings`
 
@@ -171,10 +203,46 @@ Supplies the current application settings DTO to hydrate the Svelte store.
 - **Payload:** `SettingsDto`
 
 ```typescript
+interface SettingsDto {
+    runAtStartup: boolean;
+    showSystemTrayIcon: boolean;
+    enableFileLogging: boolean;
+    systemLogLevel: 'Off' | 'Error' | 'Warning' | 'Info' | 'Debug';
+    monitoring: MonitoringDto;
+    overlay: OverlayDto;
+    alerts: AlertsDto;
+    netUsage: NetUsageDto;
+    updates: UpdateConfigDto;
+    windowTheme: string;
+}
+
+interface MonitoringDto {
+    intervalMs: number;
+    useFahrenheit: boolean;
+    useNetBits: boolean;
+    preferredNic: string;
+    hasBattery: boolean;
+    trackCpu: boolean;
+    trackGpu: boolean;
+    trackRam: boolean;
+    trackNet: boolean;
+    trackDisk: boolean;
+    trackBattery: boolean;
+    cpuFreqMode: 'average' | 'max';
+    cpuUsageMode: 'overall' | 'max';
+    gpuUsageSource: 'driver' | 'wddm';
+    logCpuMode: number;
+    logGpuMode: number;
+    logRamMode: number;
+    logNetMode: number;
+    logDiskMode: number;
+    logBatteryMode: number;
+}
+
 interface OverlayDto {
     visible: boolean;
     doubleClickAction: 'settings' | 'taskmanager' | 'none';
-    position: 'left' | 'right' | 'beside_apps';
+    position: 'left' | 'right';
     taskbarAlignment?: 'left' | 'center'; // Dynamically detected Windows 11 alignment
     taskbarSpaceConstrained?: boolean; // True when available taskbar slot is narrower than overlay
     availableSlotWidth?: number; // Measured pixel width of available taskbar slot
@@ -187,12 +255,52 @@ interface OverlayDto {
     metricColors: Record<string, string>;
     groupColors: Record<string, string>;
     followWindowsTheme: boolean;
+    layoutPreset: 'default' | 'gaming' | 'compact' | 'micro' | 'thermals' | 'workstation' | 'network' | 'full' | 'custom';
     row1: string[];
+}
+
+interface AlertsDto {
+    enabled: boolean;
+    alertCpuTemp: boolean;
+    cpuTempMaxC: number;
+    alertCpuUsage: boolean;
+    cpuUsageMaxPct: number;
+    alertCpuFreq: boolean;
+    cpuFreqMinMhz: number;
+    alertCpuPower: boolean;
+    cpuPowerMaxW: number;
+    alertGpuTemp: boolean;
+    gpuTempMaxC: number;
+    alertGpuUsage: boolean;
+    gpuUsageMaxPct: number;
+    alertGpuVram: boolean;
+    gpuVramMaxMb: number;
+    alertGpuFreq: boolean;
+    gpuFreqMinMhz: number;
+    alertGpuPower: boolean;
+    gpuPowerMaxW: number;
+    alertRamUsage: boolean;
+    ramUsageMaxPct: number;
+    alertBatteryLow: boolean;
+    batteryLowPct: number;
+    alertNetDaily: boolean;
+    netDailyMaxGb: number;
+    alertNetMonthly: boolean;
+    netMonthlyMaxGb: number;
+    showToastNotif: boolean;
+    flashOverlay: boolean;
+    sustainedSecs: number; // default: 3
+    cooldownSecs: number; // default: 60
+    fireOncePerSession: boolean;
+}
+
+interface NetUsageDto {
+    enabled: boolean;
 }
 
 interface UpdateConfigDto {
     checkFrequency: 'manual' | 'weekly' | 'monthly';
-    includePrereleases: boolean; // default: false
+    includePrereleases: boolean; // default: false (stable) / true (beta)
     lastCheckUtc: string;
 }
 ```
@@ -362,12 +470,58 @@ Dispatched upon completion of an update check.
 {
   "isUpdateAvailable": true,
   "isPrerelease": false,
-  "currentVersion": "1.0.0-rc.1",
-  "latestVersion": "1.0.0",
-  "releaseUrl": "https://github.com/Nicconike/LocalTelemetry/releases/tag/v1.0.0",
+  "currentVersion": "1.2.0",
+  "latestVersion": "1.3.0",
+  "releaseUrl": "https://github.com/Nicconike/LocalTelemetry/releases/tag/v1.3.0",
   "releaseNotes": "Official release notes markdown...",
-  "publishedAt": "2026-10-03T12:00:00Z",
+  "publishedAt": "2026-10-31T12:00:00Z",
   "errorMessage": null
+}
+```
+
+### 11. `taskbarSlotChanged`
+
+Dispatched when the taskbar space constraint state or available slot width changes in real time.
+
+- **Type:** `"taskbarSlotChanged"`
+- **Payload Schema:**
+
+```json
+{
+  "taskbarSpaceConstrained": true,
+  "availableSlotWidth": 320
+}
+```
+
+### 12. `exportDatabaseResult`
+
+Dispatched upon completion, cancellation, or failure of a database export operation.
+
+- **Type:** `"exportDatabaseResult"`
+- **Payload Schema:**
+
+```json
+{
+  "success": true,
+  "filePath": "C:\\Users\\User\\Downloads\\internet_usage_2026-11-14.jsonl",
+  "fileName": "internet_usage_2026-11-14.jsonl"
+}
+```
+
+When cancelled by the user:
+
+```json
+{
+  "cancelled": true
+}
+```
+
+When the export encounters a file system error:
+
+```json
+{
+  "success": false,
+  "error": "Access to the path is denied."
 }
 ```
 

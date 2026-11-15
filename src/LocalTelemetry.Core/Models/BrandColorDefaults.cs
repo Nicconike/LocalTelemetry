@@ -80,6 +80,9 @@ public static class BrandColorDefaults
         ["BYD"] = "#ED1C24",              // BYD Red
         ["LG Energy"] = "#E6007E",        // LG Pink
         ["Panasonic"] = "#004085",        // Panasonic Blue
+        ["Celxpert"] = "#005BAA",         // Celxpert Blue
+        ["Coslight"] = "#003399",         // Coslight Blue
+        ["Murata"] = "#ED1C24",           // Murata Red
     };
 
     // Category brand lists
@@ -121,6 +124,7 @@ public static class BrandColorDefaults
         ["battery"] =
         [
             "Sunwoda", "Simplo", "Dynapack", "BYD", "LG Energy", "Panasonic",
+            "Celxpert", "Coslight", SamsungBrand, "Murata",
         ],
     };
 
@@ -136,6 +140,16 @@ public static class BrandColorDefaults
         ["WD"] = "Western Digital",
         ["WDC"] = "Western Digital",
         ["Hewlett"] = "HP",
+        ["SMP"] = "Simplo",
+        ["CEL"] = "Celxpert",
+        ["LGC"] = "LG Energy",
+        ["LG Chem"] = "LG Energy",
+        ["LG"] = "LG Energy",
+        ["SWD"] = "Sunwoda",
+        ["SEC"] = SamsungBrand,
+        ["DP"] = "Dynapack",
+        ["Pana"] = "Panasonic",
+        ["Sony"] = "Murata",
     };
 
     // Auto-built category dictionaries
@@ -219,7 +233,15 @@ public static class BrandColorDefaults
         var mfr = SystemInfo.GetBatteryManufacturer();
         if (string.IsNullOrEmpty(mfr)) return string.Empty;
         var match = BatteryColors.FirstOrDefault(kvp => mfr.Contains(kvp.Key, StringComparison.OrdinalIgnoreCase));
-        return match.Value ?? string.Empty;
+        if (!string.IsNullOrEmpty(match.Value)) return match.Value;
+
+        if (_alias.TryGetValue(mfr, out var canonical) && BatteryColors.TryGetValue(canonical, out var aliasColor))
+            return aliasColor;
+
+        if (SystemOemColors.TryGetValue(mfr, out var oemColor))
+            return oemColor;
+
+        return string.Empty;
     }
 
     private static string LogAndResolveColor(string hardwareName, string vendor, string detectedColor, string fallbackColor)

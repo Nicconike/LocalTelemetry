@@ -261,6 +261,9 @@
                                     ? ""
                                     : "v"}{updateResult?.latestVersion} Available
                             </span>
+                            {#if updateResult?.isPrerelease}
+                                <span class="update-badge beta">Beta</span>
+                            {/if}
                             <button
                                 class="download-btn"
                                 onclick={() =>
@@ -532,8 +535,8 @@
     .page-container {
         display: flex;
         flex-direction: column;
-        gap: var(--space-4);
-        max-width: 540px;
+        gap: var(--space-3);
+        max-width: 100%;
         min-height: 100%;
     }
 
@@ -541,8 +544,8 @@
     .brand-hero {
         display: flex;
         align-items: center;
-        gap: var(--space-5);
-        padding: var(--space-6);
+        gap: var(--space-4);
+        padding: var(--space-4) var(--space-5);
         background: linear-gradient(
             135deg,
             var(--color-surface-2) 0%,
@@ -591,7 +594,7 @@
         background: var(--color-surface);
         border: 1px solid var(--color-border);
         border-radius: var(--radius-lg);
-        padding: var(--space-5);
+        padding: var(--space-4);
         box-shadow: var(--shadow-sm);
         display: flex;
         flex-direction: column;
@@ -714,6 +717,15 @@
     .update-badge.error {
         color: #ff3b30;
         background: rgba(255, 59, 48, 0.12);
+    }
+    .update-badge.beta {
+        color: #b388ff;
+        background: rgba(179, 136, 255, 0.15);
+        border: 1px solid rgba(179, 136, 255, 0.3);
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 10px;
+        letter-spacing: 0.5px;
     }
     .update-found-box {
         display: flex;

@@ -13,7 +13,8 @@
     },
     "include": [
         "*.ts",
-        "*.mjs"
+        "*.mjs",
+        "../../tests/LocalTelemetry.Release.Tests/**/*.ts"
     ],
     "exclude": [
         "node_modules"

@@ -202,8 +202,13 @@ public sealed class HardwareMonitor : IDisposable
         _perDiskCounters = CreatePerDiskCounters();
         if (_perDiskCounters is not null)
         {
+            var archPairs = _diskBusTypes.Select(b => ((string?)null, (string?)b)).ToList();
+            var archLabels = ComputeDiskArchitectureLabels(archPairs);
             for (int i = 0; i < _perDiskCounters.Count; i++)
-                Metrics.RegisterDisk($"disk{i}", $"DISK{i}");
+            {
+                string label = i < archLabels.Count ? archLabels[i] : $"Disk {i + 1}";
+                Metrics.RegisterDisk($"disk{i}", label);
+            }
         }
     }
 
@@ -491,6 +496,9 @@ public sealed class HardwareMonitor : IDisposable
             cbSize = (uint)Marshal.SizeOf<NativeMethods.SpDevinfoData>()
         };
         uint i = 0;
+        string? firstIntegratedVendor = null;
+        string? firstIntegratedName = null;
+        bool foundDedicated = false;
 
         while (NativeMethods.SetupDiEnumDeviceInfo(devInfoSet, i++, ref devInfo))
         {
@@ -504,8 +512,24 @@ public sealed class HardwareMonitor : IDisposable
             bool dedicated = IsDedicatedAdapter(vendor, name, devInfoSet, devInfo);
             Log.Debug($"Detected graphics adapter '{name}' (Vendor {vendor}, dedicated {dedicated})");
 
-            if (TrySelectActiveGpuAdapter(vendor, name, dedicated))
-                break;
+            if (dedicated)
+            {
+                foundDedicated = true;
+                if (TrySelectActiveGpuAdapter(vendor, name, true))
+                    return;
+            }
+            else if (firstIntegratedVendor is null)
+            {
+                firstIntegratedVendor = vendor;
+                firstIntegratedName = name;
+            }
+        }
+
+        if (!foundDedicated && firstIntegratedVendor is not null)
+        {
+            _gpuVendor = firstIntegratedVendor;
+            _gpuName = firstIntegratedName ?? firstIntegratedVendor;
+            Log.Info($"No dedicated graphics adapter detected; using integrated graphics '{_gpuName}'");
         }
     }
 
@@ -602,8 +626,13 @@ public sealed class HardwareMonitor : IDisposable
             var diskInfos = DiskQuery.QueryAllDrives();
             _primaryDiskType = diskInfos.Count > 0 ? (diskInfos[0].DisplayType ?? diskInfos[0].BusType ?? "DISK") : "DISK";
             _diskBusTypes = diskInfos.Select(d => d.DisplayType ?? d.BusType ?? "DISK").ToList();
+            var archPairs = diskInfos.Select(d => (d.DisplayType, (string?)d.BusType)).ToList();
+            var archLabels = ComputeDiskArchitectureLabels(archPairs);
             for (int i = 0; i < diskInfos.Count; i++)
-                Metrics.RegisterDisk($"disk{i}", $"DISK{i}");
+            {
+                string label = i < archLabels.Count ? archLabels[i] : $"Disk {i + 1}";
+                Metrics.RegisterDisk($"disk{i}", label);
+            }
             Log.Debug($"Detected {diskInfos.Count} storage device(s), primary type {_primaryDiskType}");
         }
         catch (Exception ex)
@@ -612,6 +641,63 @@ public sealed class HardwareMonitor : IDisposable
             _primaryDiskType = "DISK";
             _diskBusTypes = [];
         }
+    }
+
+    /// <summary>Extracts a normalized disk architecture label (e.g. "NVMe", "SATA", "HDD") from display/bus type.</summary>
+    public static string ExtractDiskArchitecture(string? displayType, string? busType)
+    {
+        string raw = !string.IsNullOrWhiteSpace(displayType) ? displayType : (busType ?? string.Empty);
+        if (string.IsNullOrWhiteSpace(raw)) return "Disk";
+
+        if (raw.Contains("NVMe", StringComparison.OrdinalIgnoreCase)) return "NVMe";
+        if (raw.Contains("SATA", StringComparison.OrdinalIgnoreCase)) return "SATA";
+        if (raw.Contains("SCSI", StringComparison.OrdinalIgnoreCase)) return "SCSI";
+        if (raw.Contains("USB", StringComparison.OrdinalIgnoreCase)) return "USB";
+        if (raw.Contains("SSD", StringComparison.OrdinalIgnoreCase)) return "SSD";
+        if (raw.Contains("HDD", StringComparison.OrdinalIgnoreCase)) return "HDD";
+
+        string clean = raw.Trim().ToUpperInvariant();
+        if (clean.StartsWith("BUSTYPE", StringComparison.OrdinalIgnoreCase))
+            clean = clean[7..].Trim();
+        if (clean == "DISK" || clean == "UNKNOWN" || string.IsNullOrWhiteSpace(clean))
+            return "Disk";
+
+        return clean;
+    }
+
+    /// <summary>Computes indexed architecture labels (e.g. "NVMe 1", "NVMe 2") for a list of disks.</summary>
+    public static List<string> ComputeDiskArchitectureLabels(IReadOnlyList<(string? DisplayType, string? BusType)> disks)
+    {
+        var archs = disks.Select(d => ExtractDiskArchitecture(d.DisplayType, d.BusType)).ToList();
+        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var a in archs)
+        {
+            counts[a] = counts.TryGetValue(a, out int c) ? c + 1 : 1;
+        }
+
+        var positions = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var labels = new List<string>(disks.Count);
+        for (int i = 0; i < archs.Count; i++)
+        {
+            string arch = archs[i];
+            int totalOfType = counts[arch];
+            positions[arch] = positions.TryGetValue(arch, out int p) ? p + 1 : 1;
+            int pos = positions[arch];
+
+            if (arch.Equals("Disk", StringComparison.OrdinalIgnoreCase))
+            {
+                labels.Add($"Disk {i + 1}");
+            }
+            else if (totalOfType > 1)
+            {
+                labels.Add($"{arch} {pos}");
+            }
+            else
+            {
+                labels.Add(arch);
+            }
+        }
+        return labels;
     }
 
     private static int CompareDiskCounters(
@@ -1283,10 +1369,31 @@ public sealed class HardwareMonitor : IDisposable
         return 0f;
     }
 
+    private static bool _wmiCpuTempAvailable = true;
+    private static int _wmiCpuTempFailures;
+    private static long _lastWmiCpuTempQueryTicks;
+    internal static bool ResetWmiCpuTempForTesting { get; set; }
+
     private static float ReadWmiCpuTemp()
     {
+        if (ResetWmiCpuTempForTesting)
+        {
+            _wmiCpuTempAvailable = true;
+            _wmiCpuTempFailures = 0;
+            _lastWmiCpuTempQueryTicks = 0;
+            ResetWmiCpuTempForTesting = false;
+        }
+
+        long now = Stopwatch.GetTimestamp();
+        if (!_wmiCpuTempAvailable && _lastWmiCpuTempQueryTicks > 0 &&
+            (now - _lastWmiCpuTempQueryTicks) < (Stopwatch.Frequency * 60))
+        {
+            return 0f;
+        }
+
         try
         {
+            _lastWmiCpuTempQueryTicks = now;
             using var searcher = new System.Management.ManagementObjectSearcher(@"root\wmi", "SELECT CurrentTemperature FROM MSAcpi_ThermalZoneTemperature");
             foreach (var obj in searcher.Get())
             {
@@ -1294,12 +1401,24 @@ public sealed class HardwareMonitor : IDisposable
                 {
                     float celsius = (rawKelvin10 - 2732) / 10.0f;
                     if (celsius is >= 15f and <= 125f)
+                    {
+                        _wmiCpuTempAvailable = true;
+                        _wmiCpuTempFailures = 0;
                         return celsius;
+                    }
                 }
+            }
+
+            _wmiCpuTempFailures++;
+            if (_wmiCpuTempFailures >= 2)
+            {
+                _wmiCpuTempAvailable = false;
             }
         }
         catch (Exception ex)
         {
+            _wmiCpuTempFailures++;
+            _wmiCpuTempAvailable = false;
             Log.Debug(ex, "WMI thermal zone temperature query unavailable");
         }
         return 0f;

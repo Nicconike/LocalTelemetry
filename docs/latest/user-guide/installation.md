@@ -10,7 +10,7 @@ This page details system requirements, installation methods, administrative driv
 | **Architecture**     | [**x86-64 / AMD64**](https://en.wikipedia.org/wiki/X86-64) ([x64 compatible](https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/x64-architecture)) | [**x86-64 / AMD64**](https://en.wikipedia.org/wiki/X86-64) (Intel or AMD)                                                     |
 | **Permissions**      | **Administrator (UAC)** *(required for hardware sensor driver)*                                                                                                     | **Administrator (UAC)** *(silent boot via Task Scheduler)*                                                                    |
 | **System RAM**       | **2 GB** (Windows 10) / [**4 GB**](https://www.microsoft.com/en-in/windows/windows-11-specifications?r=1) (Windows 11)                                              | **8 GB or higher**                                                                                                            |
-| **App Footprint**    | **~40-50 MB RAM** (minimized overlay) / **~100-150 MB** (Settings UI)                                                                                               | **~40-50 MB RAM**                                                                                                             |
+| **App Footprint**    | **~30-40 MB RAM** (overlay) / **~40-100 MB dynamic** (Settings UI)                                                          | **~35-50 MB RAM**                                                                                                             |
 | **Disk Space**       | **~70 MB** initial footprint (**37 MB** installation folder + **~30 MB** WebView2 user cache)                                                                       | **100 MB+** (recommended for long-term traffic history & logs)                                                                 |
 | **.NET Runtime**     | [**Microsoft .NET 10 Desktop Runtime (x64)**](https://aka.ms/dotnet/10.0/windowsdesktop-runtime-win-x64.exe)                                                        | [**.NET 10 Desktop Runtime**](https://aka.ms/dotnet/10.0/windowsdesktop-runtime-win-x64.exe) *(Auto-downloaded by installer)* |
 | **UI Runtime**       | [**Microsoft Edge WebView2 Runtime**](https://go.microsoft.com/fwlink/p/?LinkId=2124703)                                                                            | [**WebView2 Runtime**](https://go.microsoft.com/fwlink/p/?LinkId=2124703) *(Pre-installed on Windows 11)*                     |
@@ -21,7 +21,7 @@ This page details system requirements, installation methods, administrative driv
 In accordance with official [Microsoft Windows 11 Specifications](https://www.microsoft.com/en-in/windows/windows-11-specifications?r=1) and [Windows Hardware Driver Documentation](https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/x64-architecture):
 
 - **Processor**: 1 GHz or faster with 2 or more cores on a compatible 64-bit [x86-64 / AMD64](https://en.wikipedia.org/wiki/X86-64) processor (Intel or AMD).
-- **System Memory**: Minimum **2 GB** on 64-bit Windows 10, or **4 GB** on [Windows 11](https://www.microsoft.com/en-in/windows/windows-11-specifications?r=1). LocalTelemetry maintains an ultralight footprint of **~40-50 MB RAM** during background taskbar monitoring.
+- **System Memory**: Minimum **2 GB** on 64-bit Windows 10, or **4 GB** on [Windows 11](https://www.microsoft.com/en-in/windows/windows-11-specifications?r=1). LocalTelemetry maintains an ultralight footprint of **~35-50 MB RAM** during background taskbar monitoring.
 - **Storage Footprint**: Minimum **~70 MB** initial disk space across the installation directory (**37 MB** in `C:\Program Files\LocalTelemetry`, as reported in Windows *Installed apps*) and user profile cache (**~30 MB** in `%LOCALAPPDATA%\LocalTelemetry` for WebView2 runtime cache, settings, and logs). Portable mode requires **~34 MB** on extraction and expands to **~65 MB** once the local WebView2 settings cache is generated. **100 MB** or more of free disk space is recommended for long-term network usage history and log files.
 - **System Firmware**: UEFI with Secure Boot capability and TPM 2.0 (standard Windows 11 hardware baseline; LocalTelemetry operates seamlessly with Secure Boot enabled).
 - **Display & Taskbar**: Standard Windows taskbar with support for primary or secondary display positioning at any scaling factor (100%-200% DPI).
@@ -53,15 +53,7 @@ In accordance with official [Microsoft Windows 11 Specifications](https://www.mi
 > [!IMPORTANT]
 > **Internet Connection for First-Time Setup**: Because most users will not have the .NET 10 Desktop Runtime installed, an active internet connection is required during initial setup so the installer can fetch the runtime package. Once installed, all subsequent launches, driver initialization, and telemetry operations run completely offline.
 
-### :package: Method 2: Windows Package Manager (WinGet)
-
-Install via [WinGet](https://learn.microsoft.com/en-us/windows/package-manager/winget/):
-
-```powershell
-winget install --id Nicconike.LocalTelemetry
-```
-
-### :inbox: Method 3: Scoop Package Manager (Direct Repository Bucket)
+### :inbox: Method 2: Scoop Package Manager (Direct Repository Bucket)
 
 Install directly from the GitHub repository via [Scoop](https://scoop.sh/):
 
@@ -77,7 +69,7 @@ To update LocalTelemetry to the latest release at any time:
 scoop update localtelemetry
 ```
 
-### :folder-archive: Method 4: Portable ZIP (Zero Installation)
+### :folder-archive: Method 3: Portable ZIP (Zero Installation)
 
 1. **Install Prerequisites**: Because portable mode does not include an installation wizard to auto-fetch runtimes, ensure you have installed:
     - [**Microsoft .NET 10 Desktop Runtime (x64)**](https://aka.ms/dotnet/10.0/windowsdesktop-runtime-win-x64.exe)

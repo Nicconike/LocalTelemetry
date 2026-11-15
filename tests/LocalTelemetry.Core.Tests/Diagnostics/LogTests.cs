@@ -210,10 +210,11 @@ public sealed class LogTests : IDisposable
 
         string content = File.ReadAllText(dedicatedSysLog);
         // Verify starts on line 1 without leading blank line
-        content.StartsWith('-').Should().BeTrue();
+        content.StartsWith("--------------------------------------------------------------------------------").Should().BeTrue();
         content.Should().Contain("LocalTelemetry v1.0.0-test Started");
-        content.Should().Contain("OS: Windows 11 Pro (build 26200)");
-        content.Should().Contain("LocalTelemetry Terminated | Reason: Windows System Shutdown");
+        content.Should().Contain("Admin: Yes");
+        content.Should().Contain("Mode: Standard");
+        content.Should().Contain("LocalTelemetry Terminated | Reason: Windows System Shutdown | Timestamp: ");
         content.Should().NotContain("Application Quit"); // deduplicated
         content.Should().Contain("Session Uptime: 5m 0s");
     }
@@ -274,7 +275,7 @@ public sealed class LogTests : IDisposable
     }
 
     [Fact]
-    public void SessionStart_WithNullOsName_UsesFallbackOsDescription()
+    public void SessionStart_WritesSingleLineSessionHeader()
     {
         string dedicatedSysLog = Path.Combine(_tempDir, "sys_osfallback_" + Guid.NewGuid().ToString("N") + ".log");
         string dedicatedMetricLog = Path.Combine(_tempDir, "metric_osfallback_" + Guid.NewGuid().ToString("N") + ".log");
@@ -284,9 +285,25 @@ public sealed class LogTests : IDisposable
         Log.Shutdown();
 
         string content = File.ReadAllText(dedicatedSysLog);
+        content.Should().Contain("--------------------------------------------------------------------------------");
         content.Should().Contain("LocalTelemetry v1.2.3 Started");
-        content.Should().Contain("OS:");
         content.Should().Contain("Admin: No");
+        content.Should().Contain("Mode: Floating");
+    }
+
+    [Fact]
+    public void SessionEnd_WritesSingleLineSessionFooter()
+    {
+        string dedicatedSysLog = Path.Combine(_tempDir, "sys_footer_" + Guid.NewGuid().ToString("N") + ".log");
+        string dedicatedMetricLog = Path.Combine(_tempDir, "metric_footer_" + Guid.NewGuid().ToString("N") + ".log");
+        Log.Init(dedicatedSysLog, dedicatedMetricLog, enableMetrics: false);
+
+        Log.SessionEnd("Application Quit", TimeSpan.FromMinutes(12));
+        Log.Shutdown();
+
+        string content = File.ReadAllText(dedicatedSysLog);
+        content.Should().Contain("LocalTelemetry Terminated | Reason: Application Quit | Timestamp: ");
+        content.Should().Contain(" | Session Uptime: 12m 0s");
     }
 
     [Fact]
@@ -303,6 +320,42 @@ public sealed class LogTests : IDisposable
         string content = File.ReadAllText(dedicatedSysLog);
         content.Should().Contain("Session Uptime: 4h 32m 15s");
         content.Should().Contain("Reason: User Logout");
+    }
+
+    [Fact]
+    public void ConsecutiveSessions_HaveSingleSeparatorLineBetweenOldAndNewSessions_WithoutDoubleDividers()
+    {
+        string dedicatedSysLog = Path.Combine(_tempDir, "sys_consecutive_" + Guid.NewGuid().ToString("N") + ".log");
+        string dedicatedMetricLog = Path.Combine(_tempDir, "metric_consecutive_" + Guid.NewGuid().ToString("N") + ".log");
+
+        // Session 1
+        Log.Init(dedicatedSysLog, dedicatedMetricLog, enableMetrics: false);
+        Log.SessionStart("1.0.0", isAdmin: true, configPath: "test.json", mode: "Standard");
+        Log.Info("Session 1 running");
+        Log.SessionEnd("Application Quit", TimeSpan.FromMinutes(10));
+        Log.Shutdown();
+
+        // Session 2 in the same log file
+        Log.Init(dedicatedSysLog, dedicatedMetricLog, enableMetrics: false);
+        Log.SessionStart("1.0.0", isAdmin: true, configPath: "test.json", mode: "Standard");
+        Log.Info("Session 2 running");
+        Log.Shutdown();
+
+        string content = File.ReadAllText(dedicatedSysLog);
+        string doubleDividerLf = "--------------------------------------------------------------------------------\n--------------------------------------------------------------------------------";
+        string doubleDividerCrlf = "--------------------------------------------------------------------------------\r\n--------------------------------------------------------------------------------";
+
+        content.Should().NotContain(doubleDividerLf);
+        content.Should().NotContain(doubleDividerCrlf);
+
+        // Verify transition has exactly one separator between Terminated and Started
+        string[] lines = content.Split(["\r\n", "\n"], StringSplitOptions.None);
+        int terminatedIndex = Array.FindIndex(lines, l => l.Contains("LocalTelemetry Terminated"));
+        int startedIndex = Array.FindIndex(lines, terminatedIndex + 1, l => l.Contains("LocalTelemetry v1.0.0 Started"));
+
+        terminatedIndex.Should().BeGreaterThan(-1);
+        startedIndex.Should().Be(terminatedIndex + 2); // Exactly 1 line between: Terminated, divider, Started
+        lines[terminatedIndex + 1].Should().Be(new string('-', 80));
     }
 
     [Fact]

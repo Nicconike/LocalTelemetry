@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using LocalTelemetry.Core.Diagnostics;
@@ -109,11 +110,19 @@ public sealed class AppSettings
         // Ensure MetricColors has all known metric entries (from older configs with fewer keys)
         var mc = cfg.Overlay.MetricColors;
         var allDefaults = BrandColorDefaults.BuildDefaultMetricColors();
+        cfg.Overlay.DefaultMetricColors = allDefaults;
         bool dirty = false;
-        foreach (var kvp in allDefaults.Where(kvp => !mc.ContainsKey(kvp.Key)))
+        foreach (var (k, v) in allDefaults)
         {
-            mc[kvp.Key] = kvp.Value;
-            dirty = true;
+            bool isMissingOrLegacy = !mc.TryGetValue(k, out var curVal) ||
+                (!cfg.Overlay.UserCustomizedMetricColors.Contains(k) &&
+                 (curVal == OverlayConfig.DefaultCyanColor || curVal == OverlayConfig.DefaultSkyBlueColor || curVal == "#FBBF24" || curVal == "#80E080"));
+
+            if (isMissingOrLegacy)
+            {
+                mc[k] = v;
+                dirty = true;
+            }
         }
         if (dirty)
         {
@@ -124,15 +133,23 @@ public sealed class AppSettings
         // Ensure GroupColors has all known group entries (from configs saved before group colors existed)
         var gc = cfg.Overlay.GroupColors;
         bool groupDirty = false;
-        foreach (var kvp in BrandColorDefaults.BuildDefaultGroupColors(allDefaults).Where(kvp => !gc.ContainsKey(kvp.Key)))
+        foreach (var (groupKey, groupColor) in BrandColorDefaults.BuildDefaultGroupColors(allDefaults).Where(kvp => !gc.ContainsKey(kvp.Key)))
         {
-            gc[kvp.Key] = kvp.Value;
+            gc[groupKey] = groupColor;
             groupDirty = true;
         }
         if (groupDirty)
         {
             cfg.Save();
             Log.Debug($"Configuration migration completed: populated {gc.Count} group color entries");
+        }
+        // Ensure pre-release updates are enabled by default on beta / pre-release builds
+        // unless the user explicitly configured their preference in settings.
+        if (UpdateConfig.DefaultIncludePrereleases && !cfg.Updates.UserExplicitlySetIncludePrereleases && !cfg.Updates.IncludePrereleases)
+        {
+            cfg.Updates.IncludePrereleases = true;
+            cfg.Save();
+            Log.Debug("Configuration migration: enabled pre-release updates by default for pre-release build");
         }
     }
 
@@ -152,6 +169,24 @@ public sealed class AppSettings
             Log.Debug($"Configuration saved successfully ({json.Length} characters, Overlay Visible: {Overlay.Visible})");
         }
         catch (Exception ex) { Log.Error(ex, "Failed to save configuration settings"); }
+    }
+
+    /// <summary>Copies configuration values from another <see cref="AppSettings"/> instance.</summary>
+    /// <param name="other">The source settings to copy from.</param>
+    public void CopyFrom(AppSettings other)
+    {
+        RunAtStartup = other.RunAtStartup;
+        StartMinimized = other.StartMinimized;
+        MinimizeToTrayOnClose = other.MinimizeToTrayOnClose;
+        ShowSystemTrayIcon = other.ShowSystemTrayIcon;
+        EnableFileLogging = other.EnableFileLogging;
+        SystemLogLevel = other.SystemLogLevel;
+        WindowTheme = other.WindowTheme;
+        Monitoring = other.Monitoring;
+        Overlay = other.Overlay;
+        Alerts = other.Alerts;
+        NetUsage = other.NetUsage;
+        Updates = other.Updates;
     }
 
     /// <summary>Whether the app is registered to run automatically at user logon.</summary>
@@ -244,10 +279,6 @@ public sealed class OverlayConfig
     public string Placement { get; set; } = "left";
     /// <summary>Horizontal offset in pixels from the chosen placement.</summary>
     public int PlacementOffset { get; set; } = 0;
-    /// <summary>Saved drag X for Approach-B float (-1 = auto).</summary>
-    public int FloatX { get; set; } = -1;
-    /// <summary>Saved drag Y for Approach-B float (-1 = auto).</summary>
-    public int FloatY { get; set; } = -1;
     /// <summary>Action on double-click: <c>"none"</c>, <c>"taskmanager"</c>, <c>"settings"</c>.</summary>
     public string DoubleClickAction { get; set; } = "settings";
     /// <summary>Overlay opacity percentage (0-100).</summary>
@@ -265,38 +296,20 @@ public sealed class OverlayConfig
     /// <summary>Background color as a hex string.</summary>
     public string BgColor { get; set; } = "#1c1b19";
 
-    private const string DefaultCyanColor = "#00E5FF";
-    private const string DefaultSkyBlueColor = "#88CCFF";
+    internal const string DefaultCyanColor = "#00E5FF";
+    internal const string DefaultSkyBlueColor = "#88CCFF";
 
     /// <summary>Per-metric value colors for the widget (overrides ValueColor).</summary>
-    public Dictionary<string, string> MetricColors { get; set; } = new()
-    {
-        [Metrics.CpuPct] = DefaultCyanColor,
-        [Metrics.CpuTemp] = DefaultCyanColor,
-        [Metrics.CpuFreq] = DefaultCyanColor,
-        [Metrics.CpuPower] = DefaultCyanColor,
-        [Metrics.RamPct] = "#A78BFA",
-        [Metrics.RamUsed] = "#A78BFA",
-        [Metrics.GpuPct] = DefaultSkyBlueColor,
-        [Metrics.GpuTemp] = DefaultSkyBlueColor,
-        [Metrics.GpuVram] = DefaultSkyBlueColor,
-        [Metrics.GpuFreq] = DefaultSkyBlueColor,
-        [Metrics.GpuPower] = DefaultSkyBlueColor,
-        [Metrics.NetDown] = "#38BDF8",
-        [Metrics.NetUp] = "#4ADE80",
-        [Metrics.NetTotal] = "#FBBF24",
-        [Metrics.BatteryPct] = "#80E080",
-        [Metrics.BatteryRate] = "#80E080",
-    };
+    public Dictionary<string, string> MetricColors { get; set; } = BrandColorDefaults.BuildDefaultMetricColors();
 
     /// <summary>
     /// Per-group colors shown by the Appearance page group pickers ("All CPU", "All GPU", ...).
     /// Keys: <c>cpu</c>, <c>gpu</c>, <c>ram</c>, <c>network</c>, <c>battery</c>, <c>disk</c>.
-    /// Defaults to the detected vendor-brand colors (see <c>ApplyVendorColors</c>).
+    /// Defaults are hardware-aware (brand colors where detectable, fallback to theme defaults).
     /// Independent of <see cref="MetricColors"/>: changing a group color stamps all metrics in the
     /// group, but changing a single metric color does not affect the group color.
     /// </summary>
-    public Dictionary<string, string> GroupColors { get; set; } = [];
+    public Dictionary<string, string> GroupColors { get; set; } = BrandColorDefaults.BuildDefaultGroupColors();
 
     /// <summary>Hardware-detected default colors (never saved, rebuilt on each launch).</summary>
     [JsonIgnore]
@@ -310,6 +323,9 @@ public sealed class OverlayConfig
 
     /// <summary>Group keys whose colors were customized by the user (skip in ApplyVendorColors).</summary>
     public HashSet<string> UserCustomizedGroupColors { get; set; } = [];
+
+    /// <summary>Active layout preset name (<c>"default"</c>, <c>"gaming"</c>, <c>"compact"</c>, <c>"micro"</c>, <c>"thermals"</c>, <c>"workstation"</c>, <c>"network"</c>, <c>"full"</c>, or <c>"custom"</c>).</summary>
+    public string LayoutPreset { get; set; } = "default";
 
     /// <summary>Combined metric ID list (even indices = top row, odd indices = bottom row).</summary>
     public List<string> Row1 { get; set; } = [Metrics.CpuPct, Metrics.CpuTemp, Metrics.GpuPct, Metrics.GpuTemp, Metrics.GpuVram, Metrics.NetTotal, Metrics.RamPct, Metrics.RamUsed, Metrics.NetDown, Metrics.NetUp];
@@ -383,6 +399,8 @@ public sealed class AlertConfig
     public bool ShowToastNotif { get; set; } = true;
     /// <summary>Whether to flash the overlay background on alert.</summary>
     public bool FlashOverlay { get; set; } = true;
+    /// <summary>Consecutive seconds a metric must continuously breach threshold before triggering alerts.</summary>
+    public int SustainedSecs { get; set; } = 3;
     /// <summary>Minimum seconds between repeated alerts for the same threshold.</summary>
     public int CooldownSecs { get; set; } = 60;
     /// <summary>When true, alerts fire only once per app session (cooldown is ignored).</summary>
@@ -401,11 +419,41 @@ public sealed class NetUsageConfig
 /// <summary>Update checking configuration.</summary>
 public sealed class UpdateConfig
 {
+    private bool? _includePrereleases;
+
     /// <summary>Update check frequency: "weekly", "monthly", or "manual". Default is "manual" for new installs.</summary>
     public string CheckFrequency { get; set; } = "manual";
 
     /// <summary>Whether to include pre-release and Release Candidate (RC) builds when checking for updates.</summary>
-    public bool IncludePrereleases { get; set; } = false;
+    public bool IncludePrereleases
+    {
+        get => _includePrereleases ?? DefaultIncludePrereleases;
+        set => _includePrereleases = value;
+    }
+
+    /// <summary>Whether the user has explicitly changed the pre-release setting in the UI.</summary>
+    public bool UserExplicitlySetIncludePrereleases { get; set; }
+
+    /// <summary>Default value for IncludePrereleases based on whether the running version is a pre-release build.</summary>
+    public static bool DefaultIncludePrereleases { get; set; } = DetectPrereleaseBuild();
+
+    private static bool DetectPrereleaseBuild()
+    {
+        try
+        {
+            var asm = System.Reflection.Assembly.GetEntryAssembly() ?? typeof(AppSettings).Assembly;
+            var infoAttr = asm.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>();
+            string ver = infoAttr?.InformationalVersion ?? asm.GetName().Version?.ToString() ?? string.Empty;
+            int plusIdx = ver.IndexOf('+');
+            if (plusIdx > 0)
+                ver = ver[..plusIdx];
+            return ver.Contains('-');
+        }
+        catch
+        {
+            return false;
+        }
+    }
 
     /// <summary>UTC timestamp of the last update check.</summary>
     public DateTime LastCheckUtc { get; set; } = DateTime.MinValue;

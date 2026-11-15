@@ -19,13 +19,26 @@ public class AlertServiceTests
         field?.SetValue(service, DateTime.UtcNow.AddSeconds(-20));
     }
 
-    private static (AlertService service, TaskbarOverlay overlay, NotificationClient notifClient)
-        CreateService(AppSettings cfg)
+    private sealed class ManualTimeProvider : TimeProvider
     {
+        private DateTimeOffset _utcNow = DateTimeOffset.UtcNow;
+
+        public void Advance(TimeSpan delta) => _utcNow += delta;
+        public override DateTimeOffset GetUtcNow() => _utcNow;
+    }
+
+    private static (AlertService service, TaskbarOverlay overlay, NotificationClient notifClient)
+        CreateService(AppSettings cfg, TimeProvider? timeProvider = null, bool defaultZeroSustained = true)
+    {
+        if (defaultZeroSustained && cfg.Alerts.SustainedSecs == 3)
+        {
+            cfg.Alerts.SustainedSecs = 0;
+        }
+
         var embedder = new TaskbarEmbedder(cfg);
         var overlay = new TaskbarOverlay(cfg, embedder);
         var notifClient = Substitute.For<NotificationClient>();
-        var service = new AlertService(cfg, overlay, notifClient);
+        var service = new AlertService(cfg, overlay, notifClient, null, timeProvider);
         BypassStartupGracePeriod(service);
         return (service, overlay, notifClient);
     }
@@ -373,6 +386,7 @@ public class AlertServiceTests
         cfg.Alerts.AlertNetMonthly = true;
         cfg.Alerts.NetDailyMaxGb = 0.001f;
         cfg.Alerts.NetMonthlyMaxGb = 0.001f;
+        cfg.Alerts.SustainedSecs = 0;
         cfg.Alerts.FlashOverlay = true;
         cfg.Alerts.ShowToastNotif = true;
 
@@ -437,7 +451,7 @@ public class AlertServiceTests
         var cfg = new AppSettings();
         cfg.Alerts.Enabled = true;
         cfg.Alerts.AlertCpuTemp = true;
-        cfg.Alerts.CpuTempMaxC = 90f; // Threshold 90°C, Hysteresis 6°C -> Recovery at <= 84°C
+        cfg.Alerts.CpuTempMaxC = 90f; // Threshold 90°C, Hysteresis 10°C -> Recovery at <= 80°C
         cfg.Alerts.ShowToastNotif = true;
         cfg.Alerts.CooldownSecs = 0; // Disable time cooldown to test pure hysteresis behavior
 
@@ -447,15 +461,16 @@ public class AlertServiceTests
         service.Evaluate(new TelemetrySnapshot { CpuTempPackageC = 91f });
         _ = notifClient.Received(1).SendToastAsync(Arg.Is<string>(s => s.Contains("CPU Temperature High")), Arg.Any<string>());
 
-        // 2. Fluctuations typical of laptop gaming (92°C, 88°C, 91°C, 85°C): should NOT fire again
+        // 2. Fluctuations typical of laptop gaming (92°C, 88°C, 91°C, 85°C, 83°C): should NOT fire again
         service.Evaluate(new TelemetrySnapshot { CpuTempPackageC = 92f });
         service.Evaluate(new TelemetrySnapshot { CpuTempPackageC = 88f });
         service.Evaluate(new TelemetrySnapshot { CpuTempPackageC = 91f });
         service.Evaluate(new TelemetrySnapshot { CpuTempPackageC = 85f });
+        service.Evaluate(new TelemetrySnapshot { CpuTempPackageC = 83f });
         _ = notifClient.Received(1).SendToastAsync(Arg.Any<string>(), Arg.Any<string>());
 
-        // 3. Cools down below 90 - 6 = 84°C (e.g. 83°C): recovers/normalizes
-        service.Evaluate(new TelemetrySnapshot { CpuTempPackageC = 83f });
+        // 3. Cools down below 90 - 10 = 80°C (e.g. 79°C): recovers/normalizes
+        service.Evaluate(new TelemetrySnapshot { CpuTempPackageC = 79f });
         _ = notifClient.Received(1).SendToastAsync(Arg.Any<string>(), Arg.Any<string>());
 
         // 4. Climbs back to 91°C: should fire again as a new breach
@@ -486,5 +501,109 @@ public class AlertServiceTests
         // 3. Surge to 96°C (+6°C from initial 90°C >= 5°C escalationDelta): triggers escalation alert
         service.Evaluate(new TelemetrySnapshot { CpuTempPackageC = 96f });
         _ = notifClient.Received(1).SendToastAsync(Arg.Is<string>(s => s.Contains("CPU Temperature Critical")), Arg.Any<string>());
+    }
+
+    [WpfFact]
+    public void Evaluate_SpikeUnderSustainedDuration_DoesNotFireAlertOrSetOverlayActive()
+    {
+        var cfg = new AppSettings();
+        cfg.Alerts.Enabled = true;
+        cfg.Alerts.AlertCpuTemp = true;
+        cfg.Alerts.CpuTempMaxC = 90f;
+        cfg.Alerts.SustainedSecs = 3;
+        cfg.Alerts.ShowToastNotif = true;
+
+        var timeProvider = new ManualTimeProvider();
+        var (service, overlay, notifClient) = CreateService(cfg, timeProvider, defaultZeroSustained: false);
+
+        // Tick 1: 95°C at t=0s -> breach starts, no notification
+        service.Evaluate(new TelemetrySnapshot { CpuTempPackageC = 95f });
+        _ = notifClient.DidNotReceiveWithAnyArgs().SendToastAsync(default!, default!);
+        overlay.IsAlertActive(Metrics.CpuTemp).Should().BeFalse();
+
+        // Tick 2: 95°C at t=2s (only 2s elapsed < 3s sustained) -> no notification
+        timeProvider.Advance(TimeSpan.FromSeconds(2));
+        service.Evaluate(new TelemetrySnapshot { CpuTempPackageC = 95f });
+        _ = notifClient.DidNotReceiveWithAnyArgs().SendToastAsync(default!, default!);
+        overlay.IsAlertActive(Metrics.CpuTemp).Should().BeFalse();
+
+        // Tick 3: Drops to 85°C (spike ended) -> breach tracking cleared
+        timeProvider.Advance(TimeSpan.FromSeconds(0.5));
+        service.Evaluate(new TelemetrySnapshot { CpuTempPackageC = 85f });
+        _ = notifClient.DidNotReceiveWithAnyArgs().SendToastAsync(default!, default!);
+        overlay.IsAlertActive(Metrics.CpuTemp).Should().BeFalse();
+    }
+
+    [WpfFact]
+    public void Evaluate_SustainedBreach_FiresAlertAndSetsOverlayActive()
+    {
+        var cfg = new AppSettings();
+        cfg.Alerts.Enabled = true;
+        cfg.Alerts.AlertCpuTemp = true;
+        cfg.Alerts.CpuTempMaxC = 90f;
+        cfg.Alerts.SustainedSecs = 3;
+        cfg.Alerts.ShowToastNotif = true;
+
+        var timeProvider = new ManualTimeProvider();
+        var (service, overlay, notifClient) = CreateService(cfg, timeProvider, defaultZeroSustained: false);
+
+        // Tick 1: 95°C at t=0s
+        service.Evaluate(new TelemetrySnapshot { CpuTempPackageC = 95f });
+        overlay.IsAlertActive(Metrics.CpuTemp).Should().BeFalse();
+
+        // Tick 2: 95°C at t=3.5s (sustained >= 3s) -> fires!
+        timeProvider.Advance(TimeSpan.FromSeconds(3.5));
+        service.Evaluate(new TelemetrySnapshot { CpuTempPackageC = 95f });
+
+        _ = notifClient.Received(1).SendToastAsync(Arg.Is<string>(s => s.Contains("CPU Temperature High")), Arg.Any<string>());
+        overlay.IsAlertActive(Metrics.CpuTemp).Should().BeTrue();
+    }
+
+    [WpfFact]
+    public void Evaluate_RecoveryAfterSustainedBreach_ClearsOverlayActive()
+    {
+        var cfg = new AppSettings();
+        cfg.Alerts.Enabled = true;
+        cfg.Alerts.AlertCpuTemp = true;
+        cfg.Alerts.CpuTempMaxC = 90f; // Hysteresis is 10°C, recovers at <= 80°C
+        cfg.Alerts.SustainedSecs = 3;
+
+        var timeProvider = new ManualTimeProvider();
+        var (service, overlay, _) = CreateService(cfg, timeProvider, defaultZeroSustained: false);
+
+        // Initial sustained breach
+        service.Evaluate(new TelemetrySnapshot { CpuTempPackageC = 95f });
+        timeProvider.Advance(TimeSpan.FromSeconds(3.5));
+        service.Evaluate(new TelemetrySnapshot { CpuTempPackageC = 95f });
+        overlay.IsAlertActive(Metrics.CpuTemp).Should().BeTrue();
+
+        // Cools down to 85°C: still within hysteresis band (90 - 10 = 80°C), remains active
+        service.Evaluate(new TelemetrySnapshot { CpuTempPackageC = 85f });
+        overlay.IsAlertActive(Metrics.CpuTemp).Should().BeTrue();
+
+        // Cools down to 79°C: recovers!
+        service.Evaluate(new TelemetrySnapshot { CpuTempPackageC = 79f });
+        overlay.IsAlertActive(Metrics.CpuTemp).Should().BeFalse();
+    }
+
+    [WpfFact]
+    public void Evaluate_DisabledAlerts_ClearsActiveOverlayWarnings()
+    {
+        var cfg = new AppSettings();
+        cfg.Alerts.Enabled = true;
+        cfg.Alerts.AlertCpuTemp = true;
+        cfg.Alerts.CpuTempMaxC = 90f;
+        cfg.Alerts.SustainedSecs = 0;
+
+        var (service, overlay, _) = CreateService(cfg);
+
+        // Breach fires immediately
+        service.Evaluate(new TelemetrySnapshot { CpuTempPackageC = 95f });
+        overlay.IsAlertActive(Metrics.CpuTemp).Should().BeTrue();
+
+        // User disables alerts
+        cfg.Alerts.Enabled = false;
+        service.Evaluate(new TelemetrySnapshot { CpuTempPackageC = 95f });
+        overlay.IsAlertActive(Metrics.CpuTemp).Should().BeFalse();
     }
 }

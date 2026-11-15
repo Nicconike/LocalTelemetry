@@ -4,6 +4,47 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com), and this project adheres to [Semantic Versioning](https://semver.org) & [Conventional Commits](https://conventionalcommits.org).
 
+## [1.3.0-beta.4](https://github.com/Nicconike/LocalTelemetry/compare/v1.3.0-beta.3...v1.3.0-beta.4) (15-11-2026)
+
+### Features
+
+* **release:** automate domain-grouped GitHub release notes with sub-bullet expansion ([946f4a1](https://github.com/Nicconike/LocalTelemetry/commit/946f4a1256f8c1c0e4895a6b3e697e6c5691544e))
+* **layout,traffic,overlay:** add layout presets, traffic import, and themes ([b8fe8e0](https://github.com/Nicconike/LocalTelemetry/commit/b8fe8e0b9ba16d1197d7df602accd1a16e4dfc05))
+
+## [1.3.0-beta.3](https://github.com/Nicconike/LocalTelemetry/compare/v1.3.0-beta.2...v1.3.0-beta.3) (14-11-2026)
+
+### Features
+
+* **layout,traffic,overlay:** add layout presets, JSONL network traffic import, unique high-contrast themes, and resilient taskbar embedding ([20507fd](https://github.com/Nicconike/LocalTelemetry/commit/20507fdd629ed5a2e5205b7bfaf871bfd0ad98a6))
+
+### Continuous Integration
+
+* **workflows:** restrict auto-approval to dependabot and sync develop ([fed8a04](https://github.com/Nicconike/LocalTelemetry/commit/fed8a049b0b086c6732d292ee117b707c96ef376))
+* **workflows:** enforce app token attribution and target develop in dependabot ([d4dd765](https://github.com/Nicconike/LocalTelemetry/commit/d4dd76546b5ea72ab755467d3d7e7b2532881f2d))
+* **sonar:** restrict push trigger to master and feed frontend coverage ([35596c7](https://github.com/Nicconike/LocalTelemetry/commit/35596c779f0274475c983b90c732cd80644a7b11))
+* **release:** prevent duplicate trailing newlines and expand test coverage ([20d84ca](https://github.com/Nicconike/LocalTelemetry/commit/20d84cac557822e51f29ca9689be20970f7c3788))
+
+## [1.3.0-beta.2](https://github.com/Nicconike/LocalTelemetry/compare/v1.3.0-beta.1...v1.3.0-beta.2) (2026-10-31)
+
+### Bug Fixes
+
+* **overlay:** dismiss context menu on outside click and purge floating fallback code ([bb672c2](https://github.com/Nicconike/LocalTelemetry/commit/bb672c28fde60aa5c785f12a76f671ce43199162))
+
+## [1.3.0-beta.1](https://github.com/Nicconike/LocalTelemetry/compare/v1.2.0...v1.3.0-beta.1) (2026-10-31)
+
+### Features
+
+* **release:** add develop pre-release channel and overlay space auto-recovery ([572b12e](https://github.com/Nicconike/LocalTelemetry/commit/572b12e2996e790dba8e53db67cdeca5bec63203))
+
+### Code Refactoring
+
+* **quality:** decompose complex methods and resolve Sonar code smells ([9f1a58e](https://github.com/Nicconike/LocalTelemetry/commit/9f1a58e83d523b8d6d1c069c12673b1edff47492))
+
+### Tests
+
+* **taskbar:** assert simulated automation exception in button coverage test ([0064ecd](https://github.com/Nicconike/LocalTelemetry/commit/0064ecd5a9cfd7268e456343f8290fbb31f20685))
+* **hardware:** isolate pawnio installer seams and disable test parallelization ([31a6487](https://github.com/Nicconike/LocalTelemetry/commit/31a6487104f10edbdd1abddb46d62da575eb65a5))
+
 ## [1.2.0](https://github.com/Nicconike/LocalTelemetry/compare/v1.1.0...v1.2.0) (2026-10-26)
 
 ### Features

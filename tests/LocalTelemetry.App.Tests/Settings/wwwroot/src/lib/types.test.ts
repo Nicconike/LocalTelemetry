@@ -79,6 +79,7 @@ describe('types.ts structure & compatibility', () => {
                 netMonthlyMaxGb: 1000,
                 showToastNotif: true,
                 flashOverlay: true,
+                sustainedSecs: 3,
                 cooldownSecs: 30,
                 fireOncePerSession: false,
             },

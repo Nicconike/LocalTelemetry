@@ -125,11 +125,19 @@ Under the **Windows Network Usage** section on the Traffic page, you can manuall
 - **Import Execution**: Click **Import from Windows**. LocalTelemetry reads historical records from the Windows database for the requested range.
 - **Status Reporting**: Displays the total days and bandwidth imported (e.g. `Imported 14 day(s): ↓ 12.45 GB, ↑ 2.10 GB`) or confirms that the period is already up to date.
 
+### :arrow-down-to-line: Database Backup Export
+
+Under the **Traffic Database & Backup** section, click **Export Database Backup**:
+
+- Exports all recorded and imported bandwidth history to a standalone `.jsonl` file.
+- Prompts with a Windows Save File Dialog to specify the destination and filename.
+- Allows convenient data backups before system reinstallations or migrations to another device.
+
 ### :import: Manual Traffic Database & Backup File Import
 
 Under the **Traffic Database & Backup** section on the Traffic page, click **Select .jsonl or .dat file** to restore or load external bandwidth logs:
 
-- **JSON Lines Format (`.jsonl`)**: Restores native LocalTelemetry backup files containing line-delimited JSON objects. Supports `date`, upload bytes (`up_bytes`, `upload_bytes`, `up`), download bytes (`down_bytes`, `download_bytes`, `down`), and `interface`. Dates support `YYYY-MM-DD`, `DD-MM-YYYY`, and `DD/MM/YYYY`. Records merge into `TrafficHistoryStore` with source `JsonlImport`.
+- **JSON Lines & JSON Array Format (`.jsonl` / `.json`)**: Restores native LocalTelemetry backup files containing line-delimited JSON objects or standard JSON arrays (`[...]`). Supports standard date formats (`YYYY-MM-DD`, `DD-MM-YYYY`, `DD/MM/YYYY`) and multiple byte field schemas (`download_bytes`/`upload_bytes`, `down`/`up`, `rx_bytes`/`tx_bytes`, `bytes_in`/`bytes_out`). Records merge into `TrafficHistoryStore` with source `JsonlImport`.
 
   ```json
   {"date":"2026-10-01","download_bytes":524288000,"upload_bytes":104857600,"interface":"Ethernet"}

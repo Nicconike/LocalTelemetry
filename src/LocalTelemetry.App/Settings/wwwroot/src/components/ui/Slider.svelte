@@ -19,7 +19,7 @@
     {/if}
     <input
         type="range"
-        bind:value
+        {value}
         {min}
         {max}
         {step}
@@ -27,6 +27,12 @@
         aria-valuemin={min}
         aria-valuemax={max}
         aria-valuenow={value}
+        oninput={(e) => {
+            const n = Number(e.currentTarget.value);
+            if (!isNaN(n)) {
+                value = n;
+            }
+        }}
         {onchange}
     />
 </div>

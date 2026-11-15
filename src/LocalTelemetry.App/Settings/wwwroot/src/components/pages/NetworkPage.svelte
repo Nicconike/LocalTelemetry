@@ -27,7 +27,7 @@
 
         <SectionCard
             title="Network Adapter"
-            description="Select which network adapter is used for throughput monitoring and traffic history recording."
+            description="Select which network adapter is used for throughput monitoring."
         >
             <Select
                 label="Adapter"
@@ -43,6 +43,7 @@
             <Toggle
                 bind:checked={$settings.netUsage.enabled}
                 label="Record Daily Traffic History"
+                description="Persists cumulative bandwidth history to internet_usage.jsonl."
             />
         </SectionCard>
     </div>
@@ -52,7 +53,7 @@
     .page {
         display: flex;
         flex-direction: column;
-        gap: var(--space-5);
+        gap: var(--space-3);
     }
     h2 {
         font-size: var(--text-lg);
