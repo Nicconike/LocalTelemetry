@@ -53,13 +53,17 @@ LocalTelemetry automatically inspects your hardware components at startup (`Syst
 
 ## :layout-dashboard: Overlay Layout Presets
 
-LocalTelemetry provides five curated layout presets in **Settings -> Layout** to quickly tailor telemetry to your workflow:
+LocalTelemetry provides eight curated layout presets in **Settings -> Layout** to quickly tailor telemetry to your workflow:
 
 - **Default (10 Metrics)**: Balanced 5-column dual-row overview (CPU Usage & Temp, GPU Usage & Temp, GPU VRAM & Net Total, RAM Usage & Used, Download & Upload).
 - **Gaming (12 Metrics)**: Performance-focused layout featuring CPU/GPU clocks and wattage alongside temperatures, utilization, and dedicated GPU VRAM.
-- **Compact (6 Metrics)**: Minimalist low-profile single-row layout displaying core load percentages and network throughput.
+- **Compact (6 Metrics)**: Minimalist layout displaying core load percentages and network speed.
+- **Micro (4 Metrics)**: Ultra-compact 2-column strip for narrow taskbars and small displays (CPU %, GPU %, RAM %, Download speed).
+- **Thermals & Power (8 Metrics)**: Dedicated dual-column CPU and GPU thermal, wattage, and clock diagnostics.
+- **Workstation (8+ Metrics)**: Productivity pairing featuring CPU compute, RAM pool, live network, and primary storage drive I/O.
+- **Network & Traffic (8 Metrics)**: Bandwidth focus highlighting live download/upload speeds, cumulative transfer, and core system load.
 - **Full Telemetry (20+ Metrics)**: Complete system monitoring tracking all available hardware sensors including per-drive NVMe/SATA I/O and battery telemetry.
-- **Custom**: Fully customizable layout created by adding, removing, or reordering metrics in the layout designer.
+- **Custom**: Fully customizable layout created by adding, removing, swapping, or reordering metrics in the layout designer.
 
 ## :layout-dashboard: Customized & Expanded Setups
 

@@ -22,7 +22,7 @@ To read the personal story, background, and engineering philosophy behind this p
 - :calendar-days: **Gapless Network History**: Reconstructs daily bandwidth from your Windows installation date via Windows SRUM (`SRUDB.dat`) alongside live speed metering.
 - :battery-plus: **Laptop Battery Telemetry**: Real-time battery charge percentage and charge/discharge rate in Watts directly on the taskbar overlay, plus manufacturer, device model, designed capacity, and full charge capacity in the System dashboard.
 - :bell-ring: **Non-Intrusive Safety Alerts**: In-place taskbar flashing and focus-safe desktop toast notifications that warn of thermal throttling without minimizing full-screen games.
-- :palette: **Svelte 5 Customization Dashboard**: Complete control over metric visibility, drag-and-drop sequencing, per-metric colors, and warning thresholds.
+- :palette: **Svelte 5 Customization Dashboard**: Complete control over metric visibility, 8 curated layout presets, column swapping and drag-and-drop sequencing, per-metric colors, and warning thresholds.
 - :shield-check: **Privacy-First & Local Storage**: All hardware sensor metrics and bandwidth logs remain strictly on your local machine with zero analytics or tracking. Software updates check the official GitHub Releases API either on-demand or at your configured schedule without transmitting personal telemetry.
 
 ## :book-open-text: User Guide Chapters

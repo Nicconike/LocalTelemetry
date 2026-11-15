@@ -54,10 +54,15 @@ The settings panel is organized into 10 dedicated tabs matching the exact naviga
 
 - **Layout Presets**: Select quick arrangements for your taskbar:
   - **Default**: Balanced 5-column layout tracking core utilization, temperatures, memory, and network throughput.
-  - **Compact**: Minimalist single-row layout displaying core load percentages and total bandwidth.
   - **Gaming**: Tailored for gameplay performance, thermals, and dedicated GPU VRAM consumption.
+  - **Compact**: Minimalist single-row layout displaying core load percentages and network speed.
+  - **Micro**: Ultra-compact 2-column strip for narrow taskbars and small displays.
+  - **Thermals & Power**: Dedicated diagnostics for CPU/GPU temperatures, wattage, and core clocks.
+  - **Workstation**: Productivity layout highlighting compute load, RAM usage, network, and storage drive I/O.
+  - **Network & Traffic**: Bandwidth focus featuring live transfer rates, cumulative usage, and core load.
   - **Full Telemetry**: Expanded layout displaying all available metrics including clocks, power draw, and disk I/O.
   - **Custom**: User-defined sequence created by selecting, removing, or reordering metrics.
+- **Column Pairing & Swapping**: Group metrics into 2-row vertical columns with one-click swap and left/right shift controls.
 - **Metric Drag-and-Drop Ordering**: Drag metrics (or use the up/down arrows) to change the exact column sequence on the taskbar overlay.
 - **Add / Remove Metrics**: Select which hardware metrics are displayed on the overlay (such as NVMe disk I/O, laptop battery status, package wattage, and core clocks) or remove unneeded sensors. Battery metrics are automatically hidden on desktop computers without a battery.
 - **Reset Layout to Defaults**: Click the **Reset Layout to Defaults** button to instantly restore the standard 5-column default layout (CPU Usage & Temp, GPU Usage & Temp, GPU VRAM & Total Transferred, RAM Usage & Used, and Download & Upload speeds).
@@ -83,7 +88,7 @@ The settings panel is organized into 10 dedicated tabs matching the exact naviga
 - **Filter by Adapter**: Filter bandwidth totals dynamically for **All** or any individual network interface discovered in the month's records (such as **Ethernet** or **Wi-Fi**).
 - **Day Detail Breakdown**: Click on any calendar day to inspect per-adapter upload and download volumes.
 - **Windows Network Usage Import**: Backfill historical usage from Windows SRUM using date presets (`Last 7 Days`, `Last 14 Days`, `Last 30 Days`) or custom `From` / `To` date pickers.
-- **Traffic Database & Backup Import**: Import native `internet_usage.jsonl` backups or external plaintext `.dat` logs into the database.
+- **Traffic Database & Backup Import**: Import native `internet_usage.jsonl` backups, `.json` files, or external plaintext `.dat` logs into the database.
 - **Database Backup Export**: Export complete multi-year traffic history to a standalone `.jsonl` file via a native Windows Save File Dialog.
 - **Persistent Storage**: All historical records are saved locally in `internet_usage.jsonl`.
 

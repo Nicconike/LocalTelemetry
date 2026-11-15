@@ -6,6 +6,7 @@ on:
         paths:
             - "src/**"
             - "tests/**"
+            - ".github/release/**"
             - "Directory.Build.props"
             - "global.json"
             - "LocalTelemetry.sln"
@@ -17,6 +18,7 @@ on:
         paths:
             - "src/**"
             - "tests/**"
+            - ".github/release/**"
             - "Directory.Build.props"
             - "global.json"
             - "LocalTelemetry.sln"
@@ -80,6 +82,34 @@ jobs:
                   disable_search: true
                   plugins: noop
 
+    test-release:
+        name: Release Tests
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout Repository
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  fetch-depth: 0
+
+            - name: Setup Bun
+              uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+
+            - name: Run Release Tests with Coverage
+              run: |
+                  bun install --frozen-lockfile --ignore-scripts
+                  bun run test:coverage
+              working-directory: .github/release
+
+            - name: Upload Release Coverage
+              uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+              with:
+                  token: ${{ secrets.CODECOV_TOKEN }}
+                  slug: Nicconike/LocalTelemetry
+                  files: .github/release/coverage/lcov.info
+                  flags: release
+                  disable_search: true
+                  plugins: noop
+
     test-windows:
         name: .NET Tests
         runs-on: windows-latest
@@ -124,12 +154,6 @@ jobs:
             - name: Test Core
               run: dotnet test tests/LocalTelemetry.Core.Tests/LocalTelemetry.Core.Tests.csproj --configuration Debug --no-build --verbosity minimal --collect:"XPlat Code Coverage" --results-directory TestResults/core -p:Platform=x64
 
-            - name: Test Notifier
-              run: dotnet test tests/LocalTelemetry.Notifier.Tests/LocalTelemetry.Notifier.Tests.csproj --configuration Debug --no-build --verbosity minimal --collect:"XPlat Code Coverage" --results-directory TestResults/notifier -p:Platform=x64
-
-            - name: Test App
-              run: dotnet test tests/LocalTelemetry.App.Tests/LocalTelemetry.App.Tests.csproj --configuration Debug --no-build --verbosity minimal --collect:"XPlat Code Coverage" --results-directory TestResults/app -p:Platform=x64
-
             - name: Upload Core Coverage
               uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
               with:
@@ -140,6 +164,9 @@ jobs:
                   disable_search: true
                   plugins: noop
 
+            - name: Test Notifier
+              run: dotnet test tests/LocalTelemetry.Notifier.Tests/LocalTelemetry.Notifier.Tests.csproj --configuration Debug --no-build --verbosity minimal --collect:"XPlat Code Coverage" --results-directory TestResults/notifier -p:Platform=x64
+
             - name: Upload Notifier Coverage
               uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
               with:
@@ -149,6 +176,9 @@ jobs:
                   flags: notifier
                   disable_search: true
                   plugins: noop
+
+            - name: Test App
+              run: dotnet test tests/LocalTelemetry.App.Tests/LocalTelemetry.App.Tests.csproj --configuration Debug --no-build --verbosity minimal --collect:"XPlat Code Coverage" --results-directory TestResults/app -p:Platform=x64
 
             - name: Upload App Coverage
               uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1

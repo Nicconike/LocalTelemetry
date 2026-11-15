@@ -139,7 +139,7 @@ src/LocalTelemetry.App/Settings/wwwroot/
 │   │   │   ├── GeneralPage.svelte    # Autostart, polling interval & units
 │   │   │   ├── MonitoringPage.svelte # Hardware component sensor toggles
 │   │   │   ├── OverlayPage.svelte    # Taskbar overlay placement, offsets, opacity & space constraint banner
-│   │   │   ├── LayoutPage.svelte     # Metric drag-and-drop reordering
+│   │   │   ├── LayoutPage.svelte     # 8 layout presets, column swapping & drag-and-drop reordering
 │   │   │   ├── NetworkPage.svelte    # Active adapter selection & traffic logging toggle
 │   │   │   ├── TrafficHistoryPage.svelte # Daily network calendar heatmap, .jsonl backup & .dat import
 │   │   │   ├── AlertsPage.svelte     # Threshold limits & toast settings

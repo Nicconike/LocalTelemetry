@@ -201,15 +201,15 @@ The mode is determined at launch by checking for the `app.mode` marker file in t
 | `groupColors` | `object` | Key-value hex mapping | Empty `{}` | Group color overrides for entire component categories. |
 | `followWindowsTheme` | `boolean` | `true`, `false` | `true` | Dynamically adapts color key and luminosity to Windows theme. |
 | `userCustomizedMetricColors` | `array` | Metric ID strings | `[]` | Metric IDs manually recolored by the user; preserved during vendor color updates. |
+| `userCustomizedGroupColors` | `array` | Group key strings | `[]` | Group keys manually recolored by the user. |
+| `layoutPreset` | `string` | `"default"`, `"gaming"`, `"compact"`, `"micro"`, `"thermals"`, `"workstation"`, `"network"`, `"full"`, `"custom"` | `"default"` | Active overlay arrangement preset. |
+| `row1` | `array` | Metric ID strings | 10 default IDs | Column metric layout (even indices = top, odd indices = bottom). |
 
 > [!NOTE] Runtime DTO Augmentation
 > The settings serialization pipeline (`SettingsDtoMapping.ToDto`) augments the client DTO with runtime taskbar properties:
 >
 > - `taskbarSpaceConstrained`: `boolean` (`true` when the available taskbar slot is narrower than the overlay width).
 > - `availableSlotWidth`: `integer` (measured width of the available taskbar slot in pixels).
-| `userCustomizedGroupColors` | `array` | Group key strings | `[]` | Group keys manually recolored by the user. |
-| `layoutPreset` | `string` | `"default"`, `"gaming"`, `"compact"`, `"full"`, `"custom"` | `"default"` | Active overlay arrangement preset. |
-| `row1` | `array` | Metric ID strings | 10 default IDs | Column metric layout (even indices = top, odd indices = bottom). |
 
 ---
 
@@ -247,8 +247,16 @@ The mode is determined at launch by checking for the `app.mode` marker file in t
 | `showToastNotif` | `boolean` | `true`, `false` | `true` | Shows standalone desktop toast popups on alerts. |
 | `flashOverlay` | `boolean` | `true`, `false` | `true` | Flashes the taskbar overlay visually on alerts. |
 | `sustainedSecs` | `integer` | `1` to `10` | `3` | Continuous breach duration in seconds before triggering notifications. |
-| `cooldownSecs` | `integer` | `5` to `3600` | `60` | Minimum seconds between repeat notifications. |
+| `cooldownSecs` | `integer` | `5` to `120` | `60` | Minimum seconds between repeat notifications. |
 | `fireOncePerSession` | `boolean` | `true`, `false` | `false` | Alerts trigger only once per application run when true. |
+
+---
+
+### `netUsage` (Network Usage Tracking Configuration)
+
+| Property | Type | Valid Values | Default | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `enabled` | `boolean` | `true`, `false` | `true` | Enables daily and monthly network bandwidth logging to `internet_usage.jsonl`. |
 
 ---
 
@@ -258,6 +266,7 @@ The mode is determined at launch by checking for the `app.mode` marker file in t
 | :--- | :--- | :--- | :--- | :--- |
 | `checkFrequency` | `string` | `"manual"`, `"weekly"`, `"monthly"` | `"manual"` | Interval for automated background update checks. |
 | `includePrereleases` | `boolean` | `true`, `false` | `false` (stable) / `true` (beta) | Includes pre-release and beta builds when checking for updates. |
+| `userExplicitlySetIncludePrereleases` | `boolean` | `true`, `false` | `false` | Indicates whether the user manually toggled pre-release updates in settings. |
 | `lastCheckUtc` | `string` (ISO 8601) | Datetime string | MinValue | Timestamp of the last completed update check. |
 
 ---

@@ -160,7 +160,7 @@ public sealed class OverlayDto
     /// <summary>Whether to follow the Windows accent/theme color automatically.</summary>
     public bool FollowWindowsTheme { get; set; } = true;
 
-    /// <summary>Active layout preset name ("default", "gaming", "compact", "full", or "custom").</summary>
+    /// <summary>Active layout preset name ("default", "gaming", "compact", "micro", "thermals", "workstation", "network", "full", or "custom").</summary>
     public string LayoutPreset { get; set; } = "default";
 
     /// <summary>Metric IDs displayed in the first overlay row (top row).</summary>

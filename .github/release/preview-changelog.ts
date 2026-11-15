@@ -1,24 +1,32 @@
 /**
- * Standalone tool to generate and preview release notes and changelogs locally
- * grouped into clean functional domains.
+ * Standalone tool to generate and preview release notes and changelogs locally.
+ *
+ * Demonstrates:
+ * 1. CHANGELOG.md format: Conventional commit type groupings (Features, Bug Fixes, etc.)
+ * 2. GitHub Releases format: Functional domain groupings with body sub-bullet expansion.
  *
  * Usage:
- *   bun run changelog
- *   bun run changelog --from v1.2.0 --to HEAD
+ *   bun preview-changelog.ts
+ *   bun preview-changelog.ts --from v1.3.0-beta.2 --to v1.3.0-beta.3
+ *   bun preview-changelog.ts --format github
+ *   bun preview-changelog.ts --format changelog
  */
-import { execSync } from 'node:child_process';
+import process from 'node:process';
+import { execFileSync } from 'node:child_process';
 import { generateNotes } from '@semantic-release/release-notes-generator';
 import {
-    compareCommitGroups,
-    createChangelogTransform,
+    cleanRepoUrl,
     formatReleaseDate,
+    generateGitHubReleaseNotes,
+    resolveGitBinary,
     STANDARD_COMMIT_RANKS,
     STANDARD_RELEASE_RULES,
 } from './changelog-domains.js';
 
 function getLatestTag(): string {
     try {
-        return execSync('git describe --tags --abbrev=0', { encoding: 'utf-8' }).trim();
+        const gitBin = resolveGitBinary();
+        return execFileSync(gitBin, ['describe', '--tags', '--abbrev=0'], { encoding: 'utf-8' }).trim();
     } catch {
         return 'HEAD~10';
     }
@@ -26,7 +34,8 @@ function getLatestTag(): string {
 
 function getCommitDate(ref: string): string {
     try {
-        return execSync(`git log -1 --format=%cI ${ref}`, { encoding: 'utf-8' }).trim();
+        const gitBin = resolveGitBinary();
+        return execFileSync(gitBin, ['log', '-1', '--format=%cI', ref], { encoding: 'utf-8' }).trim();
     } catch {
         return new Date().toISOString();
     }
@@ -34,8 +43,9 @@ function getCommitDate(ref: string): string {
 
 function getRepoUrl(): string {
     try {
-        const url = execSync('git config --get remote.origin.url', { encoding: 'utf-8' }).trim();
-        return url.replace(/\.git$/i, '');
+        const gitBin = resolveGitBinary();
+        const raw = execFileSync(gitBin, ['config', '--get', 'remote.origin.url'], { encoding: 'utf-8' });
+        return cleanRepoUrl(raw);
     } catch {
         return 'https://github.com/Nicconike/LocalTelemetry';
     }
@@ -44,32 +54,36 @@ function getRepoUrl(): string {
 function getCommitsBetween(
     fromTag: string,
     toRef: string = 'HEAD',
-): Array<{ message: string; hash: string; committerDate?: string }> {
-    const raw = execSync(`git log ${fromTag}..${toRef} --format="COMMIT_START%n%H%n%cI%n%B%nCOMMIT_END"`, {
-        encoding: 'utf-8',
-    });
+): Array<{ hash: string; shortHash: string; message: string; committerDate?: string }> {
+    const gitBin = resolveGitBinary();
+    const raw = execFileSync(
+        gitBin,
+        ['log', `${fromTag}..${toRef}`, '--format=COMMIT_START%x00%H%x00%h%x00%cI%x00%B%x00COMMIT_END'],
+        { encoding: 'utf-8' },
+    );
 
-    const commits: Array<{ message: string; hash: string; committerDate?: string }> = [];
-    const chunks = raw.split('COMMIT_START\n');
+    const commits: Array<{ hash: string; shortHash: string; message: string; committerDate?: string }> = [];
+    const chunks = raw.split('COMMIT_START\0');
 
     for (const chunk of chunks) {
         if (!chunk.trim()) continue;
-        const endIdx = chunk.indexOf('\nCOMMIT_END');
+        const endIdx = chunk.indexOf('\0COMMIT_END');
         const content = endIdx >= 0 ? chunk.substring(0, endIdx) : chunk;
-        const lines = content.split('\n');
-        const hash = lines[0]?.trim();
-        const committerDate = lines[1]?.trim();
-        const message = lines.slice(2).join('\n').trim();
+        const parts = content.split('\0');
+        const hash = parts[0]?.trim();
+        const shortHash = parts[1]?.trim() || hash?.substring(0, 7) || '';
+        const committerDate = parts[2]?.trim();
+        const message = parts.slice(3).join('\0').trim();
 
         if (hash && message) {
-            commits.push({ hash, message, committerDate });
+            commits.push({ hash, shortHash, message, committerDate });
         }
     }
 
     return commits;
 }
 
-async function main() {
+async function main(): Promise<void> {
     const args = process.argv.slice(2);
     let fromTag = '';
     let toRef = 'HEAD';
@@ -101,30 +115,13 @@ async function main() {
     const releaseDateIso = getCommitDate(toRef);
     const repoUrl = getRepoUrl();
 
+    // Standard conventional configuration used for CHANGELOG.md
     const standardConfig = {
         preset: 'conventionalcommits',
         presetConfig: STANDARD_RELEASE_RULES,
         writerOpts: {
             commitGroupsSort: (a: { title?: string }, b: { title?: string }) =>
                 (STANDARD_COMMIT_RANKS[b.title ?? ''] ?? 0) - (STANDARD_COMMIT_RANKS[a.title ?? ''] ?? 0),
-            commitsSort: (a: { scope?: string; subject?: string }, b: { scope?: string; subject?: string }) => {
-                const scopeCompare = (b.scope ?? '').localeCompare(a.scope ?? '');
-                if (scopeCompare !== 0) return scopeCompare;
-                return (b.subject ?? '').localeCompare(a.subject ?? '');
-            },
-            formatDate: formatReleaseDate,
-            finalizeContext: (context: Record<string, unknown>) => {
-                context.date = formatReleaseDate(releaseDateIso);
-                return context;
-            },
-        },
-    };
-
-    const domainConfig = {
-        preset: 'conventionalcommits',
-        writerOpts: {
-            transform: createChangelogTransform(),
-            commitGroupsSort: compareCommitGroups,
             commitsSort: (a: { scope?: string; subject?: string }, b: { scope?: string; subject?: string }) => {
                 const scopeCompare = (b.scope ?? '').localeCompare(a.scope ?? '');
                 if (scopeCompare !== 0) return scopeCompare;
@@ -156,29 +153,36 @@ async function main() {
         cwd: process.cwd(),
     };
 
+    const domainNotes = generateGitHubReleaseNotes({
+        fromTag,
+        toRef,
+        version,
+        date: releaseDateIso,
+        repositoryUrl: repoUrl,
+        commits,
+    });
+
     if (format === 'standard' || format === 'changelog') {
         const standardNotes = await generateNotes(standardConfig, context);
         console.log(standardNotes);
     } else if (format === 'domains' || format === 'github' || format === 'release') {
-        const domainNotes = await generateNotes(domainConfig, context);
         console.log(domainNotes);
     } else {
-        const [standardNotes, domainNotes] = await Promise.all([
-            generateNotes(standardConfig, context),
-            generateNotes(domainConfig, context),
-        ]);
+        const standardNotes = await generateNotes(standardConfig, context);
         console.log('================================================================');
         console.log('1. CHANGELOG.md Format (Commit-based Conventional Types):');
         console.log('================================================================');
         console.log(standardNotes);
         console.log('================================================================');
-        console.log('2. GitHub Releases Format (Functional Domains):');
+        console.log('2. GitHub Releases Format (Functional Domains with Sub-Bullets):');
         console.log('================================================================');
         console.log(domainNotes);
     }
 }
 
-main().catch((err) => {
+try {
+    await main();
+} catch (err) {
     console.error('Failed to preview changelog:', err);
     process.exit(1);
-});
+}

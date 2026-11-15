@@ -324,7 +324,7 @@ public sealed class OverlayConfig
     /// <summary>Group keys whose colors were customized by the user (skip in ApplyVendorColors).</summary>
     public HashSet<string> UserCustomizedGroupColors { get; set; } = [];
 
-    /// <summary>Active layout preset name (<c>"default"</c>, <c>"gaming"</c>, <c>"compact"</c>, <c>"full"</c>, or <c>"custom"</c>).</summary>
+    /// <summary>Active layout preset name (<c>"default"</c>, <c>"gaming"</c>, <c>"compact"</c>, <c>"micro"</c>, <c>"thermals"</c>, <c>"workstation"</c>, <c>"network"</c>, <c>"full"</c>, or <c>"custom"</c>).</summary>
     public string LayoutPreset { get; set; } = "default";
 
     /// <summary>Combined metric ID list (even indices = top row, odd indices = bottom row).</summary>

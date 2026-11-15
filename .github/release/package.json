@@ -14,7 +14,10 @@
     "private": true,
     "name": "localtelemetry-release",
     "scripts": {
-        "release": "bun ./run.ts --extends ./release.config.mjs"
+        "release": "bun ./run.ts --extends ./release.config.mjs",
+        "test": "bun test ../../tests/LocalTelemetry.Release.Tests/",
+        "test:coverage": "bun test --coverage --coverage-reporter=lcov --coverage-dir=coverage ../../tests/LocalTelemetry.Release.Tests/",
+        "changelog": "bun ./preview-changelog.ts"
     },
     "dependencies": {
         "conventional-changelog-conventionalcommits": "^8.0.0"

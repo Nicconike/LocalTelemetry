@@ -37,7 +37,7 @@ Explore the key configuration tabs in the settings dashboard to tailor LocalTele
 
 ### :layout-dashboard: Customize Displayed Metrics (Layout vs Monitoring)
 
-- **Layout Tab**: Drag and drop metrics to customize column order, add or remove sensors (such as NVMe disk throughput or laptop battery vitals), or click **Reset Layout to Defaults** to restore the standard 5-column layout.
+- **Layout Tab**: Select from 8 curated layout presets, drag and drop metrics to customize column order, swap or shift columns, add or remove sensors (such as NVMe disk throughput or laptop battery vitals), or click **Reset Layout to Defaults** to restore the standard 5-column layout.
 - **Monitoring Tab**: Toggle individual hardware polling components (CPU, GPU, RAM, Disk, Network, Battery) on or off to eliminate unused background queries, and configure CPU calculation modes (*Average* vs *Max Active Core* clocks; *Overall* vs *Max Thread* usage).
 
 ### :proportions: Adjust Overlay Position & Scale

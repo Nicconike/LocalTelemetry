@@ -130,12 +130,7 @@
         "ram_used",
     ];
 
-    const microMetrics = [
-        "cpu_pct",
-        "gpu_pct",
-        "ram_pct",
-        "net_down",
-    ];
+    const microMetrics = ["cpu_pct", "gpu_pct", "ram_pct", "net_down"];
 
     function getFullMetrics() {
         const base = [
@@ -177,37 +172,43 @@
         {
             id: "compact",
             label: "Compact",
-            tooltip: "Minimal taskbar footprint with core utilization and network speed",
+            tooltip:
+                "Minimal taskbar footprint with core utilization and network speed",
             count: compactMetrics.length,
         },
         {
             id: "micro",
             label: "Micro",
-            tooltip: "Ultra-compact 2-column strip for narrow taskbars and small displays",
+            tooltip:
+                "Ultra-compact 2-column strip for narrow taskbars and small displays",
             count: microMetrics.length,
         },
         {
             id: "thermals",
             label: "Thermals & Power",
-            tooltip: "Dual-column CPU and GPU thermal, wattage, and clock diagnostics",
+            tooltip:
+                "Dual-column CPU and GPU thermal, wattage, and clock diagnostics",
             count: thermalsMetrics.length,
         },
         {
             id: "workstation",
             label: "Workstation",
-            tooltip: "Productivity pairing: CPU compute, RAM pool, live network, and primary drive I/O",
+            tooltip:
+                "Productivity pairing: CPU compute, RAM pool, live network, and primary drive I/O",
             count: getWorkstationMetrics().length,
         },
         {
             id: "network",
             label: "Network & Traffic",
-            tooltip: "Bandwidth focus: live download/upload speeds, cumulative transfer, and core load",
+            tooltip:
+                "Bandwidth focus: live download/upload speeds, cumulative transfer, and core load",
             count: networkMetrics.length,
         },
         {
             id: "full",
             label: "Full Telemetry",
-            tooltip: "Comprehensive hardware overview across all sensors, drives, and battery",
+            tooltip:
+                "Comprehensive hardware overview across all sensors, drives, and battery",
             getCount: () => getFullMetrics().length,
         },
     ]);
@@ -277,14 +278,22 @@
             next.overlay.layoutPreset = presetId;
         } else {
             const cur = filtered.join(",");
-            if (cur === defaultMetrics.join(",")) next.overlay.layoutPreset = "default";
-            else if (cur === gamingMetrics.join(",")) next.overlay.layoutPreset = "gaming";
-            else if (cur === compactMetrics.join(",")) next.overlay.layoutPreset = "compact";
-            else if (cur === microMetrics.join(",")) next.overlay.layoutPreset = "micro";
-            else if (cur === thermalsMetrics.join(",")) next.overlay.layoutPreset = "thermals";
-            else if (cur === getWorkstationMetrics().join(",")) next.overlay.layoutPreset = "workstation";
-            else if (cur === networkMetrics.join(",")) next.overlay.layoutPreset = "network";
-            else if (cur === getPresetMetrics("full").join(",")) next.overlay.layoutPreset = "full";
+            if (cur === defaultMetrics.join(","))
+                next.overlay.layoutPreset = "default";
+            else if (cur === gamingMetrics.join(","))
+                next.overlay.layoutPreset = "gaming";
+            else if (cur === compactMetrics.join(","))
+                next.overlay.layoutPreset = "compact";
+            else if (cur === microMetrics.join(","))
+                next.overlay.layoutPreset = "micro";
+            else if (cur === thermalsMetrics.join(","))
+                next.overlay.layoutPreset = "thermals";
+            else if (cur === getWorkstationMetrics().join(","))
+                next.overlay.layoutPreset = "workstation";
+            else if (cur === networkMetrics.join(","))
+                next.overlay.layoutPreset = "network";
+            else if (cur === getPresetMetrics("full").join(","))
+                next.overlay.layoutPreset = "full";
             else next.overlay.layoutPreset = "custom";
         }
         settings.set(next);
@@ -448,20 +457,20 @@
         <div class="page-header">
             <h2>Widget Metric Layout</h2>
             <p class="desc">
-                Configure your dual-row taskbar telemetry. Even metrics form the top row, and odd metrics form the bottom row of each column.
+                Configure your dual-row taskbar telemetry. Even metrics form the
+                top row, and odd metrics form the bottom row of each column.
             </p>
         </div>
 
         <div class="preset-section">
             <div class="preset-header">
                 <span class="preset-label">Layout Presets</span>
-                {#if activePreset === "custom"}
-                    <span class="custom-indicator custom-card" role="status">
-                        Custom ({items.length} metrics)
-                    </span>
-                {/if}
             </div>
-            <div class="preset-tiles" role="radiogroup" aria-label="Layout Presets">
+            <div
+                class="preset-tiles"
+                role="radiogroup"
+                aria-label="Layout Presets"
+            >
                 {#each presets as p (p.id)}
                     <button
                         type="button"
@@ -478,6 +487,18 @@
                         </span>
                     </button>
                 {/each}
+                {#if activePreset === "custom"}
+                    <button
+                        type="button"
+                        class="preset-tile preset-pill preset-card-item custom-card active"
+                        role="radio"
+                        aria-checked="true"
+                        title="User-defined custom layout with {items.length} metrics"
+                    >
+                        <span class="tile-title">Custom</span>
+                        <span class="tile-count">{items.length}</span>
+                    </button>
+                {/if}
             </div>
         </div>
 
@@ -485,20 +506,34 @@
             {#if columns.length > 0}
                 <div class="mini-preview-card">
                     <div class="mini-preview-head">
-                        <span class="mini-preview-label">Live Taskbar Widget Preview</span>
-                        <span class="mini-preview-sub">2-row column preview</span>
+                        <span class="mini-preview-label"
+                            >Live Taskbar Widget Preview</span
+                        >
+                        <span class="mini-preview-sub"
+                            >2-row column preview</span
+                        >
                     </div>
-                    <div class="mini-taskbar-widget" role="region" aria-label="Taskbar Widget Preview">
+                    <div
+                        class="mini-taskbar-widget"
+                        role="region"
+                        aria-label="Taskbar Widget Preview"
+                    >
                         {#each columns as col (col.colIdx)}
                             <div class="mini-col">
                                 <div class="mini-row top">
                                     <span class="mini-dot top"></span>
-                                    <span class="mini-text">{formatShortMetric(col.topId)}</span>
+                                    <span class="mini-text"
+                                        >{formatShortMetric(col.topId)}</span
+                                    >
                                 </div>
                                 <div class="mini-row bot">
                                     {#if col.botId}
                                         <span class="mini-dot bot"></span>
-                                        <span class="mini-text">{formatShortMetric(col.botId)}</span>
+                                        <span class="mini-text"
+                                            >{formatShortMetric(
+                                                col.botId,
+                                            )}</span
+                                        >
                                     {:else}
                                         <span class="mini-empty">-</span>
                                     {/if}
@@ -513,9 +548,13 @@
                         <div class="column-card">
                             <div class="column-head">
                                 <div class="column-title-group">
-                                    <span class="column-tag">Column {col.colIdx + 1}</span>
+                                    <span class="column-tag"
+                                        >Column {col.colIdx + 1}</span
+                                    >
                                     <span class="column-desc">
-                                        {formatMetric(col.topId)}{col.botId ? ` / ${formatMetric(col.botId)}` : ""}
+                                        {formatMetric(col.topId)}{col.botId
+                                            ? ` / ${formatMetric(col.botId)}`
+                                            : ""}
                                     </span>
                                 </div>
                                 <div class="column-actions">
@@ -524,7 +563,8 @@
                                             type="button"
                                             class="btn-col-action btn-swap"
                                             title="Swap Top and Bottom row metrics"
-                                            onclick={() => swapColumn(col.colIdx)}
+                                            onclick={() =>
+                                                swapColumn(col.colIdx)}
                                         >
                                             ⇅ Swap
                                         </button>
@@ -534,7 +574,8 @@
                                         class="btn-col-action"
                                         title="Move column left"
                                         disabled={col.colIdx === 0}
-                                        onclick={() => moveColumn(col.colIdx, -1)}
+                                        onclick={() =>
+                                            moveColumn(col.colIdx, -1)}
                                     >
                                         ◀ Col
                                     </button>
@@ -542,8 +583,10 @@
                                         type="button"
                                         class="btn-col-action"
                                         title="Move column right"
-                                        disabled={col.colIdx >= columns.length - 1}
-                                        onclick={() => moveColumn(col.colIdx, 1)}
+                                        disabled={col.colIdx >=
+                                            columns.length - 1}
+                                        onclick={() =>
+                                            moveColumn(col.colIdx, 1)}
                                     >
                                         Col ▶
                                     </button>
@@ -556,34 +599,44 @@
                                 role="listitem"
                                 draggable="true"
                                 class:dragging={dragIdx === col.topIdx}
-                                class:drag-over={dropIdx === col.topIdx && dragIdx !== col.topIdx}
-                                ondragstart={(e) => handleDragStart(e, col.topIdx)}
-                                ondragover={(e) => handleDragOver(e, col.topIdx)}
+                                class:drag-over={dropIdx === col.topIdx &&
+                                    dragIdx !== col.topIdx}
+                                ondragstart={(e) =>
+                                    handleDragStart(e, col.topIdx)}
+                                ondragover={(e) =>
+                                    handleDragOver(e, col.topIdx)}
                                 ondragleave={handleDragLeave}
                                 ondrop={(e) => handleDrop(e, col.topIdx)}
                                 ondragend={handleDragEnd}
                             >
                                 <span class="drag-handle">&#x2630;</span>
-                                <span class="metric-idx">{col.topIdx + 1}.</span>
+                                <span class="metric-idx">{col.topIdx + 1}.</span
+                                >
                                 <span class="row-badge top">Top Row</span>
-                                <span class="metric-name">{formatMetric(col.topId)}</span>
+                                <span class="metric-name"
+                                    >{formatMetric(col.topId)}</span
+                                >
                                 <div class="metric-actions">
                                     <button
                                         class="btn-icon"
                                         title="Move up"
                                         disabled={col.topIdx === 0}
-                                        onclick={() => moveUp(col.topIdx)}>&#x25B2;</button
+                                        onclick={() => moveUp(col.topIdx)}
+                                        >&#x25B2;</button
                                     >
                                     <button
                                         class="btn-icon"
                                         title="Move down"
-                                        disabled={col.topIdx >= items.length - 1}
-                                        onclick={() => moveDown(col.topIdx)}>&#x25BC;</button
+                                        disabled={col.topIdx >=
+                                            items.length - 1}
+                                        onclick={() => moveDown(col.topIdx)}
+                                        >&#x25BC;</button
                                     >
                                     <button
                                         class="btn-icon btn-remove"
                                         title="Remove"
-                                        onclick={() => remove(col.topIdx)}>&#x2716;</button
+                                        onclick={() => remove(col.topIdx)}
+                                        >&#x2716;</button
                                     >
                                 </div>
                             </div>
@@ -595,40 +648,56 @@
                                     role="listitem"
                                     draggable="true"
                                     class:dragging={dragIdx === col.botIdx}
-                                    class:drag-over={dropIdx === col.botIdx && dragIdx !== col.botIdx}
-                                    ondragstart={(e) => handleDragStart(e, col.botIdx)}
-                                    ondragover={(e) => handleDragOver(e, col.botIdx)}
+                                    class:drag-over={dropIdx === col.botIdx &&
+                                        dragIdx !== col.botIdx}
+                                    ondragstart={(e) =>
+                                        handleDragStart(e, col.botIdx)}
+                                    ondragover={(e) =>
+                                        handleDragOver(e, col.botIdx)}
                                     ondragleave={handleDragLeave}
                                     ondrop={(e) => handleDrop(e, col.botIdx)}
                                     ondragend={handleDragEnd}
                                 >
                                     <span class="drag-handle">&#x2630;</span>
-                                    <span class="metric-idx">{col.botIdx + 1}.</span>
-                                    <span class="row-badge bottom">Bottom Row</span>
-                                    <span class="metric-name">{formatMetric(col.botId)}</span>
+                                    <span class="metric-idx"
+                                        >{col.botIdx + 1}.</span
+                                    >
+                                    <span class="row-badge bottom"
+                                        >Bottom Row</span
+                                    >
+                                    <span class="metric-name"
+                                        >{formatMetric(col.botId)}</span
+                                    >
                                     <div class="metric-actions">
                                         <button
                                             class="btn-icon"
                                             title="Move up"
                                             disabled={col.botIdx === 0}
-                                            onclick={() => moveUp(col.botIdx)}>&#x25B2;</button
+                                            onclick={() => moveUp(col.botIdx)}
+                                            >&#x25B2;</button
                                         >
                                         <button
                                             class="btn-icon"
                                             title="Move down"
-                                            disabled={col.botIdx >= items.length - 1}
-                                            onclick={() => moveDown(col.botIdx)}>&#x25BC;</button
+                                            disabled={col.botIdx >=
+                                                items.length - 1}
+                                            onclick={() => moveDown(col.botIdx)}
+                                            >&#x25BC;</button
                                         >
                                         <button
                                             class="btn-icon btn-remove"
                                             title="Remove"
-                                            onclick={() => remove(col.botIdx)}>&#x2716;</button
+                                            onclick={() => remove(col.botIdx)}
+                                            >&#x2716;</button
                                         >
                                     </div>
                                 </div>
                             {:else}
                                 <div class="col-slot empty-slot">
-                                    <span class="empty-slot-text">Empty Bottom Row (add a metric below to pair)</span>
+                                    <span class="empty-slot-text"
+                                        >Empty Bottom Row (add a metric below to
+                                        pair)</span
+                                    >
                                 </div>
                             {/if}
                         </div>
@@ -701,16 +770,6 @@
         letter-spacing: 0.6px;
         color: var(--color-text-muted);
     }
-    .custom-indicator {
-        font-size: 11px;
-        font-weight: 600;
-        color: var(--color-primary);
-        background: color-mix(in srgb, var(--color-primary) 12%, transparent);
-        border: 1px solid color-mix(in srgb, var(--color-primary) 30%, transparent);
-        padding: 2px 8px;
-        border-radius: 9999px;
-        letter-spacing: 0.2px;
-    }
 
     .preset-tiles {
         display: grid;
@@ -773,7 +832,11 @@
     .preset-tile.active .tile-count {
         border-color: color-mix(in srgb, var(--color-primary) 40%, transparent);
         color: var(--color-primary);
-        background: color-mix(in srgb, var(--color-primary) 15%, var(--color-bg));
+        background: color-mix(
+            in srgb,
+            var(--color-primary) 15%,
+            var(--color-bg)
+        );
     }
 
     .metrics-section {
@@ -878,11 +941,13 @@
     }
     .mini-dot.top {
         background: var(--color-primary);
-        box-shadow: 0 0 3px color-mix(in srgb, var(--color-primary) 60%, transparent);
+        box-shadow: 0 0 3px
+            color-mix(in srgb, var(--color-primary) 60%, transparent);
     }
     .mini-dot.bot {
         background: var(--color-secondary);
-        box-shadow: 0 0 3px color-mix(in srgb, var(--color-secondary) 60%, transparent);
+        box-shadow: 0 0 3px
+            color-mix(in srgb, var(--color-secondary) 60%, transparent);
     }
     .mini-text {
         font-weight: 600;
@@ -913,7 +978,11 @@
         transition: border-color var(--transition);
     }
     .column-card:hover {
-        border-color: color-mix(in srgb, var(--color-primary) 30%, var(--color-border));
+        border-color: color-mix(
+            in srgb,
+            var(--color-primary) 30%,
+            var(--color-border)
+        );
     }
     .column-head {
         display: flex;
@@ -977,10 +1046,18 @@
     .btn-col-action.btn-swap {
         color: var(--color-primary);
         border-color: color-mix(in srgb, var(--color-primary) 40%, transparent);
-        background: color-mix(in srgb, var(--color-primary) 8%, var(--color-bg));
+        background: color-mix(
+            in srgb,
+            var(--color-primary) 8%,
+            var(--color-bg)
+        );
     }
     .btn-col-action.btn-swap:hover {
-        background: color-mix(in srgb, var(--color-primary) 18%, var(--color-bg));
+        background: color-mix(
+            in srgb,
+            var(--color-primary) 18%,
+            var(--color-bg)
+        );
         border-color: var(--color-primary);
     }
 
@@ -998,12 +1075,14 @@
     .row-badge.top {
         background: color-mix(in srgb, var(--color-primary) 14%, transparent);
         color: var(--color-primary);
-        border: 1px solid color-mix(in srgb, var(--color-primary) 32%, transparent);
+        border: 1px solid
+            color-mix(in srgb, var(--color-primary) 32%, transparent);
     }
     .row-badge.bottom {
         background: color-mix(in srgb, var(--color-secondary) 14%, transparent);
         color: var(--color-secondary);
-        border: 1px solid color-mix(in srgb, var(--color-secondary) 32%, transparent);
+        border: 1px solid
+            color-mix(in srgb, var(--color-secondary) 32%, transparent);
     }
 
     .metric-row {

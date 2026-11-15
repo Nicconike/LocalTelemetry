@@ -139,7 +139,7 @@ You can customize how metrics appear and behave across the settings pages:
   - `2 s` (2000 ms): Lower background polling activity.
   - `5 s` (5000 ms): Ultra-low CPU wakeups.
 - **Temperature Scale** (**Settings -> General**): Toggle **Show Temperatures in °F** to switch between Celsius (`°C`) and Fahrenheit (`°F`).
-- **Metric Order & Visibility** (**Settings -> Layout**): Drag and drop metrics to change their order on the taskbar, or remove metrics you don't need.
+- **Metric Order & Visibility** (**Settings -> Layout**): Select from 8 curated layout presets, swap or shift columns, drag and drop metrics to customize column order, or remove metrics you don't need.
 - **Colors & Themes** (**Settings -> Appearance**): Customize metric text colors individually, or click **Reset All to Defaults** to apply authentic hardware manufacturer brand colors automatically.
 
 ---

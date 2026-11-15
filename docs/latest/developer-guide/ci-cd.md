@@ -29,13 +29,15 @@ flowchart TD
         TriggerCI["<b>Push / Pull Request</b><br/>Targets master & develop branches"]
         Commitlint["<b>1. Commitlint</b><br/>Enforces Conventional Commits"]
         Vitest["<b>2. Bun Vitest</b><br/>Svelte 5 Runes Unit Tests"]
-        DotNetBuild["<b>3. .NET 10 Build</b><br/>dotnet build & format --verify"]
-        DotNetTest["<b>4. xUnit Test Suites</b><br/>Core • App • Notifier Tests"]
-        Coverage["<b>5. Code Coverage</b><br/>XPlat Coverage Report -> Codecov"]
+        ReleaseTest["<b>3. Release Tests</b><br/>Changelog & Release Suite"]
+        DotNetBuild["<b>4. .NET 10 Build</b><br/>dotnet build & format --verify"]
+        DotNetTest["<b>5. xUnit Test Suites</b><br/>Core • App • Notifier Tests"]
+        Coverage["<b>6. Code Coverage</b><br/>5 Targets -> Codecov & Sonar"]
 
         TriggerCI --> Commitlint
         Commitlint --> Vitest
-        Vitest --> DotNetBuild
+        Vitest --> ReleaseTest
+        ReleaseTest --> DotNetBuild
         DotNetBuild --> DotNetTest
         DotNetTest --> Coverage
     end
@@ -105,14 +107,20 @@ Validates commit messages against Conventional Commits rules defined in `commitl
 - Executes Vitest unit tests in `tests/LocalTelemetry.App.Tests/Settings/wwwroot/`.
 - Uploads JUnit test report artifacts.
 
-### 3. Windows Integration & Tests (`test-windows`)
+### 3. Release Tooling Tests (`test-release`)
+
+- Installs dependencies using Bun in `.github/release/`.
+- Executes Bun unit tests across release generator domains in `tests/LocalTelemetry.Release.Tests/`.
+- Uploads LCOV test coverage to Codecov under the `release` flag.
+
+### 4. Windows Integration & Tests (`test-windows`)
 
 - Compiles the Svelte 5 frontend into `src/LocalTelemetry.App/Settings/wwwroot/dist/`.
 - Uploads bundle size metrics to Codecov Bundle Analysis using `@codecov/vite-plugin`.
 - Restores and caches NuGet packages.
 - Verifies code formatting with `dotnet format --verify-no-changes`.
 - Executes xUnit tests across `LocalTelemetry.Core.Tests`, `LocalTelemetry.App.Tests`, and `LocalTelemetry.Notifier.Tests`.
-- Collects test coverage with Coverlet and uploads coverage across 4 targets (`app`, `core`, `notifier`, and frontend).
+- Collects test coverage with Coverlet and uploads coverage across 5 targets (`app`, `core`, `notifier`, `frontend`, and `release`).
 
 ---
 
@@ -174,7 +182,7 @@ The documentation site deployment pipeline is defined in [`.github/workflows/doc
 ## :shield-check: Security & Quality Workflows
 
 - **CodeQL (`codeql.yml`)**: Scans C# and JavaScript/TypeScript code for security vulnerabilities and injection risks.
-- **SonarCloud (`sonar.yml`)**: Runs static code analysis and maintains the SonarCloud Clean Code quality gate. Collects C# Cobertura coverage from xUnit tests and JavaScript/TypeScript LCOV coverage from Vitest (`test:coverage`).
+- **SonarCloud (`sonar.yml`)**: Runs static code analysis and maintains the SonarCloud Clean Code quality gate. Collects C# Cobertura coverage from xUnit tests and JavaScript/TypeScript LCOV coverage from Vitest and release tooling test suites (`test:coverage`).
 - **OpenSSF Scorecard (`scorecard.yml`)**: Audits supply-chain security, dependency pinning, and branch protections.
 - **Pull Request Synchronization (`sync.yml`)**: Synchronizes pull requests targeting `master` and `develop` with upstream branches and verifies Dependabot updates.
 - **GitHub Projects Automation (`project.yml`)**: Automates triage, status transitions, sprint planning, and effort sizing in GitHub Projects v2.

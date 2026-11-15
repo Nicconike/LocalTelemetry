@@ -203,6 +203,42 @@ Supplies the current application settings DTO to hydrate the Svelte store.
 - **Payload:** `SettingsDto`
 
 ```typescript
+interface SettingsDto {
+    runAtStartup: boolean;
+    showSystemTrayIcon: boolean;
+    enableFileLogging: boolean;
+    systemLogLevel: 'Off' | 'Error' | 'Warning' | 'Info' | 'Debug';
+    monitoring: MonitoringDto;
+    overlay: OverlayDto;
+    alerts: AlertsDto;
+    netUsage: NetUsageDto;
+    updates: UpdateConfigDto;
+    windowTheme: string;
+}
+
+interface MonitoringDto {
+    intervalMs: number;
+    useFahrenheit: boolean;
+    useNetBits: boolean;
+    preferredNic: string;
+    hasBattery: boolean;
+    trackCpu: boolean;
+    trackGpu: boolean;
+    trackRam: boolean;
+    trackNet: boolean;
+    trackDisk: boolean;
+    trackBattery: boolean;
+    cpuFreqMode: 'average' | 'max';
+    cpuUsageMode: 'overall' | 'max';
+    gpuUsageSource: 'driver' | 'wddm';
+    logCpuMode: number;
+    logGpuMode: number;
+    logRamMode: number;
+    logNetMode: number;
+    logDiskMode: number;
+    logBatteryMode: number;
+}
+
 interface OverlayDto {
     visible: boolean;
     doubleClickAction: 'settings' | 'taskmanager' | 'none';
@@ -219,7 +255,7 @@ interface OverlayDto {
     metricColors: Record<string, string>;
     groupColors: Record<string, string>;
     followWindowsTheme: boolean;
-    layoutPreset: 'default' | 'gaming' | 'compact' | 'full' | 'custom';
+    layoutPreset: 'default' | 'gaming' | 'compact' | 'micro' | 'thermals' | 'workstation' | 'network' | 'full' | 'custom';
     row1: string[];
 }
 
@@ -230,7 +266,7 @@ interface AlertsDto {
     alertCpuUsage: boolean;
     cpuUsageMaxPct: number;
     alertCpuFreq: boolean;
-    cpuFreqMaxGhz: number;
+    cpuFreqMinMhz: number;
     alertCpuPower: boolean;
     cpuPowerMaxW: number;
     alertGpuTemp: boolean;
@@ -238,9 +274,9 @@ interface AlertsDto {
     alertGpuUsage: boolean;
     gpuUsageMaxPct: number;
     alertGpuVram: boolean;
-    gpuVramMaxPct: number;
+    gpuVramMaxMb: number;
     alertGpuFreq: boolean;
-    gpuFreqMaxMhz: number;
+    gpuFreqMinMhz: number;
     alertGpuPower: boolean;
     gpuPowerMaxW: number;
     alertRamUsage: boolean;
@@ -256,6 +292,10 @@ interface AlertsDto {
     sustainedSecs: number; // default: 3
     cooldownSecs: number; // default: 60
     fireOncePerSession: boolean;
+}
+
+interface NetUsageDto {
+    enabled: boolean;
 }
 
 interface UpdateConfigDto {

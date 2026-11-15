@@ -84,7 +84,7 @@ For portable installations, [`Uninstall.bat`](https://github.com/Nicconike/Local
 The repository hosts a direct Scoop bucket manifest at `bucket/localtelemetry.json`:
 
 - **Manifest**: Specifies binary extraction for `LocalTelemetry-win-x64.zip`, start menu shortcut creation, and GitHub release tracking.
-- **Automated Workflow**: When a release is published, `build.ps1` updates `bucket/localtelemetry.json` with the new version and SHA-256 hash, and commits the update directly to `master`.
+- **Automated Workflow**: When a stable release is published, `.github/release/build.ps1` updates `bucket/localtelemetry.json` with the new version and SHA-256 hash.
 - **Installation**: Users install directly from this repository without requiring third-party bucket approvals:
 
   ```powershell

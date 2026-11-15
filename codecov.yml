@@ -1,6 +1,6 @@
 codecov:
     notify:
-        after_n_builds: 4
+        after_n_builds: 5
 
 ignore:
     - "**/*.xaml"
@@ -46,6 +46,10 @@ flags:
         paths:
             - src/LocalTelemetry.Notifier/**
         carryforward: true
+    release:
+        paths:
+            - .github/release/**
+        carryforward: true
 
 component_management:
     individual_components:
@@ -61,3 +65,7 @@ component_management:
           name: Notifier
           paths:
               - src/LocalTelemetry.Notifier/**
+        - component_id: release
+          name: Release Tooling
+          paths:
+              - .github/release/**

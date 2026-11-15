@@ -2,27 +2,25 @@
     <img src="docs/public/images/banner.jpg" alt="LocalTelemetry Banner" width="100%" />
 </p>
 
-<p align="center">
-    <a href="https://github.com/Nicconike/LocalTelemetry/releases">
-        <img src="https://img.shields.io/github/v/release/nicconike/LocalTelemetry?include_prereleases&sort=semver&logo=github&logoColor=white&label=Release&color=0DBCBF&labelColor=101318" alt="GitHub Release" />
-    </a>
-    <a href="https://github.com/Nicconike/LocalTelemetry/releases">
-        <img src="https://img.shields.io/github/downloads/nicconike/LocalTelemetry/total?logo=github&logoColor=white&color=0DBCBF&labelColor=101318&label=Downloads" alt="GitHub Downloads" />
-    </a>
-    <a href="https://github.com/Nicconike/LocalTelemetry">
-        <img src="https://img.shields.io/badge/platform-Windows%2011%20%7C%2010-0DBCBF?logo=windows11&logoColor=white&labelColor=101318" alt="Platform" />
-    </a>
-    <a href="https://github.com/Nicconike/LocalTelemetry/blob/main/LICENSE">
-        <img src="https://img.shields.io/github/license/nicconike/localtelemetry?logo=github&logoColor=white&color=0DBCBF&labelColor=101318" alt="License" />
-    </a>
-    <a href="https://discord.gg/M2QevSgW3S">
-        <img src="https://img.shields.io/badge/Chat_on-Discord-0DBCBF?logo=discord&logoColor=5865F2&labelColor=101318" alt="Discord" />
-    </a>
-</p>
-
-<p align="center">
+<div align="center">
     <details>
-        <summary align="center"><strong>Continuous Integration, Code Quality & Security Audits</strong></summary>
+        <summary align="center">
+            <a href="https://github.com/Nicconike/LocalTelemetry/releases">
+                <img src="https://img.shields.io/github/v/release/nicconike/LocalTelemetry?include_prereleases&sort=semver&logo=github&logoColor=white&label=Release&color=0DBCBF&labelColor=101318" alt="GitHub Release" />
+            </a>
+            <a href="https://github.com/Nicconike/LocalTelemetry/releases">
+                <img src="https://img.shields.io/github/downloads/nicconike/LocalTelemetry/total?logo=github&logoColor=white&color=0DBCBF&labelColor=101318&label=Downloads" alt="GitHub Downloads" />
+            </a>
+            <a href="https://github.com/Nicconike/LocalTelemetry">
+                <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0DBCBF?logo=windows11&logoColor=white&labelColor=101318" alt="Platform" />
+            </a>
+            <a href="https://github.com/Nicconike/LocalTelemetry/blob/main/LICENSE">
+                <img src="https://img.shields.io/github/license/nicconike/localtelemetry?logo=github&logoColor=white&color=0DBCBF&labelColor=101318" alt="License" />
+            </a>
+            <a href="https://discord.gg/M2QevSgW3S">
+                <img src="https://img.shields.io/badge/Chat_on-Discord-0DBCBF?logo=discord&logoColor=5865F2&labelColor=101318" alt="Discord" />
+            </a>
+        </summary>
         <br />
         <p align="center">
             <a href="https://github.com/Nicconike/LocalTelemetry/actions/workflows/ci.yml">
@@ -62,11 +60,7 @@
             </a>
         </p>
     </details>
-</p>
-
-<p align="center">
-    <img src="docs/public/images/overlay.png" alt="LocalTelemetry Live Taskbar Hardware Overlay" style="border-radius: 8px; max-width: 100%;" />
-</p>
+</div>
 
 <p align="center">
     <a href="https://nicconike.github.io/LocalTelemetry/"><strong>Documentation & Guides »</strong></a>
@@ -100,27 +94,28 @@ scoop install localtelemetry
 
 ## Why LocalTelemetry?
 
-Vendor software suites (such as NZXT CAM, Corsair iCUE, and ASUS Armoury Crate) consume hundreds of megabytes of RAM just to show system temperatures. Windows 11 also removed support for legacy taskbar deskbands.
+Typical vendor software suites consume hundreds of megabytes of RAM across multiple background services. Windows 11 also removed support for legacy taskbar deskbands.
 
-LocalTelemetry brings hardware monitoring back where it belongs: lightweight, native, and completely offline.
+LocalTelemetry provides hardware monitoring in the taskbar: lightweight, native, and completely offline.
 
 ### Feature Comparison
 
-| Feature | LocalTelemetry | Vendor Suites (iCUE / CAM) | Legacy Monitors |
-| :--- | :---: | :---: | :---: |
-| **Native Win 11 Taskbar Integration** | Embedded | Floating overlay only | Broken on Windows 11 |
-| **Memory Footprint** | **~45–60 MB (Taskbar)** / ~180 MB with Settings (WebView2) | 400–900 MB (Electron) | ~20–30 MB |
-| **Direct Register Sensors (MSR / SMN)** | PawnIO Kernel Driver | Proprietary / Slow | Basic WMI only |
-| **Privacy & Offline Operation** | **100% Offline (Zero tracking)** | Cloud telemetry & analytics | Local |
-| **Settings Technology** | **Svelte 5 UI** | Heavy Web Wrapper | Win32 / MFC |
-| **Game-Safe Alerts** | Focus-safe background toasts | Minimizes full-screen games | None |
+| Capability | LocalTelemetry | Typical Vendor Suites |
+| :--- | :---: | :---: |
+| **Windows 11 Taskbar Integration** | Embedded next to clock (no floating windows) | Floating overlay or tray tooltip only |
+| **Background Memory Footprint** | **~35–50 MB RAM** (~40–150 MB dynamic with Settings) | 400–900 MB RAM across helper processes |
+| **Low-Level Hardware Access** | Direct Intel MSR & AMD SMN registers via PawnIO | Proprietary services or high-latency queries |
+| **Layout Customization** | 8 curated presets with column swapping & drag-and-drop ordering | Fixed dashboard layouts |
+| **Network Traffic Accounting** | Daily upload & download history with calendar heatmap | None |
+| **Privacy & Connectivity** | 100% offline with zero telemetry or tracking | Mandatory accounts & cloud telemetry |
+| **Game-Safe Alerts** | Non-focus-stealing toasts with 10°C thermal hysteresis | Minimizes or interrupts full-screen games |
 
 ---
 
 ## Key Features
 
 - **Native Taskbar Overlay**: Embeds live metrics next to your clock. Automatically supports both centered and left-aligned Windows 11 taskbars.
-- **Overlay Layout Presets**: Switch instantly between curated presets (Default, Compact, Gaming, Full Telemetry) or create custom arrangements with drag-and-drop ordering, preset sorting, live preview, and variant controls.
+- **Overlay Layout Presets**: Switch instantly between 8 curated presets (Default, Gaming, Compact, Micro, Thermals, Workstation, Network, Full Telemetry) or build custom arrangements with interactive column swapping, live preview, and drag-and-drop ordering.
 - **Deep Kernel Telemetry**: Direct CPU clocks, wattage, and thermals via Intel MSR and AMD SMN registers with ACPI fallback. Full support for NVIDIA (NVML), AMD (ADL), and Intel (IGCL) GPUs.
 - **Real-Time Network Speed & History**: Track live upload and download speeds with local daily history logging, JSONL backup imports, and Windows network usage backfilling.
 - **Adaptive OEM Brand Themes**: Detects installed hardware vendors (Intel, AMD, NVIDIA, Samsung, Corsair) and applies authentic manufacturer color palettes.

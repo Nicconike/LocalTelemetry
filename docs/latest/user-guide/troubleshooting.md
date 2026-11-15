@@ -24,8 +24,8 @@ On a fresh installation, LocalTelemetry launches with the Settings window open a
 No. LocalTelemetry is optimized for minimal background resource consumption:
 
 - Hardware polling occurs on asynchronous worker threads using non-blocking Win32 and vendor APIs.
-- When minimized to the taskbar and system tray with settings closed, memory usage remains around ~40 MB RAM.
-- The Svelte 5 settings panel (Microsoft WebView2) is completely disposed when closed, consuming zero GPU or rendering resources while hidden.
+- When minimized to the taskbar and system tray with settings closed, memory usage remains around ~35-50 MB RAM.
+- When the Svelte 5 settings panel (Microsoft WebView2) is closed, background rendering suspends and memory remains dynamic (~40 to 100-150 MB), consuming zero GPU resources while hidden.
 
 ### :monitor: Is LocalTelemetry compatible with Windows 11?
 
