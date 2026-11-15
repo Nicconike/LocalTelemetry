@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com), and this project adheres to [Semantic Versioning](https://semver.org) & [Conventional Commits](https://conventionalcommits.org).
 
+## [1.3.0-beta.4](https://github.com/Nicconike/LocalTelemetry/compare/v1.3.0-beta.3...v1.3.0-beta.4) (15-11-2026)
+
+### Features
+
+* **release:** automate domain-grouped GitHub release notes with sub-bullet expansion ([946f4a1](https://github.com/Nicconike/LocalTelemetry/commit/946f4a1256f8c1c0e4895a6b3e697e6c5691544e))
+* **layout,traffic,overlay:** add layout presets, traffic import, and themes ([b8fe8e0](https://github.com/Nicconike/LocalTelemetry/commit/b8fe8e0b9ba16d1197d7df602accd1a16e4dfc05))
+
 ## [1.3.0-beta.3](https://github.com/Nicconike/LocalTelemetry/compare/v1.3.0-beta.2...v1.3.0-beta.3) (14-11-2026)
 
 ### Features
