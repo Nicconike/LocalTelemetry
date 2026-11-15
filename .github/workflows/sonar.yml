@@ -6,6 +6,7 @@ on:
         paths:
             - "src/**"
             - "tests/**"
+            - ".github/release/**"
             - "Directory.Build.props"
             - "global.json"
             - "LocalTelemetry.sln"
@@ -15,6 +16,7 @@ on:
         paths:
             - "src/**"
             - "tests/**"
+            - ".github/release/**"
             - "Directory.Build.props"
             - "global.json"
             - "LocalTelemetry.sln"
@@ -62,11 +64,19 @@ jobs:
                       ${{ runner.os }}-sonar-v1-
                       ${{ runner.os }}-sonar-
 
-            - name: Build Frontend
+            - name: Build & Test Frontend
               run: |
                   bun install --frozen-lockfile --ignore-scripts
                   bun run build
+                  bun install --frozen-lockfile --ignore-scripts --cwd ../../../../tests/LocalTelemetry.App.Tests/Settings/wwwroot
+                  bun run --cwd ../../../../tests/LocalTelemetry.App.Tests/Settings/wwwroot test:coverage
               working-directory: src/LocalTelemetry.App/Settings/wwwroot
+
+            - name: Test Release Tooling
+              run: |
+                  bun install --frozen-lockfile --ignore-scripts
+                  bun run test:coverage
+              working-directory: .github/release
 
             - name: Install SonarScanner
               shell: pwsh
@@ -86,6 +96,7 @@ jobs:
                       /d:sonar.host.url="https://sonarcloud.io" `
                       /d:sonar.token="$env:SONAR_TOKEN" `
                       /d:sonar.cs.cobertura.reportsPaths="**/TestResults/**/coverage.cobertura.xml" `
+                      /d:sonar.javascript.lcov.reportPaths="tests/LocalTelemetry.App.Tests/Settings/wwwroot/coverage/lcov.info,.github/release/coverage/lcov.info" `
                       /d:sonar.scanner.scanAll=false `
                       /d:sonar.exclusions="**/wwwroot/dist/**,**/bin/**,**/obj/**"
 

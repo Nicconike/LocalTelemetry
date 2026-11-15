@@ -27,6 +27,38 @@ describe('themes.ts', () => {
         expect(defaultLight?.label).toBe('Default Light');
     });
 
+    it('should include new OLED, Nord, and Cyberpunk themes', () => {
+        const expectedThemes = [
+            { value: 'oled', label: 'OLED Black' },
+            { value: 'oled-light', label: 'OLED Light' },
+            { value: 'nord', label: 'Nord' },
+            { value: 'nord-light', label: 'Nord Light' },
+            { value: 'cyberpunk', label: 'Cyberpunk' },
+            { value: 'cyberpunk-light', label: 'Cyberpunk Light' }
+        ];
+
+        for (const exp of expectedThemes) {
+            const found = themes.find((t) => t.value === exp.value);
+            expect(found).toBeDefined();
+            expect(found?.label).toBe(exp.label);
+            expect(found?.vars['--color-bg']).toBeTruthy();
+            expect(found?.vars['--color-surface']).toBeTruthy();
+            expect(found?.vars['--color-primary']).toBeTruthy();
+        }
+
+        applyThemeVars('oled');
+        expect(document.documentElement.style.getPropertyValue('--color-bg')).toBe('#000000');
+        expect(document.documentElement.dataset.theme).toBe('dark');
+
+        applyThemeVars('nord');
+        expect(document.documentElement.style.getPropertyValue('--color-bg')).toBe('#242933');
+        expect(document.documentElement.dataset.theme).toBe('dark');
+
+        applyThemeVars('cyberpunk');
+        expect(document.documentElement.style.getPropertyValue('--color-bg')).toBe('#09090b');
+        expect(document.documentElement.dataset.theme).toBe('dark');
+    });
+
     it('applyThemeVars should apply CSS variables to document.documentElement', () => {
         applyThemeVars('midnight');
         const bg = document.documentElement.style.getPropertyValue('--color-bg');

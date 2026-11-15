@@ -143,9 +143,17 @@ describe('TrafficHistoryPage.svelte', () => {
         await tick();
 
         const presetBtns = Array.from(document.body.querySelectorAll('.preset-btn')) as HTMLButtonElement[];
+        const preset7 = presetBtns.find(b => b.textContent?.includes('Last 7 Days'));
+        const preset14 = presetBtns.find(b => b.textContent?.includes('Last 14 Days'));
         const preset30 = presetBtns.find(b => b.textContent?.includes('Last 30 Days'));
+        expect(preset7).toBeDefined();
+        expect(preset14).toBeDefined();
         expect(preset30).toBeDefined();
 
+        preset7!.click();
+        await tick();
+        preset14!.click();
+        await tick();
         preset30!.click();
         await tick();
 
@@ -155,6 +163,18 @@ describe('TrafficHistoryPage.svelte', () => {
         importBtn.click();
         await tick();
         expect(importUsageSpy).toHaveBeenCalled();
+
+        // Also test import with already-formatted DD-MM-YYYY date strings (triggers toDmy non-ISO fallback)
+        const dateInputs = document.body.querySelectorAll<HTMLInputElement>('.date-picker-row input');
+        if (dateInputs.length >= 2) {
+            dateInputs[0].value = '01-10-2026';
+            dateInputs[0].dispatchEvent(new Event('input', { bubbles: true }));
+            dateInputs[1].value = '10-10-2026';
+            dateInputs[1].dispatchEvent(new Event('input', { bubbles: true }));
+            await tick();
+            importBtn.click();
+            await tick();
+        }
     });
 
     it('displays windows import result status when set in store', async () => {
@@ -391,6 +411,13 @@ describe('TrafficHistoryPage.svelte', () => {
         startDateInput.dispatchEvent(new Event('input', { bubbles: true }));
         await tick();
         expect(document.body.textContent).toContain('Invalid date (use DD-MM-YYYY)');
+
+        // Valid DD-MM-YYYY date format
+        startDateInput.value = '15-08-2026';
+        startDateInput.dispatchEvent(new Event('input', { bubbles: true }));
+        await tick();
+        expect(document.body.textContent).not.toContain('Invalid date');
+
         startDateInput.type = 'date';
     });
 
@@ -467,5 +494,53 @@ describe('TrafficHistoryPage.svelte', () => {
         await tick();
         expect(get(windowsImportResult)).toBeNull();
         vi.useRealTimers();
+    });
+
+    it('handles database export to jsonl file and displays modal', async () => {
+        const wv = new EventTarget() as any;
+        wv.postMessage = vi.fn();
+        (globalThis as any).window.chrome = { webview: wv };
+
+        const exportSpy = vi.spyOn(bridge, 'exportDatabase');
+        const openFolderSpy = vi.spyOn(bridge, 'openFolder');
+
+        component = mount(TrafficHistoryPage, { target: document.body });
+        await tick();
+
+        const exportBtn = Array.from(document.body.querySelectorAll<HTMLButtonElement>('.action-btn'))
+            .find((b) => b.textContent?.includes('Export Database'));
+        expect(exportBtn).toBeDefined();
+
+        exportBtn?.click();
+        await tick();
+
+        expect(exportSpy).toHaveBeenCalled();
+        expect(exportSpy.mock.calls[0][1]).toContain('.jsonl');
+
+        wv.dispatchEvent(new MessageEvent('message', {
+            data: {
+                type: 'exportDatabaseResult',
+                payload: {
+                    success: true,
+                    filePath: 'C:\\Users\\test\\internet_usage_01-01-2026.jsonl',
+                    fileName: 'internet_usage_01-01-2026.jsonl'
+                }
+            }
+        }));
+        await tick();
+
+        expect(document.body.textContent).toContain('Database Exported');
+        expect(document.body.textContent).toContain('internet_usage_01-01-2026.jsonl');
+
+        const openFolderBtn = document.body.querySelector<HTMLButtonElement>('.btn-open-folder');
+        openFolderBtn?.click();
+        expect(openFolderSpy).toHaveBeenCalledWith({ path: 'C:\\Users\\test\\internet_usage_01-01-2026.jsonl' });
+
+        const closeBtn = document.body.querySelector<HTMLButtonElement>('.btn-close');
+        closeBtn?.click();
+        await tick();
+        expect(document.body.textContent).not.toContain('Database Exported');
+
+        delete (globalThis as any).window.chrome;
     });
 });

@@ -82,6 +82,7 @@ function makePayload(): SettingsDto {
             netMonthlyMaxGb: 1000,
             showToastNotif: true,
             flashOverlay: true,
+            sustainedSecs: 3,
             cooldownSecs: 30,
             fireOncePerSession: false,
         },
@@ -104,6 +105,7 @@ describe('App.svelte', () => {
         document.body.innerHTML = '';
         settings.set(null);
         pristineSettings.set('');
+        saveStatus.set('idle');
         activePage.set('alerts');
     });
 
@@ -363,6 +365,10 @@ describe('App.svelte', () => {
     });
 
     it('handles modal Escape key, discard button, and invalid pristine settings', async () => {
+        const wv = new EventTarget() as any;
+        wv.postMessage = vi.fn();
+        (globalThis as any).window.chrome = { webview: wv };
+
         const payload = makePayload();
         settings.set(structuredClone(payload));
         pristineSettings.set(JSON.stringify(payload));
@@ -419,6 +425,10 @@ describe('App.svelte', () => {
         await tick();
         expect(document.querySelector('.nav-modal')).toBeNull();
 
+        // Simulate saved event from bridge so saving state resets
+        wv.dispatchEvent(new MessageEvent('message', { data: { type: 'saved' } }));
+        await tick();
+
         // Navigate while dirty again and test discard & move
         settings.update(s => {
             if (s) s.monitoring.intervalMs = 7777;
@@ -433,6 +443,7 @@ describe('App.svelte', () => {
         expect(get(activePage)).toBe('overlay');
 
         // Test bottom bar discard with invalid JSON
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
         pristineSettings.set('invalid json');
         settings.update(s => {
             if (s) s.monitoring.intervalMs = 9999;
@@ -440,10 +451,12 @@ describe('App.svelte', () => {
         });
         await tick();
         const barDiscardBtn = document.querySelector('.btn-discard') as HTMLButtonElement;
-        if (barDiscardBtn) {
-            barDiscardBtn.click();
-            await tick();
-        }
+        expect(barDiscardBtn).not.toBeNull();
+        barDiscardBtn.click();
+        await tick();
+        consoleErrorSpy.mockRestore();
+
+        delete (globalThis as any).window.chrome;
     });
 
     it('receives IPC events with null payloads gracefully', async () => {
@@ -466,6 +479,30 @@ describe('App.svelte', () => {
         wv.dispatchEvent(new MessageEvent('message', { data: { type: 'trafficToday', payload: {} } }));
         wv.dispatchEvent(new MessageEvent('message', { data: { type: 'importDatResult', payload: null } }));
         wv.dispatchEvent(new MessageEvent('message', { data: { type: 'windowsUsageImportResult', payload: null } }));
+        wv.dispatchEvent(new MessageEvent('message', { data: { type: 'taskbarSlotChanged', payload: null } }));
+        wv.dispatchEvent(new MessageEvent('message', { data: { type: 'taskbarSlotChanged', payload: 'string-payload' } }));
+        wv.dispatchEvent(new MessageEvent('message', {
+            data: {
+                type: 'taskbarSlotChanged',
+                payload: { taskbarSpaceConstrained: true, availableSlotWidth: 260 }
+            }
+        }));
+        await tick();
+        expect(get(settings)?.overlay.taskbarSpaceConstrained).toBe(true);
+        expect(get(settings)?.overlay.availableSlotWidth).toBe(260);
+        const saveBar = document.querySelector('.save-bar');
+        expect(saveBar?.classList.contains('visible')).toBe(false);
+
+        // When settings is null
+        settings.set(null as any);
+        wv.dispatchEvent(new MessageEvent('message', {
+            data: {
+                type: 'taskbarSlotChanged',
+                payload: { taskbarSpaceConstrained: false }
+            }
+        }));
+        await tick();
+        settings.set(structuredClone(payload));
         await tick();
 
         // Dispatch trafficToday when multiple records exist for today

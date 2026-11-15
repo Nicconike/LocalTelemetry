@@ -176,8 +176,11 @@ flowchart TD
 ### :bell: AlertService (Threshold Evaluation & Notifications)
 
 - Evaluates live `TelemetrySnapshot` values against threshold limits defined in `AppSettings.Alerts`.
-- Dispatches visual text flashing commands to `TaskbarOverlay`.
-- Sends toast notification commands to `NotificationClient.cs` to trigger `LocalTelemetry.Notifier.exe` over Named Pipe IPC.
+- Applies anti-spike duration filtering (`SustainedSecs`) to suppress momentary boost spikes.
+- Implements 10°C thermal normalization hysteresis (and 2-unit non-thermal hysteresis) to eliminate notification flapping.
+- Controls persistent warning color states (`SetAlertActive`) and transient flashing commands in `TaskbarOverlay`.
+- Dispatches toast notification commands to `NotificationClient.cs` to trigger `LocalTelemetry.Notifier.exe` over Named Pipe IPC.
+- Writes structured breach (`[WARNING]`) and recovery (`[INFO]`) audit logs to disk.
 
 ### :layout-dashboard: SettingsShell (WebView2 Host Window)
 

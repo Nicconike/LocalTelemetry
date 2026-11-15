@@ -112,7 +112,7 @@ flowchart TD
 
 ### :monitor: Windows UI & System Interop
 
-1. [**Taskbar Overlay & Win32 Interop**](./taskbar-overlay-interop.md): Win32 `SetParent` reparenting, taskband shrinking, layered floating window fallback, and Explorer crash recovery.
+1. [**Taskbar Overlay & Win32 Interop**](./taskbar-overlay-interop.md): Win32 `SetParent` reparenting, taskband shrinking, and Explorer crash recovery.
 2. [**Toast Notifier & Inter-Process Communication (IPC)**](./notifier-ipc.md): Process isolation, named pipe IPC, and non-blocking toast animations.
 
 ### :code-xml: Frontend & Application Configuration
@@ -132,7 +132,7 @@ flowchart TD
 - [**Repository Structure**](./repository-structure.md): Detailed directory map of the solution, source code, and tests
 - [**Backend Architecture & Telemetry Engine**](./backend-architecture.md): In-depth look at `AppSettings.cs`, `HardwareMonitor.cs`, `HardwareInventory.cs`, and `SystemInfo.cs`
 - [**Hardware Drivers & Sensor Polling**](./hardware-drivers.md): Detailed hardware register mappings, MSRs, NVML, ADL, PDH, and PawnIo
-- [**Win32 Taskbar Hooking & Overlay Interop**](./taskbar-overlay-interop.md): Deep dive into `SetParent` reparenting, taskband shrinking, layered floating fallback, and Explorer recovery
+- [**Win32 Taskbar Hooking & Overlay Interop**](./taskbar-overlay-interop.md): Deep dive into `SetParent` reparenting, taskband shrinking, and Explorer recovery
 - [**Svelte 5 Frontend & WebView2 Bridge**](./frontend-webview.md): Svelte 5 runes architecture and bidirectional C# <-> JS JSON messaging sequence
 - [**Toast Notifier & Inter-Process Communication (IPC)**](./notifier-ipc.md): Named Pipe IPC protocol, `HiddenForm` message pump, and cubic ease-out slide-in animations
 - [**C# Core API & Telemetry Models**](./reference/core-api.md): Public classes, sensor interfaces, inventory data structures, and logging methods

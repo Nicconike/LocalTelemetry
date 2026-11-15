@@ -201,6 +201,33 @@ public class TaskbarOverlayTests
     }
 
     [WpfFact]
+    public void SetAlertActive_UpdatesAlertStateAndChangesBrushColor()
+    {
+        var cfg = new AppSettings();
+        var embedder = new TaskbarEmbedder(cfg);
+        using var overlay = new TaskbarOverlay(cfg, embedder);
+
+        overlay.IsAlertActive(Metrics.CpuTemp).Should().BeFalse();
+
+        var makeBrush = typeof(TaskbarOverlay).GetMethod("MakeValueBrush", BindingFlags.NonPublic | BindingFlags.Instance);
+        var normalBrush = (SolidBrush)makeBrush!.Invoke(overlay, [Metrics.CpuTemp, cfg.Overlay])!;
+
+        overlay.SetAlertActive(Metrics.CpuTemp, true);
+        overlay.IsAlertActive(Metrics.CpuTemp).Should().BeTrue();
+
+        var alertBrush = (SolidBrush)makeBrush.Invoke(overlay, [Metrics.CpuTemp, cfg.Overlay])!;
+        alertBrush.Color.R.Should().Be(255);
+        alertBrush.Color.G.Should().Be(68);
+        alertBrush.Color.B.Should().Be(68);
+
+        overlay.SetAlertActive(Metrics.CpuTemp, false);
+        overlay.IsAlertActive(Metrics.CpuTemp).Should().BeFalse();
+
+        var revertedBrush = (SolidBrush)makeBrush.Invoke(overlay, [Metrics.CpuTemp, cfg.Overlay])!;
+        revertedBrush.Color.Should().Be(normalBrush.Color);
+    }
+
+    [WpfFact]
     public void TaskbarOverlay_FullWindowLifecycleAndWndProc()
     {
         var cfg = new AppSettings();
@@ -266,11 +293,7 @@ public class TaskbarOverlayTests
         clickedAction.Should().Be("settings");
 
         // Reflection invocations for timer handlers & rendering
-        typeof(TaskbarEmbedder).GetProperty("IsFallback", BindingFlags.Public | BindingFlags.Instance)!.GetSetMethod(true)!.Invoke(embedder, [false]);
         typeof(TaskbarEmbedder).GetProperty("IsEmbedded", BindingFlags.Public | BindingFlags.Instance)!.GetSetMethod(true)!.Invoke(embedder, [false]);
-
-        var renderFloat = typeof(TaskbarOverlay).GetMethod("RenderFloat", BindingFlags.NonPublic | BindingFlags.Instance);
-        renderFloat!.Invoke(overlay, null);
 
         var posTick = typeof(TaskbarOverlay).GetMethod("PosTick", BindingFlags.NonPublic | BindingFlags.Instance);
         posTick!.Invoke(overlay, null);
@@ -321,8 +344,9 @@ public class TaskbarOverlayTests
         {
             System.Runtime.InteropServices.Marshal.StructureToPtr(new NativeMethods.MSLLHOOKSTRUCT { pt = new NativeMethods.POINT { X = 10, Y = 10 } }, structPtr, false);
 
-            // WM_RBUTTONUP (context menu)
-            mouseProc!.Invoke(overlay, [0, (IntPtr)NativeMethods.WM_RBUTTONUP, structPtr]);
+            // WM_RBUTTONDOWN then WM_RBUTTONUP (context menu)
+            mouseProc!.Invoke(overlay, [0, (IntPtr)NativeMethods.WM_RBUTTONDOWN, structPtr]);
+            mouseProc.Invoke(overlay, [0, (IntPtr)NativeMethods.WM_RBUTTONUP, structPtr]);
 
             // WM_LBUTTONDOWN & WM_LBUTTONDBLCLK
             mouseProc.Invoke(overlay, [0, (IntPtr)NativeMethods.WM_LBUTTONDOWN, structPtr]);
@@ -361,7 +385,7 @@ public class TaskbarOverlayTests
         getDiskLabel.Should().NotBeNull();
 
         // Disks of same type get numbered
-        ((string)getDiskLabel!.Invoke(overlay, ["disk_disk0_read"])!).Should().Be("NVMe1R");
+        ((string)getDiskLabel.Invoke(overlay, ["disk_disk0_read"])!).Should().Be("NVMe1R");
         ((string)getDiskLabel.Invoke(overlay, ["disk_disk1_write"])!).Should().Be("NVMe2W");
         ((string)getDiskLabel.Invoke(overlay, ["disk_disk2_read"])!).Should().Be("SATAR");
         ((string)getDiskLabel.Invoke(overlay, ["disk_disk3_write"])!).Should().Be("HDDW");
@@ -420,7 +444,7 @@ public class TaskbarOverlayTests
 
         // WM_SETCURSOR / WM_MOUSEMOVE
         object[] setCursorArgs = [NativeMethods.WM_SETCURSOR, IntPtr.Zero];
-        ((bool)handleMouse!.Invoke(overlay, setCursorArgs)!).Should().BeFalse();
+        ((bool)handleMouse.Invoke(overlay, setCursorArgs)!).Should().BeFalse();
 
         // WM_RBUTTONDOWN
         object[] rBtnDownArgs = [NativeMethods.WM_RBUTTONDOWN, IntPtr.Zero];
@@ -438,6 +462,22 @@ public class TaskbarOverlayTests
         // Unhandled
         object[] unhandledArgs = [0x9999, IntPtr.Zero];
         ((bool)handleMouse.Invoke(overlay, unhandledArgs)!).Should().BeFalse();
+    }
+
+    [WpfFact]
+    public void TaskbarOverlay_IsOverlayOrTaskbarAtPoint_ValidatesPointHierarchy()
+    {
+        var cfg = new AppSettings();
+        var embedder = new TaskbarEmbedder(cfg);
+        using var overlay = new TaskbarOverlay(cfg, embedder);
+        overlay.Show();
+
+        var method = typeof(TaskbarOverlay).GetMethod("IsOverlayOrTaskbarAtPoint", BindingFlags.NonPublic | BindingFlags.Instance);
+        method.Should().NotBeNull();
+
+        // In test mode (SkipEmbedForTesting || SkipShowWindowForTesting), returns true
+        var result = (bool)method.Invoke(overlay, [new NativeMethods.POINT { X = 50, Y = 50 }])!;
+        result.Should().BeTrue();
     }
 
     [WpfFact]
@@ -493,7 +533,6 @@ public class TaskbarOverlayTests
         overlay.Show();
 
         typeof(TaskbarEmbedder).GetProperty("IsEmbedded", BindingFlags.Public | BindingFlags.Instance)!.GetSetMethod(true)!.Invoke(embedder, [true]);
-        typeof(TaskbarEmbedder).GetProperty("IsFallback", BindingFlags.Public | BindingFlags.Instance)!.GetSetMethod(true)!.Invoke(embedder, [false]);
 
         // Exercise PosTick when IsChildMode is true and DPI changes
         typeof(TaskbarOverlay).GetField("_dpi", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(overlay, 0.5f);
@@ -642,6 +681,9 @@ public class TaskbarOverlayTests
         bool priorEmbed = TaskbarOverlay.SkipEmbedForTesting;
         bool priorMouse = TaskbarOverlay.SkipMouseHookForTesting;
 
+        using var fakeTray = new Form { Bounds = new Rectangle(0, 1000, 1920, 48) };
+        TaskbarEmbedder.ExplorerTrayWndOverride = () => fakeTray.Handle;
+
         TaskbarOverlay.SkipShowWindowForTesting = false;
         TaskbarOverlay.SkipEmbedForTesting = false;
         TaskbarOverlay.SkipMouseHookForTesting = false;
@@ -677,6 +719,7 @@ public class TaskbarOverlayTests
         }
         finally
         {
+            TaskbarEmbedder.ExplorerTrayWndOverride = null;
             TaskbarOverlay.SkipShowWindowForTesting = priorShow;
             TaskbarOverlay.SkipEmbedForTesting = priorEmbed;
             TaskbarOverlay.SkipMouseHookForTesting = priorMouse;
@@ -836,5 +879,56 @@ public class TaskbarOverlayTests
         {
             TaskbarOverlay.SkipEmbedForTesting = origSkipEmbed;
         }
+    }
+
+    [Fact]
+    public void TaskbarOverlay_CheckAndNotifySpaceConstraint_FiresEventWhenStateChanges()
+    {
+        var cfg = new AppSettings();
+        var embedder = new TaskbarEmbedder(cfg);
+        using var overlay = new TaskbarOverlay(cfg, embedder);
+
+        bool? notifiedConstrained = null;
+        int? notifiedWidth = null;
+        int eventCount = 0;
+
+        overlay.TaskbarSpaceConstraintChanged += (constrained, width) =>
+        {
+            notifiedConstrained = constrained;
+            notifiedWidth = width;
+            eventCount++;
+        };
+
+        // Initially _lastReportedSpaceConstrained is false and _lastReportedSlotWidth is -1
+        overlay.CheckAndNotifySpaceConstraint();
+        eventCount.Should().Be(1);
+        notifiedConstrained.Should().Be(false);
+        notifiedWidth.Should().Be(0);
+
+        // Calling again without change should not re-fire
+        overlay.CheckAndNotifySpaceConstraint();
+        eventCount.Should().Be(1);
+
+        // Simulate change in embedder constraint state
+        typeof(TaskbarEmbedder).GetField("<IsTaskbarSpaceConstrained>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(embedder, true);
+        typeof(TaskbarEmbedder).GetField("<AvailableSlotWidth>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(embedder, 180);
+
+        overlay.CheckAndNotifySpaceConstraint();
+        eventCount.Should().Be(2);
+        notifiedConstrained.Should().Be(true);
+        notifiedWidth.Should().Be(180);
+
+        // Simulate returning to normal (unconstrained, wider slot)
+        typeof(TaskbarEmbedder).GetField("<IsTaskbarSpaceConstrained>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(embedder, false);
+        typeof(TaskbarEmbedder).GetField("<AvailableSlotWidth>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(embedder, 500);
+
+        overlay.CheckAndNotifySpaceConstraint();
+        eventCount.Should().Be(3);
+        notifiedConstrained.Should().Be(false);
+        notifiedWidth.Should().Be(500);
     }
 }

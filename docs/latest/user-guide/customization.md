@@ -31,7 +31,7 @@ The settings panel is organized into 10 dedicated tabs matching the exact naviga
 - **Opacity**: Adjust overlay opacity (`20%` to `100%`).
 - **Scale**: Adjust overlay scaling multiplier (`80%` to `200%`).
 - **Double-Click Action**: Configure what happens when double-clicking the overlay (`None`, `Open Task Manager`, or `Open Settings`).
-- **Taskbar Space Constraint Banner**: Warns when the available taskbar slot is narrower than the overlay. LocalTelemetry scales down and clamps coordinates to prevent overlap. Includes a button to open Windows Taskbar Settings (`ms-settings:taskbar`) to hide Windows Widgets.
+- **Taskbar Space Constraint Banner**: Warns when the available taskbar slot is narrower than the overlay. LocalTelemetry scales down and clamps coordinates to prevent overlap. Includes a **Dismiss** button and a link to open Windows Taskbar Settings (`ms-settings:taskbar`). The banner resets automatically when space constraints ease.
 
 ![Overlay Settings Tab](/images/overlay-settings.png)
 *Overlay settings tab for configuring taskbar placement, edge offset, opacity, scaling, and double-click behavior.*
@@ -39,10 +39,10 @@ The settings panel is organized into 10 dedicated tabs matching the exact naviga
 ### :activity: Monitoring
 
 - **Active Trackers**: Toggle individual hardware polling components on or off (CPU, GPU, RAM, Network, Disk, and Battery on portable devices). Toggling off an unused component completely halts its background polling loop and driver queries to eliminate unnecessary CPU wakeups.
-- **CPU Monitoring Mode**:
-  - **Clock Mode**: Choose between `Average` (mean clock frequency across all active cores) or `Max Active Core` (highest clocked core frequency).
-  - **Usage Source**: Choose between `Overall (Task Manager)` (average system-wide load) or `Max Thread (Gaming)` (highest loaded thread, ideal for spotting single-core bottlenecks).
-- **GPU Usage Source**: Choose between `Driver (NVML/ADL)` (vendor driver engine load matching MSI Afterburner) or `WDDM (Task Manager)` (Windows display driver model engine statistics).
+- **Computation Modes**:
+  - **CPU Clock Mode**: Choose between `Average` (mean clock frequency across all active cores) or `Max Active Core` (highest clocked core frequency).
+  - **CPU Utilization Mode**: Choose between `Overall (Task Manager)` (average system-wide load) or `Max Thread (Gaming)` (highest loaded thread, ideal for spotting single-core bottlenecks).
+  - **GPU Usage Source**: Choose between `Driver (NVML/ADL)` (vendor driver engine load matching MSI Afterburner) or `WDDM (Task Manager)` (Windows display driver model engine statistics).
 - **Metrics Logging**: Master toggle to log periodic sensor telemetry to daily log files (`lt_DD-MM-YYYY.log`).
 - **Per-Category Log Modes**: Configure logging detail (`Off`, `Errors`, `Full`) independently for each hardware component.
 - **System Logging**: Sets diagnostic logging verbosity written to `lt_system.log` (`Off`, `Error`, `Warning`, `Info`, `Debug`). Set to `Debug` only when troubleshooting hardware issues.
@@ -52,6 +52,17 @@ The settings panel is organized into 10 dedicated tabs matching the exact naviga
 
 ### :layout-grid: Layout
 
+- **Layout Presets**: Select quick arrangements for your taskbar:
+  - **Default**: Balanced 5-column layout tracking core utilization, temperatures, memory, and network throughput.
+  - **Gaming**: Tailored for gameplay performance, thermals, and dedicated GPU VRAM consumption.
+  - **Compact**: Minimalist single-row layout displaying core load percentages and network speed.
+  - **Micro**: Ultra-compact 2-column strip for narrow taskbars and small displays.
+  - **Thermals & Power**: Dedicated diagnostics for CPU/GPU temperatures, wattage, and core clocks.
+  - **Workstation**: Productivity layout highlighting compute load, RAM usage, network, and storage drive I/O.
+  - **Network & Traffic**: Bandwidth focus featuring live transfer rates, cumulative usage, and core load.
+  - **Full Telemetry**: Expanded layout displaying all available metrics including clocks, power draw, and disk I/O.
+  - **Custom**: User-defined sequence created by selecting, removing, or reordering metrics.
+- **Column Pairing & Swapping**: Group metrics into 2-row vertical columns with one-click swap and left/right shift controls.
 - **Metric Drag-and-Drop Ordering**: Drag metrics (or use the up/down arrows) to change the exact column sequence on the taskbar overlay.
 - **Add / Remove Metrics**: Select which hardware metrics are displayed on the overlay (such as NVMe disk I/O, laptop battery status, package wattage, and core clocks) or remove unneeded sensors. Battery metrics are automatically hidden on desktop computers without a battery.
 - **Reset Layout to Defaults**: Click the **Reset Layout to Defaults** button to instantly restore the standard 5-column default layout (CPU Usage & Temp, GPU Usage & Temp, GPU VRAM & Total Transferred, RAM Usage & Used, and Download & Upload speeds).
@@ -77,7 +88,8 @@ The settings panel is organized into 10 dedicated tabs matching the exact naviga
 - **Filter by Adapter**: Filter bandwidth totals dynamically for **All** or any individual network interface discovered in the month's records (such as **Ethernet** or **Wi-Fi**).
 - **Day Detail Breakdown**: Click on any calendar day to inspect per-adapter upload and download volumes.
 - **Windows Network Usage Import**: Backfill historical usage from Windows SRUM using date presets (`Last 7 Days`, `Last 14 Days`, `Last 30 Days`) or custom `From` / `To` date pickers.
-- **Traffic Database & Backup Import**: Import native `internet_usage.jsonl` backups or external plaintext `.dat` logs into the database.
+- **Traffic Database & Backup Import**: Import native `internet_usage.jsonl` backups, `.json` files, or external plaintext `.dat` logs into the database.
+- **Database Backup Export**: Export complete multi-year traffic history to a standalone `.jsonl` file via a native Windows Save File Dialog.
 - **Persistent Storage**: All historical records are saved locally in `internet_usage.jsonl`.
 
 ![Traffic History Tab](/images/traffic-settings.png)
@@ -85,7 +97,10 @@ The settings panel is organized into 10 dedicated tabs matching the exact naviga
 
 ### :triangle-alert: Alerts
 
-- **Hardware Threshold Limits**: Configure warning triggers for CPU (Usage %, Temp, Frequency throttling, Package Power), RAM (Usage %), GPU (Usage %, VRAM, Temp, Frequency throttling, Board Power), Network (Daily and Monthly bandwidth quotas), and Battery (Low charge %).
+- **Hardware Threshold Limits**: Configure warning triggers for CPU (Usage %, Temp, Frequency throttling, Package Power), RAM (Usage %), GPU (Usage %, VRAM, Temp, Frequency throttling, Board Power), Network (Daily and Monthly bandwidth quotas), and Battery (Low charge %). When enabled for the first time, only CPU Temp (90°C) is active by default.
+- **Sustained Duration Filter**: Configure **Sustained breach duration** (`1 s` to `10 s`, default: `3 s`) to ignore momentary turbo spikes.
+- **Visual In-Overlay Highlights**: Sustained breaches highlight the affected metric in Coral Red (`#FF4444`) on the taskbar overlay until normalized.
+- **10°C Thermal Hysteresis**: Keeps temperature alerts active until the sensor cools at least 10°C below its configured threshold to prevent flapping.
 - **Network Bandwidth Quotas**: Set warnings for **Daily Internet Usage** (`5 GB` to `500 GB`) and **Monthly Internet Usage** (`100 GB` to `5000 GB`).
 - **Notification Channels**: Enable desktop toast popups (**Show Tray Notification**) and in-place visual flashing on the taskbar overlay (**Flash Overlay Briefly**).
 - **Cooldown & Session Rules**: Configure cooldown delay between alerts (`5 s` to `120 s`, default: `60 s`) or enable **Only fire once per session (ignores cooldown)**.
@@ -110,7 +125,7 @@ The settings panel is organized into 10 dedicated tabs matching the exact naviga
 
 ### :swatch-book: Appearance
 
-- **Window Themes**: Select from built-in curated dark and light theme presets for the configuration interface.
+- **Window Themes**: Select from 9 curated theme presets with both dark and light modes: Default, Midnight, Emerald, Amethyst, Rose, Amber, OLED Black, Nord, and Cyberpunk.
 - **Metric Color Customization**: Set individual hex colors for each hardware metric (CPU, GPU, RAM, Disks, Network, Battery) using color pickers or hex inputs.
 - **Hardware Group Colors**: Apply unified color overrides across entire component sensor groups.
 - **Follow Windows Theme**: Synchronize overlay transparency key color and contrast with the active Windows theme.
@@ -121,7 +136,7 @@ The settings panel is organized into 10 dedicated tabs matching the exact naviga
 
 ### :info: About
 
-- **Software Updates**: Check for newer releases via the GitHub Releases API on demand (**Check for Updates** button), configure update check frequency (**Weekly**, **Monthly**, or **Manual**), and toggle **Include pre-release & RC builds** (disabled by default). If an update is detected, a direct **Download** button links straight to the release.
+- **Software Updates**: Check for newer releases via the GitHub Releases API on demand (**Check for Updates** button), configure update check frequency (**Weekly**, **Monthly**, or **Manual**), and toggle **Include pre-release & RC builds** (enabled by default on pre-release builds, disabled by default on stable releases). If an update is detected, a direct **Download** button links straight to the release, with a **Beta** badge shown for pre-releases.
 - **Application Metadata**: Displays the active version (`vX.Y.Z`), deployment mode (`Standard` vs `Portable`), build date, target runtime (.NET 10), and platform (Windows x64).
 - **Application Directories**: Single-click "→" buttons open the application folders directly in Windows File Explorer:
   - **Standard Mode**: Quick access to the Installation Folder (`C:\Program Files\LocalTelemetry`), Settings & Data Folder (`%LOCALAPPDATA%\LocalTelemetry`), and Logs Folder (`%LOCALAPPDATA%\LocalTelemetry\logs`).

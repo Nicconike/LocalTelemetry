@@ -7,7 +7,7 @@ public sealed class TrafficHistoryFile
 {
     private readonly string _filePath;
     private List<DailyRecord> _records = [];
-    private readonly object _lock = new();
+    private readonly System.Threading.Lock _lock = new();
     private bool _dirtySinceLastSave;
 
     public string FilePath => _filePath;
@@ -49,7 +49,10 @@ public sealed class TrafficHistoryFile
         var seen = new HashSet<(int, int, int, string)>();
         try
         {
-            foreach (string line in File.ReadLines(_filePath))
+            using var stream = new FileStream(_filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var reader = new StreamReader(stream);
+            string? line;
+            while ((line = reader.ReadLine()) is not null)
             {
                 lineCount++;
                 if (string.IsNullOrWhiteSpace(line)) continue;
@@ -179,7 +182,7 @@ public sealed class TrafficHistoryFile
                 if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                     Directory.CreateDirectory(dir);
 
-                using var stream = new FileStream(_filePath, FileMode.Create, FileAccess.Write, FileShare.Read);
+                using var stream = new FileStream(_filePath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
                 using var writer = new StreamWriter(stream);
 
                 // Sort descending so file always has newest-first order regardless of how records were added.

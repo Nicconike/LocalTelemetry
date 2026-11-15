@@ -1,6 +1,6 @@
-# :package: Building & Packaging (Inno Setup 7, WinGet & Scoop)
+# :package: Building & Packaging (Inno Setup 7 & Scoop)
 
-This guide explains how to produce production builds of **LocalTelemetry**, compile application binaries, configure Inno Setup 7, generate WinGet and Scoop manifests, and execute uninstallation scripts.
+This guide explains how to produce production builds of **LocalTelemetry**, compile application binaries, configure Inno Setup 7, generate Scoop manifests, and execute uninstallation scripts.
 
 ## :hammer: Building Production Binaries
 
@@ -50,12 +50,13 @@ The configuration script is located at [`setup.iss`](https://github.com/Nicconik
 - **PawnIO Driver Provisioning**: Stops and deletes any stale `PawnIO` service, executes `PawnIO_setup.exe -install -silent`, retries if Windows returns error 1072 (service marked for deletion), and flags for reboot if needed.
 - **Scheduled Task Registration**: Uses the Task Scheduler COM API to create `LocalTelemetry Startup` with `TASK_RUNLEVEL_HIGHEST`, `DisallowStartIfOnBatteries = false`, `StopIfGoingOnBatteries = false`, and `ExecutionTimeLimit = "PT0S"` (infinite runtime).
 - **App Mode Marker**: Creates `{app}\app.mode` so the application routes user settings to `%LOCALAPPDATA%\LocalTelemetry`.
+- **Temporary Extraction File Cleanup**: Calls `DeleteTempPawnIoFiles` on install and uninstall to remove temporary `PawnIO_*` extraction folders from `%windir%\Temp` and `%TEMP%`.
 - **Complete Driver & Registry Cleanup on Uninstall**: Closes processes, removes the scheduled task, stops the service, and invokes PowerShell with `pnputil.exe /delete-driver /uninstall /force` to purge `pawnio.inf` from the Windows DriverStore. If Windows returns code `3010`, it warns the user that a restart is required to release the driver from memory.
 - **Selective User Data Cleanup**: Presents a custom cleanup form (`PromptUserDataCleanup`) to selectively remove Application Settings (`settings.json`), Cache & Diagnostic Logs (`logs/`, `webview2_data/`), and Traffic History (`internet_usage.jsonl`), preserving bandwidth history by default.
 
 ### :terminal: Compiling via ISCC CLI
 
-If Inno Setup 7 is installed on your system (via `winget install --id JRSoftware.InnoSetup.7`):
+If Inno Setup 7 is installed on your system:
 
 ```powershell
 & "C:\Program Files\Inno Setup 7\ISCC.exe" /DAppVersion=1.2.0 /DAppVersionInfoVersion=1.2.0.0 setup.iss
@@ -78,23 +79,12 @@ For portable installations, [`Uninstall.bat`](https://github.com/Nicconike/Local
 
 ---
 
-## :package-check: WinGet Packaging Specifications
-
-The repository maintains the official multi-file Windows Package Manager manifests in `packaging/winget/`:
-
-- **Version Manifest (`Nicconike.LocalTelemetry.yaml`)**: Defines the package identifier (`Nicconike.LocalTelemetry`), version, and default locale.
-- **Installer Manifest (`Nicconike.LocalTelemetry.installer.yaml`)**: Defines the Inno Setup installer type, architecture (`x64`), download URL, SHA-256 hash, and silent switches (`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-`).
-- **Locale Manifest (`Nicconike.LocalTelemetry.locale.en-US.yaml`)**: Contains package metadata, description, license, tags, and release notes URL.
-- **Automated Workflow**: When a release is published via `.github/workflows/release.yml`, `build.ps1` updates all three manifest files. The release workflow then submits the update to the official Microsoft WinGet Community Repository via `wingetcreate`.
-
----
-
 ## :inbox: Scoop Packaging Specifications
 
 The repository hosts a direct Scoop bucket manifest at `bucket/localtelemetry.json`:
 
 - **Manifest**: Specifies binary extraction for `LocalTelemetry-win-x64.zip`, start menu shortcut creation, and GitHub release tracking.
-- **Automated Workflow**: When a release is published, `build.ps1` updates `bucket/localtelemetry.json` with the new version and SHA-256 hash, and commits the update directly to `master`.
+- **Automated Workflow**: When a stable release is published, `.github/release/build.ps1` updates `bucket/localtelemetry.json` with the new version and SHA-256 hash.
 - **Installation**: Users install directly from this repository without requiring third-party bucket approvals:
 
   ```powershell

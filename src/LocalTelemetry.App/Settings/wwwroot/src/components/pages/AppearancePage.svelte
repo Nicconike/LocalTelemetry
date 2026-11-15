@@ -319,9 +319,10 @@
                         onclick={() => applyTheme(t)}
                         role="button"
                         tabindex="0"
+                        title={t.label}
                         onkeydown={(e) => e.key === "Enter" && applyTheme(t)}
                     >
-                        <span class="swatch-label">{t.label}</span>
+                        <span class="swatch-label" title={t.label}>{t.label}</span>
                         <div
                             class="swatch-preview"
                             style="background:{t.vars['--color-bg']}"
@@ -349,20 +350,16 @@
                                 <div class="swatch-dots">
                                     <span
                                         class="swatch-dot"
+                                        title="Primary Accent"
                                         style="background:{t.vars[
                                             '--color-primary'
                                         ]}"
                                     ></span>
                                     <span
                                         class="swatch-dot"
+                                        title="Secondary Accent"
                                         style="background:{t.vars[
-                                            '--color-success'
-                                        ]}"
-                                    ></span>
-                                    <span
-                                        class="swatch-dot"
-                                        style="background:{t.vars[
-                                            '--color-warning'
+                                            '--color-secondary'
                                         ]}"
                                     ></span>
                                 </div>
@@ -381,9 +378,10 @@
                         onclick={() => applyTheme(t)}
                         role="button"
                         tabindex="0"
+                        title={t.label}
                         onkeydown={(e) => e.key === "Enter" && applyTheme(t)}
                     >
-                        <span class="swatch-label">{t.label}</span>
+                        <span class="swatch-label" title={t.label}>{t.label}</span>
                         <div
                             class="swatch-preview"
                             style="background:{t.vars['--color-bg']}"
@@ -411,20 +409,16 @@
                                 <div class="swatch-dots">
                                     <span
                                         class="swatch-dot"
+                                        title="Primary Accent"
                                         style="background:{t.vars[
                                             '--color-primary'
                                         ]}"
                                     ></span>
                                     <span
                                         class="swatch-dot"
+                                        title="Secondary Accent"
                                         style="background:{t.vars[
-                                            '--color-success'
-                                        ]}"
-                                    ></span>
-                                    <span
-                                        class="swatch-dot"
-                                        style="background:{t.vars[
-                                            '--color-warning'
+                                            '--color-secondary'
                                         ]}"
                                     ></span>
                                 </div>
@@ -728,7 +722,7 @@
     .page {
         display: flex;
         flex-direction: column;
-        gap: var(--space-5);
+        gap: var(--space-3);
     }
     h2 {
         font-size: var(--text-lg);
@@ -740,31 +734,33 @@
         text-transform: uppercase;
         letter-spacing: 0.05em;
         color: var(--color-text-muted);
-        margin: var(--space-3) 0 var(--space-2) 0;
+        margin: var(--space-2) 0 var(--space-1) 0;
     }
     h3.section-subtitle:first-of-type {
         margin-top: 0;
     }
 
     .theme-preview {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--space-3);
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: var(--space-2);
     }
     .theme-preview + h3.section-subtitle {
-        margin-top: var(--space-4);
-        padding-top: var(--space-3);
+        margin-top: var(--space-3);
+        padding-top: var(--space-2);
         border-top: 1px solid var(--color-divider);
     }
 
     .swatch-card {
-        width: 120px;
+        width: 100%;
         border-radius: var(--radius-lg);
         border: 2px solid var(--color-border);
         cursor: pointer;
         transition: border-color var(--transition);
         overflow: hidden;
         background: transparent;
+        display: flex;
+        flex-direction: column;
     }
     .swatch-card:hover {
         border-color: var(--color-text-muted);
@@ -774,11 +770,17 @@
     }
 
     .swatch-label {
-        display: block;
-        padding: var(--space-2) var(--space-3) 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 28px;
+        padding: 4px 6px 0;
         font-size: var(--text-xs);
         font-weight: 600;
         text-align: center;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
     .swatch-preview {
         padding: 6px;

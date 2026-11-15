@@ -181,6 +181,17 @@ public sealed class UpdateCheckService(AppSettings cfg, HttpClient? httpClient =
     }
 
     /// <summary>
+    /// Checks whether the specified version or current application version is a pre-release or beta build.
+    /// </summary>
+    /// <param name="version">Optional version string to evaluate. If null, evaluates the current running assembly.</param>
+    /// <returns>True if the version represents a pre-release or beta build; otherwise, false.</returns>
+    public static bool IsPrereleaseVersion(string? version = null)
+    {
+        string ver = version ?? GetCurrentVersionString();
+        return TryParseSemVer(ver, out var parsed) ? parsed.Prerelease is not null : ver.Contains('-');
+    }
+
+    /// <summary>
     /// Robust version comparison logic supporting Semantic Versioning 2.0 &amp; standard System.Version.
     /// </summary>
     public static bool IsVersionNewer(string currentVerStr, string latestVerStr)

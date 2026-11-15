@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO;
 using System.Net.NetworkInformation;
 using System.Runtime.Versioning;
+using System.Text;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Input;
@@ -29,8 +30,7 @@ public sealed partial class SettingsShell : Window
     internal static Action<ProcessStartInfo>? UrlProcessLauncher { get; set; }
     internal static Action<string>? FolderLauncherAction { get; set; }
     internal static Action<ProcessStartInfo>? FolderProcessLauncher { get; set; }
-    internal static Action<string>? ScriptExecutorOverride { get; set; }
-    internal static Func<string, Task>? ScriptExecutorAsyncOverride { get; set; }
+    internal static Func<string, (bool? Result, string? SelectedPath)>? SaveFileDialogOverride { get; set; }
     internal static bool SkipWebView2InitForTesting { get; set; }
     internal static bool SkipInitializeComponentForTesting { get; set; }
     internal static bool SkipShowForTesting { get; set; }
@@ -62,6 +62,9 @@ public sealed partial class SettingsShell : Window
     private const string NvidiaVendor = "NVIDIA";
     private const string EnabledStr = "enabled";
     private const string DisabledStr = "disabled";
+    private const string OverlayLayoutPresetPath = "overlay.layoutpreset";
+    private const string OverlayRow1Path = "overlay.row1";
+    private const string OverlayMetricsPath = "overlay.metrics";
 
     private readonly AppSettings _cfg;
     private readonly string _wwwRoot;
@@ -110,9 +113,34 @@ public sealed partial class SettingsShell : Window
         SetWindowIcon();
 
         Loaded += OnLoaded;
-        // Close WebView2 select dropdowns when the window is moved
-        // (WebView2 native popups render at stale screen coordinates after move)
-        LocationChanged += (_, _) => HandleWindowLocationChanged();
+        StateChanged += (_, _) =>
+        {
+            if (WindowState != WindowState.Minimized && IsVisible)
+            {
+                SendTrafficToday();
+                OnAppUsageTick(null, EventArgs.Empty);
+            }
+        };
+        IsVisibleChanged += (_, _) =>
+        {
+            if (IsVisible && WindowState != WindowState.Minimized)
+            {
+                SendTrafficToday();
+                OnAppUsageTick(null, EventArgs.Empty);
+            }
+        };
+    }
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle != IntPtr.Zero)
+        {
+            int style = NativeMethods.GetWindowLong(handle, NativeMethods.GWL_STYLE);
+            style |= NativeMethods.WS_CAPTION | NativeMethods.WS_SYSMENU | NativeMethods.WS_MINIMIZEBOX | NativeMethods.WS_MAXIMIZEBOX;
+            NativeMethods.SetWindowLong(handle, NativeMethods.GWL_STYLE, style);
+        }
     }
 
     private void SetWindowIcon()
@@ -138,29 +166,6 @@ public sealed partial class SettingsShell : Window
         catch (Exception ex) { Log.Error(ex, "Window icon extraction failed"); }
     }
 
-    private void HandleWindowLocationChanged()
-    {
-        if (_webViewReady && (ScriptExecutorOverride is not null || ScriptExecutorAsyncOverride is not null || WebView?.CoreWebView2 is not null))
-        {
-            try
-            {
-                if (ScriptExecutorOverride is not null)
-                {
-                    ScriptExecutorOverride("try{document.activeElement?.blur();}catch(e){console.warn('WebView2 blur failed',e);}");
-                }
-                else if (ScriptExecutorAsyncOverride is not null)
-                {
-                    ScriptExecutorAsyncOverride("try{document.activeElement?.blur();}catch(e){console.warn('WebView2 blur failed',e);}");
-                }
-                else
-                {
-                    WebView!.CoreWebView2.ExecuteScriptAsync("try{document.activeElement?.blur();}catch(e){console.warn('WebView2 blur failed',e);}");
-                }
-            }
-            catch (Exception ex) { Log.Error(ex, "WebView2 blur script failed after window move"); }
-        }
-    }
-
     // Use Loaded event so the WPF visual tree is ready.
     // Guard with _webViewReady so re-showing the window doesn't re-init.
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -173,30 +178,7 @@ public sealed partial class SettingsShell : Window
 
             _appUsageTimer = new System.Windows.Threading.DispatcherTimer();
             _appUsageTimer.Interval = TimeSpan.FromSeconds(2);
-            _appUsageTimer.Tick += (s, ev) =>
-            {
-                if (_currentProcess == null) return;
-                try
-                {
-                    _currentProcess.Refresh();
-                    var cpuTime = _currentProcess.TotalProcessorTime;
-                    var now = DateTime.UtcNow;
-                    var timeDelta = now - _lastUsageCheckTime;
-                    var cpuDelta = cpuTime - _lastProcessorTime;
-
-                    _lastProcessorTime = cpuTime;
-                    _lastUsageCheckTime = now;
-
-                    double cpuPct = 0;
-                    if (timeDelta.TotalMilliseconds > 0)
-                    {
-                        cpuPct = cpuDelta.TotalMilliseconds / timeDelta.TotalMilliseconds * 100.0 / Environment.ProcessorCount;
-                    }
-
-                    WindowTitleText.Text = $"LocalTelemetry ({cpuPct:0.0}% CPU)";
-                }
-                catch (Exception ex) { Log.Warn(ex, "App usage title update failed"); }
-            };
+            _appUsageTimer.Tick += OnAppUsageTick;
             _appUsageTimer.Start();
         }
 
@@ -218,7 +200,7 @@ public sealed partial class SettingsShell : Window
 
         // Start periodic push of today's traffic totals (every 5 seconds).
         _trafficTodayTimer = new System.Threading.Timer(
-            _ => Dispatcher.Invoke(SendTrafficToday),
+            _ => Dispatcher.Invoke(OnTrafficTodayTimerTick),
             null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
 
         TrafficHistoryStore.HistoryUpdated += OnHistoryUpdated;
@@ -245,7 +227,7 @@ public sealed partial class SettingsShell : Window
             var envOptions = new CoreWebView2EnvironmentOptions
             {
                 Language = "en-GB",
-                AdditionalBrowserArguments = "--disable-features=EyeDropper --force-dark-mode",
+                AdditionalBrowserArguments = "--disable-features=CalculateNativeWinOcclusion,EyeDropper,Translate,OptimizationHints,MediaRouter --renderer-process-limit=1 --js-flags=\"--max-old-space-size=32 --optimize-for-size\" --disable-gpu-shader-disk-cache --disable-background-networking --aggressive-cache-discard --force-dark-mode",
             };
             CoreWebView2Environment env =
                 await CoreWebView2Environment.CreateAsync(
@@ -254,6 +236,19 @@ public sealed partial class SettingsShell : Window
                     options: envOptions);
 
             await WebView.EnsureCoreWebView2Async(env);
+            WebView.NavigationCompleted += (_, _) =>
+            {
+                _webViewReady = true;
+                RefreshTrafficHistory();
+                try
+                {
+                    NativeMethods.EmptyWorkingSet(Process.GetCurrentProcess().Handle);
+                }
+                catch (Exception ex)
+                {
+                    Log.Debug(ex, "Failed initial working set trimming after WebView2 navigation");
+                }
+            };
             WebView.CoreWebView2.Profile.PreferredColorScheme = CoreWebView2PreferredColorScheme.Dark;
 
             CoreWebView2Settings wv = WebView.CoreWebView2.Settings;
@@ -267,6 +262,11 @@ public sealed partial class SettingsShell : Window
             wv.IsStatusBarEnabled = false;
 
             WebView.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
+            WebView.CoreWebView2.DownloadStarting += (_, args) =>
+            {
+                args.Handled = true;
+                args.Cancel = true;
+            };
 
             WebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                 hostName: SettingsHost,
@@ -313,6 +313,69 @@ public sealed partial class SettingsShell : Window
                     MessageBoxImage.Warning);
             }
             Hide();
+        }
+    }
+
+    private void OnTrafficTodayTimerTick()
+    {
+        if (!SkipShowForTesting && (!IsVisible || WindowState == WindowState.Minimized)) return;
+        SendTrafficToday();
+    }
+
+    private int _appUsageTickCount;
+    internal void OnAppUsageTick(object? s, EventArgs ev)
+    {
+        if (_currentProcess == null) return;
+        if (!SkipShowForTesting && (!IsVisible || WindowState == WindowState.Minimized))
+        {
+            try
+            {
+                NativeMethods.EmptyWorkingSet(_currentProcess.Handle);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "Failed to empty working set while hidden or minimized");
+            }
+            return;
+        }
+        try
+        {
+            _appUsageTickCount++;
+            if (_appUsageTickCount % 30 == 0)
+            {
+                try
+                {
+                    NativeMethods.EmptyWorkingSet(_currentProcess.Handle);
+                }
+                catch (Exception ex)
+                {
+                    Log.Debug(ex, "Periodic working set trimming failed");
+                }
+            }
+
+            _currentProcess.Refresh();
+            var cpuTime = _currentProcess.TotalProcessorTime;
+            var now = DateTime.UtcNow;
+            var timeDelta = now - _lastUsageCheckTime;
+            var cpuDelta = cpuTime - _lastProcessorTime;
+
+            _lastProcessorTime = cpuTime;
+            _lastUsageCheckTime = now;
+
+            double cpuPct = 0;
+            if (timeDelta.TotalMilliseconds > 0)
+            {
+                cpuPct = cpuDelta.TotalMilliseconds / timeDelta.TotalMilliseconds * 100.0 / Environment.ProcessorCount;
+            }
+
+            double ramMb = _currentProcess.WorkingSet64 / (1024.0 * 1024.0);
+            string title = $"LocalTelemetry ({cpuPct:0.0}% CPU, {ramMb:0.0} MB RAM)";
+            WindowTitleText.Text = title;
+            Title = title;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn(ex, "App usage title update failed");
         }
     }
 
@@ -371,7 +434,21 @@ public sealed partial class SettingsShell : Window
                 case "getSystemInfo": SendSystemInfo(); break;
                 case "openUrl": HandleOpenUrl(root); break;
                 case "openFolder": HandleOpenFolder(root); break;
-                case "getTrafficHistoryAll": SendAllTrafficHistory(); break;
+                case "exportDatabase": HandleExportDatabase(root); break;
+                case "getTrafficHistoryAll":
+                    SendAllTrafficHistory();
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await WindowsNetworkUsageProvider.RefreshTodayUsageAsync(TrafficHistoryStore.HistoryFile);
+                        }
+                        catch (Exception ex)
+                        {
+                            Log.Debug(ex, "Background today traffic refresh failed");
+                        }
+                    });
+                    break;
                 case "importDat": HandleImportJson(json); break;
                 case "importWindowsUsage": LastImportTask = HandleImportWindowsUsage(root); break;
                 case "checkForUpdates": HandleCheckForUpdatesMsg(root); break;
@@ -435,13 +512,43 @@ public sealed partial class SettingsShell : Window
 
     private static void HandleOpenFolder(JsonElement root)
     {
-        if (!root.TryGetProperty(PayloadProp, out JsonElement folderPayload)
-            || !folderPayload.TryGetProperty("target", out JsonElement targetEl))
+        if (!root.TryGetProperty(PayloadProp, out JsonElement folderPayload))
+            return;
+
+        string? specificPath = folderPayload.TryGetProperty("path", out JsonElement pEl) ? pEl.GetString() : null;
+        if (!string.IsNullOrWhiteSpace(specificPath) && (File.Exists(specificPath) || Directory.Exists(specificPath)))
         {
+            OpenSpecificFolder(specificPath);
             return;
         }
 
-        string target = targetEl.GetString() ?? string.Empty;
+        if (folderPayload.TryGetProperty("target", out JsonElement targetEl))
+        {
+            OpenTargetFolder(targetEl.GetString() ?? string.Empty);
+        }
+    }
+
+    private static void OpenSpecificFolder(string specificPath)
+    {
+        Log.Info($"Opened folder in Windows Explorer for '{specificPath}'");
+        if (FolderLauncherAction is not null)
+        {
+            FolderLauncherAction(specificPath);
+            return;
+        }
+
+        string explorerPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
+        var psi = new ProcessStartInfo
+        {
+            FileName = explorerPath,
+            Arguments = File.Exists(specificPath) ? $"/select,\"{specificPath}\"" : $"\"{specificPath}\"",
+            UseShellExecute = true
+        };
+        LaunchFolderProcess(psi);
+    }
+
+    private static void OpenTargetFolder(string target)
+    {
         string dirToOpen;
         string folderLabel;
 
@@ -461,26 +568,100 @@ public sealed partial class SettingsShell : Window
             folderLabel = "data";
         }
 
-        if (!string.IsNullOrEmpty(dirToOpen) && Directory.Exists(dirToOpen))
+        if (string.IsNullOrEmpty(dirToOpen) || !Directory.Exists(dirToOpen)) return;
+
+        Log.Info($"Opened {folderLabel} folder in Windows Explorer ({dirToOpen})");
+        if (FolderLauncherAction is not null)
         {
-            Log.Info($"Opened {folderLabel} folder in Windows Explorer ({dirToOpen})");
-            if (FolderLauncherAction is not null)
+            FolderLauncherAction(dirToOpen);
+            return;
+        }
+
+        string explorerPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
+        var psi = new ProcessStartInfo
+        {
+            FileName = explorerPath,
+            Arguments = $"\"{dirToOpen}\"",
+            UseShellExecute = true
+        };
+        LaunchFolderProcess(psi);
+    }
+
+    private static void LaunchFolderProcess(ProcessStartInfo psi)
+    {
+        if (FolderProcessLauncher is not null)
+            FolderProcessLauncher(psi);
+        else if (!SkipShowForTesting && !SkipWebView2InitForTesting)
+            Process.Start(psi);
+    }
+
+    internal void HandleExportDatabase(JsonElement root)
+    {
+        if (!root.TryGetProperty(PayloadProp, out JsonElement payload)) return;
+        string content = payload.TryGetProperty("content", out JsonElement c) ? c.GetString() ?? string.Empty : string.Empty;
+        string defaultFileName = payload.TryGetProperty("defaultFileName", out JsonElement f) ? f.GetString() ?? "internet_usage.jsonl" : "internet_usage.jsonl";
+
+        try
+        {
+            bool? dialogResult;
+            string? selectedPath;
+
+            if (SaveFileDialogOverride is not null)
             {
-                FolderLauncherAction(dirToOpen);
-                return;
+                (dialogResult, selectedPath) = SaveFileDialogOverride(defaultFileName);
+            }
+            else
+            {
+                var sfd = new Microsoft.Win32.SaveFileDialog
+                {
+                    Title = "Export Traffic Database",
+                    Filter = "JSON Lines (*.jsonl)|*.jsonl|All files (*.*)|*.*",
+                    FileName = defaultFileName,
+                    DefaultExt = ".jsonl"
+                };
+                dialogResult = sfd.ShowDialog(this);
+                selectedPath = sfd.FileName;
             }
 
-            string explorerPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
-            var psi = new ProcessStartInfo
+            if (dialogResult == true && !string.IsNullOrWhiteSpace(selectedPath))
             {
-                FileName = explorerPath,
-                Arguments = $"\"{dirToOpen}\"",
-                UseShellExecute = true
-            };
-            if (FolderProcessLauncher is not null)
-                FolderProcessLauncher(psi);
-            else if (!SkipShowForTesting && !SkipWebView2InitForTesting)
-                Process.Start(psi);
+                File.WriteAllText(selectedPath, content, Encoding.UTF8);
+                Log.Info($"Exported traffic database to '{selectedPath}'");
+                PostJson(JsonSerializer.Serialize(new
+                {
+                    type = "exportDatabaseResult",
+                    payload = new
+                    {
+                        success = true,
+                        filePath = selectedPath,
+                        fileName = Path.GetFileName(selectedPath)
+                    }
+                }, JsonOut));
+            }
+            else
+            {
+                PostJson(JsonSerializer.Serialize(new
+                {
+                    type = "exportDatabaseResult",
+                    payload = new
+                    {
+                        cancelled = true
+                    }
+                }, JsonOut));
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to export traffic database");
+            PostJson(JsonSerializer.Serialize(new
+            {
+                type = "exportDatabaseResult",
+                payload = new
+                {
+                    success = false,
+                    error = ex.Message
+                }
+            }, JsonOut));
         }
     }
 
@@ -489,10 +670,6 @@ public sealed partial class SettingsShell : Window
         bool force = root.TryGetProperty(PayloadProp, out JsonElement forcePayload)
             && forcePayload.TryGetProperty("force", out JsonElement forceEl)
             && forceEl.GetBoolean();
-        if (force)
-        {
-            Log.Info("User requested manual software update check");
-        }
         _ = HandleCheckForUpdatesAsync(force);
     }
 
@@ -512,6 +689,35 @@ public sealed partial class SettingsShell : Window
     public void SendUpdatedSettings()
     {
         SendSettings();
+    }
+
+    /// <summary>Pushes fresh traffic history records and today's usage totals to the frontend.</summary>
+    public void RefreshTrafficHistory()
+    {
+        if (!_webViewReady) return;
+        SendTrafficToday();
+        SendTrafficMonths();
+        SendAllTrafficHistory();
+    }
+
+    /// <summary>
+    /// Notifies the settings UI that the taskbar space constraint state or available slot width has changed.
+    /// </summary>
+    /// <param name="constrained">Whether the taskbar slot is narrower than the overlay width.</param>
+    /// <param name="availableWidth">The measured width in pixels available for the overlay.</param>
+    public void NotifyTaskbarSlotChanged(bool constrained, int availableWidth)
+    {
+        var envelope = new
+        {
+            type = "taskbarSlotChanged",
+            payload = new
+            {
+                taskbarSpaceConstrained = constrained,
+                availableSlotWidth = availableWidth
+            }
+        };
+        PostJson(JsonSerializer.Serialize(envelope, JsonOut));
+        Log.Debug($"Dispatched taskbar slot constraint update to settings UI (constrained: {constrained}, availableWidth: {availableWidth})");
     }
 
     private void SendSettings()
@@ -576,6 +782,7 @@ public sealed partial class SettingsShell : Window
     /// <summary>Debounced handler for <see cref="NetworkChange.NetworkAddressChanged"/>.</summary>
     private void OnNetworkAddressChanged(object? sender, EventArgs e)
     {
+        if (!SkipShowForTesting && (!IsVisible || WindowState == WindowState.Minimized)) return;
         _nicDebounceTimer?.Change(1000, Timeout.Infinite);
     }
 
@@ -623,6 +830,7 @@ public sealed partial class SettingsShell : Window
     private void SendTrafficToday()
     {
         if (!_webViewReady) return;
+
         var (td, tu) = TrafficHistoryStore.GetToday();
         var payload = new { downBytes = td, upBytes = tu };
         var envelope = new { type = "trafficToday", payload };
@@ -677,14 +885,14 @@ public sealed partial class SettingsShell : Window
             }
 
             int days;
-            string trimmed = content.TrimStart();
-            if (trimmed.StartsWith('{'))
+            string trimmed = content.TrimStart('\uFEFF', ' ', '\t', '\r', '\n');
+            if (trimmed.StartsWith('{') || trimmed.StartsWith('['))
             {
-                days = JsonlTrafficImporter.Import(content);
+                days = JsonlTrafficImporter.Import(trimmed);
             }
             else
             {
-                days = DatImporter.Import(content);
+                days = DatImporter.Import(trimmed);
             }
 
             TrafficHistoryStore.Save();
@@ -1063,14 +1271,25 @@ public sealed partial class SettingsShell : Window
         var alertChanges = rawChanges.Where(c => c.Path.StartsWith("alerts.", StringComparison.OrdinalIgnoreCase)).ToList();
         var colorChanges = rawChanges.Where(c => c.Path.StartsWith(groupColorsPrefix, StringComparison.OrdinalIgnoreCase)
                                               || c.Path.StartsWith(metricColorsPrefix, StringComparison.OrdinalIgnoreCase)).ToList();
+        var layoutChanges = rawChanges.Where(c => c.Path.Equals(OverlayLayoutPresetPath, StringComparison.OrdinalIgnoreCase)
+                                               || c.Path.Equals(OverlayRow1Path, StringComparison.OrdinalIgnoreCase)
+                                               || c.Path.Equals(OverlayMetricsPath, StringComparison.OrdinalIgnoreCase)).ToList();
 
         var result = rawChanges
             .Where(c => !c.Path.StartsWith("alerts.", StringComparison.OrdinalIgnoreCase)
                      && !c.Path.StartsWith(groupColorsPrefix, StringComparison.OrdinalIgnoreCase)
-                     && !c.Path.StartsWith(metricColorsPrefix, StringComparison.OrdinalIgnoreCase))
+                     && !c.Path.StartsWith(metricColorsPrefix, StringComparison.OrdinalIgnoreCase)
+                     && !c.Path.Equals(OverlayLayoutPresetPath, StringComparison.OrdinalIgnoreCase)
+                     && !c.Path.Equals(OverlayRow1Path, StringComparison.OrdinalIgnoreCase)
+                     && !c.Path.Equals(OverlayMetricsPath, StringComparison.OrdinalIgnoreCase))
             .Select(c => FormatHumanReadableChange(c.Path, c.OldVal, c.NewVal))
             .Where(s => !string.IsNullOrWhiteSpace(s))
             .ToList();
+
+        if (layoutChanges.Count > 0)
+        {
+            result.AddRange(ConsolidateLayoutDiff(layoutChanges));
+        }
 
         if (alertChanges.Count > 0)
         {
@@ -1122,7 +1341,7 @@ public sealed partial class SettingsShell : Window
             if (map.TryGetValue(threshKey, out var thresh))
                 enabledSummaries.Add($"{label} ({prefix}{thresh.NewVal}{unit})");
             else
-                enabledSummaries.Add($"{label} enabled");
+                enabledSummaries.Add(label);
         }
 
         return enabledSummaries.Count > 0
@@ -1412,10 +1631,15 @@ public sealed partial class SettingsShell : Window
         "overlay.flashoverlay" => $"Flashing alerts {ToggleStr(newVal)}",
         "overlay.showlabels" => newVal.Equals("true", StringComparison.OrdinalIgnoreCase)
             ? "Labels shown" : "Labels hidden",
-        "overlay.doubleclickaction" => newVal.Equals("taskmanager", StringComparison.OrdinalIgnoreCase)
-            ? "Double-click action set to Task Manager" : "Double-click action set to Open Settings",
+        "overlay.doubleclickaction" => newVal.ToLowerInvariant() switch
+        {
+            "taskmanager" => "Double-click action set to Task Manager",
+            "none" => "Double-click action set to None",
+            _ => "Double-click action set to Open Settings",
+        },
         "overlay.followwindowstheme" => $"Follow Windows theme {ToggleStr(newVal)}",
-        "overlay.row1" or "overlay.metrics" => FormatOverlayLayoutChange(oldVal, newVal),
+        OverlayLayoutPresetPath => $"Layout preset updated to '{GetPresetDisplayName(newVal)}'",
+        OverlayRow1Path or OverlayMetricsPath => FormatOverlayLayoutChange(oldVal, newVal),
         _ when normPath.StartsWith("overlay.metriccolors.", StringComparison.Ordinal) =>
             $"Metric '{GetMetricName(path[21..])}' color changed from {oldVal} to {newVal}",
         _ when normPath.StartsWith("overlay.groupcolors.", StringComparison.Ordinal) =>
@@ -1456,38 +1680,177 @@ public sealed partial class SettingsShell : Window
         "alerts.gpupowermaxw" => $"GPU power threshold set to {newVal} W",
         "alerts.netdailymaxgb" => $"Daily network limit set to {newVal} GB",
         "alerts.netmonthlymaxgb" => $"Monthly network limit set to {newVal} GB",
+        "alerts.sustainedsecs" => $"Alert sustained duration set to {newVal}s",
         "alerts.cooldownsecs" => $"Alert cooldown set to {newVal}s",
         "alerts.showtoastnotif" => $"Alert toast notifications {ToggleStr(newVal)}",
         "alerts.flashoverlay" => $"Alert overlay flashing {ToggleStr(newVal)}",
         "netusage.enabled" => $"Network usage tracking {ToggleStr(newVal)}",
         "updates.includeprereleases" => $"Include pre-release builds {ToggleStr(newVal)}",
         "updates.checkfrequency" => newVal.Length > 0 ? $"Update check frequency set to {char.ToUpperInvariant(newVal[0]) + newVal[1..]}" : "Update check frequency changed",
+        "updates.userexplicitlysetincludeprereleases" => "",
         _ => null
     };
 
     private static string ToggleStr(string newVal) => newVal.Equals("true", StringComparison.OrdinalIgnoreCase) ? EnabledStr : DisabledStr;
 
-    private static string GetMetricName(string metricId) => metricId.ToLowerInvariant() switch
+    private static string GetPresetDisplayName(string presetId) => presetId.Trim('"').Trim().ToLowerInvariant() switch
     {
-        "cpu_pct" => "CPU Usage",
-        "cpu_temp" => "CPU Temperature",
-        "cpu_freq" => "CPU Frequency",
-        "cpu_power" => "CPU Power",
-        "ram_pct" => "RAM Usage %",
-        "ram_used" => "RAM Used",
-        "gpu_pct" => "GPU Usage",
-        "gpu_temp" => "GPU Temperature",
-        "gpu_vram" => "GPU VRAM",
-        "gpu_freq" => "GPU Frequency",
-        "gpu_power" => "GPU Power",
-        "net_down" => "Download Speed",
-        "net_up" => "Upload Speed",
-        "net_total" => "Total Network Usage",
-        "battery_pct" => "Battery %",
-        "battery_rate" => "Battery Rate",
-        _ when metricId.StartsWith("disk_", StringComparison.Ordinal) => $"Disk {metricId[5..].ToUpperInvariant()}",
-        _ => metricId
+        "default" => "Default",
+        "gaming" => "Gaming",
+        "compact" => "Compact",
+        "full" => "Full Telemetry",
+        "custom" => "Custom",
+        _ when presetId.Trim('"').Trim().Length > 0 => char.ToUpperInvariant(presetId.Trim('"').Trim()[0]) + presetId.Trim('"').Trim()[1..],
+        _ => "Custom"
     };
+
+    private static List<string> ConsolidateLayoutDiff(List<(string Path, string OldVal, string NewVal)> layoutChanges)
+    {
+        var result = new List<string>();
+        var presetChange = layoutChanges.FirstOrDefault(c => c.Path.Equals(OverlayLayoutPresetPath, StringComparison.OrdinalIgnoreCase));
+        var rowChange = layoutChanges.FirstOrDefault(c => c.Path.Equals(OverlayRow1Path, StringComparison.OrdinalIgnoreCase)
+                                                       || c.Path.Equals(OverlayMetricsPath, StringComparison.OrdinalIgnoreCase));
+
+        bool hasPreset = !string.IsNullOrEmpty(presetChange.Path);
+        bool hasRow = !string.IsNullOrEmpty(rowChange.Path);
+
+        if (hasPreset)
+        {
+            string cleanNewPreset = presetChange.NewVal.Trim('"').Trim();
+
+            if (!cleanNewPreset.Equals("custom", StringComparison.OrdinalIgnoreCase))
+            {
+                result.Add($"Layout preset updated to '{GetPresetDisplayName(cleanNewPreset)}'");
+                return result;
+            }
+
+            if (hasRow)
+            {
+                string rowDetails = FormatCustomLayoutDetails(rowChange.OldVal, rowChange.NewVal);
+                if (!string.IsNullOrWhiteSpace(rowDetails))
+                {
+                    result.Add($"Layout preset updated to 'Custom' ({rowDetails})");
+                    return result;
+                }
+            }
+
+            result.Add("Layout preset updated to 'Custom'");
+            return result;
+        }
+
+        if (hasRow)
+        {
+            string rowMsg = FormatOverlayLayoutChange(rowChange.OldVal, rowChange.NewVal);
+            if (!string.IsNullOrWhiteSpace(rowMsg))
+            {
+                result.Add(rowMsg);
+            }
+        }
+
+        return result;
+    }
+
+    private static string FormatCustomLayoutDetails(string oldVal, string newVal)
+    {
+        var newIds = ParseMetricIds(newVal);
+        var oldIds = ParseMetricIds(oldVal);
+
+        if (newIds.Count == 0) return "cleared";
+
+        var added = newIds.Except(oldIds).Select(GetMetricName).ToList();
+        var removed = oldIds.Except(newIds).Select(GetMetricName).ToList();
+
+        if (added.Count > 0)
+        {
+            if (removed.Count == 0)
+                return $"Added {string.Join(", ", added)}";
+            return $"Added {string.Join(", ", added)}, Removed {string.Join(", ", removed)}";
+        }
+        if (removed.Count > 0)
+        {
+            return $"Removed {string.Join(", ", removed)}";
+        }
+        if (!oldIds.SequenceEqual(newIds))
+        {
+            return "Metrics layout reordered";
+        }
+        return string.Empty;
+    }
+
+    private static string GetMetricName(string metricId)
+    {
+        return metricId.ToLowerInvariant() switch
+        {
+            "cpu_pct" => "CPU Usage",
+            "cpu_temp" => "CPU Temperature",
+            "cpu_freq" => "CPU Frequency",
+            "cpu_power" => "CPU Power",
+            "ram_pct" => "RAM Usage %",
+            "ram_used" => "RAM Used",
+            "gpu_pct" => "GPU Usage",
+            "gpu_temp" => "GPU Temperature",
+            "gpu_vram" => "GPU VRAM",
+            "gpu_freq" => "GPU Frequency",
+            "gpu_power" => "GPU Power",
+            "net_down" => "Download Speed",
+            "net_up" => "Upload Speed",
+            "net_total" => "Total Network Usage",
+            "battery_pct" => "Battery %",
+            "battery_rate" => "Battery Rate",
+            _ when metricId.StartsWith("disk_", StringComparison.OrdinalIgnoreCase) => GetDiskMetricName(metricId),
+            _ when Metrics.AllMetricsById.TryGetValue(metricId, out var desc) && !string.IsNullOrWhiteSpace(desc.FullLabel) => desc.FullLabel,
+            _ => metricId
+        };
+    }
+
+    private static string GetDiskMetricName(string metricId)
+    {
+        int last = metricId.LastIndexOf('_');
+        if (last <= 5) return metricId;
+        string diskPart = metricId[5..last];
+        string aspectRaw = metricId[(last + 1)..];
+        string aspect = char.ToUpperInvariant(aspectRaw[0]) + aspectRaw[1..].ToLowerInvariant();
+
+        if (diskPart.StartsWith("disk", StringComparison.OrdinalIgnoreCase) && int.TryParse(diskPart[4..], out int idx))
+        {
+            var disks = SystemInfo.GetAllDisks();
+            if (disks is not null && disks.Count > 0)
+            {
+                var archPairs = disks.Select(d => ((string?)d.DisplayType, (string?)d.BusType)).ToList();
+                var labels = HardwareMonitor.ComputeDiskArchitectureLabels(archPairs);
+                if (idx >= 0 && idx < labels.Count)
+                {
+                    return $"{labels[idx]} {aspect}";
+                }
+            }
+
+            if (Metrics.AllMetricsById.TryGetValue(metricId, out var desc) && !string.IsNullOrWhiteSpace(desc.FullLabel)
+                && !desc.FullLabel.StartsWith("DISK", StringComparison.OrdinalIgnoreCase))
+            {
+                return desc.FullLabel;
+            }
+
+            return $"Disk {idx + 1} {aspect}";
+        }
+
+        return FormatFallbackDiskMetricName(metricId);
+    }
+
+    private static string FormatFallbackDiskMetricName(string metricId)
+    {
+        var parts = metricId.Split('_', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 3)
+        {
+            string diskPart = parts[1];
+            string aspect = char.ToUpperInvariant(parts[2][0]) + parts[2][1..].ToLowerInvariant();
+            if (diskPart.StartsWith("disk", StringComparison.OrdinalIgnoreCase) && int.TryParse(diskPart[4..], out int idx))
+            {
+                return $"Disk {idx + 1} {aspect}";
+            }
+            return $"{diskPart.ToUpperInvariant()} {aspect}";
+        }
+        return $"Disk {metricId[5..]}";
+    }
 
     private static List<string> ParseMetricIds(string val)
     {
@@ -1579,7 +1942,17 @@ public sealed partial class SettingsShell : Window
             return;
         }
         if (SkipDragMoveForTesting) return;
-        DragMove();
+        if (e.ButtonState == MouseButtonState.Pressed)
+        {
+            try
+            {
+                DragMove();
+            }
+            catch (InvalidOperationException)
+            {
+                // DragMove can throw if mouse button was released or already captured by WindowChrome
+            }
+        }
     }
 
     /// <summary>Closes the settings configuration window.</summary>
@@ -1591,14 +1964,39 @@ public sealed partial class SettingsShell : Window
     // Disposal
     protected override void OnClosed(EventArgs e)
     {
-        NetworkChange.NetworkAddressChanged -= OnNetworkAddressChanged;
-        _nicDebounceTimer?.Dispose();
-        _trafficTodayTimer?.Dispose();
+        try
+        {
+            NetworkChange.NetworkAddressChanged -= OnNetworkAddressChanged;
+            TrafficHistoryStore.HistoryUpdated -= OnHistoryUpdated;
+            _nicDebounceTimer?.Dispose();
+            _trafficTodayTimer?.Dispose();
+            if (_appUsageTimer != null)
+            {
+                _appUsageTimer.Stop();
+                _appUsageTimer.Tick -= OnAppUsageTick;
+            }
 
-        // Properly dispose WebView2 to prevent phantom COM objects
-        if (_webViewReady)
-            WebView?.Dispose();
-        base.OnClosed(e);
+            // Properly dispose WebView2 to prevent phantom COM objects
+            if (_webViewReady)
+            {
+                try
+                {
+                    WebView?.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    Log.Debug(ex, "WebView2 disposal error during OnClosed");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "SettingsShell cleanup error during OnClosed");
+        }
+        finally
+        {
+            base.OnClosed(e);
+        }
     }
 }
 

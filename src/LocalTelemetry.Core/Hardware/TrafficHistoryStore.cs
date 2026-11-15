@@ -14,6 +14,9 @@ public static class TrafficHistoryStore
     /// <summary>Gets the underlying <see cref="TrafficHistoryFile"/> instance.</summary>
     public static TrafficHistoryFile HistoryFile => Instance;
 
+    /// <summary>Reloads network history records from disk.</summary>
+    public static void Reload() => Instance.Load();
+
     private static TrafficHistoryFile Instance =>
         _instance ?? throw new InvalidOperationException("TrafficHistoryStore not initialized. Call Initialize() first.");
 

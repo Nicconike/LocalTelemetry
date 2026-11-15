@@ -65,13 +65,11 @@ public static class Metrics
     public static readonly Dictionary<string, MetricDescriptor> AllMetricsById = AllMetrics.ToDictionary(m => m.Id);
 #pragma warning restore S2386, S3887
 
-    /// <summary>Registers per-disk metric descriptors for a given disk index.</summary>
+    /// <summary>Registers or updates per-disk metric descriptors for a given disk index.</summary>
     /// <param name="id">Disk identifier (e.g. "disk0").</param>
-    /// <param name="label">Display label (e.g. "DISK0").</param>
+    /// <param name="label">Display label (e.g. "NVMe 1" or "DISK0").</param>
     public static void RegisterDisk(string id, string label)
     {
-        string key = $"disk_{id}_read";
-        if (AllMetricsById.ContainsKey(key)) return;
         var list = new MetricDescriptor[]
         {
             new($"disk_{id}_read", label, $"{label} Read", "MB/s", "disk"),
@@ -79,7 +77,18 @@ public static class Metrics
         };
         foreach (var m in list)
         {
-            AllMetrics.Add(m);
+            if (AllMetricsById.TryGetValue(m.Id, out var existing))
+            {
+                int idx = AllMetrics.IndexOf(existing);
+                if (idx >= 0)
+                {
+                    AllMetrics[idx] = m;
+                }
+            }
+            else
+            {
+                AllMetrics.Add(m);
+            }
             AllMetricsById[m.Id] = m;
         }
     }

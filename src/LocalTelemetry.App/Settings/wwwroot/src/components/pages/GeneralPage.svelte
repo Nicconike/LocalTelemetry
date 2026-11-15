@@ -34,7 +34,7 @@
 
         <SectionCard
             title="Update Interval"
-            description="How often metrics are refreshed"
+            description="How often metrics are refreshed."
         >
             <Select
                 label="Polling Interval"
@@ -43,10 +43,14 @@
             />
         </SectionCard>
 
-        <SectionCard title="Units">
+        <SectionCard
+            title="Temperature Units"
+            description="Choose Celsius or Fahrenheit for taskbar and overlay readings."
+        >
             <Toggle
                 bind:checked={$settings.monitoring.useFahrenheit}
-                label="Show Temperatures in °F"
+                label="Display Temperatures in Fahrenheit (°F)"
+                description="Default is Celsius (°C). Affects all temperature sensors."
             />
         </SectionCard>
     </div>
@@ -56,7 +60,7 @@
     .page {
         display: flex;
         flex-direction: column;
-        gap: var(--space-5);
+        gap: var(--space-3);
     }
     h2 {
         font-size: var(--text-lg);

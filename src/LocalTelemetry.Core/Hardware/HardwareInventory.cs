@@ -284,19 +284,36 @@ public static class HardwareInventory
 
     private static void LogFullHardwareDetails(HardwareLogDetails details)
     {
-        Log.Info("Hardware configuration detected");
-        Log.Info($"Detected system {details.SystemLine}, OS {details.OsVersion}, form factor {details.FormFactor}");
+        var sb = new StringBuilder();
+        sb.AppendLine("Hardware configuration detected:");
+        sb.AppendLine($"  System: {details.SystemLine}, OS {details.OsVersion}, form factor {details.FormFactor}");
         if (!string.IsNullOrWhiteSpace(details.MotherboardLine))
-            Log.Info($"Detected motherboard {details.MotherboardLine}");
+        {
+            sb.AppendLine($"  Motherboard: {details.MotherboardLine}");
+        }
         if (!string.IsNullOrWhiteSpace(details.ProcessorLine))
-            Log.Info($"Detected processor {details.ProcessorLine}");
+        {
+            sb.AppendLine($"  Processor: {details.ProcessorLine}");
+        }
         foreach (var gpu in details.GpuLines)
-            Log.Info($"Detected graphics adapter {gpu}");
-        Log.Info($"Detected {details.DiskCount} physical drive(s), primary {details.PrimaryDiskType}");
-        foreach (var d in details.DiskLines)
-            Log.Info($"Detected {d}");
-        Log.Info($"Detected memory {details.MemoryLine}");
-        Log.Info($"Detected battery {details.BatteryLine}");
+        {
+            sb.AppendLine($"  Graphics: {gpu}");
+        }
+        sb.AppendLine($"  Storage: {details.DiskCount} physical drive(s), primary {details.PrimaryDiskType}");
+        foreach (var disk in details.DiskLines)
+        {
+            sb.AppendLine($"    {disk}");
+        }
+        if (!string.IsNullOrWhiteSpace(details.MemoryLine))
+        {
+            sb.AppendLine($"  Memory: {details.MemoryLine}");
+        }
+        if (!string.IsNullOrWhiteSpace(details.BatteryLine) && !details.BatteryLine.StartsWith("None", StringComparison.OrdinalIgnoreCase))
+        {
+            sb.AppendLine($"  Battery: {details.BatteryLine}");
+        }
+
+        Log.Info(sb.ToString().TrimEnd());
     }
 
     private static void SaveStateQuietly(string? path, HardwareState state)

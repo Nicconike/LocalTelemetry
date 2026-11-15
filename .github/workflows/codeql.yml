@@ -2,7 +2,7 @@ name: CodeQL
 
 on:
     push:
-        branches: [master]
+        branches: [master, develop]
         paths:
             - "src/**"
             - "Directory.Build.props"
@@ -10,7 +10,7 @@ on:
             - "LocalTelemetry.sln"
             - ".github/workflows/codeql.yml"
     pull_request:
-        branches: [master]
+        branches: [master, develop]
         paths:
             - "src/**"
             - "Directory.Build.props"

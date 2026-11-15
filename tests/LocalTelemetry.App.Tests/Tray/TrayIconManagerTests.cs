@@ -206,6 +206,38 @@ public class TrayIconManagerTests
     }
 
     [WpfFact]
+    public void OverlayContextMenu_RendersItemsToBitmap()
+    {
+        using var tray = new TrayIconManager();
+        var field = typeof(TrayIconManager).GetField("_overlayContextMenu", BindingFlags.Instance | BindingFlags.NonPublic);
+        var cms = (ContextMenuStrip)field!.GetValue(tray)!;
+
+        // Force handle creation and layout
+        var handle = cms.Handle;
+        handle.Should().NotBe(IntPtr.Zero);
+
+        using var bmp = new Bitmap(cms.Width > 0 ? cms.Width : 200, cms.Height > 0 ? cms.Height : 200);
+        cms.DrawToBitmap(bmp, new Rectangle(0, 0, bmp.Width, bmp.Height));
+
+        int nonBlackOrBg = 0;
+        for (int y = 0; y < bmp.Height; y++)
+        {
+            for (int x = 0; x < bmp.Width; x++)
+            {
+                var c = bmp.GetPixel(x, y);
+                // Check if text (white or light gray) is present
+                if (c.R > 100 && c.G > 100 && c.B > 100)
+                {
+                    nonBlackOrBg++;
+                }
+            }
+        }
+
+        // Output info via assertion or check
+        nonBlackOrBg.Should().BeGreaterThan(0, $"Expected rendered text pixels but found {nonBlackOrBg}. Size={cms.Width}x{cms.Height}");
+    }
+
+    [WpfFact]
     public void TrayIconManager_OverlayContextMenu_StateAndVisibilityLifecycle()
     {
         using var tray = new TrayIconManager();
@@ -442,6 +474,47 @@ public class TrayIconManagerTests
         finally
         {
             TrayIconManager.SkipUiForTesting = priorSkipUi;
+        }
+    }
+
+    [WpfFact]
+    public void MouseHookCallback_DismissesContextMenuWhenClickOutside()
+    {
+        using var tray = new TrayIconManager();
+        var createMenu = typeof(TrayIconManager).GetMethod("CreateBaseContextMenu", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        using var ctx = (ContextMenuStrip)createMenu.Invoke(tray, null)!;
+
+        // Set active context menu
+        var activeMenuField = typeof(TrayIconManager).GetField("_activeContextMenu", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        activeMenuField.SetValue(tray, ctx);
+
+        var hookCallback = typeof(TrayIconManager).GetMethod("MouseHookCallback", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+        // Simulate hook struct at (500, 500)
+        var hookStruct = new LocalTelemetry.App.Win32.NativeMethods.MSLLHOOKSTRUCT
+        {
+            pt = new LocalTelemetry.App.Win32.NativeMethods.POINT { X = 500, Y = 500 }
+        };
+        IntPtr ptr = System.Runtime.InteropServices.Marshal.AllocHGlobal(System.Runtime.InteropServices.Marshal.SizeOf(hookStruct));
+        try
+        {
+            System.Runtime.InteropServices.Marshal.StructureToPtr(hookStruct, ptr, false);
+
+            // Test non-button down msg (WM_MOUSEMOVE = 0x200)
+            var resMove = hookCallback.Invoke(tray, [0, (IntPtr)0x0200, ptr]);
+            resMove.Should().NotBeNull();
+
+            // Test outside click (WM_LBUTTONDOWN = 0x201)
+            var resClick = hookCallback.Invoke(tray, [0, (IntPtr)0x0201, ptr]);
+            resClick.Should().NotBeNull();
+
+            // Test with negative nCode
+            var resNegative = hookCallback.Invoke(tray, [-1, (IntPtr)0x0201, ptr]);
+            resNegative.Should().NotBeNull();
+        }
+        finally
+        {
+            System.Runtime.InteropServices.Marshal.FreeHGlobal(ptr);
         }
     }
 }

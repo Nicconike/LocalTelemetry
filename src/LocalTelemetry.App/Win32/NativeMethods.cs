@@ -15,6 +15,11 @@ internal static class NativeMethods
     public const int CS_DBLCLKS = 0x0008;
     public const int WS_POPUP = unchecked((int)0x80000000);
     public const int WS_CHILD = 0x40000000;
+    public const int WS_CAPTION = 0x00C00000;
+    public const int WS_SYSMENU = 0x00080000;
+    public const int WS_THICKFRAME = 0x00040000;
+    public const int WS_MINIMIZEBOX = 0x00020000;
+    public const int WS_MAXIMIZEBOX = 0x00010000;
     public const int WS_EX_LAYERED = 0x00080000;
     public const int WS_EX_TOOLWINDOW = 0x00000080;
     public const int WS_EX_NOACTIVATE = 0x08000000;
@@ -34,6 +39,7 @@ internal static class NativeMethods
     // ShowWindow Commands
     public const int SW_HIDE = 0;
     public const int SW_SHOWNOACTIVATE = 4;
+    public const int SW_RESTORE = 9;
 
     // Special HWND Handles
     public static readonly IntPtr HWND_TOPMOST = new(-1);
@@ -46,6 +52,7 @@ internal static class NativeMethods
     public const int WM_ERASEBKGND = 0x0014;
     public const int WM_NCDESTROY = 0x0082;
     public const int WM_LBUTTONDOWN = 0x0201;
+    public const int WM_LBUTTONUP = 0x0202;
     public const int WM_LBUTTONDBLCLK = 0x0203;
     public const int WM_RBUTTONDOWN = 0x0204;
     public const int WM_RBUTTONUP = 0x0205;
@@ -177,6 +184,10 @@ internal static class NativeMethods
     [DllImport("user32.dll", SetLastError = true)]
     public static extern IntPtr SetParent(IntPtr child, IntPtr parent);
 
+    /// <summary>Retrieves a handle to the specified window's parent or owner.</summary>
+    [DllImport("user32.dll", ExactSpelling = true)]
+    public static extern IntPtr GetParent(IntPtr hWnd);
+
     /// <summary>Retrieves the bounding rectangle of a window.</summary>
     [DllImport("user32.dll")]
     public static extern bool GetWindowRect(IntPtr hWnd, out RECT r);
@@ -211,6 +222,10 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     public static extern bool IsWindow(IntPtr hWnd);
 
+    /// <summary>Retrieves a handle to the window that contains the specified point.</summary>
+    [DllImport("user32.dll")]
+    public static extern IntPtr WindowFromPoint(POINT point);
+
     /// <summary>Retrieves the handle to the ancestor of the specified window.</summary>
     [DllImport("user32.dll")]
     public static extern IntPtr GetAncestor(IntPtr hWnd, uint gaFlags);
@@ -232,6 +247,13 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    public const uint ASFW_ANY = unchecked((uint)-1);
+
+    /// <summary>Enables the specified process to set the foreground window using SetForegroundWindow.</summary>
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool AllowSetForegroundWindow(uint dwProcessId);
 
     /// <summary>Sends an AppBar message to Windows Explorer.</summary>
     [DllImport("shell32.dll")]
@@ -269,6 +291,9 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     public static extern uint GetDoubleClickTime();
 
+    /// <summary>Special HWND value to broadcast a message to all top-level windows.</summary>
+    public static readonly IntPtr HWND_BROADCAST = new(0xffff);
+
     /// <summary>Posts a message to the window's message queue.</summary>
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -300,9 +325,19 @@ internal static class NativeMethods
     public static extern bool RemoveWindowSubclass(IntPtr hWnd, SUBCLASSPROC pfnSubclass, UIntPtr uIdSubclass);
 
     // Mouse Hook & Cursor Constants & Declarations
+    public const int WH_MOUSE_LL = 14;
     public const int WM_SETCURSOR = 0x0020;
     public const int WM_MOUSEMOVE = 0x0200;
     public const int IDC_ARROW = 32512;
+
+    public delegate IntPtr LowLevelMouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    public static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseHookCallback lpfn, IntPtr hMod, uint dwThreadId);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool UnhookWindowsHookEx(IntPtr hhk);
 
 #pragma warning disable S101 // Win32 SDK P/Invoke struct naming convention matches Windows API definitions
     [StructLayout(LayoutKind.Sequential)]
@@ -388,6 +423,10 @@ internal static class NativeMethods
 
     // Desktop Window Manager (DWM) Attributes
     public const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+
+    [DllImport("psapi.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool EmptyWorkingSet(IntPtr hProcess);
 
     [DllImport("dwmapi.dll", PreserveSig = true)]
     public static extern int DwmSetWindowAttribute(IntPtr hwnd, int dwAttribute, ref int pvAttribute, int cbAttribute);

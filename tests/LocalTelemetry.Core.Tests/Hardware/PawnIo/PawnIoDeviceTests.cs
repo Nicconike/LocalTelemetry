@@ -629,7 +629,7 @@ public class PawnIoDeviceTests
 
             var downloadMethod = typeof(PawnIoDevice).GetMethod("DownloadInstallerBytes", BindingFlags.NonPublic | BindingFlags.Static);
             var downloaded = (byte[])downloadMethod?.Invoke(null, null)!;
-            downloaded.Should().Equal([0x4D, 0x5A, 0x90, 0x00]);
+            downloaded.Should().Equal(0x4D, 0x5A, 0x90, 0x00);
 
             // Test RunInstaller using ProcessLauncher
             var runInstaller = typeof(PawnIoDevice).GetMethod("RunInstaller", BindingFlags.NonPublic | BindingFlags.Static);
@@ -645,6 +645,26 @@ public class PawnIoDeviceTests
             PawnIoDevice.InstallerDownloader = origDownloader;
             PawnIoDevice.HttpClientFactory = origHttpFactory;
         }
+    }
+
+    [Fact]
+    public void PawnIoDevice_DeletePawnIoTempFiles_RemovesMatchingTempFilesAndDirectories()
+    {
+        string tempDir = Path.GetTempPath();
+        string dummyFile = Path.Combine(tempDir, $"PawnIO_test_{Guid.NewGuid():N}.tmp");
+        string dummyDir = Path.Combine(tempDir, $"PawnIO_dir_{Guid.NewGuid():N}.tmp");
+
+        File.WriteAllText(dummyFile, "test");
+        Directory.CreateDirectory(dummyDir);
+        File.WriteAllText(Path.Combine(dummyDir, "test.sys"), "test");
+
+        File.Exists(dummyFile).Should().BeTrue();
+        Directory.Exists(dummyDir).Should().BeTrue();
+
+        PawnIoDevice.DeletePawnIoTempFiles();
+
+        File.Exists(dummyFile).Should().BeFalse();
+        Directory.Exists(dummyDir).Should().BeFalse();
     }
 
     private sealed class FakeHttpMessageHandler(HttpResponseMessage response) : HttpMessageHandler

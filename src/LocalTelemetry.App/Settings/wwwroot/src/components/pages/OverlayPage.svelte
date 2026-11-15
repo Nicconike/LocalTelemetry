@@ -29,15 +29,19 @@
         { value: "settings", label: "Open Settings" },
     ];
 
-    function apply() {
-        saveSettings($settings);
-    }
+    let dismissed = $state(false);
+
+    $effect(() => {
+        if (!$settings?.overlay?.taskbarSpaceConstrained) {
+            dismissed = false;
+        }
+    });
 </script>
 
 {#if $settings}
     <div class="page">
         <h2>Overlay</h2>
-        {#if $settings.overlay?.taskbarSpaceConstrained}
+        {#if $settings.overlay?.taskbarSpaceConstrained && !dismissed}
             <div class="constraint-banner" role="alert">
                 <svg
                     class="banner-icon"
@@ -67,6 +71,11 @@
                             class="banner-btn"
                             onclick={() => openUrl("ms-settings:taskbar")}
                             >Open Taskbar Settings</button
+                        >
+                        <button
+                            type="button"
+                            class="banner-btn banner-btn-dismiss"
+                            onclick={() => (dismissed = true)}>Dismiss</button
                         >
                     </div>
                 </div>
@@ -128,7 +137,7 @@
     .page {
         display: flex;
         flex-direction: column;
-        gap: var(--space-5);
+        gap: var(--space-3);
     }
     h2 {
         font-size: var(--text-lg);
@@ -169,6 +178,8 @@
         font-size: var(--text-xs);
     }
     .banner-actions {
+        display: flex;
+        gap: var(--space-2);
         margin-top: var(--space-1);
     }
     .banner-btn {
@@ -186,5 +197,14 @@
     }
     .banner-btn:hover {
         background: color-mix(in srgb, var(--color-warning) 35%, transparent);
+    }
+    .banner-btn-dismiss {
+        background: transparent;
+        border-color: var(--color-border);
+        color: var(--color-text-muted);
+    }
+    .banner-btn-dismiss:hover {
+        background: var(--color-surface-hover);
+        color: var(--color-text);
     }
 </style>

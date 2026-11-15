@@ -1622,6 +1622,62 @@ public static class SystemInfo
         return "";
     }
 
+    private static readonly (string Pattern, string Brand)[] KnownBatteryVendors =
+    [
+        ("Sunwoda", "Sunwoda"),
+        ("Simplo", "Simplo"),
+        ("Celxpert", "Celxpert"),
+        ("LG Energy", "LG Energy"),
+        ("LG Chem", "LG Energy"),
+        ("Dynapack", "Dynapack"),
+        ("Panasonic", "Panasonic"),
+        ("Coslight", "Coslight"),
+        ("Samsung", "Samsung"),
+        ("Murata", "Murata"),
+        ("Sony", "Murata"),
+    ];
+
+    private static readonly (string Code, string Brand)[] KnownBatteryCodes =
+    [
+        ("BYD", "BYD"),
+        ("SMP", "Simplo"),
+        ("CEL", "Celxpert"),
+        ("LGC", "LG Energy"),
+        ("SWD", "Sunwoda"),
+        ("SEC", "Samsung"),
+        ("DP", "Dynapack"),
+        ("Pana", "Panasonic"),
+    ];
+
+    internal static string ResolveBatteryVendorToken(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return "";
+
+        foreach (var (pattern, brand) in KnownBatteryVendors)
+        {
+            if (text.Contains(pattern, StringComparison.OrdinalIgnoreCase))
+                return brand;
+        }
+
+        foreach (var (code, brand) in KnownBatteryCodes)
+        {
+            if (text.Equals(code, StringComparison.OrdinalIgnoreCase))
+                return brand;
+
+            int idx = text.IndexOf(code, StringComparison.OrdinalIgnoreCase);
+            if (idx >= 0)
+            {
+                bool leftBoundary = idx == 0 || !char.IsLetter(text[idx - 1]);
+                int rightIdx = idx + code.Length;
+                bool rightBoundary = rightIdx >= text.Length || !char.IsLower(text[rightIdx]);
+                if (leftBoundary && rightBoundary)
+                    return brand;
+            }
+        }
+
+        return "";
+    }
+
     private static string QueryWin32BatteryManufacturer()
     {
         try
@@ -1630,17 +1686,31 @@ public static class SystemInfo
                 throw new ManagementException("Simulated Win32_Battery devid failure");
             if (ThrowInWin32BatteryGenericExceptionForTesting)
                 throw new InvalidOperationException("Simulated Win32_Battery generic devid failure");
-            using var searcher = new ManagementObjectSearcher("SELECT DeviceID FROM Win32_Battery");
+            using var searcher = new ManagementObjectSearcher("SELECT DeviceID, Manufacturer, Name FROM Win32_Battery");
             using var results = searcher.Get();
             foreach (ManagementBaseObject mo in results)
             {
-                string devId = (mo["DeviceID"] as string ?? "").Trim();
-                if (devId.Length == 0) continue;
+                string mfrProp = (mo["Manufacturer"] as string ?? "").Trim();
+                if (IsValidBatteryString(mfrProp))
+                {
+                    string resolved = ResolveBatteryVendorToken(mfrProp);
+                    if (resolved.Length > 0) return resolved;
+                    return mfrProp;
+                }
 
-                var matchedBrand = BrandColorDefaults.BatteryColors.Keys
-                    .FirstOrDefault(brand => devId.Contains(brand, StringComparison.OrdinalIgnoreCase));
-                if (matchedBrand != null)
-                    return matchedBrand;
+                string devId = (mo["DeviceID"] as string ?? "").Trim();
+                if (devId.Length > 0)
+                {
+                    string resolved = ResolveBatteryVendorToken(devId);
+                    if (resolved.Length > 0) return resolved;
+                }
+
+                string name = (mo["Name"] as string ?? "").Trim();
+                if (name.Length > 0)
+                {
+                    string resolved = ResolveBatteryVendorToken(name);
+                    if (resolved.Length > 0) return resolved;
+                }
             }
         }
         catch (ManagementException ex) { Diagnostics.Log.Debug($"Failed to query battery manufacturer from Win32_Battery: {ex.Message}"); }
@@ -1649,7 +1719,7 @@ public static class SystemInfo
     }
 
     /// <summary>Gets the battery manufacturer name from WMI or SMBIOS.</summary>
-    /// <returns>e.g. <c>Sunwoda</c>, <c>LGC</c> or empty if no battery present.</returns>
+    /// <returns>e.g. <c>Sunwoda</c>, <c>BYD</c>, <c>Simplo</c> or empty if no battery present.</returns>
     public static string GetBatteryManufacturer()
     {
         if (!HasBattery()) return "";
@@ -1657,15 +1727,36 @@ public static class SystemInfo
 
         // 1. Live ACPI battery static data from root\wmi (queried from battery BMS)
         string wmi = QueryRootWmiString("BatteryStaticData", "ManufactureName");
-        if (IsValidBatteryString(wmi)) return _batteryManufacturerCache = wmi;
+        if (IsValidBatteryString(wmi))
+        {
+            foreach (var (code, brand) in KnownBatteryCodes)
+            {
+                if (wmi.Equals(code, StringComparison.OrdinalIgnoreCase))
+                    return _batteryManufacturerCache = brand;
+            }
+            return _batteryManufacturerCache = wmi;
+        }
 
         // 2. SMBIOS Type 22 (Portable Battery) if valid and not a virtual/dummy placeholder
         string smbios = GetSmbiosBatteryString(0x05);
-        if (IsValidBatteryString(smbios)) return _batteryManufacturerCache = smbios;
+        if (IsValidBatteryString(smbios))
+        {
+            foreach (var (code, brand) in KnownBatteryCodes)
+            {
+                if (smbios.Equals(code, StringComparison.OrdinalIgnoreCase))
+                    return _batteryManufacturerCache = brand;
+            }
+            return _batteryManufacturerCache = smbios;
+        }
 
         // 3. Fallback: Parse manufacturer from Win32_Battery DeviceID (e.g. "818SunwodaL24D4PC0")
         string win32Mfr = QueryWin32BatteryManufacturer();
         if (IsValidBatteryString(win32Mfr)) return _batteryManufacturerCache = win32Mfr;
+
+        // 4. Fallback: System OEM
+        string oem = GetSystemManufacturer();
+        if (IsValidBatteryString(oem) && !oem.Equals("System manufacturer", StringComparison.OrdinalIgnoreCase))
+            return _batteryManufacturerCache = oem;
 
         return _batteryManufacturerCache = "";
     }
