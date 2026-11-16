@@ -12,6 +12,9 @@
  *   bun preview-changelog.ts --format changelog
  */
 import process from 'node:process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { generateNotes } from '@semantic-release/release-notes-generator';
 import {
@@ -29,6 +32,51 @@ function getLatestTag(): string {
         return execFileSync(gitBin, ['describe', '--tags', '--abbrev=0'], { encoding: 'utf-8' }).trim();
     } catch {
         return 'HEAD~10';
+    }
+}
+
+function getPreviousTag(tag: string): string {
+    const gitBin = resolveGitBinary();
+    try {
+        return execFileSync(gitBin, ['describe', '--tags', '--abbrev=0', `${tag}^`], { encoding: 'utf-8' }).trim();
+    } catch {
+        return 'HEAD~10';
+    }
+}
+
+function resolveGhBinary(): string {
+    if (process.platform === 'win32') {
+        const progFiles = process.env.ProgramFiles ?? String.raw`C:\Program Files`;
+        const candidates = [
+            path.join(progFiles, 'GitHub CLI', 'gh.exe'),
+            String.raw`C:\Program Files\GitHub CLI\gh.exe`,
+        ];
+        for (const candidate of candidates) {
+            if (fs.existsSync(candidate)) return candidate;
+        }
+    }
+    return 'gh';
+}
+
+function updateGitHubRelease(tag: string, notes: string): void {
+    const tempFile = path.join(os.tmpdir(), `release-notes-${tag}-${Date.now()}.md`);
+    fs.writeFileSync(tempFile, notes, 'utf-8');
+    const ghBin = resolveGhBinary();
+    try {
+        console.log(`Updating GitHub Release ${tag} via ${ghBin}...`);
+        execFileSync(ghBin, ['release', 'edit', tag, '--notes-file', tempFile], {
+            stdio: 'inherit',
+            env: process.env,
+        });
+        console.log(`Successfully updated GitHub Release ${tag} with domain-grouped release notes.`);
+    } finally {
+        try {
+            if (fs.existsSync(tempFile)) {
+                fs.unlinkSync(tempFile);
+            }
+        } catch {
+            // Ignore cleanup failure
+        }
     }
 }
 
@@ -54,15 +102,15 @@ function getRepoUrl(): string {
 function getCommitsBetween(
     fromTag: string,
     toRef: string = 'HEAD',
-): Array<{ hash: string; shortHash: string; message: string; committerDate?: string }> {
+): Array<{ hash: string; shortHash: string; message: string; committerDate?: string; authorDate?: string }> {
     const gitBin = resolveGitBinary();
     const raw = execFileSync(
         gitBin,
-        ['log', `${fromTag}..${toRef}`, '--format=COMMIT_START%x00%H%x00%h%x00%cI%x00%B%x00COMMIT_END'],
+        ['log', `${fromTag}..${toRef}`, '--format=COMMIT_START%x00%H%x00%h%x00%cI%x00%aI%x00%B%x00COMMIT_END'],
         { encoding: 'utf-8' },
     );
 
-    const commits: Array<{ hash: string; shortHash: string; message: string; committerDate?: string }> = [];
+    const commits: Array<{ hash: string; shortHash: string; message: string; committerDate?: string; authorDate?: string }> = [];
     const chunks = raw.split('COMMIT_START\0');
 
     for (const chunk of chunks) {
@@ -73,37 +121,101 @@ function getCommitsBetween(
         const hash = parts[0]?.trim();
         const shortHash = parts[1]?.trim() || hash?.substring(0, 7) || '';
         const committerDate = parts[2]?.trim();
-        const message = parts.slice(3).join('\0').trim();
+        const authorDate = parts[3]?.trim();
+        const message = parts.slice(4).join('\0').trim();
 
         if (hash && message) {
-            commits.push({ hash, shortHash, message, committerDate });
+            commits.push({ hash, shortHash, message, committerDate, authorDate });
         }
     }
 
     return commits;
 }
 
-async function main(): Promise<void> {
-    const args = process.argv.slice(2);
+interface CliOptions {
+    fromTag: string;
+    toRef: string;
+    format: string;
+    updateReleaseTag: string;
+}
+
+function parseCliArgs(args: string[]): CliOptions {
     let fromTag = '';
     let toRef = 'HEAD';
     let format = 'all';
+    let updateReleaseTag = '';
 
     for (let i = 0; i < args.length; i++) {
-        if (args[i] === '--from' && args[i + 1]) {
-            fromTag = args[++i];
-        } else if (args[i] === '--to' && args[i + 1]) {
-            toRef = args[++i];
-        } else if ((args[i] === '--format' || args[i] === '--mode') && args[i + 1]) {
-            format = args[++i].toLowerCase();
+        const arg = args[i];
+        const next = args[i + 1];
+        if (arg === '--from' && next) {
+            fromTag = next;
+            i++;
+        } else if (arg === '--to' && next) {
+            toRef = next;
+            i++;
+        } else if ((arg === '--format' || arg === '--mode') && next) {
+            format = next.toLowerCase();
+            i++;
+        } else if (arg === '--update-release' && next) {
+            updateReleaseTag = next;
+            i++;
         }
     }
 
-    if (!fromTag) {
+    if (updateReleaseTag) {
+        toRef = updateReleaseTag;
+        if (!fromTag) fromTag = getPreviousTag(toRef);
+    } else if (!fromTag) {
         fromTag = getLatestTag();
     }
 
-    console.log(`Generating preview notes: ${fromTag} -> ${toRef}\n`);
+    return { fromTag, toRef, format, updateReleaseTag };
+}
+
+function createStandardConfig(releaseDateIso: string) {
+    return {
+        preset: 'conventionalcommits',
+        presetConfig: STANDARD_RELEASE_RULES,
+        writerOpts: {
+            commitGroupsSort: (a: { title?: string }, b: { title?: string }) =>
+                (STANDARD_COMMIT_RANKS[b.title ?? ''] ?? 0) - (STANDARD_COMMIT_RANKS[a.title ?? ''] ?? 0),
+            commitsSort: (a: { scope?: string; subject?: string }, b: { scope?: string; subject?: string }) => {
+                const scopeDiff = (b.scope ?? '').localeCompare(a.scope ?? '');
+                return scopeDiff !== 0 ? scopeDiff : (b.subject ?? '').localeCompare(a.subject ?? '');
+            },
+            formatDate: formatReleaseDate,
+            finalizeContext: (context: Record<string, unknown>) => {
+                context.date = formatReleaseDate(releaseDateIso);
+                return context;
+            },
+        },
+    };
+}
+
+function displayReleaseNotes(format: string, standardNotes: string, domainNotes: string): void {
+    if (format === 'standard' || format === 'changelog') {
+        console.log(standardNotes);
+        return;
+    }
+    if (format === 'domains' || format === 'github' || format === 'release') {
+        console.log(domainNotes);
+        return;
+    }
+    console.log('================================================================');
+    console.log('1. CHANGELOG.md Format (Commit-based Conventional Types):');
+    console.log('================================================================');
+    console.log(standardNotes);
+    console.log('================================================================');
+    console.log('2. GitHub Releases Format (Functional Domains with Sub-Bullets):');
+    console.log('================================================================');
+    console.log(domainNotes);
+}
+
+async function main(): Promise<void> {
+    const { fromTag, toRef, format, updateReleaseTag } = parseCliArgs(process.argv.slice(2));
+
+    console.log(`Generating release notes: ${fromTag} -> ${toRef}\n`);
 
     const commits = getCommitsBetween(fromTag, toRef);
     if (commits.length === 0) {
@@ -115,26 +227,25 @@ async function main(): Promise<void> {
     const releaseDateIso = getCommitDate(toRef);
     const repoUrl = getRepoUrl();
 
-    // Standard conventional configuration used for CHANGELOG.md
-    const standardConfig = {
-        preset: 'conventionalcommits',
-        presetConfig: STANDARD_RELEASE_RULES,
-        writerOpts: {
-            commitGroupsSort: (a: { title?: string }, b: { title?: string }) =>
-                (STANDARD_COMMIT_RANKS[b.title ?? ''] ?? 0) - (STANDARD_COMMIT_RANKS[a.title ?? ''] ?? 0),
-            commitsSort: (a: { scope?: string; subject?: string }, b: { scope?: string; subject?: string }) => {
-                const scopeCompare = (b.scope ?? '').localeCompare(a.scope ?? '');
-                if (scopeCompare !== 0) return scopeCompare;
-                return (b.subject ?? '').localeCompare(a.subject ?? '');
-            },
-            formatDate: formatReleaseDate,
-            finalizeContext: (context: Record<string, unknown>) => {
-                context.date = formatReleaseDate(releaseDateIso);
-                return context;
-            },
-        },
-    };
+    const domainNotes = generateGitHubReleaseNotes({
+        fromTag,
+        toRef,
+        version,
+        date: releaseDateIso,
+        repositoryUrl: repoUrl,
+        commits,
+    });
 
+    if (updateReleaseTag) {
+        if (!domainNotes.trim()) {
+            console.warn(`No domain release notes generated for ${updateReleaseTag}.`);
+            return;
+        }
+        updateGitHubRelease(updateReleaseTag, domainNotes);
+        return;
+    }
+
+    const standardConfig = createStandardConfig(releaseDateIso);
     const context = {
         commits,
         lastRelease: {
@@ -153,31 +264,8 @@ async function main(): Promise<void> {
         cwd: process.cwd(),
     };
 
-    const domainNotes = generateGitHubReleaseNotes({
-        fromTag,
-        toRef,
-        version,
-        date: releaseDateIso,
-        repositoryUrl: repoUrl,
-        commits,
-    });
-
-    if (format === 'standard' || format === 'changelog') {
-        const standardNotes = await generateNotes(standardConfig, context);
-        console.log(standardNotes);
-    } else if (format === 'domains' || format === 'github' || format === 'release') {
-        console.log(domainNotes);
-    } else {
-        const standardNotes = await generateNotes(standardConfig, context);
-        console.log('================================================================');
-        console.log('1. CHANGELOG.md Format (Commit-based Conventional Types):');
-        console.log('================================================================');
-        console.log(standardNotes);
-        console.log('================================================================');
-        console.log('2. GitHub Releases Format (Functional Domains with Sub-Bullets):');
-        console.log('================================================================');
-        console.log(domainNotes);
-    }
+    const standardNotes = await generateNotes(standardConfig, context);
+    displayReleaseNotes(format, standardNotes, domainNotes);
 }
 
 try {

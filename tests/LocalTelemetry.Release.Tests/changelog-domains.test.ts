@@ -1,13 +1,17 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+    CHANGE_SECTIONS,
     cleanRepoUrl,
     cleanSubject,
     DOMAINS,
     formatReleaseDate,
     generateGitHubReleaseNotes,
     parseCommitEntries,
+    parseOwnerAndRepo,
+    resolveChangeCategory,
     resolveDomain,
+    resolveDomainLabel,
 } from '../../.github/release/changelog-domains.js';
 
 describe('changelog-domains', () => {
@@ -29,6 +33,22 @@ describe('changelog-domains', () => {
         it('falls back to default URL when null or empty', () => {
             assert.equal(cleanRepoUrl(''), 'https://github.com/Nicconike/LocalTelemetry');
             assert.equal(cleanRepoUrl(undefined), 'https://github.com/Nicconike/LocalTelemetry');
+        });
+    });
+
+    describe('parseOwnerAndRepo', () => {
+        it('parses owner and repo from standard HTTPS URL', () => {
+            const res = parseOwnerAndRepo('https://github.com/Nicconike/LocalTelemetry');
+            assert.deepEqual(res, { owner: 'Nicconike', repo: 'LocalTelemetry' });
+        });
+
+        it('parses owner and repo from SSH URL', () => {
+            const res = parseOwnerAndRepo('git@github.com:Nicconike/LocalTelemetry.git');
+            assert.deepEqual(res, { owner: 'Nicconike', repo: 'LocalTelemetry' });
+        });
+
+        it('returns null for non-github or invalid URL', () => {
+            assert.equal(parseOwnerAndRepo('invalid-url-without-slash'), null);
         });
     });
 
@@ -104,6 +124,48 @@ describe('changelog-domains', () => {
         });
     });
 
+    describe('resolveChangeCategory', () => {
+        it('resolves breaking changes first', () => {
+            const cat = resolveChangeCategory('feat', true, 'overlay', 'breaking api change');
+            assert.equal(cat?.id, 'breaking');
+        });
+
+        it('resolves conventional commit categories', () => {
+            assert.equal(resolveChangeCategory('feat')?.id, 'feat');
+            assert.equal(resolveChangeCategory('fix')?.id, 'fix');
+            assert.equal(resolveChangeCategory('perf')?.id, 'perf');
+            assert.equal(resolveChangeCategory('refactor')?.id, 'refactor');
+            assert.equal(resolveChangeCategory('build')?.id, 'build');
+            assert.equal(resolveChangeCategory('ci')?.id, 'ci');
+            assert.equal(resolveChangeCategory('test')?.id, 'test');
+            assert.equal(resolveChangeCategory('docs')?.id, 'docs');
+        });
+
+        it('maps dependency chores to build', () => {
+            const cat = resolveChangeCategory('chore', false, 'deps', 'bump svelte');
+            assert.equal(cat?.id, 'build');
+        });
+
+        it('omits release chores and generic styles', () => {
+            assert.equal(resolveChangeCategory('chore', false, 'release', '1.3.0-beta.4'), null);
+            assert.equal(resolveChangeCategory('style', false, '', 'format code'), null);
+        });
+    });
+
+    describe('resolveDomainLabel', () => {
+        it('resolves clean domain labels from scopes', () => {
+            assert.equal(resolveDomainLabel('feat', 'layout', ''), 'Layout Presets');
+            assert.equal(resolveDomainLabel('feat', 'overlay', ''), 'Taskbar Overlay');
+            assert.equal(resolveDomainLabel('feat', 'traffic', ''), 'Network Traffic');
+            assert.equal(resolveDomainLabel('feat', 'theme', ''), 'Appearance & Themes');
+            assert.equal(resolveDomainLabel('build', 'deps', ''), 'Dependencies');
+            assert.equal(resolveDomainLabel('ci', 'sync', ''), 'PR Synchronization');
+            assert.equal(resolveDomainLabel('ci', 'release', ''), 'Release Pipeline');
+            assert.equal(resolveDomainLabel('test', 'coverage', ''), 'Tests & Coverage');
+            assert.equal(resolveDomainLabel('docs', 'guides', ''), 'Documentation');
+        });
+    });
+
     describe('cleanSubject', () => {
         it('strips redundant leading scope prefixes', () => {
             assert.equal(cleanSubject('overlay: embed window'), 'Embed window');
@@ -155,37 +217,43 @@ describe('changelog-domains', () => {
 
             assert.equal(entries.length, 6);
             assert.deepEqual(entries[0], {
-                domain: DOMAINS.LAYOUT,
+                category: CHANGE_SECTIONS.FEAT,
+                domain: 'Layout Presets',
                 subject: 'Add layout preset customization and sorting',
                 hash: commit.hash,
                 shortHash: commit.shortHash,
             });
             assert.deepEqual(entries[1], {
-                domain: DOMAINS.TRAFFIC,
+                category: CHANGE_SECTIONS.FEAT,
+                domain: 'Network Traffic',
                 subject: 'Add JSONL historical network traffic import',
                 hash: commit.hash,
                 shortHash: commit.shortHash,
             });
             assert.deepEqual(entries[2], {
-                domain: DOMAINS.THEME,
+                category: CHANGE_SECTIONS.FEAT,
+                domain: 'Appearance & Themes',
                 subject: 'Introduce Laser Crimson Cyberpunk theme',
                 hash: commit.hash,
                 shortHash: commit.shortHash,
             });
             assert.deepEqual(entries[3], {
-                domain: DOMAINS.OVERLAY,
+                category: CHANGE_SECTIONS.FEAT,
+                domain: 'Taskbar Overlay',
                 subject: 'Enhance Win32 taskbar embedder positioning',
                 hash: commit.hash,
                 shortHash: commit.shortHash,
             });
             assert.deepEqual(entries[4], {
-                domain: DOMAINS.TESTS,
+                category: CHANGE_SECTIONS.TEST,
+                domain: 'Tests & Coverage',
                 subject: 'Add unit tests for layout presets and themes',
                 hash: commit.hash,
                 shortHash: commit.shortHash,
             });
             assert.deepEqual(entries[5], {
-                domain: DOMAINS.DOCS,
+                category: CHANGE_SECTIONS.DOCS,
+                domain: 'Documentation',
                 subject: 'Update architecture specification',
                 hash: commit.hash,
                 shortHash: commit.shortHash,
@@ -202,7 +270,8 @@ describe('changelog-domains', () => {
             const entries = parseCommitEntries(commit);
             assert.equal(entries.length, 1);
             assert.deepEqual(entries[0], {
-                domain: DOMAINS.OVERLAY,
+                category: CHANGE_SECTIONS.FIX,
+                domain: 'Taskbar Overlay',
                 subject: 'Dismiss context menu on outside click',
                 hash: commit.hash,
                 shortHash: commit.shortHash,
@@ -222,7 +291,7 @@ describe('changelog-domains', () => {
     });
 
     describe('generateGitHubReleaseNotes', () => {
-        it('assembles sorted markdown release notes grouped by domain with distinct CI and test sections', () => {
+        it('assembles sorted markdown release notes grouped by type with distinct SemVer sections', () => {
             const commits = [
                 {
                     hash: '1111111111111111111111111111111111111111',
@@ -232,7 +301,7 @@ describe('changelog-domains', () => {
                 {
                     hash: '2222222222222222222222222222222222222222',
                     shortHash: '2222222',
-                    message: 'feat(layout): add custom preset tile',
+                    message: 'fix(layout): fix custom preset tile calculation',
                 },
                 {
                     hash: '3333333333333333333333333333333333333333',
@@ -256,20 +325,54 @@ describe('changelog-domains', () => {
             });
 
             assert.ok(notes.includes('## [1.1.0](https://github.com/Nicconike/LocalTelemetry/compare/v1.0.0...v1.1.0) (14-11-2026)'));
-            assert.ok(notes.includes('### Taskbar Overlay\n\n* Embed child window into taskbar ([1111111](https://github.com/Nicconike/LocalTelemetry/commit/1111111111111111111111111111111111111111))'));
-            assert.ok(notes.includes('### Layout Presets & Metrics\n\n* Add custom preset tile ([2222222](https://github.com/Nicconike/LocalTelemetry/commit/2222222222222222222222222222222222222222))'));
-            assert.ok(notes.includes('### Continuous Integration & Workflows\n\n* Enforce app token attribution ([3333333](https://github.com/Nicconike/LocalTelemetry/commit/3333333333333333333333333333333333333333))'));
-            assert.ok(notes.includes('### Tests & Test Coverage\n\n* Assert simulated automation exception ([4444444](https://github.com/Nicconike/LocalTelemetry/commit/4444444444444444444444444444444444444444))'));
+            assert.ok(notes.includes('### 🚀 Features\n\n* **Taskbar Overlay**: Embed child window into taskbar ([1111111](https://github.com/Nicconike/LocalTelemetry/commit/1111111111111111111111111111111111111111))'));
+            assert.ok(notes.includes('### 🐛 Bug Fixes\n\n* **Layout Presets**: Fix custom preset tile calculation ([2222222](https://github.com/Nicconike/LocalTelemetry/commit/2222222222222222222222222222222222222222))'));
+            assert.ok(notes.includes('### 🤖 Continuous Integration & Workflows\n\n* **CI Workflows**: Enforce app token attribution ([3333333](https://github.com/Nicconike/LocalTelemetry/commit/3333333333333333333333333333333333333333))'));
+            assert.ok(notes.includes('### 🧪 Tests & Test Coverage\n\n* **Taskbar Overlay**: Assert simulated automation exception ([4444444](https://github.com/Nicconike/LocalTelemetry/commit/4444444444444444444444444444444444444444))'));
 
-            // Verify priority ordering: Overlay (120) -> Layout (110) -> CI (30) -> Tests (20)
-            const overlayIdx = notes.indexOf('### Taskbar Overlay');
-            const layoutIdx = notes.indexOf('### Layout Presets & Metrics');
-            const ciIdx = notes.indexOf('### Continuous Integration & Workflows');
-            const testIdx = notes.indexOf('### Tests & Test Coverage');
+            // Verify priority ordering: Features (90) -> Bug Fixes (80) -> CI (30) -> Tests (20)
+            const featIdx = notes.indexOf('### 🚀 Features');
+            const fixIdx = notes.indexOf('### 🐛 Bug Fixes');
+            const ciIdx = notes.indexOf('### 🤖 Continuous Integration & Workflows');
+            const testIdx = notes.indexOf('### 🧪 Tests & Test Coverage');
 
-            assert.ok(overlayIdx < layoutIdx);
-            assert.ok(layoutIdx < ciIdx);
+            assert.ok(featIdx < fixIdx);
+            assert.ok(fixIdx < ciIdx);
             assert.ok(ciIdx < testIdx);
+        });
+
+        it('groups multiple items under the same domain as nested sub-bullets', () => {
+            const commits = [
+                {
+                    hash: 'aaaaaaa111111111111111111111111111111111',
+                    shortHash: 'aaaaaaa',
+                    message: 'build(deps): bump dompurify to 3.4.17',
+                },
+                {
+                    hash: 'bbbbbbb222222222222222222222222222222222',
+                    shortHash: 'bbbbbbb',
+                    message: 'build(deps): bump svelte to 5.57.2',
+                },
+                {
+                    hash: 'ccccccc333333333333333333333333333333333',
+                    shortHash: 'ccccccc',
+                    message: 'build: update global.json SDK',
+                },
+            ];
+
+            const notes = generateGitHubReleaseNotes({
+                fromTag: 'v1.0.0',
+                toRef: 'v1.1.0',
+                version: '1.1.0',
+                date: '14-11-2026',
+                repositoryUrl: 'https://github.com/Nicconike/LocalTelemetry',
+                commits,
+            });
+
+            // Dependencies has 2 items -> nested sub-bullets
+            assert.ok(notes.includes('* **Dependencies**\n  * Bump dompurify to 3.4.17 ([aaaaaaa](https://github.com/Nicconike/LocalTelemetry/commit/aaaaaaa111111111111111111111111111111111))\n  * Bump svelte to 5.57.2 ([bbbbbbb](https://github.com/Nicconike/LocalTelemetry/commit/bbbbbbb222222222222222222222222222222222))'));
+            // Build System has 1 item -> single line with colon
+            assert.ok(notes.includes('* **Build System**: Update global.json SDK ([ccccccc](https://github.com/Nicconike/LocalTelemetry/commit/ccccccc333333333333333333333333333333333))'));
         });
     });
 });

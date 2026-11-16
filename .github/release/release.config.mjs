@@ -79,9 +79,8 @@ export default {
             },
         ],
         commitPluginPath,
-        changelogDomainsPluginPath,
         [
-            '@semantic-release/github',
+            changelogDomainsPluginPath,
             {
                 assets: [
                     { path: './LocalTelemetrySetup.exe', label: 'LocalTelemetry Setup' },

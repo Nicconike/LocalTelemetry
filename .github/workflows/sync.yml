@@ -17,11 +17,12 @@ on:
         workflows: ["CI", "SonarQube Analysis", "CodeQL"]
         types: [completed]
         branches-ignore: [master]
+    workflow_dispatch:
 
 permissions:
     contents: read
-    pull-requests: write
-    issues: write
+    pull-requests: read
+    issues: read
 
 jobs:
     sync:
@@ -29,6 +30,7 @@ jobs:
         runs-on: ubuntu-latest
         if: >-
             github.event_name == 'push' ||
+            github.event_name == 'workflow_dispatch' ||
             github.event_name == 'pull_request_target' ||
             (github.event_name == 'workflow_run' &&
              github.event.workflow_run.event == 'pull_request' &&
@@ -42,12 +44,18 @@ jobs:
                   private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
             - name: Sync Open PRs on Push
-              if: github.event_name == 'push'
+              if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
               env:
                   GH_TOKEN: ${{ steps.app_token.outputs.token }}
                   REPO: ${{ github.repository }}
               run: |
-                  prs=$(gh pr list --repo "$REPO" --base "${{ github.ref_name }}" --state open --json number,headRefName,author,title --jq '.[]')
+                  base_branch="${{ github.ref_name }}"
+                  if [ -z "$base_branch" ] || [ "$base_branch" = "HEAD" ]; then
+                      base_branch="develop"
+                  fi
+
+                  echo "Checking for open pull requests targeting $base_branch..."
+                  prs=$(gh pr list --repo "$REPO" --base "$base_branch" --state open --json number,headRefName,author,title --jq '.[]')
                   if [ -z "$prs" ]; then
                       echo "No open pull requests found."
                       exit 0
@@ -60,14 +68,8 @@ jobs:
                       pr_title=$(echo "$pr" | jq -r '.title')
 
                       echo "Processing PR #$pr_num (branch: $pr_branch, author: $pr_author)..."
-
-                      if [ "$pr_author" = "app/dependabot" ] || [ "$pr_author" = "dependabot" ] || [ "$pr_author" = "dependabot[bot]" ]; then
-                          echo "Triggering Dependabot rebase for PR #$pr_num..."
-                          gh pr comment "$pr_num" --repo "$REPO" --body "@dependabot rebase" || true
-                      else
-                          echo "Updating branch for PR #$pr_num..."
-                          gh api --method PUT "repos/$REPO/pulls/$pr_num/update-branch" --silent || true
-                      fi
+                      echo "Updating branch for PR #$pr_num with latest $base_branch..."
+                      gh api --method PUT "repos/$REPO/pulls/$pr_num/update-branch" --silent || true
 
                       clean_title="$pr_title"
                       if [[ "$clean_title" =~ ^([a-zA-Z0-9_()-]+:\ )([Bb]ump the ([a-zA-Z0-9_-]+)-deps group.*)$ ]]; then
@@ -126,6 +128,13 @@ jobs:
                   pr_state=$(gh pr view "$pr_number" --repo "$REPO" --json state --jq '.state')
                   if [ "$pr_state" != "OPEN" ]; then
                       echo "PR #$pr_number is not open (state: $pr_state). Skipping."
+                      exit 0
+                  fi
+
+                  merge_state=$(gh pr view "$pr_number" --repo "$REPO" --json mergeStateStatus --jq '.mergeStateStatus')
+                  if [ "$merge_state" = "BEHIND" ]; then
+                      echo "PR #$pr_number is behind base branch. Updating branch..."
+                      gh api --method PUT "repos/$REPO/pulls/$pr_number/update-branch" --silent || true
                       exit 0
                   fi
 
