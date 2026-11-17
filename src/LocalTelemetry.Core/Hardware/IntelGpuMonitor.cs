@@ -212,6 +212,7 @@ internal sealed class IntelGpuNativePInvoke : IIntelGpuNative
             var initArgs = default(CtlInitArgs);
             initArgs.Size = (uint)Marshal.SizeOf<CtlInitArgs>();
             initArgs.Version = 0;
+            initArgs.AppVersion = 1 << 16;
             initArgs.flags = 1;
             return InitFunc(ref initArgs, out apiHandle);
         }
@@ -428,9 +429,9 @@ internal sealed class IntelGpuNativePInvoke : IIntelGpuNative
     {
         public uint Size;
         public byte Version;
-        public ulong AppVersion;
+        public uint AppVersion;
         public uint flags;
-        public ulong SupportedVersion;
+        public uint SupportedVersion;
         public Guid ApplicationUID;
     }
 
@@ -442,32 +443,24 @@ internal sealed class IntelGpuNativePInvoke : IIntelGpuNative
         public IntPtr pDeviceID;
         public uint device_id_size;
         public uint device_type;
-        public uint supported_subfunction_flags;
-        public ulong driver_version;
-        public CtlFirmwareVersion firmware_version;
-        public uint pci_vendor_id;
-        public uint pci_device_id;
+        public uint flags;
         public uint rev_id;
-        public uint num_eus_per_sub_slice;
-        public uint num_sub_slices_per_slice;
-        public uint num_slices;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
+        public uint subsys_id;
+        public uint subsys_vendor_id;
+        public uint graphics_vendor_id;
+        public uint device_vendor_id;
+        public ulong driver_version;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 100)]
         public string? name;
-        public uint graphics_adapter_properties;
-        public uint Frequency;
-        public ushort pci_subsys_id;
-        public ushort pci_subsys_vendor_id;
-        public CtlAdapterBdf adapter_bdf;
-        public uint num_xe_cores;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    internal struct CtlFirmwareVersion
-    {
-        public ushort major;
-        public ushort minor;
-        public ushort build;
-        public ushort revision;
+        public CtlAdapterBdf address;
+        public ulong max_mem_bandwidth;
+        public ulong max_gpu_clock_freq;
+        public uint num_eus_per_subslice;
+        public uint num_subslices_per_slice;
+        public uint num_slices;
+        public ulong memory_size;
+        public uint memory_type;
+        public uint core_frequency;
     }
 
     [StructLayout(LayoutKind.Sequential)]

@@ -70,8 +70,9 @@ flowchart TD
 | **CPU Package Power** | RAPL Energy Status MSRs (`0x606` / `0x611`) | `IntelPowerGadget.cs` / Estimated TDP calculation |
 | **RAM Usage** | `GlobalMemoryStatusEx` (Win32 API) | N/A |
 | **GPU Utilization** | `NVML` (NVIDIA) / `ADL` (AMD) / `IGCL` (Intel) | `WddmGpuMonitor.cs` (WDDM Engine Counters via D3DKMT) |
-| **GPU Temperature** | `nvmlDeviceGetTemperature` | `ADL_Overdrive6_Temperature_Get` / IGCL |
-| **GPU VRAM Usage** | `nvmlDeviceGetMemoryInfo` | ADL VRAM queries / WDDM VRAM Counters |
+| **GPU Temperature** | `nvmlDeviceGetTemperature` | `ADL_Overdrive6_Temperature_Get` / IGCL / Package DTS (`ReadCpuTemp`) |
+| **GPU VRAM Usage** | `nvmlDeviceGetMemoryInfo` | ADL VRAM queries / WDDM Shared Memory (`\GPU Adapter Memory(*)\Shared Usage`) |
+| **GPU Power Draw** | `nvmlDeviceGetPowerUsage` / ADL / IGCL | Intel RAPL PP1 Energy Status MSR (`0x641`) |
 | **Disk Throughput** | `\PhysicalDisk(*)\Disk Read & Write Bytes` | `DiskQuery.cs` (Win32 IOCTLs) |
 | **Network Speeds** | `NetworkInterface.GetIPv4Statistics()` delta | `EseNetworkUsageReader.cs` (Windows ESE SRUDB database) |
 | **Battery Level & W** | `GetSystemPowerStatus` & `root\wmi` | N/A (Desktop systems return empty / disabled) |
@@ -177,6 +178,21 @@ When Windows display adapters restart (e.g. driver update, GPU TDR recovery, or 
   - `_amdGpu?.Reset()`: Rebinds ADL context.
   - `_intelGpu?.Reset()`: Rebinds Intel ControlLib context.
 - When waking from system standby, `HardwareLifecycleManager` delays recovery by `3000 ms` to allow PCIe buses and graphics drivers to reach operational power states before querying registers.
+
+### :microchip: Integrated Graphics (iGPU) Architecture & Fallback Hierarchy (Desktops & Laptops)
+
+On systems without a dedicated graphics card — including desktop PCs (e.g. Intel UHD 730/770, AMD Radeon Graphics on Ryzen 7000/8000/9000 and G-series CPUs), SFF workstations, mini PCs, and laptops — discrete hardware sensors are unavailable:
+
+- **Adapter Categorization & Desktop Bus Filtering**: `HardwareMonitor.EnumerateDisplayAdapters` scans display devices. It inspects known integrated GPU naming signatures (`IsKnownIntegratedGpu`) before evaluating PCI bus indices. This ensures desktop processors on secondary internal PCIe buses are not misclassified as dedicated cards. It sets `_hasDedicatedGpu` to `true` when a discrete GPU is found, or `false` when only integrated adapters exist.
+- **Unified Adapter Logging**: Formats the active adapter as `Active graphics adapter is {gpuName} ({kind}, {gpuVendor})` on startup.
+- **Native P/Invoke Struct Alignment**:
+  - **Intel IGCL (`IntelGpuMonitor.cs`)**: `CtlInitArgs` uses 32-bit `uint` version fields (36 bytes total). `CtlDeviceAdapterProperties` aligns with native `igcl_api.h` field layouts (`sDeviceName[100]`).
+  - **AMD ADL (`AmdGpuMonitor.cs`)**: `AdlAdapterInfo` matches the 15-field native layout from `adl_structures.h`. Array entries initialize `iSize` and filter for `iPresent > 0`.
+- **Telemetry Fallbacks (Guarded by `!_hasDedicatedGpu`)**:
+  - **VRAM**: Queries WDDM PDH counter `\GPU Adapter Memory(*)\Shared Usage` via `WddmGpuMonitor.GetSharedMemoryUsedMb()`.
+  - **Temperature**: Falls back to package digital thermal sensors (`ReadCpuTemp()`) when vendor queries return zero.
+  - **Power Draw**: Samples Intel RAPL Power Plane 1 MSR (`MSR_PP1_ENERGY_STATUS = 0x641`) via `ReadIntelGpuPowerRapl()`.
+  - **Dedicated Isolation**: These fallbacks never activate when a discrete graphics card is present.
 
 ---
 

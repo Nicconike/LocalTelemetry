@@ -86,6 +86,9 @@ public sealed class HardwareMonitor : IDisposable
     private ulong _prevPkgEnergy;
     private DateTime _prevEnergyTime;
     private bool _hasEnergyPrimed;
+    private ulong _prevGpuEnergy;
+    private DateTime _prevGpuEnergyTime;
+    private bool _hasGpuEnergyPrimed;
 
     private const string IntelVendor = "Intel";
     private const string AmdVendor = "AMD";
@@ -96,6 +99,10 @@ public sealed class HardwareMonitor : IDisposable
     private string _cpuVendor = string.Empty;
     private string _gpuVendor = string.Empty;
     private string _gpuName = string.Empty;
+    private bool _hasDedicatedGpu;
+
+    /// <summary>Gets whether an active dedicated graphics card is present.</summary>
+    public bool HasDedicatedGpu => _hasDedicatedGpu;
 
     // One-shot logging flags (prevent per-tick repeat warnings)
     private int _onceCpuTempIntelMsrNull;
@@ -470,7 +477,7 @@ public sealed class HardwareMonitor : IDisposable
         try
         {
             EnumerateDisplayAdapters(devInfoSet);
-            string adapterLog = FormatActiveGpuAdapterLog(_gpuName, _gpuVendor);
+            string adapterLog = FormatActiveGpuAdapterLog(_gpuName, _gpuVendor, _hasDedicatedGpu);
             Log.Info($"Active graphics adapter is {adapterLog}");
             InitWddmGpu();
             InitVendorGpuMonitor();
@@ -481,12 +488,13 @@ public sealed class HardwareMonitor : IDisposable
         }
     }
 
-    private static string FormatActiveGpuAdapterLog(string gpuName, string gpuVendor)
+    private static string FormatActiveGpuAdapterLog(string gpuName, string gpuVendor, bool hasDedicatedGpu)
     {
+        string kind = hasDedicatedGpu ? "Dedicated" : "Integrated";
         if (!string.IsNullOrEmpty(gpuName))
-            return $"{gpuName} ({gpuVendor})";
+            return $"{gpuName} ({kind}, {gpuVendor})";
 
-        return !string.IsNullOrEmpty(gpuVendor) ? gpuVendor : "None";
+        return !string.IsNullOrEmpty(gpuVendor) ? $"{gpuVendor} ({kind})" : "None";
     }
 
     private void EnumerateDisplayAdapters(IntPtr devInfoSet)
@@ -497,7 +505,7 @@ public sealed class HardwareMonitor : IDisposable
         };
         uint i = 0;
         string? firstIntegratedVendor = null;
-        string? firstIntegratedName = null;
+        string firstIntegratedName = string.Empty;
         bool foundDedicated = false;
 
         while (NativeMethods.SetupDiEnumDeviceInfo(devInfoSet, i++, ref devInfo))
@@ -516,7 +524,10 @@ public sealed class HardwareMonitor : IDisposable
             {
                 foundDedicated = true;
                 if (TrySelectActiveGpuAdapter(vendor, name, true))
+                {
+                    _hasDedicatedGpu = true;
                     return;
+                }
             }
             else if (firstIntegratedVendor is null)
             {
@@ -525,11 +536,15 @@ public sealed class HardwareMonitor : IDisposable
             }
         }
 
-        if (!foundDedicated && firstIntegratedVendor is not null)
+        if (foundDedicated)
         {
+            _hasDedicatedGpu = true;
+        }
+        else if (firstIntegratedVendor is not null)
+        {
+            _hasDedicatedGpu = false;
             _gpuVendor = firstIntegratedVendor;
-            _gpuName = firstIntegratedName ?? firstIntegratedVendor;
-            Log.Info($"No dedicated graphics adapter detected; using integrated graphics '{_gpuName}'");
+            _gpuName = firstIntegratedName;
         }
     }
 
@@ -559,13 +574,45 @@ public sealed class HardwareMonitor : IDisposable
         return false;
     }
 
+    internal static bool IsKnownIntegratedGpu(string name, string? vendor)
+    {
+        if (string.IsNullOrEmpty(name)) return false;
+
+        if (vendor == IntelVendor)
+        {
+            return !name.Contains("Arc", StringComparison.OrdinalIgnoreCase)
+                && !name.Contains("DG1", StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (vendor == AmdVendor)
+        {
+            if (name.Contains("RX", StringComparison.OrdinalIgnoreCase)
+                || name.Contains("PRO", StringComparison.OrdinalIgnoreCase)
+                || name.Contains("VII", StringComparison.OrdinalIgnoreCase)
+                || name.Contains("WX", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return name.Contains("Radeon(TM) Graphics", StringComparison.OrdinalIgnoreCase)
+                || name.Contains("Radeon Graphics", StringComparison.OrdinalIgnoreCase)
+                || System.Text.RegularExpressions.Regex.IsMatch(name,
+                    @"\b(Vega \d+|\d{3}M)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(250));
+        }
+
+        return false;
+    }
+
     private static bool IsDedicatedAdapter(string? vendor, string name, IntPtr devInfoSet, NativeMethods.SpDevinfoData devInfo)
     {
+        if (IsKnownIntegratedGpu(name, vendor))
+            return false;
+
         return vendor == NvidiaVendor
             || (vendor == IntelVendor && name.Contains("Arc", StringComparison.OrdinalIgnoreCase))
-            || IsDiscreteBus(devInfoSet, devInfo)
             || (vendor == AmdVendor && System.Text.RegularExpressions.Regex.IsMatch(name,
-                @"\b(RX|PRO|VII|WX|W[36]\d{3})\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(250)));
+                @"\b(RX|PRO|VII|WX|W[36]\d{3})\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(250)))
+            || IsDiscreteBus(devInfoSet, devInfo);
     }
 
     private void InitVendorGpuMonitor()
@@ -983,10 +1030,12 @@ public sealed class HardwareMonitor : IDisposable
     private const uint MSR_IA32_MPERF = 0xE7;
     private const uint MSR_RAPL_POWER_UNIT = 0x606;
     private const uint MSR_PKG_ENERGY_STATUS = 0x611;
+    private const uint MSR_PP1_ENERGY_STATUS = 0x641;
     private static readonly ulong[] MsrAperfInput = [MSR_IA32_APERF];
     private static readonly ulong[] MsrMperfInput = [MSR_IA32_MPERF];
     private static readonly ulong[] MsrRaplPowerUnitInput = [MSR_RAPL_POWER_UNIT];
     private static readonly ulong[] MsrPkgEnergyStatusInput = [MSR_PKG_ENERGY_STATUS];
+    private static readonly ulong[] MsrPp1EnergyStatusInput = [MSR_PP1_ENERGY_STATUS];
     private static readonly ulong[] MsrPkgPowerSkuInput = [MSR_PKG_POWER_SKU];
 
     private float ReadCpuFreqMsr()
@@ -1100,22 +1149,62 @@ public sealed class HardwareMonitor : IDisposable
     {
         try
         {
-            if (gpu.HasValue && gpu.Value.TempC >= 0) return gpu.Value.TempC;
-            if (_nvGpu is not null)
+            if (TryReadHardwareGpuTemp(gpu, out float temp))
+                return temp;
+
+            if (!_hasDedicatedGpu && !string.IsNullOrEmpty(_gpuVendor))
             {
-                gpu = _nvGpu.Query();
-                if (gpu.HasValue && gpu.Value.TempC >= 0) return gpu.Value.TempC;
+                return ReadCpuTemp();
             }
-            if (_amdGpu is not null && _amdGpu.IsAvailable)
-                return _amdGpu.GetTempC();
-            if (_intelGpu is not null && _intelGpu.IsAvailable)
-                return _intelGpu.GetTempC();
         }
         catch (Exception ex)
         {
             LogMetricErrorOnce("gpu", "gpu_temp_exception", $"Failed to read GPU temperature: {ex.Message}");
         }
         return 0f;
+    }
+
+    private bool TryReadHardwareGpuTemp(NvGpuMonitor.NvGpuData? gpu, out float temp)
+    {
+        temp = 0f;
+        if (TryGetNvGpuTemp(gpu, out temp))
+            return true;
+
+        if (_amdGpu is { IsAvailable: true })
+        {
+            temp = _amdGpu.GetTempC();
+            if (temp > 0) return true;
+        }
+
+        if (_intelGpu is { IsAvailable: true })
+        {
+            temp = _intelGpu.GetTempC();
+            if (temp > 0) return true;
+        }
+
+        return false;
+    }
+
+    private bool TryGetNvGpuTemp(NvGpuMonitor.NvGpuData? gpu, out float temp)
+    {
+        if (gpu is { TempC: >= 0 })
+        {
+            temp = gpu.Value.TempC;
+            return true;
+        }
+
+        if (_nvGpu is not null)
+        {
+            var queried = _nvGpu.Query();
+            if (queried is { TempC: >= 0 })
+            {
+                temp = queried.Value.TempC;
+                return true;
+            }
+        }
+
+        temp = 0f;
+        return false;
     }
 
     private float ReadGpuVramUsedMb(NvGpuMonitor.NvGpuData? gpu = null)
@@ -1129,9 +1218,19 @@ public sealed class HardwareMonitor : IDisposable
                 if (gpu.HasValue) return gpu.Value.VramUsedMb;
             }
             if (_amdGpu is not null && _amdGpu.IsAvailable)
-                return _amdGpu.GetVram().usedMb;
+            {
+                float vram = _amdGpu.GetVram().usedMb;
+                if (vram > 0) return vram;
+            }
             if (_intelGpu is not null && _intelGpu.IsAvailable)
-                return _intelGpu.GetVram().usedMb;
+            {
+                float vram = _intelGpu.GetVram().usedMb;
+                if (vram > 0) return vram;
+            }
+            if (!_hasDedicatedGpu && !string.IsNullOrEmpty(_gpuVendor) && _wddmGpu is not null)
+            {
+                return _wddmGpu.GetSharedMemoryUsedMb();
+            }
         }
         catch (Exception ex)
         {
@@ -1177,12 +1276,61 @@ public sealed class HardwareMonitor : IDisposable
                 float w = _amdGpu.GetPowerDrawW();
                 if (w > 0) return w;
             }
+            if (!_hasDedicatedGpu && _gpuVendor == IntelVendor)
+            {
+                return ReadIntelGpuPowerRapl();
+            }
         }
         catch (Exception ex)
         {
             LogMetricErrorOnce("gpu", "gpu_power_exception", $"Failed to read GPU power draw: {ex.Message}");
         }
         return 0f;
+    }
+
+    private float ReadIntelGpuPowerRapl()
+    {
+        if (_pawnIoDevice is null)
+            return 0f;
+
+        if (_energyUnit <= 0)
+            ReadRaplPowerUnit();
+        if (_energyUnit <= 0)
+            return 0f;
+
+        try
+        {
+            var pp1Result = _pawnIoDevice.Execute(IoctlReadMsrCommand, MsrPp1EnergyStatusInput, 1);
+            if (pp1Result.Length < 1)
+                return 0f;
+
+            ulong energy = pp1Result[0] & 0xFFFFFFFF;
+
+            var now = DateTime.UtcNow;
+            if (!_hasGpuEnergyPrimed)
+            {
+                _prevGpuEnergy = energy;
+                _prevGpuEnergyTime = now;
+                _hasGpuEnergyPrimed = true;
+                return 0f;
+            }
+
+            ulong dEnergy = (uint)(energy - _prevGpuEnergy);
+            double dt = (now - _prevGpuEnergyTime).TotalSeconds;
+            _prevGpuEnergy = energy;
+            _prevGpuEnergyTime = now;
+
+            if (dt <= 0) return 0f;
+
+            double joules = dEnergy * _energyUnit;
+            float watts = (float)(joules / dt);
+            return Math.Clamp(watts, 0f, 300f);
+        }
+        catch (Exception ex)
+        {
+            LogMetricErrorOnce("gpu", "rapl_pp1_energy_failed", $"Failed to read RAPL PP1 energy status: {ex.Message}");
+            return 0f;
+        }
     }
 
     // RAPL CPU power (MSR_PKG_ENERGY_STATUS delta)

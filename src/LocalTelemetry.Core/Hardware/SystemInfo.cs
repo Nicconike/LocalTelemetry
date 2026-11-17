@@ -37,6 +37,8 @@ public static class SystemInfo
     private const string IntelVendor = "Intel";
     private const string NvidiaVendor = "NVIDIA";
     private const string UnknownLabel = "Unknown";
+    private const string ManufacturerProperty = "Manufacturer";
+    private const string LgEnergyBrand = "LG Energy";
     private const string SkipSmbiosSpeedForTestingMessage = "Skip SMBIOS speed for testing";
 
     // Caches (populated on first call, never re-read)
@@ -1074,7 +1076,7 @@ public static class SystemInfo
     {
         string reg = GetBiosRegValue("BaseBoardManufacturer");
         if (reg.Length > 0) return reg;
-        return QueryWmiFirst("SELECT Manufacturer FROM Win32_BaseBoard", "Manufacturer");
+        return QueryWmiFirst("SELECT Manufacturer FROM Win32_BaseBoard", ManufacturerProperty);
     }
 
     /// <summary>Gets the motherboard product name, from registry then WMI fallback.</summary>
@@ -1135,7 +1137,7 @@ public static class SystemInfo
     /// <returns>e.g. <c>Dell Inc.</c>, <c>ASUS</c> or empty if unavailable.</returns>
     public static string GetSystemManufacturer()
     {
-        string wmi = QueryWmiFirst("SELECT Manufacturer FROM Win32_ComputerSystem", "Manufacturer");
+        string wmi = QueryWmiFirst("SELECT Manufacturer FROM Win32_ComputerSystem", ManufacturerProperty);
         if (wmi.Length > 0 && !FallbackToSmbiosSystemInfoForTesting) return wmi;
         try
         {
@@ -1204,7 +1206,7 @@ public static class SystemInfo
 
                 string mfr = moduleIdx < smbiosMfrs.Count ? smbiosMfrs[moduleIdx] : "";
                 if (string.IsNullOrEmpty(mfr))
-                    mfr = (mo["Manufacturer"] as string ?? "").Trim();
+                    mfr = (mo[ManufacturerProperty] as string ?? "").Trim();
                 moduleIdx++;
 
                 string partNumber = (mo["PartNumber"] as string ?? "").Trim();
@@ -1627,8 +1629,8 @@ public static class SystemInfo
         ("Sunwoda", "Sunwoda"),
         ("Simplo", "Simplo"),
         ("Celxpert", "Celxpert"),
-        ("LG Energy", "LG Energy"),
-        ("LG Chem", "LG Energy"),
+        (LgEnergyBrand, LgEnergyBrand),
+        ("LG Chem", LgEnergyBrand),
         ("Dynapack", "Dynapack"),
         ("Panasonic", "Panasonic"),
         ("Coslight", "Coslight"),
@@ -1642,7 +1644,7 @@ public static class SystemInfo
         ("BYD", "BYD"),
         ("SMP", "Simplo"),
         ("CEL", "Celxpert"),
-        ("LGC", "LG Energy"),
+        ("LGC", LgEnergyBrand),
         ("SWD", "Sunwoda"),
         ("SEC", "Samsung"),
         ("DP", "Dynapack"),
@@ -1690,32 +1692,30 @@ public static class SystemInfo
             using var results = searcher.Get();
             foreach (ManagementBaseObject mo in results)
             {
-                string mfrProp = (mo["Manufacturer"] as string ?? "").Trim();
-                if (IsValidBatteryString(mfrProp))
-                {
-                    string resolved = ResolveBatteryVendorToken(mfrProp);
-                    if (resolved.Length > 0) return resolved;
-                    return mfrProp;
-                }
-
-                string devId = (mo["DeviceID"] as string ?? "").Trim();
-                if (devId.Length > 0)
-                {
-                    string resolved = ResolveBatteryVendorToken(devId);
-                    if (resolved.Length > 0) return resolved;
-                }
-
-                string name = (mo["Name"] as string ?? "").Trim();
-                if (name.Length > 0)
-                {
-                    string resolved = ResolveBatteryVendorToken(name);
-                    if (resolved.Length > 0) return resolved;
-                }
+                string mfr = ResolveManufacturerFromBatteryObject(mo);
+                if (mfr.Length > 0) return mfr;
             }
         }
         catch (ManagementException ex) { Diagnostics.Log.Debug($"Failed to query battery manufacturer from Win32_Battery: {ex.Message}"); }
         catch (Exception ex) { Diagnostics.Log.Debug(ex, "Failed to query battery manufacturer from Win32_Battery"); }
         return "";
+    }
+
+    private static string ResolveManufacturerFromBatteryObject(ManagementBaseObject mo)
+    {
+        string mfrProp = (mo[ManufacturerProperty] as string ?? "").Trim();
+        if (IsValidBatteryString(mfrProp))
+        {
+            string resolved = ResolveBatteryVendorToken(mfrProp);
+            return resolved.Length > 0 ? resolved : mfrProp;
+        }
+
+        string devId = (mo["DeviceID"] as string ?? "").Trim();
+        string devResolved = ResolveBatteryVendorToken(devId);
+        if (devResolved.Length > 0) return devResolved;
+
+        string name = (mo["Name"] as string ?? "").Trim();
+        return ResolveBatteryVendorToken(name);
     }
 
     /// <summary>Gets the battery manufacturer name from WMI or SMBIOS.</summary>
@@ -2158,6 +2158,9 @@ public static class SystemInfo
 
     private static bool IsDiscreteGpu(string name, string vendor, IntPtr devInfoSet, NativeMethods.SpDevinfoData devInfo)
     {
+        if (HardwareMonitor.IsKnownIntegratedGpu(name, vendor))
+            return false;
+
         if (vendor == IntelVendor && name.Contains("Arc", StringComparison.OrdinalIgnoreCase)) return true;
         if (vendor == "AMD" && (name.Contains("RX", StringComparison.OrdinalIgnoreCase)
                 || name.Contains("PRO", StringComparison.OrdinalIgnoreCase)

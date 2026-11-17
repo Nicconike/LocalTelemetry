@@ -318,5 +318,18 @@ public class WddmGpuMonitorTests
             WddmGpuMonitor.ResetHooks();
         }
     }
-}
 
+    [Fact]
+    public void WddmGpuMonitor_GetSharedMemoryUsedMb_Behaviors()
+    {
+        var monitor = new WddmGpuMonitor();
+        if (monitor.IsAvailable)
+        {
+            float sharedMb = monitor.GetSharedMemoryUsedMb();
+            sharedMb.Should().BeGreaterThanOrEqualTo(0f);
+        }
+
+        monitor.Dispose();
+        monitor.GetSharedMemoryUsedMb().Should().Be(0f);
+    }
+}

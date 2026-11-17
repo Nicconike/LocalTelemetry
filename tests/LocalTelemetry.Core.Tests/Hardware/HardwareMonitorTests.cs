@@ -110,8 +110,8 @@ public class HardwareMonitorTests
         var pollMethod = typeof(HardwareMonitor).GetMethod("Poll", BindingFlags.NonPublic | BindingFlags.Instance);
         pollMethod?.Invoke(monitor, null);
 
-        var completedTask = await Task.WhenAny(tcs.Task, Task.Delay(10000));
-        completedTask.Should().BeSameAs(tcs.Task);
+        var completedSnapshot = await tcs.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        completedSnapshot.Should().NotBeNull();
 
         received.Should().NotBeNull();
     }
@@ -491,12 +491,78 @@ public class HardwareMonitorTests
         using var m = CreateMonitor(BasicCfg());
         SetField(m, "_nvGpu", null);
         SetField(m, "_amdGpu", null);
+        SetField(m, "_intelGpu", null);
         SetField(m, "_wddmGpu", null);
+        SetField(m, "_gpuVendor", string.Empty);
+        SetField(m, "_hasDedicatedGpu", false);
         InvokeFloat(m, "ReadGpuPct", (NvGpuMonitor.NvGpuData?)null).Should().Be(0f);
         InvokeFloat(m, "ReadGpuTemp", (NvGpuMonitor.NvGpuData?)null).Should().Be(0f);
         InvokeFloat(m, "ReadGpuVramUsedMb", (NvGpuMonitor.NvGpuData?)null).Should().Be(0f);
         InvokeFloat(m, "ReadGpuFreqMHz", (NvGpuMonitor.NvGpuData?)null).Should().Be(0f);
         InvokeFloat(m, "ReadGpuPowerW", (NvGpuMonitor.NvGpuData?)null).Should().Be(0f);
+    }
+
+    [Fact]
+    public void ReadGpu_IntegratedGpuFallbacks_UsedOnlyWhenNoDedicatedGpu()
+    {
+        using var m = CreateMonitor(BasicCfg());
+        SetField(m, "_nvGpu", null);
+        SetField(m, "_amdGpu", null);
+        SetField(m, "_intelGpu", null);
+        SetField(m, "_wddmGpu", null);
+        SetField(m, "_cpuVendor", "Intel");
+        SetField(m, "_gpuVendor", "Intel");
+
+        // 1. When dedicated GPU is present, fallbacks are NOT used
+        SetField(m, "_hasDedicatedGpu", true);
+        InvokeFloat(m, "ReadGpuTemp", (NvGpuMonitor.NvGpuData?)null).Should().Be(0f);
+        InvokeFloat(m, "ReadGpuVramUsedMb", (NvGpuMonitor.NvGpuData?)null).Should().Be(0f);
+        InvokeFloat(m, "ReadGpuPowerW", (NvGpuMonitor.NvGpuData?)null).Should().Be(0f);
+
+        // 2. When integrated GPU only (no dedicated GPU), fallbacks are active
+        SetField(m, "_hasDedicatedGpu", false);
+        m.HasDedicatedGpu.Should().BeFalse();
+    }
+
+    [Fact]
+    public void FormatActiveGpuAdapterLog_FormatsDedicatedAndIntegrated()
+    {
+        var method = typeof(HardwareMonitor).GetMethod("FormatActiveGpuAdapterLog", BindingFlags.NonPublic | BindingFlags.Static);
+        method.Should().NotBeNull();
+
+        string dResult = (string)method.Invoke(null, ["NVIDIA GeForce RTX 4090", "NVIDIA", true])!;
+        dResult.Should().Be("NVIDIA GeForce RTX 4090 (Dedicated, NVIDIA)");
+
+        string iResult = (string)method.Invoke(null, ["Intel(R) Iris(R) Xe Graphics", "Intel", false])!;
+        iResult.Should().Be("Intel(R) Iris(R) Xe Graphics (Integrated, Intel)");
+
+        string emptyResult = (string)method.Invoke(null, ["", "Intel", false])!;
+        emptyResult.Should().Be("Intel (Integrated)");
+
+        string noneResult = (string)method.Invoke(null, ["", "", false])!;
+        noneResult.Should().Be("None");
+    }
+
+    [Theory]
+    [InlineData("Intel(R) UHD Graphics 770", "Intel", true)]
+    [InlineData("Intel(R) UHD Graphics 730", "Intel", true)]
+    [InlineData("Intel(R) Iris(R) Xe Graphics", "Intel", true)]
+    [InlineData("Intel(R) HD Graphics 630", "Intel", true)]
+    [InlineData("Intel(R) Arc(TM) A770 Graphics", "Intel", false)]
+    [InlineData("Intel(R) Arc(TM) A380 Graphics", "Intel", false)]
+    [InlineData("Intel(R) Iris(R) Xe MAX Graphics (DG1)", "Intel", false)]
+    [InlineData("AMD Radeon(TM) Graphics", "AMD", true)]
+    [InlineData("AMD Radeon Graphics", "AMD", true)]
+    [InlineData("AMD Radeon 780M", "AMD", true)]
+    [InlineData("AMD Radeon 680M", "AMD", true)]
+    [InlineData("AMD Radeon(TM) Vega 8 Graphics", "AMD", true)]
+    [InlineData("AMD Radeon RX 7900 XTX", "AMD", false)]
+    [InlineData("AMD Radeon RX 6700 XT", "AMD", false)]
+    [InlineData("AMD Radeon PRO W7900", "AMD", false)]
+    [InlineData("NVIDIA GeForce RTX 4090", "NVIDIA", false)]
+    public void IsKnownIntegratedGpu_IdentifiesDesktopAndMobileIntegratedAdapters(string name, string vendor, bool expected)
+    {
+        HardwareMonitor.IsKnownIntegratedGpu(name, vendor).Should().Be(expected);
     }
 
     [Fact]
@@ -1884,9 +1950,10 @@ public class HardwareMonitorTests
     {
         // FormatActiveGpuAdapterLog
         var formatGpu = typeof(HardwareMonitor).GetMethod("FormatActiveGpuAdapterLog", BindingFlags.NonPublic | BindingFlags.Static)!;
-        ((string)formatGpu.Invoke(null, ["GeForce RTX 4090", "NVIDIA"])!).Should().Be("GeForce RTX 4090 (NVIDIA)");
-        ((string)formatGpu.Invoke(null, ["", "AMD"])!).Should().Be("AMD");
-        ((string)formatGpu.Invoke(null, ["", ""])!).Should().Be("None");
+        ((string)formatGpu.Invoke(null, ["GeForce RTX 4090", "NVIDIA", true])!).Should().Be("GeForce RTX 4090 (Dedicated, NVIDIA)");
+        ((string)formatGpu.Invoke(null, ["Intel(R) Iris(R) Xe Graphics", "Intel", false])!).Should().Be("Intel(R) Iris(R) Xe Graphics (Integrated, Intel)");
+        ((string)formatGpu.Invoke(null, ["", "AMD", true])!).Should().Be("AMD (Dedicated)");
+        ((string)formatGpu.Invoke(null, ["", "", false])!).Should().Be("None");
 
         // DetectGpuVendor
         var detectGpu = typeof(HardwareMonitor).GetMethod("DetectGpuVendor", BindingFlags.NonPublic | BindingFlags.Static)!;
@@ -2092,7 +2159,7 @@ public class HardwareMonitorTests
     [Fact]
     public void HardwareMonitor_IsVirtualAdapter_ComprehensiveBranches()
     {
-        void AssertVirtual(string name, string desc, bool expected)
+        static void AssertVirtual(string name, string desc, bool expected)
         {
             var nic = Substitute.For<NetworkInterface>();
             nic.Name.Returns(name);

@@ -15,6 +15,7 @@ public sealed class WddmGpuMonitor : IDisposable
 {
     private IntPtr _query;
     private IntPtr _counter;
+    private IntPtr _sharedMemCounter;
     private IntPtr _buffer;
     private int _bufferCapacity;
     private bool _primed;
@@ -84,6 +85,17 @@ public sealed class WddmGpuMonitor : IDisposable
             return;
         }
 
+        int memStatus = PdhAddEnglishCounterFunc(
+            _query,
+            @"\GPU Adapter Memory(*)\Shared Usage",
+            IntPtr.Zero,
+            out _sharedMemCounter);
+        if (memStatus != 0)
+        {
+            Log.Debug($"Failed to add GPU adapter shared memory counter (status 0x{memStatus:X8})");
+            _sharedMemCounter = IntPtr.Zero;
+        }
+
         // Collect initial baseline - rate counters need two samples for a delta.
         status = PdhCollectQueryDataFunc(_query);
         if (status != 0)
@@ -118,6 +130,7 @@ public sealed class WddmGpuMonitor : IDisposable
             PdhCloseQuery(_query);
             _query = IntPtr.Zero;
             _counter = IntPtr.Zero;
+            _sharedMemCounter = IntPtr.Zero;
         }
 
         if (_buffer != IntPtr.Zero)
@@ -165,7 +178,7 @@ public sealed class WddmGpuMonitor : IDisposable
                 return 0f;
             }
 
-            if (!FetchCounterArray(out uint itemCount))
+            if (!FetchCounterArray(_counter, out uint itemCount))
             {
                 return 0f;
             }
@@ -175,6 +188,40 @@ public sealed class WddmGpuMonitor : IDisposable
         catch (Exception ex)
         {
             Log.Error(ex, "Failed to query WDDM GPU utilization");
+            return 0f;
+        }
+    }
+
+    /// <summary>
+    /// Returns current shared GPU memory usage in megabytes across active adapters.
+    /// Used for integrated GPUs which dynamically allocate from host system RAM.
+    /// </summary>
+    public float GetSharedMemoryUsedMb()
+    {
+        if (!IsAvailable || _disposed || _sharedMemCounter == IntPtr.Zero) return 0f;
+
+        try
+        {
+            if (!FetchCounterArray(_sharedMemCounter, out uint itemCount))
+                return 0f;
+
+            double maxBytes = 0.0;
+            for (uint i = 0; i < itemCount; i++)
+            {
+                int offset = (int)i * ItemStride;
+                uint cStatus = unchecked((uint)Marshal.ReadInt32(_buffer, offset + CStatusOffset));
+                if (cStatus != 0) continue;
+
+                double bytes = BitConverter.Int64BitsToDouble(
+                    Marshal.ReadInt64(_buffer, offset + ValueOffset));
+                if (bytes > maxBytes) maxBytes = bytes;
+            }
+
+            return (float)(maxBytes / (1024.0 * 1024.0));
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to query WDDM GPU shared memory usage");
             return 0f;
         }
     }
@@ -189,19 +236,19 @@ public sealed class WddmGpuMonitor : IDisposable
         }
     }
 
-    private bool FetchCounterArray(out uint itemCount)
+    private bool FetchCounterArray(IntPtr counterHandle, out uint itemCount)
     {
         itemCount = 0;
         uint bufSize = 0;
         int status = PdhGetFormattedCounterArrayFunc(
-            _counter, PdhFmtDouble, ref bufSize, ref itemCount, IntPtr.Zero);
+            counterHandle, PdhFmtDouble, ref bufSize, ref itemCount, IntPtr.Zero);
 
         if (itemCount == 0 || status != PdhMoreData) return false;
 
         EnsureBuffer((int)bufSize);
 
         status = PdhGetFormattedCounterArrayFunc(
-            _counter, PdhFmtDouble, ref bufSize, ref itemCount, _buffer);
+            counterHandle, PdhFmtDouble, ref bufSize, ref itemCount, _buffer);
         return status == 0;
     }
 
@@ -291,6 +338,7 @@ public sealed class WddmGpuMonitor : IDisposable
         if (_buffer != IntPtr.Zero) Marshal.FreeHGlobal(_buffer);
         _query = IntPtr.Zero;
         _counter = IntPtr.Zero;
+        _sharedMemCounter = IntPtr.Zero;
         _buffer = IntPtr.Zero;
         _bufferCapacity = 0;
     }

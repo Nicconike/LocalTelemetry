@@ -116,7 +116,7 @@ LocalTelemetry provides hardware monitoring in the taskbar: lightweight, native,
 
 - **Native Taskbar Overlay**: Embeds live metrics next to your clock. Automatically supports both centered and left-aligned Windows 11 taskbars.
 - **Overlay Layout Presets**: Switch instantly between 8 curated presets (Default, Gaming, Compact, Micro, Thermals, Workstation, Network, Full Telemetry) or build custom arrangements with interactive column swapping, live preview, and drag-and-drop ordering.
-- **Deep Kernel Telemetry**: Direct CPU clocks, wattage, and thermals via Intel MSR and AMD SMN registers with ACPI fallback. Full support for NVIDIA (NVML), AMD (ADL), and Intel (IGCL) GPUs.
+- **Deep Kernel Telemetry**: Direct CPU clocks, wattage, and thermals via Intel MSR and AMD SMN registers with ACPI fallback. Full support for NVIDIA (NVML), AMD (ADL), and Intel (IGCL) GPUs, including shared memory and package thermal fallbacks for integrated graphics.
 - **Real-Time Network Speed & History**: Track live upload and download speeds with local daily history logging, JSONL backup imports, and Windows network usage backfilling.
 - **Adaptive OEM Brand Themes**: Detects installed hardware vendors (Intel, AMD, NVIDIA, Samsung, Corsair) and applies authentic manufacturer color palettes.
 - **100% Offline & Private**: Zero telemetry collection, zero trackers, and zero cloud calls. All metrics stay strictly on your local PC.

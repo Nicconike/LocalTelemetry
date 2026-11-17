@@ -50,6 +50,15 @@ Graphics card telemetry tracks GPU core utilization, video memory consumption, c
   - `Driver (NVML/ADL)`: Directly queries vendor driver APIs for kernel engine busy time (matches tools like MSI Afterburner and GeForce Experience).
   - `WDDM (Task Manager)`: Queries the Windows graphics engine scheduler, matching Windows Task Manager.
 
+### :microchip: Integrated Graphics (iGPU) Telemetry (Desktops & Laptops)
+
+Systems without a dedicated graphics card — including desktop PCs (e.g. Intel Core i3/i5/i7/i9 with UHD Graphics, AMD Ryzen 7000/8000/9000 CPUs, and G-series APUs), mini PCs, and laptops — lack discrete board sensors. When no dedicated GPU is present, LocalTelemetry activates specialized fallbacks:
+
+- **Shared Video Memory**: Integrated GPUs dynamically share system RAM. LocalTelemetry queries the WDDM shared memory performance counter (`\GPU Adapter Memory(*)\Shared Usage`), reporting active allocated shared memory in MB.
+- **On-Die Temperature**: Integrated graphics share the silicon package with the processor. LocalTelemetry reports package digital thermal sensor (DTS) temperatures, matching tools such as Lenovo Vantage and HWiNFO.
+- **Integrated GPU Power**: On Intel processors, energy consumption is measured via the Intel RAPL Power Plane 1 MSR (`0x641`), calculating real-time graphics wattage.
+- **Dedicated Guard**: All integrated fallbacks apply only when no dedicated graphics adapter is active.
+
 ---
 
 ## :memory-stick: RAM (Memory) Metrics

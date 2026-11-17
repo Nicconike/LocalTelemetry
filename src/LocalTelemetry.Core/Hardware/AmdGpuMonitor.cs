@@ -216,9 +216,22 @@ internal sealed class AmdAdlNativePInvoke : IAmdAdlNative
         {
             int count = 0;
             var info = new AdlAdapterInfo[16];
+            for (int j = 0; j < info.Length; j++)
+            {
+                info[j].iSize = Marshal.SizeOf<AdlAdapterInfo>();
+            }
             int ret = AdapterInfoFunc(info, ref count);
             if (ret == 0 && count > 0)
             {
+                for (int j = 0; j < count && j < info.Length; j++)
+                {
+                    if (info[j].iPresent > 0 && !string.IsNullOrEmpty(info[j].strAdapterName))
+                    {
+                        adapterIndex = info[j].iAdapterIndex;
+                        adapterName = info[j].strAdapterName ?? string.Empty;
+                        return 0;
+                    }
+                }
                 adapterIndex = info[0].iAdapterIndex;
                 adapterName = info[0].strAdapterName ?? string.Empty;
                 return 0;
@@ -345,9 +358,27 @@ internal sealed class AmdAdlNativePInvoke : IAmdAdlNative
     [StructLayout(LayoutKind.Sequential)]
     internal struct AdlAdapterInfo
     {
+        public int iSize;
         public int iAdapterIndex;
         [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
+        public string? strUDID;
+        public int iBusNumber;
+        public int iDeviceNumber;
+        public int iFunctionNumber;
+        public int iVendorID;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
         public string? strAdapterName;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
+        public string? strDisplayName;
+        public int iPresent;
+        public int iExist;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
+        public string? strDriverPath;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
+        public string? strDriverPathExt;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
+        public string? strPNPString;
+        public int iOSDisplayIndex;
     }
 
     [StructLayout(LayoutKind.Sequential)]
