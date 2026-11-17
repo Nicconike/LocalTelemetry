@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com), and this project adheres to [Semantic Versioning](https://semver.org) & [Conventional Commits](https://conventionalcommits.org).
 
+## [1.3.0-beta.5](https://github.com/Nicconike/LocalTelemetry/compare/v1.3.0-beta.4...v1.3.0-beta.5) (17-11-2026)
+
+### Bug Fixes
+
+* **hardware:** enable telemetry metrics for integrated graphics and unify adapter logging ([e812a43](https://github.com/Nicconike/LocalTelemetry/commit/e812a43fbc9faf70fce029f915a44342abc59969))
+
+### Code Refactoring
+
+* **release:** nest changelog domain entries, reduce complexity and harden sync workflow ([0780dfa](https://github.com/Nicconike/LocalTelemetry/commit/0780dfa75f58a7fb148c763ca55a3f95ef417cc1))
+
+### Build System
+
+* **deps:** bump frontend dependencies ([4776e00](https://github.com/Nicconike/LocalTelemetry/commit/4776e005af20c24f880b83a71234b747fcd2b389))
+* **deps:** Bump @lucide/svelte from 1.61.0 to 1.63.0 ([#27](https://github.com/Nicconike/LocalTelemetry/issues/27)) ([db6322b](https://github.com/Nicconike/LocalTelemetry/commit/db6322bda1d3df48bc4fb826dddf2d15d53aab60))
+
 ## [1.3.0-beta.4](https://github.com/Nicconike/LocalTelemetry/compare/v1.3.0-beta.3...v1.3.0-beta.4) (15-11-2026)
 
 ### Features
