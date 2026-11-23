@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com), and this project adheres to [Semantic Versioning](https://semver.org) & [Conventional Commits](https://conventionalcommits.org).
 
+## [1.3.0-beta.6](https://github.com/Nicconike/LocalTelemetry/compare/v1.3.0-beta.5...v1.3.0-beta.6) (23-11-2026)
+
+### Features
+
+* **overlay:** add multi-monitor overlays, power resume guards and layout presets ([e471e59](https://github.com/Nicconike/LocalTelemetry/commit/e471e59d0b9531c23bd5cfcb04f3fab562b7535f)), closes [#28](https://github.com/Nicconike/LocalTelemetry/issues/28) [#29](https://github.com/Nicconike/LocalTelemetry/issues/29)
+
 ## [1.3.0-beta.5](https://github.com/Nicconike/LocalTelemetry/compare/v1.3.0-beta.4...v1.3.0-beta.5) (17-11-2026)
 
 ### Bug Fixes
