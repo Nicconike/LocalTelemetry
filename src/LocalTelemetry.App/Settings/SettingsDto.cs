@@ -126,6 +126,15 @@ public sealed class OverlayDto
     /// <summary>Overlay opacity percentage (0-100).</summary>
     public int Opacity { get; set; } = 100;
 
+    /// <summary>Display targeting mode: "primary", "all", or "custom".</summary>
+    public string DisplayMode { get; set; } = "primary";
+
+    /// <summary>List of enabled display keys when DisplayMode is "custom".</summary>
+    public List<string> EnabledDisplays { get; set; } = ["primary"];
+
+    /// <summary>List of all currently connected physical displays and their taskbar status.</summary>
+    public List<DetectedDisplayDto> DetectedDisplays { get; set; } = [];
+
     /// <summary>DPI scale factor percentage (100 = normal).</summary>
     public int Scale { get; set; } = 100;
 
@@ -163,8 +172,8 @@ public sealed class OverlayDto
     /// <summary>Active layout preset name ("default", "gaming", "compact", "micro", "thermals", "workstation", "network", "full", or "custom").</summary>
     public string LayoutPreset { get; set; } = "default";
 
-    /// <summary>Metric IDs displayed in the first overlay row (top row).</summary>
-    public List<string> Row1 { get; set; } = [];
+    /// <summary>Columns of metric IDs where each column has 1 or 2 metrics.</summary>
+    public List<List<string>> Columns { get; set; } = [];
 
     /// <summary>Set of metric IDs whose colors have been customised by the user.</summary>
     public HashSet<string> UserCustomizedMetricColors { get; set; } = [];
@@ -296,6 +305,23 @@ public sealed class UpdateConfigDto
     public bool IncludePrereleases { get; set; } = UpdateConfig.DefaultIncludePrereleases;
 }
 
+// DetectedDisplayDto
+/// <summary>Information about a detected display monitor for settings display selection.</summary>
+public sealed class DetectedDisplayDto
+{
+    /// <summary>Display identifier ("primary", "display_2", etc.).</summary>
+    public string Id { get; set; } = "primary";
+
+    /// <summary>Display friendly label (e.g. "Display 1 (Primary - 2048 x 1280)").</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>Whether this is the primary Windows display.</summary>
+    public bool IsPrimary { get; set; }
+
+    /// <summary>Whether a valid Windows taskbar exists on this display.</summary>
+    public bool HasTaskbar { get; set; }
+}
+
 // SettingsDtoMapping
 /// <summary>Static mapping methods for converting between <see cref="AppSettings"/> and <see cref="SettingsDto"/>.</summary>
 public static class SettingsDtoMapping
@@ -358,7 +384,16 @@ public static class SettingsDtoMapping
                 UserCustomizedMetricColors = [.. src.Overlay.UserCustomizedMetricColors],
                 UserCustomizedGroupColors = [.. src.Overlay.UserCustomizedGroupColors],
                 LayoutPreset = src.Overlay.LayoutPreset,
-                Row1 = [.. src.Overlay.Row1],
+                Columns = [.. src.Overlay.Columns.Select(c => new List<string>(c))],
+                DisplayMode = src.Overlay.DisplayMode ?? PrimaryDisplayId,
+                EnabledDisplays = src.Overlay.EnabledDisplays is { Count: > 0 } ? [.. src.Overlay.EnabledDisplays] : [PrimaryDisplayId],
+                DetectedDisplays = Win32.DisplayInfo.EnumerateDisplays().Select(d => new DetectedDisplayDto
+                {
+                    Id = d.Id,
+                    Name = d.FriendlyName,
+                    IsPrimary = d.IsPrimary,
+                    HasTaskbar = d.HasTaskbar
+                }).ToList(),
                 TaskbarSpaceConstrained = isSpaceConstrained,
                 AvailableSlotWidth = availableSlotWidth,
             },
@@ -410,6 +445,8 @@ public static class SettingsDtoMapping
         };
     }
 
+    private const string PrimaryDisplayId = "primary";
+
     /// <summary>Applies values from a <see cref="SettingsDto"/> onto an <see cref="AppSettings"/> domain object.</summary>
     /// <param name="settings">The target application settings to update.</param>
     /// <param name="dto">The source DTO received from the frontend.</param>
@@ -420,103 +457,127 @@ public static class SettingsDtoMapping
         settings.EnableFileLogging = dto.EnableFileLogging;
         settings.SystemLogLevel = string.IsNullOrEmpty(dto.SystemLogLevel) ? "Info" : dto.SystemLogLevel;
 
-        settings.Monitoring.PollIntervalMs = Math.Max(100, dto.Monitoring.IntervalMs);
-        settings.Monitoring.UseFahrenheit = dto.Monitoring.UseFahrenheit;
-        settings.Monitoring.UseNetBits = dto.Monitoring.UseNetBits;
-        settings.Monitoring.PreferredNic = !string.IsNullOrEmpty(dto.Monitoring.PreferredNic)
-            ? dto.Monitoring.PreferredNic : "auto";
-        settings.Monitoring.EnableCpu = dto.Monitoring.TrackCpu;
-        settings.Monitoring.EnableGpu = dto.Monitoring.TrackGpu;
-        settings.Monitoring.EnableRam = dto.Monitoring.TrackRam;
-        settings.Monitoring.EnableNet = dto.Monitoring.TrackNet;
-        settings.Monitoring.EnableDisk = dto.Monitoring.TrackDisk;
-        settings.Monitoring.EnableBattery = dto.Monitoring.TrackBattery;
-        settings.Monitoring.CpuFreqMode = dto.Monitoring.CpuFreqMode;
-        settings.Monitoring.CpuUsageMode = dto.Monitoring.CpuUsageMode;
-        settings.Monitoring.GpuUsageSource = dto.Monitoring.GpuUsageSource;
-        settings.Monitoring.LogCpuMode = dto.Monitoring.LogCpuMode;
-        settings.Monitoring.LogGpuMode = dto.Monitoring.LogGpuMode;
-        settings.Monitoring.LogRamMode = dto.Monitoring.LogRamMode;
-        settings.Monitoring.LogNetMode = dto.Monitoring.LogNetMode;
-        settings.Monitoring.LogDiskMode = dto.Monitoring.LogDiskMode;
-        settings.Monitoring.LogBatteryMode = dto.Monitoring.LogBatteryMode;
-        settings.Overlay.Visible = dto.Overlay.Visible;
+        ApplyMonitoringSettings(settings.Monitoring, dto.Monitoring);
+        ApplyOverlaySettings(settings, dto.Overlay);
+        ApplyAlertSettings(settings.Alerts, dto.Alerts);
+
+        settings.NetUsage.Enabled = dto.NetUsage.Enabled;
+        ApplyUpdateSettings(settings.Updates, dto.Updates);
+        settings.WindowTheme = dto.WindowTheme;
+    }
+
+    private static void ApplyMonitoringSettings(MonitoringConfig cfg, MonitoringDto dto)
+    {
+        cfg.PollIntervalMs = Math.Max(100, dto.IntervalMs);
+        cfg.UseFahrenheit = dto.UseFahrenheit;
+        cfg.UseNetBits = dto.UseNetBits;
+        cfg.PreferredNic = !string.IsNullOrEmpty(dto.PreferredNic) ? dto.PreferredNic : "auto";
+        cfg.EnableCpu = dto.TrackCpu;
+        cfg.EnableGpu = dto.TrackGpu;
+        cfg.EnableRam = dto.TrackRam;
+        cfg.EnableNet = dto.TrackNet;
+        cfg.EnableDisk = dto.TrackDisk;
+        cfg.EnableBattery = dto.TrackBattery;
+        cfg.CpuFreqMode = dto.CpuFreqMode;
+        cfg.CpuUsageMode = dto.CpuUsageMode;
+        cfg.GpuUsageSource = dto.GpuUsageSource;
+        cfg.LogCpuMode = dto.LogCpuMode;
+        cfg.LogGpuMode = dto.LogGpuMode;
+        cfg.LogRamMode = dto.LogRamMode;
+        cfg.LogNetMode = dto.LogNetMode;
+        cfg.LogDiskMode = dto.LogDiskMode;
+        cfg.LogBatteryMode = dto.LogBatteryMode;
+    }
+
+    private static void ApplyOverlaySettings(AppSettings settings, OverlayDto dto)
+    {
+        settings.Overlay.Visible = dto.Visible;
         if (!settings.ShowSystemTrayIcon && !settings.Overlay.Visible)
         {
             settings.ShowSystemTrayIcon = true;
             Log.Warn("Cannot disable both System Tray Icon and Overlay. Retaining System Tray Icon to prevent lockout.");
         }
-        settings.Overlay.DoubleClickAction = string.IsNullOrEmpty(dto.Overlay.DoubleClickAction)
-            ? "settings" : dto.Overlay.DoubleClickAction;
-        settings.Overlay.Placement = MapPositionToPlacement(dto.Overlay.Position);
-        settings.Overlay.PlacementOffset = dto.Overlay.OffsetX;
-        settings.Overlay.Opacity = dto.Overlay.Opacity;
-        settings.Overlay.ScalePct = dto.Overlay.Scale;
-        settings.Overlay.FontSizePx = dto.Overlay.FontSizePx;
-        settings.Overlay.FontBold = dto.Overlay.FontBold;
-        settings.Overlay.LabelColor = dto.Overlay.LabelColor;
-        settings.Overlay.BgColor = dto.Overlay.BgColor;
-        settings.Overlay.ValueColor = dto.Overlay.TextColor;
-        if (dto.Overlay.MetricColors is { Count: > 0 })
-            settings.Overlay.MetricColors = new Dictionary<string, string>(dto.Overlay.MetricColors);
-        if (dto.Overlay.GroupColors is { Count: > 0 })
-            settings.Overlay.GroupColors = new Dictionary<string, string>(dto.Overlay.GroupColors);
-        settings.Overlay.FollowWindowsTheme = dto.Overlay.FollowWindowsTheme;
-        settings.Overlay.UserCustomizedMetricColors = dto.Overlay.UserCustomizedMetricColors is { Count: > 0 }
-            ? [.. dto.Overlay.UserCustomizedMetricColors] : [];
-        settings.Overlay.UserCustomizedGroupColors = dto.Overlay.UserCustomizedGroupColors is { Count: > 0 }
-            ? [.. dto.Overlay.UserCustomizedGroupColors] : [];
-        settings.Overlay.DefaultMetricColors = dto.Overlay.DefaultMetricColors is { Count: > 0 }
-            ? new Dictionary<string, string>(dto.Overlay.DefaultMetricColors)
+        settings.Overlay.DoubleClickAction = string.IsNullOrEmpty(dto.DoubleClickAction)
+            ? "settings" : dto.DoubleClickAction;
+        settings.Overlay.Placement = MapPositionToPlacement(dto.Position);
+        settings.Overlay.PlacementOffset = dto.OffsetX;
+        settings.Overlay.Opacity = dto.Opacity;
+        settings.Overlay.ScalePct = dto.Scale;
+        settings.Overlay.FontSizePx = dto.FontSizePx;
+        settings.Overlay.FontBold = dto.FontBold;
+        settings.Overlay.LabelColor = dto.LabelColor;
+        settings.Overlay.BgColor = dto.BgColor;
+        settings.Overlay.ValueColor = dto.TextColor;
+        if (dto.MetricColors is { Count: > 0 })
+            settings.Overlay.MetricColors = new Dictionary<string, string>(dto.MetricColors);
+        if (dto.GroupColors is { Count: > 0 })
+            settings.Overlay.GroupColors = new Dictionary<string, string>(dto.GroupColors);
+        settings.Overlay.FollowWindowsTheme = dto.FollowWindowsTheme;
+        settings.Overlay.UserCustomizedMetricColors = dto.UserCustomizedMetricColors is { Count: > 0 }
+            ? [.. dto.UserCustomizedMetricColors] : [];
+        settings.Overlay.UserCustomizedGroupColors = dto.UserCustomizedGroupColors is { Count: > 0 }
+            ? [.. dto.UserCustomizedGroupColors] : [];
+        settings.Overlay.DefaultMetricColors = dto.DefaultMetricColors is { Count: > 0 }
+            ? new Dictionary<string, string>(dto.DefaultMetricColors)
             : [];
-        if (!string.IsNullOrWhiteSpace(dto.Overlay.LayoutPreset))
-            settings.Overlay.LayoutPreset = dto.Overlay.LayoutPreset;
-        settings.Overlay.Row1 = [.. dto.Overlay.Row1 ?? []];
+        if (!string.IsNullOrWhiteSpace(dto.LayoutPreset))
+            settings.Overlay.LayoutPreset = dto.LayoutPreset;
+        settings.Overlay.Columns = [.. dto.Columns?.Select(c => new List<string>(c)) ?? []];
+        settings.Overlay.DisplayMode = string.IsNullOrEmpty(dto.DisplayMode) ? PrimaryDisplayId : dto.DisplayMode;
+        settings.Overlay.EnabledDisplays = dto.EnabledDisplays is { Count: > 0 }
+            ? [.. dto.EnabledDisplays]
+            : [PrimaryDisplayId];
+    }
 
-        settings.Alerts.Enabled = dto.Alerts.Enabled;
-        settings.Alerts.AlertCpuTemp = dto.Alerts.AlertCpuTemp;
-        settings.Alerts.AlertGpuTemp = dto.Alerts.AlertGpuTemp;
-        settings.Alerts.AlertCpuUsage = dto.Alerts.AlertCpuUsage;
-        settings.Alerts.AlertRamUsage = dto.Alerts.AlertRamUsage;
-        settings.Alerts.AlertGpuUsage = dto.Alerts.AlertGpuUsage;
-        settings.Alerts.AlertGpuVram = dto.Alerts.AlertGpuVram;
-        settings.Alerts.AlertBatteryLow = dto.Alerts.AlertBatteryLow;
-        settings.Alerts.AlertCpuFreq = dto.Alerts.AlertCpuFreq;
-        settings.Alerts.AlertCpuPower = dto.Alerts.AlertCpuPower;
-        settings.Alerts.AlertGpuFreq = dto.Alerts.AlertGpuFreq;
-        settings.Alerts.AlertGpuPower = dto.Alerts.AlertGpuPower;
-        settings.Alerts.AlertNetDaily = dto.Alerts.AlertNetDaily;
-        settings.Alerts.AlertNetMonthly = dto.Alerts.AlertNetMonthly;
-        settings.Alerts.CpuUsageMaxPct = dto.Alerts.CpuUsageMaxPct;
-        settings.Alerts.RamUsageMaxPct = dto.Alerts.RamUsageMaxPct;
-        settings.Alerts.GpuUsageMaxPct = dto.Alerts.GpuUsageMaxPct;
-        settings.Alerts.GpuVramMaxMb = dto.Alerts.GpuVramMaxMb;
-        settings.Alerts.CpuTempMaxC = dto.Alerts.CpuTempMaxC;
-        settings.Alerts.GpuTempMaxC = dto.Alerts.GpuTempMaxC;
-        settings.Alerts.BatteryLowPct = dto.Alerts.BatteryLowPct;
-        settings.Alerts.CpuFreqMinMhz = dto.Alerts.CpuFreqMinMhz;
-        settings.Alerts.CpuPowerMaxW = dto.Alerts.CpuPowerMaxW;
-        settings.Alerts.GpuFreqMinMhz = dto.Alerts.GpuFreqMinMhz;
-        settings.Alerts.GpuPowerMaxW = dto.Alerts.GpuPowerMaxW;
-        settings.Alerts.NetDailyMaxGb = dto.Alerts.NetDailyMaxGb;
-        settings.Alerts.NetMonthlyMaxGb = dto.Alerts.NetMonthlyMaxGb;
-        settings.Alerts.ShowToastNotif = dto.Alerts.ShowToastNotif;
-        settings.Alerts.FlashOverlay = dto.Alerts.FlashOverlay;
-        settings.Alerts.SustainedSecs = dto.Alerts.SustainedSecs > 0 ? dto.Alerts.SustainedSecs : 3;
-        settings.Alerts.CooldownSecs = dto.Alerts.CooldownSecs;
-        settings.Alerts.FireOncePerSession = dto.Alerts.FireOncePerSession;
+    private static void ApplyAlertSettings(AlertConfig cfg, AlertsDto dto)
+    {
+        cfg.Enabled = dto.Enabled;
+        cfg.AlertCpuTemp = dto.AlertCpuTemp;
+        cfg.AlertGpuTemp = dto.AlertGpuTemp;
+        cfg.AlertCpuUsage = dto.AlertCpuUsage;
+        cfg.AlertRamUsage = dto.AlertRamUsage;
+        cfg.AlertGpuUsage = dto.AlertGpuUsage;
+        cfg.AlertGpuVram = dto.AlertGpuVram;
+        cfg.AlertBatteryLow = dto.AlertBatteryLow;
+        cfg.AlertCpuFreq = dto.AlertCpuFreq;
+        cfg.AlertCpuPower = dto.AlertCpuPower;
+        cfg.AlertGpuFreq = dto.AlertGpuFreq;
+        cfg.AlertGpuPower = dto.AlertGpuPower;
+        cfg.AlertNetDaily = dto.AlertNetDaily;
+        cfg.AlertNetMonthly = dto.AlertNetMonthly;
+        cfg.CpuUsageMaxPct = dto.CpuUsageMaxPct;
+        cfg.RamUsageMaxPct = dto.RamUsageMaxPct;
+        cfg.GpuUsageMaxPct = dto.GpuUsageMaxPct;
+        cfg.GpuVramMaxMb = dto.GpuVramMaxMb;
+        cfg.CpuTempMaxC = dto.CpuTempMaxC;
+        cfg.GpuTempMaxC = dto.GpuTempMaxC;
+        cfg.BatteryLowPct = dto.BatteryLowPct;
+        cfg.CpuFreqMinMhz = dto.CpuFreqMinMhz;
+        cfg.CpuPowerMaxW = dto.CpuPowerMaxW;
+        cfg.GpuFreqMinMhz = dto.GpuFreqMinMhz;
+        cfg.GpuPowerMaxW = dto.GpuPowerMaxW;
+        cfg.NetDailyMaxGb = dto.NetDailyMaxGb;
+        cfg.NetMonthlyMaxGb = dto.NetMonthlyMaxGb;
+        cfg.ShowToastNotif = dto.ShowToastNotif;
+        cfg.FlashOverlay = dto.FlashOverlay;
+        cfg.SustainedSecs = dto.SustainedSecs > 0 ? dto.SustainedSecs : 3;
+        cfg.CooldownSecs = dto.CooldownSecs;
+        cfg.FireOncePerSession = dto.FireOncePerSession;
+    }
 
-        settings.NetUsage.Enabled = dto.NetUsage.Enabled;
-        if (dto.Updates is not null)
+    private static void ApplyUpdateSettings(UpdateConfig cfg, UpdateConfigDto? dto)
+    {
+        if (dto is null)
         {
-            settings.Updates.CheckFrequency = dto.Updates.CheckFrequency ?? "weekly";
-            if (settings.Updates.IncludePrereleases != dto.Updates.IncludePrereleases)
-            {
-                settings.Updates.UserExplicitlySetIncludePrereleases = true;
-            }
-            settings.Updates.IncludePrereleases = dto.Updates.IncludePrereleases;
+            return;
         }
-        settings.WindowTheme = dto.WindowTheme;
+
+        cfg.CheckFrequency = dto.CheckFrequency ?? "weekly";
+        if (cfg.IncludePrereleases != dto.IncludePrereleases)
+        {
+            cfg.UserExplicitlySetIncludePrereleases = true;
+        }
+        cfg.IncludePrereleases = dto.IncludePrereleases;
     }
 
     private const string PositionLeft = "left";

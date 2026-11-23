@@ -47,7 +47,7 @@ public class SettingsDtoTests
                 BgColor = "#222222",
                 ValueColor = "#333333",
                 FollowWindowsTheme = false,
-                Row1 = ["cpu_pct", "gpu_pct"]
+                Columns = [["cpu_pct", "gpu_pct"]]
             },
             Alerts = new AlertConfig
             {
@@ -169,7 +169,7 @@ public class SettingsDtoTests
                 BgColor = "#BBBBBB",
                 TextColor = "#CCCCCC",
                 FollowWindowsTheme = true,
-                Row1 = ["ram_pct", "ram_used"]
+                Columns = [["ram_pct", "ram_used"]]
             },
             Alerts = new AlertsDto
             {
@@ -195,7 +195,7 @@ public class SettingsDtoTests
         target.Overlay.Visible.Should().BeTrue();
         target.Overlay.Placement.Should().Be("right");
         target.Overlay.PlacementOffset.Should().Be(50);
-        target.Overlay.Row1.Should().Contain("ram_pct");
+        target.Overlay.Columns.SelectMany(c => c).Should().Contain("ram_pct");
 
         target.Alerts.Enabled.Should().BeTrue();
         target.Alerts.AlertRamUsage.Should().BeTrue();

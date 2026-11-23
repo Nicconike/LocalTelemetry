@@ -44,13 +44,15 @@ flowchart TD
         direction TB
         AppLifecycle(["<b>App.xaml.cs</b><br/>DI Host Container & App Lifecycle"])
 
+        OverlayMgr[["<b>TaskbarOverlayManager.cs</b><br/>Multi-Monitor Coordinator"]]
         Overlay["<b>TaskbarOverlay.cs</b><br/>GDI+ Taskbar HWND"]
         Tray["<b>TrayIconManager.cs</b><br/>NotifyIcon Tooltip"]
         SettingsWnd(["<b>SettingsShell</b><br/>WebView2 Window"])
         Alerts[["<b>AlertService.cs</b><br/>Threshold Monitor"]]
         UpdateChecker[["<b>UpdateCheckService.cs</b><br/>GitHub Releases Client"]]
 
-        AppLifecycle ==>|"Updates"| Overlay
+        AppLifecycle ==>|"Updates"| OverlayMgr
+        OverlayMgr -->|"Manages"| Overlay
         AppLifecycle ==>|"Updates"| Tray
         AppLifecycle -.->|"Opens"| SettingsWnd
         AppLifecycle ==>|"Evaluates"| Alerts
@@ -198,7 +200,7 @@ flowchart TD
 
 ## :refresh-cw: Polling Interval Dynamics & Zero-Allocation Pipeline
 
-LocalTelemetry maintains a low CPU and memory footprint (~35-50 MB RAM) by employing a zero-allocation polling strategy:
+LocalTelemetry maintains a low CPU (< 0.1%) and memory footprint (~15–20 MB RAM in background mode, ~40–60 MB with the Settings window open) by employing a zero-allocation polling strategy:
 
 - Fixed-size reusable byte and string buffers for register and IOCTL reading.
 - Double-buffered GDI+ drawing cached directly in unmanaged memory.

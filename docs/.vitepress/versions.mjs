@@ -4,11 +4,4 @@ export const latestReleaseTag = 'v1.3.0-beta.5';
 export const versions = [
     { text: 'Latest', link: '/' },
     { text: 'v1.3.0-beta.5', link: '/v1.3.0-beta.5/' },
-    { text: 'v1.3.0-beta.4', link: '/v1.3.0-beta.4/' },
-    { text: 'v1.3.0-beta.3', link: '/v1.3.0-beta.3/' },
-    { text: 'v1.3.0-beta.2', link: '/v1.3.0-beta.2/' },
-    { text: 'v1.3.0-beta.1', link: '/v1.3.0-beta.1/' },
-    { text: 'v1.2.0', link: '/v1.2.0/' },
-    { text: 'v1.1.0', link: '/v1.1.0/' },
-    { text: 'v1.0.0', link: '/v1.0.0/' },
 ];

@@ -129,7 +129,7 @@
         { name: "Svelte 5", type: "MIT" },
         { name: "Vite", type: "MIT" },
         { name: "Microsoft WebView2", type: "Proprietary" },
-        { name: "PawnIo Driver", type: "GPL-2.0" },
+        { name: "PawnIO Driver", type: "GPL-2.0" },
         { name: "MinVer", type: "Apache-2.0" },
     ];
 
@@ -847,15 +847,21 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
+        gap: var(--space-2);
         padding: var(--space-2) var(--space-3);
         background: var(--color-surface-offset);
         border: 1px solid var(--color-border);
         border-radius: var(--radius-md);
         font-size: var(--text-sm);
+        min-width: 0;
     }
     .lic-name {
         color: var(--color-text);
         font-weight: 500;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
     .lic-badge {
         font-size: 10px;
@@ -867,6 +873,8 @@
         color: var(--color-text-muted);
         text-transform: uppercase;
         letter-spacing: 0.02em;
+        white-space: nowrap;
+        flex-shrink: 0;
     }
 
     /* Footer */

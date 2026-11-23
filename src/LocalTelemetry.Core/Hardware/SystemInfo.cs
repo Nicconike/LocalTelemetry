@@ -36,6 +36,7 @@ public static class SystemInfo
     // Vendor and label constants
     private const string IntelVendor = "Intel";
     private const string NvidiaVendor = "NVIDIA";
+    private const string AmdVendor = "AMD";
     private const string UnknownLabel = "Unknown";
     private const string ManufacturerProperty = "Manufacturer";
     private const string LgEnergyBrand = "LG Energy";
@@ -70,11 +71,14 @@ public static class SystemInfo
             using var results = searcher.Get();
             foreach (ManagementBaseObject mo in results)
             {
-                object? val = mo[property];
-                if (val is not null)
+                using (mo)
                 {
-                    string s = val.ToString()?.Trim() ?? "";
-                    if (s.Length > 0) return s;
+                    object? val = mo[property];
+                    if (val is not null)
+                    {
+                        string s = val.ToString()?.Trim() ?? "";
+                        if (s.Length > 0) return s;
+                    }
                 }
             }
         }
@@ -95,11 +99,14 @@ public static class SystemInfo
             using var results = searcher.Get();
             foreach (ManagementBaseObject mo in results)
             {
-                object? val = mo[property];
-                if (val is not null)
+                using (mo)
                 {
-                    string s = val.ToString()?.Trim() ?? "";
-                    if (s.Length > 0 && int.TryParse(s, out int n)) return n;
+                    object? val = mo[property];
+                    if (val is not null)
+                    {
+                        string s = val.ToString()?.Trim() ?? "";
+                        if (s.Length > 0 && int.TryParse(s, out int n)) return n;
+                    }
                 }
             }
         }
@@ -924,7 +931,7 @@ public static class SystemInfo
     public static (string Name, string Vendor, bool IsDedicated, long? VramBytes, string? DriverVersion)[] GetGpus()
     {
         if (_gpusCache is not null) return _gpusCache;
-        var results = new List<(string, string, bool, long?, string?)>();
+        var results = new List<(string Name, string Vendor, bool IsDedicated, long? VramBytes, string? DriverVersion)>();
         var displayGuid = NativeMethods.GUID_DISPLAY;
         IntPtr devInfoSet = NativeMethods.SetupDiGetClassDevs(ref displayGuid, IntPtr.Zero,
             IntPtr.Zero, NativeMethods.DIGCF_PRESENT);
@@ -951,6 +958,69 @@ public static class SystemInfo
             }
         }
         finally { NativeMethods.SetupDiDestroyDeviceInfoList(devInfoSet); }
+
+        // If no dedicated GPU was found among active devices, query all installed display adapters (including sleeping D3cold devices)
+        if (!results.Any(g => g.IsDedicated))
+        {
+            IntPtr allDevInfoSet = NativeMethods.SetupDiGetClassDevs(ref displayGuid, IntPtr.Zero,
+                IntPtr.Zero, 0);
+            if (allDevInfoSet.ToInt64() != -1)
+            {
+                try
+                {
+                    NativeMethods.SpDevinfoData devInfo = new();
+                    devInfo.cbSize = (uint)Marshal.SizeOf<NativeMethods.SpDevinfoData>();
+                    uint i = 0;
+
+                    while (NativeMethods.SetupDiEnumDeviceInfo(allDevInfoSet, i++, ref devInfo))
+                    {
+                        string name = GetDevPropStr(allDevInfoSet, devInfo, NativeMethods.SPDRP_DEVICEDESC);
+                        if (string.IsNullOrEmpty(name)) continue;
+
+                        string hwId = GetDevPropStr(allDevInfoSet, devInfo, NativeMethods.SPDRP_HARDWAREID);
+                        string vendor = ParseVendor(hwId, name);
+                        if (string.IsNullOrEmpty(vendor)) continue;
+
+                        bool dedicated = vendor == NvidiaVendor || IsDiscreteGpu(name, vendor, allDevInfoSet, devInfo);
+                        if (dedicated && !results.Any(r => r.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            (long? vram, string? driver) = GetGpuRegistryData(name);
+                            results.Add((name, vendor, dedicated, vram, driver));
+                        }
+                    }
+                }
+                finally { NativeMethods.SetupDiDestroyDeviceInfoList(allDevInfoSet); }
+            }
+        }
+
+        // If still no dedicated GPU detected, check cached hardware state from previous runs
+        if (!results.Any(g => g.IsDedicated))
+        {
+            var prevState = HardwareInventory.ReadPreviousState();
+            if (prevState?.Graphics is { Count: > 0 })
+            {
+                foreach (var prevGpu in prevState.Graphics.Where(g => g.Contains("(Dedicated", StringComparison.OrdinalIgnoreCase)))
+                {
+                    string vendor = IntelVendor;
+                    if (prevGpu.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase))
+                    {
+                        vendor = NvidiaVendor;
+                    }
+                    else if (prevGpu.Contains("AMD", StringComparison.OrdinalIgnoreCase))
+                    {
+                        vendor = AmdVendor;
+                    }
+
+                    int parenIdx = prevGpu.IndexOf(" (Dedicated", StringComparison.OrdinalIgnoreCase);
+                    string name = parenIdx > 0 ? prevGpu[..parenIdx] : prevGpu;
+                    if (!results.Any(r => r.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        (long? vram, string? driver) = GetGpuRegistryData(name);
+                        results.Add((name, vendor, true, vram, driver));
+                    }
+                }
+            }
+        }
 
         _gpusCache = results.ToArray();
         return _gpusCache;
@@ -1199,40 +1269,44 @@ public static class SystemInfo
         try
         {
             using var searcher = new ManagementObjectSearcher("SELECT * FROM Win32_PhysicalMemory");
-            foreach (ManagementBaseObject mo in searcher.Get())
+            using var coll = searcher.Get();
+            foreach (ManagementBaseObject mo in coll)
             {
-                ulong capacity = Convert.ToUInt64(mo["Capacity"] ?? 0UL);
-                if (capacity == 0) continue;
-
-                string mfr = moduleIdx < smbiosMfrs.Count ? smbiosMfrs[moduleIdx] : "";
-                if (string.IsNullOrEmpty(mfr))
-                    mfr = (mo[ManufacturerProperty] as string ?? "").Trim();
-                moduleIdx++;
-
-                string partNumber = (mo["PartNumber"] as string ?? "").Trim();
-                string serial = (mo["SerialNumber"] as string ?? "").Trim();
-                uint configuredSpeed = Convert.ToUInt32(mo["ConfiguredClockSpeed"] ?? 0U);
-                uint ratedSpeed = Convert.ToUInt32(mo["Speed"] ?? 0U);
-                string speedDisplay = FormatRamModuleSpeed(configuredSpeed, ratedSpeed);
-
-                ushort ff = Convert.ToUInt16(mo["FormFactor"] ?? (ushort)0);
-                ushort mt = Convert.ToUInt16(mo["MemoryType"] ?? (ushort)0);
-                if (mt == 0)
-                    mt = Convert.ToUInt16(mo["SMBIOSMemoryType"] ?? (ushort)0);
-
-                results.Add(new()
+                using (mo)
                 {
-                    ["manufacturer"] = mfr,
-                    ["partNumber"] = partNumber,
-                    ["serial"] = serial,
-                    ["sizeGb"] = capacity / (1024.0 * 1024.0 * 1024.0),
-                    ["speed"] = speedDisplay,
-                    ["configuredSpeed"] = configuredSpeed,
-                    ["ratedSpeed"] = ratedSpeed,
-                    ["ecc"] = false,
-                    ["formFactor"] = FormFactorLabel(ff),
-                    ["type"] = MemoryTypeLabel(mt),
-                });
+                    ulong capacity = Convert.ToUInt64(mo["Capacity"] ?? 0UL);
+                    if (capacity == 0) continue;
+
+                    string mfr = moduleIdx < smbiosMfrs.Count ? smbiosMfrs[moduleIdx] : "";
+                    if (string.IsNullOrEmpty(mfr))
+                        mfr = (mo[ManufacturerProperty] as string ?? "").Trim();
+                    moduleIdx++;
+
+                    string partNumber = (mo["PartNumber"] as string ?? "").Trim();
+                    string serial = (mo["SerialNumber"] as string ?? "").Trim();
+                    uint configuredSpeed = Convert.ToUInt32(mo["ConfiguredClockSpeed"] ?? 0U);
+                    uint ratedSpeed = Convert.ToUInt32(mo["Speed"] ?? 0U);
+                    string speedDisplay = FormatRamModuleSpeed(configuredSpeed, ratedSpeed);
+
+                    ushort ff = Convert.ToUInt16(mo["FormFactor"] ?? (ushort)0);
+                    ushort mt = Convert.ToUInt16(mo["MemoryType"] ?? (ushort)0);
+                    if (mt == 0)
+                        mt = Convert.ToUInt16(mo["SMBIOSMemoryType"] ?? (ushort)0);
+
+                    results.Add(new()
+                    {
+                        ["manufacturer"] = mfr,
+                        ["partNumber"] = partNumber,
+                        ["serial"] = serial,
+                        ["sizeGb"] = capacity / (1024.0 * 1024.0 * 1024.0),
+                        ["speed"] = speedDisplay,
+                        ["configuredSpeed"] = configuredSpeed,
+                        ["ratedSpeed"] = ratedSpeed,
+                        ["ecc"] = false,
+                        ["formFactor"] = FormFactorLabel(ff),
+                        ["type"] = MemoryTypeLabel(mt),
+                    });
+                }
             }
         }
         catch (Exception ex) { Diagnostics.Log.Error(ex, "Failed to query physical memory modules via system management"); }
@@ -1349,10 +1423,13 @@ public static class SystemInfo
             using var results = searcher.Get();
             foreach (ManagementBaseObject mo in results)
             {
-                ushort mt = Convert.ToUInt16(mo["MemoryType"] ?? (ushort)0);
-                if (mt == 0)
-                    mt = Convert.ToUInt16(mo["SMBIOSMemoryType"] ?? (ushort)0);
-                if (mt != 0) return MemoryTypeLabel(mt);
+                using (mo)
+                {
+                    ushort mt = Convert.ToUInt16(mo["MemoryType"] ?? (ushort)0);
+                    if (mt == 0)
+                        mt = Convert.ToUInt16(mo["SMBIOSMemoryType"] ?? (ushort)0);
+                    if (mt != 0) return MemoryTypeLabel(mt);
+                }
             }
         }
         catch (Exception ex) { Diagnostics.Log.Error(ex, "Failed to detect memory type via system management"); }
@@ -1541,8 +1618,11 @@ public static class SystemInfo
             using var results = searcher.Get();
             foreach (ManagementBaseObject mo in results)
             {
-                string val = (mo[property] as string ?? "").Trim();
-                if (val.Length > 0) return val;
+                using (mo)
+                {
+                    string val = (mo[property] as string ?? "").Trim();
+                    if (val.Length > 0) return val;
+                }
             }
         }
         catch (ManagementException ex)
@@ -1572,7 +1652,7 @@ public static class SystemInfo
             scope.Connect();
             using var searcher = new ManagementObjectSearcher(scope, new ObjectQuery($"SELECT {property} FROM {className}"));
             using var results = searcher.Get();
-            var mo = results.Cast<ManagementBaseObject>().FirstOrDefault();
+            using var mo = results.Cast<ManagementBaseObject>().FirstOrDefault();
             if (mo is not null)
                 return TryParseWmiInt(mo[property]);
         }
@@ -1615,8 +1695,11 @@ public static class SystemInfo
             using var results = searcher.Get();
             foreach (ManagementBaseObject mo in results)
             {
-                string name = (mo["Name"] as string ?? "").Trim();
-                if (name.Length > 0) return name;
+                using (mo)
+                {
+                    string name = (mo["Name"] as string ?? "").Trim();
+                    if (name.Length > 0) return name;
+                }
             }
         }
         catch (ManagementException ex) { Diagnostics.Log.Debug($"Failed to query battery device name from system management: {ex.Message}"); }
@@ -1692,8 +1775,11 @@ public static class SystemInfo
             using var results = searcher.Get();
             foreach (ManagementBaseObject mo in results)
             {
-                string mfr = ResolveManufacturerFromBatteryObject(mo);
-                if (mfr.Length > 0) return mfr;
+                using (mo)
+                {
+                    string mfr = ResolveManufacturerFromBatteryObject(mo);
+                    if (mfr.Length > 0) return mfr;
+                }
             }
         }
         catch (ManagementException ex) { Diagnostics.Log.Debug($"Failed to query battery manufacturer from Win32_Battery: {ex.Message}"); }
@@ -2089,6 +2175,27 @@ public static class SystemInfo
         if (!string.IsNullOrEmpty(ded.Vendor))
             return BrandColorDefaults.GpuColors.TryGetValue(ded.Vendor, out var c) ? c : "";
 
+        var prevState = HardwareInventory.ReadPreviousState();
+        if (prevState?.Graphics is { Count: > 0 })
+        {
+            var prevDed = prevState.Graphics.FirstOrDefault(g => g.Contains("(Dedicated", StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrEmpty(prevDed))
+            {
+                string vendor = string.Empty;
+                if (prevDed.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase))
+                {
+                    vendor = NvidiaVendor;
+                }
+                else if (prevDed.Contains("AMD", StringComparison.OrdinalIgnoreCase))
+                {
+                    vendor = AmdVendor;
+                }
+
+                if (!string.IsNullOrEmpty(vendor) && BrandColorDefaults.GpuColors.TryGetValue(vendor, out var pc))
+                    return pc;
+            }
+        }
+
         foreach (var g in gpus)
             if (BrandColorDefaults.GpuColors.TryGetValue(g.Vendor, out var c))
                 return c;
@@ -2101,6 +2208,18 @@ public static class SystemInfo
         var gpus = GetGpus();
         var ded = gpus.FirstOrDefault(g => g.IsDedicated);
         if (!string.IsNullOrEmpty(ded.Vendor)) return ded.Vendor;
+
+        var prevState = HardwareInventory.ReadPreviousState();
+        if (prevState?.Graphics is { Count: > 0 })
+        {
+            var prevDed = prevState.Graphics.FirstOrDefault(g => g.Contains("(Dedicated", StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrEmpty(prevDed))
+            {
+                if (prevDed.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase)) return NvidiaVendor;
+                if (prevDed.Contains("AMD", StringComparison.OrdinalIgnoreCase)) return AmdVendor;
+            }
+        }
+
         return gpus.Length > 0 ? gpus[0].Vendor : UnknownLabel;
     }
 

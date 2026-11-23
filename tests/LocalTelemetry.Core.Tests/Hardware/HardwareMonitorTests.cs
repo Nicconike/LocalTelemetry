@@ -738,7 +738,7 @@ public class HardwareMonitorTests
     public void CollectCpuMetrics_Disabled_ReturnsZeros()
     {
         using var m = CreateMonitor(BasicCfg());
-        var mc = new LocalTelemetry.Core.Config.MonitoringConfig { EnableCpu = false };
+        var mc = new MonitoringConfig { EnableCpu = false };
         var (cpuPct, cpuTemp, cpuFreq, cpuPower) = ((float, float, float, float))Invoke(m, "CollectCpuMetrics", mc)!;
         cpuPct.Should().Be(0f);
         cpuTemp.Should().Be(0f);
@@ -2556,7 +2556,7 @@ public class HardwareMonitorTests
             resNull.Item2.Should().BeFalse();
 
             // 1b. Returns BatteryFlag = 128 (no battery)
-            HardwareMonitor.SystemPowerStatusOverride = () => new LocalTelemetry.Core.Hardware.NativeMethods.SystemPowerStatus
+            HardwareMonitor.SystemPowerStatusOverride = () => new NativeMethods.SystemPowerStatus
             {
                 BatteryFlag = 128
             };
@@ -2564,7 +2564,7 @@ public class HardwareMonitorTests
             resNoBat.Item1.Should().Be(0f);
 
             // 1c. Returns active battery: 85%, charging, AC online
-            HardwareMonitor.SystemPowerStatusOverride = () => new LocalTelemetry.Core.Hardware.NativeMethods.SystemPowerStatus
+            HardwareMonitor.SystemPowerStatusOverride = () => new NativeMethods.SystemPowerStatus
             {
                 BatteryFlag = 8,
                 BatteryLifePercent = 85,
@@ -2766,8 +2766,8 @@ public class HardwareMonitorTests
         }
 
         // 6. PawnIO installation retry branches
-        var pawnIoMock1 = Substitute.For<LocalTelemetry.Core.Hardware.PawnIo.IPawnIoManager>();
-        var transportMock = Substitute.For<LocalTelemetry.Core.Hardware.PawnIo.IPawnIoTransport>();
+        var pawnIoMock1 = Substitute.For<IPawnIoManager>();
+        var transportMock = Substitute.For<IPawnIoTransport>();
         transportMock.Execute(Arg.Any<string>(), Arg.Any<ulong[]>(), Arg.Any<int>()).Returns([]);
         int createCalls = 0;
         pawnIoMock1.TryCreate().Returns(_ =>
@@ -2784,8 +2784,8 @@ public class HardwareMonitorTests
             initPawn?.Invoke(monitorRetry1, null);
         }
 
-        var pawnIoMock2 = Substitute.For<LocalTelemetry.Core.Hardware.PawnIo.IPawnIoManager>();
-        pawnIoMock2.TryCreate().Returns((LocalTelemetry.Core.Hardware.PawnIo.IPawnIoTransport?)null);
+        var pawnIoMock2 = Substitute.For<IPawnIoManager>();
+        pawnIoMock2.TryCreate().Returns((IPawnIoTransport?)null);
         pawnIoMock2.TryInstall().Returns(true);
         pawnIoMock2.StartDriverService().Returns(true);
 
@@ -2832,5 +2832,64 @@ public class HardwareMonitorTests
         typeof(HardwareMonitor).GetField("_wddmGpu", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(monitor, wddmGpu);
         var actWddmUsage = () => (float)mReadGpuPct.Invoke(monitor, [null])!;
         actWddmUsage.Should().NotThrow();
+    }
+
+    [Fact]
+    public void HardwareMonitor_OnSessionLockStateChanged_PausesAndResumesPolling()
+    {
+        var cfg = new AppSettings();
+        var sysInfoMock = Substitute.For<ISystemInfo>();
+        using var monitor = new HardwareMonitor(cfg, sysInfoMock, null);
+
+        var onLockChanged = typeof(HardwareMonitor).GetMethod("OnSessionLockStateChanged", BindingFlags.NonPublic | BindingFlags.Instance);
+        onLockChanged.Should().NotBeNull();
+
+        // Lock session
+        onLockChanged.Invoke(monitor, [true]);
+        var isLocked = (bool)typeof(HardwareMonitor).GetField("_isSessionLocked", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(monitor)!;
+        var isSuspended = (bool)typeof(HardwareMonitor).GetField("_isSuspended", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(monitor)!;
+        isLocked.Should().BeTrue();
+        isSuspended.Should().BeTrue();
+
+        // Unlock session
+        onLockChanged.Invoke(monitor, [false]);
+        isLocked = (bool)typeof(HardwareMonitor).GetField("_isSessionLocked", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(monitor)!;
+        isSuspended = (bool)typeof(HardwareMonitor).GetField("_isSuspended", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(monitor)!;
+        isLocked.Should().BeFalse();
+        isSuspended.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task HardwareMonitor_OnPowerResumed_WhenLocked_DefersWarmUpUntilUnlock()
+    {
+        var cfg = new AppSettings();
+        var sysInfoMock = Substitute.For<ISystemInfo>();
+        using var monitor = new HardwareMonitor(cfg, sysInfoMock, null);
+
+        var prevDelay = HardwareMonitor.PowerResumeWarmUpDelayMs;
+        HardwareMonitor.PowerResumeWarmUpDelayMs = 10;
+        try
+        {
+            var onLockChanged = typeof(HardwareMonitor).GetMethod("OnSessionLockStateChanged", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var onResumed = typeof(HardwareMonitor).GetMethod("OnPowerResumed", BindingFlags.NonPublic | BindingFlags.Instance)!;
+
+            // Session is locked before wake
+            onLockChanged.Invoke(monitor, [true]);
+
+            onResumed.Invoke(monitor, null);
+            await Task.Delay(50);
+
+            var needsWarmUp = (bool)typeof(HardwareMonitor).GetField("_needsPowerResumeWarmUp", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(monitor)!;
+            needsWarmUp.Should().BeTrue();
+
+            // When unlocked, deferred warm-up triggers and clears flag
+            onLockChanged.Invoke(monitor, [false]);
+            needsWarmUp = (bool)typeof(HardwareMonitor).GetField("_needsPowerResumeWarmUp", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(monitor)!;
+            needsWarmUp.Should().BeFalse();
+        }
+        finally
+        {
+            HardwareMonitor.PowerResumeWarmUpDelayMs = prevDelay;
+        }
     }
 }

@@ -14,6 +14,8 @@ public static class BrandColorDefaults
     private const string SkHynixBrand = "SK Hynix";
     private const string WesternDigitalBrand = "Western Digital";
     private const string GSkillBrand = "G Skill";
+    private const string LgEnergyBrand = "LG Energy";
+    private const string CrimsonRedDefaultColor = "#ED1C24";
     private const string CyanDefaultColor = "#00E5FF";
     private const string LightBlueDefaultColor = "#88CCFF";
 
@@ -21,8 +23,8 @@ public static class BrandColorDefaults
     private static readonly Dictionary<string, string> _brand = new(StringComparer.OrdinalIgnoreCase)
     {
         // Processors & Major Silicon
-        [IntelBrand] = "#0068B5",            // Intel Blue (2020 Rebrand)
-        ["AMD"] = "#ED1C24",              // AMD Red
+        [IntelBrand] = "#0068B5",         // Intel Blue (2020 Rebrand)
+        ["AMD"] = CrimsonRedDefaultColor,   // AMD Red
         ["NVIDIA"] = "#76B900",           // NVIDIA Green
         ["Qualcomm"] = "#3253DC",         // Qualcomm Blue
         ["Atheros"] = "#3253DC",          // Acquired by Qualcomm
@@ -35,19 +37,19 @@ public static class BrandColorDefaults
         ["ASIX"] = "#0066A1",             // ASIX Blue
 
         // Memory & Storage
-        [SamsungBrand] = "#1428A0",          // Samsung Blue
+        [SamsungBrand] = "#1428A0",       // Samsung Blue
         ["Micron"] = "#0033A0",           // Micron Corporate Blue
         ["Crucial"] = "#0068FF",          // Crucial Blue Ribbon
         ["Ballistix"] = "#E31937",        // Historical Ballistix Red
-        [SkHynixBrand] = "#EA002C",         // SK Group Red
-        [WesternDigitalBrand] = "#005195",  // WD Blue
+        [SkHynixBrand] = "#EA002C",       // SK Group Red
+        [WesternDigitalBrand] = "#005195",// WD Blue
         ["SanDisk"] = "#E10600",          // SanDisk Red
         ["HGST"] = "#0072CE",             // WD/HGST Blue
         ["Seagate"] = "#6EBE49",          // Seagate Green
         ["Toshiba"] = "#FF0000",          // Toshiba Red
         ["Kioxia"] = "#00A4E4",           // Kioxia Cyan
         ["Corsair"] = "#FFE500",          // Corsair Gaming Yellow
-        [GSkillBrand] = "#ED1C23",          // Torch Red
+        [GSkillBrand] = "#ED1C23",        // Torch Red
         ["Kingston"] = "#ED1A3B",         // Kingston Rex Red
         ["Patriot"] = "#DA291C",          // Patriot Red
         ["PNY"] = "#003087",              // PNY Blue
@@ -60,7 +62,7 @@ public static class BrandColorDefaults
 
         // Motherboards, OEMs & Peripherals
         ["ASUS"] = "#006CE1",             // ASUS Science Blue
-        ["MSI"] = "#ED1C24",              // MSI Red
+        ["MSI"] = CrimsonRedDefaultColor,   // MSI Red
         ["Gigabyte"] = "#005B9A",         // Gigabyte Blue
         ["Dell"] = "#0076CE",             // Dell Blue
         ["HP"] = "#0096D6",               // HP Blue
@@ -77,12 +79,12 @@ public static class BrandColorDefaults
         ["Sunwoda"] = "#005691",          // Sunwoda Blue
         ["Simplo"] = "#009087",           // Simplo Teal
         ["Dynapack"] = "#E2001A",         // Dynapack Red
-        ["BYD"] = "#ED1C24",              // BYD Red
-        ["LG Energy"] = "#E6007E",        // LG Pink
+        ["BYD"] = CrimsonRedDefaultColor,   // BYD Red
+        [LgEnergyBrand] = "#E6007E",      // LG Pink
         ["Panasonic"] = "#004085",        // Panasonic Blue
         ["Celxpert"] = "#005BAA",         // Celxpert Blue
         ["Coslight"] = "#003399",         // Coslight Blue
-        ["Murata"] = "#ED1C24",           // Murata Red
+        ["Murata"] = CrimsonRedDefaultColor,// Murata Red
     };
 
     // Category brand lists
@@ -123,7 +125,7 @@ public static class BrandColorDefaults
         ],
         ["battery"] =
         [
-            "Sunwoda", "Simplo", "Dynapack", "BYD", "LG Energy", "Panasonic",
+            "Sunwoda", "Simplo", "Dynapack", "BYD", LgEnergyBrand, "Panasonic",
             "Celxpert", "Coslight", SamsungBrand, "Murata",
         ],
     };
@@ -142,9 +144,9 @@ public static class BrandColorDefaults
         ["Hewlett"] = "HP",
         ["SMP"] = "Simplo",
         ["CEL"] = "Celxpert",
-        ["LGC"] = "LG Energy",
-        ["LG Chem"] = "LG Energy",
-        ["LG"] = "LG Energy",
+        ["LGC"] = LgEnergyBrand,
+        ["LG Chem"] = LgEnergyBrand,
+        ["LG"] = LgEnergyBrand,
         ["SWD"] = "Sunwoda",
         ["SEC"] = SamsungBrand,
         ["DP"] = "Dynapack",

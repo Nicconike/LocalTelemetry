@@ -1,4 +1,3 @@
-using System.IO;
 using System.Reflection;
 using FluentAssertions;
 using Xunit;
@@ -75,7 +74,7 @@ public class NotifierLogTests
 
         var throwingStream = new ThrowingTestStream();
         var sw = new StreamWriter(throwingStream);
-        field!.SetValue(null, sw);
+        field.SetValue(null, sw);
 
         var act = () => NotifierLog.Shutdown();
         act.Should().NotThrow();
@@ -145,7 +144,7 @@ public class NotifierLogTests
 
         var throwingStream = new ThrowOnWriteOnlyStream();
         var sw = new StreamWriter(throwingStream) { AutoFlush = true };
-        field!.SetValue(null, sw);
+        field.SetValue(null, sw);
 
         try
         {

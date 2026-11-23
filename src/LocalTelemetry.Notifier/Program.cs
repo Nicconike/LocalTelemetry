@@ -1,6 +1,6 @@
 using System.Diagnostics;
-using System.IO;
 using System.IO.Pipes;
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text;
 using System.Text.Json;
@@ -10,6 +10,22 @@ namespace LocalTelemetry.Notifier;
 [SupportedOSPlatform("windows")]
 internal static class Program
 {
+    [DllImport("psapi.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EmptyWorkingSet(IntPtr hProcess);
+
+    internal static void TrimWorkingSet()
+    {
+        try
+        {
+            EmptyWorkingSet(Process.GetCurrentProcess().Handle);
+        }
+        catch (Exception ex)
+        {
+            NotifierLog.Debug($"TrimWorkingSet warning: {ex.Message}");
+        }
+    }
+
     internal static string PipeName { get; set; } = "LocalTelemetryNotifier";
 
     internal static int ReconnectDelayMs { get; set; } = 1000;
@@ -23,11 +39,7 @@ internal static class Program
         // otherwise toast forms are bitmap-stretched after a display scale change.
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
 
-        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
-        {
-            if (e.ExceptionObject is Exception ex)
-                NotifierLog.Error(ex, "Unhandled AppDomain exception in Notifier process");
-        };
+        AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
 
         string logPath = ResolveLogPath();
         NotifierLog.Init(logPath);
@@ -54,6 +66,7 @@ internal static class Program
         {
             _ = Task.Run(() => RunPipeServerAsync(shutdownCts, (title, body) =>
                 hiddenForm.BeginInvoke(() => ShowToast(title, body))));
+            TrimWorkingSet();
         };
         hiddenForm.FormClosing += (_, _) => NotifierLog.Info("Message pump exiting");
 
@@ -105,7 +118,8 @@ internal static class Program
         string dataDir = File.Exists(markerFile)
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LocalTelemetry")
             : exeDir;
-        return Path.Combine(dataDir, "lt_notifier.log");
+        string logsDir = Path.Combine(dataDir, "logs");
+        return Path.Combine(logsDir, "lt_notifier.log");
     }
 
     internal static async Task MonitorParentProcessAsync(Func<Task> waitForParentExit, CancellationTokenSource cts)
@@ -232,6 +246,14 @@ internal static class Program
         catch (Exception ex)
         {
             NotifierLog.Error(ex, "Failed to display toast notification");
+        }
+    }
+
+    internal static void OnUnhandledException(object? sender, UnhandledExceptionEventArgs e)
+    {
+        if (e.ExceptionObject is Exception ex)
+        {
+            NotifierLog.Error(ex, "Unhandled AppDomain exception in Notifier process");
         }
     }
 

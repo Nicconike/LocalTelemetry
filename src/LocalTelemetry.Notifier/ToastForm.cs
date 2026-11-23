@@ -145,6 +145,12 @@ internal sealed class ToastForm : Form
     }
 
     // Disposal
+    protected override void OnFormClosed(FormClosedEventArgs e)
+    {
+        base.OnFormClosed(e);
+        Program.TrimWorkingSet();
+    }
+
     protected override void Dispose(bool disposing)
     {
         if (disposing)

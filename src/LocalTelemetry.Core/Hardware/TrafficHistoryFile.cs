@@ -7,7 +7,7 @@ public sealed class TrafficHistoryFile
 {
     private readonly string _filePath;
     private List<DailyRecord> _records = [];
-    private readonly System.Threading.Lock _lock = new();
+    private readonly Lock _lock = new();
     private bool _dirtySinceLastSave;
 
     public string FilePath => _filePath;

@@ -20,7 +20,7 @@ Launch LocalTelemetry using your desktop shortcut or by running `LocalTelemetry.
 
 By default on a fresh installation, the taskbar overlay is hidden until enabled. You can turn it on in two ways:
 
-1. **Via Settings**: Navigate to **Overlay** in the settings dashboard and toggle **Show Overlay** on.
+1. **Via Settings**: Navigate to **Overlay** in Settings and toggle **Show Overlay** on.
 2. **Via System Tray**: Right-click the **System Tray Icon** and click **Show Overlay**.
 
 ![System Tray Context Menu](/images/tray-menu-show.png)
@@ -28,12 +28,12 @@ By default on a fresh installation, the taskbar overlay is hidden until enabled.
 
 Once enabled, the overlay immediately anchors onto your Windows taskbar:
 
-![Default Taskbar Overlay](/images/overlay-default.png)
-*Default out-of-the-box taskbar overlay displaying 5 dual-row columns with automatic hardware brand colors applied and some metrics configured with custom colors.*
+![Default Taskbar Overlay](/videos/default-overlay.gif)
+*Default out-of-the-box taskbar overlay displaying live telemetry with automatic hardware brand colors applied.*
 
 ## :settings: Configuring Key Preferences
 
-Explore the key configuration tabs in the settings dashboard to tailor LocalTelemetry to your setup:
+Explore the key configuration tabs in Settings to tailor LocalTelemetry to your setup:
 
 ### :layout-dashboard: Customize Displayed Metrics (Layout vs Monitoring)
 
@@ -48,7 +48,7 @@ Explore the key configuration tabs in the settings dashboard to tailor LocalTele
 
 ### :paintbrush: Personalize Colors & Themes
 
-- **Window Themes**: Switch between curated dark and light theme presets for the settings dashboard, or click **Reset to Default Theme**.
+- **Window Themes**: Switch between curated dark and light theme presets for the Settings window, or click **Reset to Default Theme**.
 - **Metric & Group Colors**: Customize individual metric colors or entire component palettes, or click **Reset All to Defaults** to re-apply detected hardware vendor brand colors.
 
 ### :bell-check: Configure Threshold Warnings

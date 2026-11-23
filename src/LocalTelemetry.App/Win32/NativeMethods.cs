@@ -92,24 +92,23 @@ internal static class NativeMethods
     public const uint GA_ROOTOWNER = 3;
 
     // Structs
-#pragma warning disable S101 // Win32 SDK P/Invoke struct naming convention matches Windows API definitions
     /// <summary>Contains information about a display monitor.</summary>
     [StructLayout(LayoutKind.Sequential)]
-    public struct MONITORINFO
+    public struct MonitorInfo
     {
         public uint cbSize;
-        public RECT rcMonitor;
-        public RECT rcWork;
+        public Rect rcMonitor;
+        public Rect rcWork;
         public uint dwFlags;
     }
 
     /// <summary>Contains painting information for a window client area.</summary>
     [StructLayout(LayoutKind.Sequential)]
-    public struct PAINTSTRUCT
+    public struct PaintStruct
     {
         public IntPtr hdc;
         public int fErase;
-        public RECT rcPaint;
+        public Rect rcPaint;
         public int fRestore, fIncUpdate;
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)]
         public byte[] rgbReserved;
@@ -117,15 +116,15 @@ internal static class NativeMethods
 
     /// <summary>Defines the x- and y-coordinates of a point.</summary>
     [StructLayout(LayoutKind.Sequential)]
-    public struct POINT { public int X, Y; }
+    public struct Point { public int X, Y; }
 
     /// <summary>Defines the width and height of a rectangle.</summary>
     [StructLayout(LayoutKind.Sequential)]
-    public struct SIZE { public int cx, cy; }
+    public struct Size { public int cx, cy; }
 
     /// <summary>Defines the coordinates of a rectangle.</summary>
     [StructLayout(LayoutKind.Sequential)]
-    public struct RECT
+    public struct Rect
     {
         public int Left, Top, Right, Bottom;
         public int Width => Right - Left;
@@ -134,15 +133,14 @@ internal static class NativeMethods
 
     /// <summary>Contains taskbar AppBar message information.</summary>
     [StructLayout(LayoutKind.Sequential)]
-    public struct APPBARDATA
+    public struct AppBarData
     {
         public uint cbSize;
         public IntPtr hWnd;
         public uint uCallbackMessage, uEdge;
-        public RECT rc;
+        public Rect rc;
         public IntPtr lParam;
     }
-#pragma warning restore S101
 
     // P/Invoke Method Declarations
 
@@ -157,7 +155,7 @@ internal static class NativeMethods
     /// <summary>Retrieves information about a display monitor.</summary>
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
-    public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+    public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MonitorInfo lpmi);
 
     /// <summary>Retrieves a system metric value.</summary>
     [DllImport("user32.dll")]
@@ -165,12 +163,12 @@ internal static class NativeMethods
 
     /// <summary>Begins painting in the specified window.</summary>
     [DllImport("user32.dll")]
-    public static extern IntPtr BeginPaint(IntPtr hWnd, ref PAINTSTRUCT lpPaint);
+    public static extern IntPtr BeginPaint(IntPtr hWnd, ref PaintStruct lpPaint);
 
     /// <summary>Ends painting in the specified window.</summary>
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
-    public static extern bool EndPaint(IntPtr hWnd, ref PAINTSTRUCT lpPaint);
+    public static extern bool EndPaint(IntPtr hWnd, ref PaintStruct lpPaint);
 
     /// <summary>Registers a new window message guaranteed to be unique throughout the system.</summary>
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
@@ -190,11 +188,11 @@ internal static class NativeMethods
 
     /// <summary>Retrieves the bounding rectangle of a window.</summary>
     [DllImport("user32.dll")]
-    public static extern bool GetWindowRect(IntPtr hWnd, out RECT r);
+    public static extern bool GetWindowRect(IntPtr hWnd, out Rect r);
 
     /// <summary>Retrieves the client-area rectangle of a window.</summary>
     [DllImport("user32.dll")]
-    public static extern bool GetClientRect(IntPtr hWnd, out RECT r);
+    public static extern bool GetClientRect(IntPtr hWnd, out Rect r);
 
     /// <summary>Retrieves a window style long value.</summary>
     [DllImport("user32.dll")]
@@ -224,7 +222,7 @@ internal static class NativeMethods
 
     /// <summary>Retrieves a handle to the window that contains the specified point.</summary>
     [DllImport("user32.dll")]
-    public static extern IntPtr WindowFromPoint(POINT point);
+    public static extern IntPtr WindowFromPoint(Point point);
 
     /// <summary>Retrieves the handle to the ancestor of the specified window.</summary>
     [DllImport("user32.dll")]
@@ -236,8 +234,8 @@ internal static class NativeMethods
     public static extern bool IsWindowVisible(IntPtr hWnd);
 
     /// <summary>Retrieves the class name of the specified window.</summary>
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    public static extern int GetClassName(IntPtr hWnd, char[] lpClassName, int nMaxCount);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern int GetClassName(IntPtr hWnd, [Out] char[] lpClassName, int nMaxCount);
 
     /// <summary>Changes window position, size and Z-order.</summary>
     [DllImport("user32.dll", SetLastError = true)]
@@ -257,7 +255,7 @@ internal static class NativeMethods
 
     /// <summary>Sends an AppBar message to Windows Explorer.</summary>
     [DllImport("shell32.dll")]
-    public static extern IntPtr SHAppBarMessage(uint msg, ref APPBARDATA data);
+    public static extern IntPtr SHAppBarMessage(uint msg, ref AppBarData data);
 
     /// <summary>Retrieves thread and process ID for a window.</summary>
     [DllImport("user32.dll")]
@@ -266,7 +264,7 @@ internal static class NativeMethods
     /// <summary>Converts screen coordinates to client coordinates.</summary>
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
-    public static extern bool ScreenToClient(IntPtr hWnd, ref POINT lpPoint);
+    public static extern bool ScreenToClient(IntPtr hWnd, ref Point lpPoint);
 
     /// <summary>Retrieves the DPI value for a window.</summary>
     [DllImport("user32.dll")]
@@ -339,17 +337,15 @@ internal static class NativeMethods
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool UnhookWindowsHookEx(IntPtr hhk);
 
-#pragma warning disable S101 // Win32 SDK P/Invoke struct naming convention matches Windows API definitions
     [StructLayout(LayoutKind.Sequential)]
-    public struct MSLLHOOKSTRUCT
+    public struct MsllHookStruct
     {
-        public POINT pt;
+        public Point pt;
         public uint mouseData;
         public uint flags;
         public uint time;
         public IntPtr dwExtraInfo;
     }
-#pragma warning restore S101
 
     [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
     public static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
@@ -362,7 +358,7 @@ internal static class NativeMethods
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
-    public static extern bool ClientToScreen(IntPtr hWnd, ref POINT lpPoint);
+    public static extern bool ClientToScreen(IntPtr hWnd, ref Point lpPoint);
 
     [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
     public static extern IntPtr GetModuleHandle(string? lpModuleName);
@@ -427,6 +423,50 @@ internal static class NativeMethods
     [DllImport("psapi.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool EmptyWorkingSet(IntPtr hProcess);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ProcessMemoryCountersEx2
+    {
+        public uint cb;
+        public uint PageFaultCount;
+        public UIntPtr PeakWorkingSetSize;
+        public UIntPtr WorkingSetSize;
+        public UIntPtr QuotaPeakPagedPoolUsage;
+        public UIntPtr QuotaPagedPoolUsage;
+        public UIntPtr QuotaPeakNonPagedPoolUsage;
+        public UIntPtr QuotaNonPagedPoolUsage;
+        public UIntPtr PagefileUsage;
+        public UIntPtr PeakPagefileUsage;
+        public UIntPtr PrivateUsage;
+        public UIntPtr PrivateWorkingSetSize;
+        public ulong SharedCommitUsage;
+    }
+
+    [DllImport("psapi.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool GetProcessMemoryInfo(
+        IntPtr hProcess,
+        ref ProcessMemoryCountersEx2 counters,
+        uint size);
+
+    public static long GetPrivateWorkingSetBytes(IntPtr hProcess)
+    {
+        if (hProcess == IntPtr.Zero) return 0;
+        try
+        {
+            var counters = new ProcessMemoryCountersEx2();
+            counters.cb = (uint)Marshal.SizeOf<ProcessMemoryCountersEx2>();
+            if (GetProcessMemoryInfo(hProcess, ref counters, counters.cb) && counters.PrivateWorkingSetSize != UIntPtr.Zero)
+            {
+                return (long)counters.PrivateWorkingSetSize.ToUInt64();
+            }
+        }
+        catch (Exception ex)
+        {
+            Core.Diagnostics.Log.Debug(ex, "Failed to read ProcessMemoryCountersEx2");
+        }
+        return 0;
+    }
 
     [DllImport("dwmapi.dll", PreserveSig = true)]
     public static extern int DwmSetWindowAttribute(IntPtr hwnd, int dwAttribute, ref int pvAttribute, int cbAttribute);

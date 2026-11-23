@@ -46,6 +46,21 @@ Write-Host "Downloading PawnIO driver setup..."
 $pawnUrl = "https://github.com/namazso/PawnIO.Setup/releases/latest/download/PawnIO_setup.exe"
 Invoke-WebRequest -Uri $pawnUrl -OutFile "./publish/PawnIO_setup.exe"
 
+# Ensure WebView2Loader.dll native interop is present in publish directory
+$wv2Paths = @(
+    "src/LocalTelemetry.App/bin/Release/net10.0-windows10.0.19041.0/win-x64/WebView2Loader.dll",
+    "src/LocalTelemetry.App/bin/Debug/net10.0-windows10.0.19041.0/win-x64/WebView2Loader.dll"
+)
+foreach ($wv2 in $wv2Paths) {
+    if (Test-Path $wv2) {
+        Copy-Item $wv2 -Destination "./publish/WebView2Loader.dll" -Force
+        $nativeDir = "./publish/runtimes/win-x64/native"
+        if (-not (Test-Path $nativeDir)) { New-Item -ItemType Directory -Path $nativeDir -Force | Out-Null }
+        Copy-Item $wv2 -Destination "$nativeDir/WebView2Loader.dll" -Force
+        break
+    }
+}
+
 # 4. Locate ISCC.exe and Compile Inno Setup Windows Installer
 Write-Host "Compiling Inno Setup Windows installer with Inno Setup 7..."
 $inno7Paths = @(

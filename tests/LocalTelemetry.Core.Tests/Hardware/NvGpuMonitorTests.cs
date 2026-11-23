@@ -261,6 +261,8 @@ public class NvGpuMonitorTests
         monitor.Query().Should().BeNull();
         monitor.IsAvailable.Should().BeFalse();
         nativeMock.Received(1).Shutdown();
+        nativeMock.DidNotReceive().GetClockInfo(Arg.Any<IntPtr>(), Arg.Any<int>(), out Arg.Any<uint>());
+        nativeMock.DidNotReceive().GetPowerUsage(Arg.Any<IntPtr>(), out Arg.Any<uint>());
     }
 
     [Fact]

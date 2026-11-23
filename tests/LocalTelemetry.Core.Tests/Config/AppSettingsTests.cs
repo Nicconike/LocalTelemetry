@@ -289,7 +289,7 @@ public sealed class AppSettingsTests : IDisposable
             FollowWindowsTheme = false,
             UserCustomizedMetricColors = ["cpu_pct"],
             UserCustomizedGroupColors = ["cpu"],
-            Row1 = ["cpu_pct", "gpu_pct"]
+            Columns = [["cpu_pct", "gpu_pct"]]
         };
 
         overlay.Visible.Should().BeTrue();
@@ -309,7 +309,8 @@ public sealed class AppSettingsTests : IDisposable
         overlay.FollowWindowsTheme.Should().BeFalse();
         overlay.UserCustomizedMetricColors.Should().Contain("cpu_pct");
         overlay.UserCustomizedGroupColors.Should().Contain("cpu");
-        overlay.Row1.Should().HaveCount(2);
+        overlay.Columns.Should().HaveCount(1);
+        overlay.Columns[0].Should().HaveCount(2);
         appSettings.Overlay = overlay;
         appSettings.Overlay.Should().BeSameAs(overlay);
 
@@ -438,5 +439,22 @@ public sealed class AppSettingsTests : IDisposable
         {
             UpdateConfig.DefaultIncludePrereleases = originalDefault;
         }
+    }
+
+    [Fact]
+    public void OverlayConfig_MultiDisplay_DefaultsAndSerialization()
+    {
+        var cfg = new OverlayConfig();
+        cfg.DisplayMode.Should().Be("primary");
+        cfg.EnabledDisplays.Should().ContainSingle().Which.Should().Be("primary");
+
+        var settings = new AppSettings();
+        settings.Overlay.DisplayMode = "custom";
+        settings.Overlay.EnabledDisplays = ["primary", "display_2", "display_3"];
+        settings.Save();
+
+        var loaded = AppSettings.Load();
+        loaded.Overlay.DisplayMode.Should().Be("custom");
+        loaded.Overlay.EnabledDisplays.Should().BeEquivalentTo("primary", "display_2", "display_3");
     }
 }

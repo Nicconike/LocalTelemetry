@@ -203,13 +203,16 @@ The mode is determined at launch by checking for the `app.mode` marker file in t
 | `userCustomizedMetricColors` | `array` | Metric ID strings | `[]` | Metric IDs manually recolored by the user; preserved during vendor color updates. |
 | `userCustomizedGroupColors` | `array` | Group key strings | `[]` | Group keys manually recolored by the user. |
 | `layoutPreset` | `string` | `"default"`, `"gaming"`, `"compact"`, `"micro"`, `"thermals"`, `"workstation"`, `"network"`, `"full"`, `"custom"` | `"default"` | Active overlay arrangement preset. |
-| `row1` | `array` | Metric ID strings | 10 default IDs | Column metric layout (even indices = top, odd indices = bottom). |
+| `columns` | `array` | 2D array of Metric ID strings (`string[][]`) | 5 default column pairs | Column list where each column contains 1 or 2 metric IDs (top and optional bottom row). |
+| `displayMode` | `string` | `"primary"`, `"all"`, `"secondary"`, `"custom"` | `"primary"` | Target display mode for overlay instances. |
+| `enabledDisplays` | `array` | Display ID strings | `["primary"]` | Enabled display identifiers when `displayMode` is `"custom"`. |
 
 > [!NOTE] Runtime DTO Augmentation
 > The settings serialization pipeline (`SettingsDtoMapping.ToDto`) augments the client DTO with runtime taskbar properties:
 >
 > - `taskbarSpaceConstrained`: `boolean` (`true` when the available taskbar slot is narrower than the overlay width).
 > - `availableSlotWidth`: `integer` (measured width of the available taskbar slot in pixels).
+> - `detectedDisplays`: `array` of `DetectedDisplayDto` (`id`, `name`, `isPrimary`, `hasTaskbar`) for display selection.
 
 ---
 

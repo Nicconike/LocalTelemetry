@@ -6,11 +6,9 @@ Answers to frequently asked questions, configuration solutions, and diagnostic s
 
 ### :shield: Why does LocalTelemetry require Administrator privileges?
 
-LocalTelemetry reads hardware telemetry directly from processor registers (Intel MSRs, AMD Ryzen SMU) and storage controllers. Windows restricts access to kernel-level hardware registers to administrative accounts to protect system security and kernel integrity.
+LocalTelemetry requires administrative privileges to load the `PawnIO` kernel driver. The driver reads hardware telemetry directly from CPU registers (Intel MSRs, AMD SMU) and storage controllers. Standard Windows user accounts cannot access these hardware interfaces.
 
-### :shield-alert: Can LocalTelemetry run without Administrator privileges?
-
-No. LocalTelemetry requires administrative privileges to load and communicate with the `PawnIO` kernel driver. Kernel driver access is necessary to read CPU package temperatures, MSR clock frequencies, and RAPL package power. If the Windows UAC elevation prompt is declined on launch, LocalTelemetry will display an elevation notice and exit.
+If you decline the UAC elevation prompt on launch, LocalTelemetry displays an elevation notice and exits. For a breakdown of elevated versus unelevated capabilities, see [Administrator Rights & UAC Explained](installation.md#user-shield-administrator-rights--uac-explained).
 
 ### :app-window: Why doesn't the taskbar overlay appear immediately after installation?
 
@@ -24,8 +22,9 @@ On a fresh installation, LocalTelemetry launches with the Settings window open a
 No. LocalTelemetry is optimized for minimal background resource consumption:
 
 - Hardware polling occurs on asynchronous worker threads using non-blocking Win32 and vendor APIs.
-- When minimized to the taskbar and system tray with settings closed, memory usage remains around ~35-50 MB RAM.
-- When the Svelte 5 settings panel (Microsoft WebView2) is closed, background rendering suspends and memory remains dynamic (~40 to 100-150 MB), consuming zero GPU resources while hidden.
+- When running in the background (taskbar overlay only), memory usage is **~15–20 MB** private RAM in Windows Task Manager.
+- When the Settings window is open, Microsoft WebView2 (Chromium engine) loads the configuration dashboard, using **~40–60 MB** total private RAM across processes.
+- Closing the Settings window disposes WebView2 and trims memory back to baseline (**~15–20 MB**).
 
 ### :monitor: Is LocalTelemetry compatible with Windows 11?
 
@@ -81,10 +80,9 @@ LocalTelemetry uses an out-of-process notifier (`LocalTelemetry.Notifier.exe`) t
 
 ### :move: Overlay placement, clipping, or auto-hide issues
 
-- **Native Child Window Taskbar Embedding**: LocalTelemetry embeds the overlay directly into the Windows taskband as a native child window. If taskbar placement fails or the taskbar restarts, the integrated watchdog automatically re-embeds the window without user intervention.
-- **Taskbar Space Constrained Warning**: If your taskbar has many open applications or high display scaling, LocalTelemetry detects that the available taskbar slot is narrower than the overlay. The Overlay settings tab shows a warning banner with a **Dismiss** button and clamps the overlay to prevent overlap. When space constraints ease, the banner auto-recovers. To resolve the constraint permanently, reduce the number of enabled metrics in **Layout**, reduce the **Scale** slider, or click **Open Taskbar Settings** in the banner to turn off Windows Widgets.
-- **Adjust Edge Offset**: If taskbar icons overlap the overlay, go to **Settings &rarr; Overlay** and adjust **Offset from Edge** (`0px` to `200px`) or switch **Position in taskbar** between `Left side` and `Right side`.
 - **Explorer Restart Watchdog**: If the Windows taskbar crashes or restarts, an integrated background watchdog checks the taskbar handle every 5 seconds and automatically re-embeds the overlay. If it does not reappear immediately, right-click the system tray icon and choose **Show Overlay**.
+- **Taskbar Space Constrained Warning**: If the available taskbar slot is narrower than the overlay, the Overlay settings tab displays a warning banner and clamps the overlay. To resolve the constraint, reduce enabled metrics in **Layout**, lower the **Scale** slider, or turn off Windows Widgets in Windows Taskbar Settings (`ms-settings:taskbar`).
+- **Adjust Edge Offset**: If taskbar icons overlap the overlay, open **Settings &rarr; Overlay** and adjust **Offset from Edge** (`0px` to `200px`) or toggle **Position in taskbar** between `Left side` and `Right side`.
 
 ### :file-exclamation-point: "Start with Windows" does not launch after moving folders (Portable Mode)
 

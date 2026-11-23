@@ -393,8 +393,8 @@ public class AlertServiceTests
         string tempPath = Path.Combine(Path.GetTempPath(), $"traffic_alert_test_{Guid.NewGuid():N}.dat");
         try
         {
-            var historyFile = new LocalTelemetry.Core.Hardware.TrafficHistoryFile(tempPath);
-            using var netLogger = new LocalTelemetry.Core.Hardware.NetUsageLogger(cfg, historyFile);
+            var historyFile = new Core.Hardware.TrafficHistoryFile(tempPath);
+            using var netLogger = new Core.Hardware.NetUsageLogger(cfg, historyFile);
 
             var embedder = new TaskbarEmbedder(cfg);
             var overlay = new TaskbarOverlay(cfg, embedder);

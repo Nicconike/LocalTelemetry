@@ -11,7 +11,8 @@ namespace LocalTelemetry.Core.Diagnostics;
 /// </summary>
 public static class Log
 {
-    private static readonly System.Threading.Lock _lock = new();
+    private static readonly Lock _lock = new();
+    private static readonly Mutex? _crossProcessMutex = CreateCrossProcessMutex();
     private static StreamWriter? _sysWriter;
     private static StreamWriter? _metricWriter;
     private static string? _systemLogPath;
@@ -21,6 +22,67 @@ public static class Log
     private static DateOnly _currentDate = DateOnly.FromDateTime(DateTime.Today);
     private static bool _sessionEnded;
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _loggedMessages = new();
+
+    private static Mutex? CreateCrossProcessMutex()
+    {
+        try
+        {
+            string name = OperatingSystem.IsWindows()
+                ? @"Local\LocalTelemetry_SystemLog_Mutex"
+                : "LocalTelemetry_SystemLog_Mutex";
+            return new Mutex(false, name);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Log] Failed to create cross-process mutex: {ex}");
+            return null;
+        }
+    }
+
+    private static void WriteLineAtomic(StreamWriter writer, string text)
+    {
+        try
+        {
+            lock (_lock)
+            {
+                bool hasMutex = false;
+                if (_crossProcessMutex is not null)
+                {
+                    try
+                    {
+                        hasMutex = _crossProcessMutex.WaitOne(500);
+                    }
+                    catch (AbandonedMutexException)
+                    {
+                        hasMutex = true;
+                    }
+                }
+
+                try
+                {
+                    if (writer.BaseStream.CanSeek)
+                    {
+                        writer.Flush();
+                        writer.BaseStream.Seek(0, SeekOrigin.End);
+                    }
+                    writer.WriteLine(text);
+                    writer.Flush();
+                }
+                finally
+                {
+                    if (hasMutex)
+                    {
+                        _crossProcessMutex!.ReleaseMutex();
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            LastWriteError = ex;
+            System.Diagnostics.Debug.WriteLine($"[Log.WriteLineAtomic] Write failure: {ex}");
+        }
+    }
 
     /// <summary>Resets the session deduplication cache. Primarily used for unit testing.</summary>
     public static void ResetDeduplication() => _loggedMessages.Clear();
@@ -57,17 +119,34 @@ public static class Log
             _sessionEnded = false;
             _loggedMessages.Clear();
 
-            RotateSystemLog(systemLogPath);
+            bool hasMutex = false;
+            if (_crossProcessMutex is not null)
+            {
+                try { hasMutex = _crossProcessMutex.WaitOne(1000); }
+                catch (AbandonedMutexException) { hasMutex = true; }
+            }
+
             try
             {
-                var fs = new FileStream(systemLogPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
-                _sysWriter = new StreamWriter(fs) { AutoFlush = true };
+                RotateSystemLog(systemLogPath);
+                try
+                {
+                    var fs = new FileStream(systemLogPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
+                    _sysWriter = new StreamWriter(fs) { AutoFlush = true };
+                }
+                catch (Exception ex)
+                {
+                    LastInitError = ex;
+                    System.Diagnostics.Debug.WriteLine($"[Log.Init] Failed to open system log '{systemLogPath}': {ex}");
+                    _sysWriter = null;
+                }
             }
-            catch (Exception ex)
+            finally
             {
-                LastInitError = ex;
-                System.Diagnostics.Debug.WriteLine($"[Log.Init] Failed to open system log '{systemLogPath}': {ex}");
-                _sysWriter = null;
+                if (hasMutex)
+                {
+                    _crossProcessMutex!.ReleaseMutex();
+                }
             }
         }
     }
@@ -334,7 +413,7 @@ public static class Log
 
             try
             {
-                targetWriter.WriteLine(line);
+                WriteLineAtomic(targetWriter, line);
 
                 // If this is the system writer, check if active file size crossed MaxSystemLogBytes
                 if (!isMetrics && _systemLogPath is not null && MaxSystemLogBytes > 0)
@@ -363,7 +442,7 @@ public static class Log
             try
             {
                 string dateStr = today.ToString("dd-MM-yyyy");
-                _sysWriter.WriteLine($"---------------------------------- {dateStr} ----------------------------------");
+                WriteLineAtomic(_sysWriter, $"---------------------------------- {dateStr} ----------------------------------");
             }
             catch (Exception ex)
             {
@@ -403,32 +482,68 @@ public static class Log
         if (_sysWriter is null || _systemLogPath is null) return;
         try
         {
-            long length = _sysWriter.BaseStream.Length;
-            if (length >= MaxSystemLogBytes)
+            if (_sysWriter.BaseStream.Length >= MaxSystemLogBytes)
             {
-                _sysWriter.Flush();
-                _sysWriter.Dispose();
-                _sysWriter = null;
-
-                RotateSystemLog(_systemLogPath);
-
-                try
-                {
-                    var fs = new FileStream(_systemLogPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
-                    _sysWriter = new StreamWriter(fs) { AutoFlush = true };
-                }
-                catch (Exception ex)
-                {
-                    LastInitError = ex;
-                    System.Diagnostics.Debug.WriteLine($"[Log.CheckLiveSystemLogRoll] Failed to re-open system log writer: {ex}");
-                    _sysWriter = null;
-                }
+                PerformLiveSystemLogRoll(_systemLogPath);
             }
         }
         catch (Exception ex)
         {
             LastRotationError = ex;
             System.Diagnostics.Debug.WriteLine($"[Log.CheckLiveSystemLogRoll] Live system log roll failed: {ex}");
+        }
+    }
+
+    private static void PerformLiveSystemLogRoll(string path)
+    {
+        try
+        {
+            lock (_lock)
+            {
+                bool hasMutex = false;
+                if (_crossProcessMutex is not null)
+                {
+                    try { hasMutex = _crossProcessMutex.WaitOne(1000); }
+                    catch (AbandonedMutexException) { hasMutex = true; }
+                }
+
+                try
+                {
+                    _sysWriter?.Flush();
+                    _sysWriter?.Dispose();
+                    _sysWriter = null;
+
+                    RotateSystemLog(path);
+                    ReopenSystemLogWriter(path);
+                }
+                finally
+                {
+                    if (hasMutex)
+                    {
+                        _crossProcessMutex!.ReleaseMutex();
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            LastRotationError = ex;
+            System.Diagnostics.Debug.WriteLine($"[Log.PerformLiveSystemLogRoll] Failed to rotate system log: {ex}");
+        }
+    }
+
+    private static void ReopenSystemLogWriter(string path)
+    {
+        try
+        {
+            var fs = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
+            _sysWriter = new StreamWriter(fs) { AutoFlush = true };
+        }
+        catch (Exception ex)
+        {
+            LastInitError = ex;
+            System.Diagnostics.Debug.WriteLine($"[Log.CheckLiveSystemLogRoll] Failed to re-open system log writer: {ex}");
+            _sysWriter = null;
         }
     }
 
@@ -443,8 +558,8 @@ public static class Log
                 string timestamp = DateTime.Now.ToString("dd-MM-yyyy hh:mm:ss.fff tt");
                 string divider = new('-', 80);
 
-                _sysWriter.WriteLine(divider);
-                _sysWriter.WriteLine($"LocalTelemetry v{version} Started | Session: {timestamp} | Admin: {(isAdmin ? "Yes" : "No")} | Mode: {mode}");
+                WriteLineAtomic(_sysWriter, divider);
+                WriteLineAtomic(_sysWriter, $"LocalTelemetry v{version} Started | Session: {timestamp} | Admin: {(isAdmin ? "Yes" : "No")} | Mode: {mode}");
             }
             catch (Exception ex)
             {
@@ -467,7 +582,7 @@ public static class Log
                 string uptimeStr = uptime.TotalHours >= 1
                     ? $"{(int)uptime.TotalHours}h {uptime.Minutes}m {uptime.Seconds}s"
                     : $"{uptime.Minutes}m {uptime.Seconds}s";
-                _sysWriter.WriteLine($"LocalTelemetry Terminated | Reason: {reason} | Timestamp: {timestamp} | Session Uptime: {uptimeStr}");
+                WriteLineAtomic(_sysWriter, $"LocalTelemetry Terminated | Reason: {reason} | Timestamp: {timestamp} | Session Uptime: {uptimeStr}");
             }
             catch (Exception ex)
             {

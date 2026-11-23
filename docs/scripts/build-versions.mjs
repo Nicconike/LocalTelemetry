@@ -30,7 +30,10 @@ const gitExecutable = (() => {
 function runGit(args) {
     try {
         return execFileSync(gitExecutable, args, { cwd: root, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-    } catch {
+    } catch (err) {
+        if (process.env.DEBUG) {
+            console.debug(`[build-versions] Git execution failed for args '${args.join(' ')}': ${err.message}`);
+        }
         return '';
     }
 }
@@ -85,7 +88,7 @@ function compareSemVer(a, b) {
     return 0;
 }
 
-function getValidReleaseTags() {
+function getValidReleaseTags(includePrereleases = true) {
     const tagOutput = runGit(['tag', '-l', 'v*']);
     if (!tagOutput) return [];
 
@@ -100,6 +103,7 @@ function getValidReleaseTags() {
         .filter((t) => {
             const parsed = parseSemVer(t);
             if (!parsed) return false;
+            if (!includePrereleases && parsed.prereleaseType) return false;
             return compareSemVer(t, MIN_VERSION) >= 0;
         })
         .sort((a, b) => compareSemVer(b, a)); // Newest first
@@ -250,14 +254,41 @@ function updateVersionsFile(validTags) {
     writeFileSync(versionsFile, newContent);
 }
 
+function cleanStaleVersionDirs(activeTags) {
+    if (!existsSync(docsDir)) return;
+    const activeDirs = new Set(activeTags.map((tag) => `v${tag.replace(/^v/, '')}`));
+    try {
+        const entries = readdirSync(docsDir, { withFileTypes: true });
+        for (const entry of entries) {
+            if (entry.isDirectory() && /^v\d+\.\d+\.\d+/.test(entry.name)) {
+                if (!activeDirs.has(entry.name)) {
+                    console.log(`[build-versions] Removing stale version folder: docs/${entry.name}`);
+                    rmSync(join(docsDir, entry.name), { recursive: true, force: true });
+                }
+            }
+        }
+    } catch (err) {
+        console.warn(`[build-versions] Warning: Failed to clean stale version folders: ${err.message}`);
+    }
+}
+
 function main() {
     const args = process.argv.slice(2);
     const force = args.includes('--force');
+    const isDev = args.includes('--dev');
     const tagArgIndex = args.indexOf('--tag');
     const extraTag = tagArgIndex !== -1 && args[tagArgIndex + 1] ? args[tagArgIndex + 1] : process.env.RELEASE_TAG;
 
+    if (isDev) {
+        console.log('[build-versions] Dev mode: skipping past version extractions.');
+        cleanStaleVersionDirs([]);
+        updateVersionsFile([]);
+        console.log('[build-versions] Version check complete. Ready for VitePress.');
+        return;
+    }
+
     console.log(`[build-versions] Scanning for release tags >= v${MIN_VERSION}...`);
-    const validTags = getValidReleaseTags();
+    const validTags = getValidReleaseTags(true);
 
     if (extraTag) {
         const normalizedTag = extraTag.startsWith('v') ? extraTag : `v${extraTag}`;
@@ -269,14 +300,19 @@ function main() {
 
     if (validTags.length === 0) {
         console.log(`[build-versions] No release tags >= v${MIN_VERSION} found yet. Serving Latest docs only.`);
+        cleanStaleVersionDirs([]);
         updateVersionsFile([]);
         return;
     }
 
-    console.log(`[build-versions] Found ${validTags.length} valid tag(s): ${validTags.join(', ')}`);
+    // By default build only Latest and 1 latest semver release version
+    const tagsToBuild = validTags.slice(0, 1);
+    console.log(`[build-versions] Latest release version detected: ${tagsToBuild.join(', ')}`);
+
+    cleanStaleVersionDirs(tagsToBuild);
 
     const successfullyExtracted = [];
-    for (const tag of validTags) {
+    for (const tag of tagsToBuild) {
         const ok = extractDocsFromTag(tag, force);
         if (ok) {
             successfullyExtracted.push(tag);

@@ -45,6 +45,7 @@ describe('types.ts structure & compatibility', () => {
                 groupColors: {},
                 defaultMetricColors: {},
                 followWindowsTheme: true,
+                columns: [['cpu_pct']],
                 row1: ['cpu_pct'],
                 userCustomizedMetricColors: [],
                 userCustomizedGroupColors: [],

@@ -63,6 +63,7 @@ public sealed partial class SettingsShell : Window
     private const string EnabledStr = "enabled";
     private const string DisabledStr = "disabled";
     private const string OverlayLayoutPresetPath = "overlay.layoutpreset";
+    private const string OverlayColumnsPath = "overlay.columns";
     private const string OverlayRow1Path = "overlay.row1";
     private const string OverlayMetricsPath = "overlay.metrics";
 
@@ -208,7 +209,6 @@ public sealed partial class SettingsShell : Window
         _webViewReady = true;
         SendTrafficToday();
         SendTrafficMonths();
-        SendAllTrafficHistory();
     }
 
     // WebView2 init
@@ -236,10 +236,11 @@ public sealed partial class SettingsShell : Window
                     options: envOptions);
 
             await WebView.EnsureCoreWebView2Async(env);
-            WebView.NavigationCompleted += (_, _) =>
+            WebView.NavigationCompleted += async (_, _) =>
             {
                 _webViewReady = true;
                 RefreshTrafficHistory();
+                await Task.Delay(1000);
                 try
                 {
                     NativeMethods.EmptyWorkingSet(Process.GetCurrentProcess().Handle);
@@ -322,7 +323,6 @@ public sealed partial class SettingsShell : Window
         SendTrafficToday();
     }
 
-    private int _appUsageTickCount;
     internal void OnAppUsageTick(object? s, EventArgs ev)
     {
         if (_currentProcess == null) return;
@@ -340,19 +340,6 @@ public sealed partial class SettingsShell : Window
         }
         try
         {
-            _appUsageTickCount++;
-            if (_appUsageTickCount % 30 == 0)
-            {
-                try
-                {
-                    NativeMethods.EmptyWorkingSet(_currentProcess.Handle);
-                }
-                catch (Exception ex)
-                {
-                    Log.Debug(ex, "Periodic working set trimming failed");
-                }
-            }
-
             _currentProcess.Refresh();
             var cpuTime = _currentProcess.TotalProcessorTime;
             var now = DateTime.UtcNow;
@@ -368,10 +355,13 @@ public sealed partial class SettingsShell : Window
                 cpuPct = cpuDelta.TotalMilliseconds / timeDelta.TotalMilliseconds * 100.0 / Environment.ProcessorCount;
             }
 
-            double ramMb = _currentProcess.WorkingSet64 / (1024.0 * 1024.0);
+            long privateWs = NativeMethods.GetPrivateWorkingSetBytes(_currentProcess.Handle);
+            double ramMb = privateWs > 0
+                ? privateWs / (1024.0 * 1024.0)
+                : _currentProcess.WorkingSet64 / (1024.0 * 1024.0);
             string title = $"LocalTelemetry ({cpuPct:0.0}% CPU, {ramMb:0.0} MB RAM)";
             WindowTitleText.Text = title;
-            Title = title;
+            Title = "LocalTelemetry Settings";
         }
         catch (Exception ex)
         {
@@ -697,7 +687,6 @@ public sealed partial class SettingsShell : Window
         if (!_webViewReady) return;
         SendTrafficToday();
         SendTrafficMonths();
-        SendAllTrafficHistory();
     }
 
     /// <summary>
@@ -845,7 +834,6 @@ public sealed partial class SettingsShell : Window
             {
                 SendTrafficToday();
                 SendTrafficMonths();
-                SendAllTrafficHistory();
             }
         });
     }
@@ -1272,6 +1260,7 @@ public sealed partial class SettingsShell : Window
         var colorChanges = rawChanges.Where(c => c.Path.StartsWith(groupColorsPrefix, StringComparison.OrdinalIgnoreCase)
                                               || c.Path.StartsWith(metricColorsPrefix, StringComparison.OrdinalIgnoreCase)).ToList();
         var layoutChanges = rawChanges.Where(c => c.Path.Equals(OverlayLayoutPresetPath, StringComparison.OrdinalIgnoreCase)
+                                               || c.Path.Equals(OverlayColumnsPath, StringComparison.OrdinalIgnoreCase)
                                                || c.Path.Equals(OverlayRow1Path, StringComparison.OrdinalIgnoreCase)
                                                || c.Path.Equals(OverlayMetricsPath, StringComparison.OrdinalIgnoreCase)).ToList();
 
@@ -1280,6 +1269,7 @@ public sealed partial class SettingsShell : Window
                      && !c.Path.StartsWith(groupColorsPrefix, StringComparison.OrdinalIgnoreCase)
                      && !c.Path.StartsWith(metricColorsPrefix, StringComparison.OrdinalIgnoreCase)
                      && !c.Path.Equals(OverlayLayoutPresetPath, StringComparison.OrdinalIgnoreCase)
+                     && !c.Path.Equals(OverlayColumnsPath, StringComparison.OrdinalIgnoreCase)
                      && !c.Path.Equals(OverlayRow1Path, StringComparison.OrdinalIgnoreCase)
                      && !c.Path.Equals(OverlayMetricsPath, StringComparison.OrdinalIgnoreCase))
             .Select(c => FormatHumanReadableChange(c.Path, c.OldVal, c.NewVal))
@@ -1639,7 +1629,7 @@ public sealed partial class SettingsShell : Window
         },
         "overlay.followwindowstheme" => $"Follow Windows theme {ToggleStr(newVal)}",
         OverlayLayoutPresetPath => $"Layout preset updated to '{GetPresetDisplayName(newVal)}'",
-        OverlayRow1Path or OverlayMetricsPath => FormatOverlayLayoutChange(oldVal, newVal),
+        OverlayColumnsPath or OverlayRow1Path or OverlayMetricsPath => FormatOverlayLayoutChange(oldVal, newVal),
         _ when normPath.StartsWith("overlay.metriccolors.", StringComparison.Ordinal) =>
             $"Metric '{GetMetricName(path[21..])}' color changed from {oldVal} to {newVal}",
         _ when normPath.StartsWith("overlay.groupcolors.", StringComparison.Ordinal) =>
@@ -1708,7 +1698,8 @@ public sealed partial class SettingsShell : Window
     {
         var result = new List<string>();
         var presetChange = layoutChanges.FirstOrDefault(c => c.Path.Equals(OverlayLayoutPresetPath, StringComparison.OrdinalIgnoreCase));
-        var rowChange = layoutChanges.FirstOrDefault(c => c.Path.Equals(OverlayRow1Path, StringComparison.OrdinalIgnoreCase)
+        var rowChange = layoutChanges.FirstOrDefault(c => c.Path.Equals(OverlayColumnsPath, StringComparison.OrdinalIgnoreCase)
+                                                       || c.Path.Equals(OverlayRow1Path, StringComparison.OrdinalIgnoreCase)
                                                        || c.Path.Equals(OverlayMetricsPath, StringComparison.OrdinalIgnoreCase));
 
         bool hasPreset = !string.IsNullOrEmpty(presetChange.Path);
@@ -1860,32 +1851,62 @@ public sealed partial class SettingsShell : Window
 
         if (trimmed.StartsWith('[') && trimmed.EndsWith(']'))
         {
-            try
-            {
-                using var doc = JsonDocument.Parse(trimmed);
-                if (doc.RootElement.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var elem in doc.RootElement.EnumerateArray())
-                    {
-                        string? id = elem.GetString();
-                        if (!string.IsNullOrWhiteSpace(id))
-                            metricIds.Add(id.Trim());
-                    }
-                }
+            if (TryParseJsonMetricIds(trimmed, metricIds))
                 return metricIds;
-            }
-            catch (JsonException ex)
-            {
-                Log.Debug(ex, "Failed to parse metrics layout as JSON; falling back to delimiter split");
-                var parts = trimmed.Trim('[', ']').Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                metricIds.AddRange(parts.Select(p => p.Trim('"', '\'')).Where(p => !string.IsNullOrWhiteSpace(p)));
-                return metricIds;
-            }
+
+            trimmed = trimmed.Trim('[', ']');
         }
 
-        var fallbackParts = trimmed.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        metricIds.AddRange(fallbackParts.Select(p => p.Trim('"', '\'')).Where(p => !string.IsNullOrWhiteSpace(p)));
+        AddDelimitedMetricIds(trimmed, metricIds);
         return metricIds;
+    }
+
+    private static bool TryParseJsonMetricIds(string json, List<string> metricIds)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) return false;
+
+            foreach (var elem in doc.RootElement.EnumerateArray())
+            {
+                ExtractMetricIdsFromElement(elem, metricIds);
+            }
+            return true;
+        }
+        catch (JsonException ex)
+        {
+            Log.Debug(ex, "Failed to parse metrics layout as JSON; falling back to delimiter split");
+            return false;
+        }
+    }
+
+    private static void ExtractMetricIdsFromElement(JsonElement elem, List<string> metricIds)
+    {
+        if (elem.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var inner in elem.EnumerateArray())
+            {
+                AddMetricIdIfValid(inner.GetString(), metricIds);
+            }
+            return;
+        }
+
+        AddMetricIdIfValid(elem.GetString(), metricIds);
+    }
+
+    private static void AddMetricIdIfValid(string? id, List<string> metricIds)
+    {
+        if (!string.IsNullOrWhiteSpace(id))
+        {
+            metricIds.Add(id.Trim());
+        }
+    }
+
+    private static void AddDelimitedMetricIds(string text, List<string> metricIds)
+    {
+        var parts = text.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        metricIds.AddRange(parts.Select(p => p.Trim('"', '\'')).Where(p => !string.IsNullOrWhiteSpace(p)));
     }
 
     private static string FormatOverlayLayoutChange(string oldVal, string newVal)
@@ -1948,9 +1969,9 @@ public sealed partial class SettingsShell : Window
             {
                 DragMove();
             }
-            catch (InvalidOperationException)
+            catch (InvalidOperationException ex)
             {
-                // DragMove can throw if mouse button was released or already captured by WindowChrome
+                Log.Debug(ex, "DragMove ignored due to window or mouse capture state");
             }
         }
     }
@@ -1987,6 +2008,15 @@ public sealed partial class SettingsShell : Window
                 {
                     Log.Debug(ex, "WebView2 disposal error during OnClosed");
                 }
+            }
+
+            try
+            {
+                NativeMethods.EmptyWorkingSet(Process.GetCurrentProcess().Handle);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "Failed to trim working set after Settings closed");
             }
         }
         catch (Exception ex)

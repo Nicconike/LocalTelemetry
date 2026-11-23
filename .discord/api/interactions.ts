@@ -319,7 +319,7 @@ function getRequirementsEmbed() {
                     { name: 'Architecture', value: '• x86-64 / AMD64 (Intel / AMD)\n• Administrator (UAC) for PawnIo', inline: true },
                     { name: 'CPU Monitoring', value: '• Intel Core / Xeon (PawnIo MSR)\n• AMD Ryzen / Threadripper (PawnIo SMU)', inline: false },
                     { name: 'GPU Monitoring', value: '• NVIDIA (NVAPI)\n• AMD Radeon (ADLX / ADL)\n• Intel Arc / Xe (IGCL / ControlLib)\n• WDDM Generic Fallback', inline: false },
-                    { name: 'RAM & Disk Space', value: '• Min 2 GB RAM (4 GB recommended)\n• 200 MB Free Disk Space', inline: false }
+                    { name: 'RAM & Disk Space', value: '• Min 2 GB RAM (4 GB recommended)\n• 100 MB Free Disk Space', inline: false }
                 ],
                 footer: {
                     text: `Requirements: https://github.com/${GITHUB_REPO}#system-requirements`

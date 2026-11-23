@@ -1,0 +1,61 @@
+name: Hardware / Sensor Support
+description: Request support for a CPU, GPU, or specific hardware metric
+labels: [enhancement]
+body:
+    - type: markdown
+      attributes:
+          value: |
+              Use this form to request support for a hardware component or a missing telemetry sensor.
+
+    - type: input
+      id: hardware-model
+      attributes:
+          label: Hardware Model
+          description: Exact model name of your CPU or GPU.
+          placeholder: "e.g., AMD Ryzen 7 7800X3D, Intel Core i7-14700K, NVIDIA RTX 4080"
+      validations:
+          required: true
+
+    - type: input
+      id: target-metric
+      attributes:
+          label: Target Metric / Sensor
+          description: Which metric is missing or unsupported?
+          placeholder: "e.g., CPU Package Power, GPU Hotspot Temp, Fan RPM"
+      validations:
+          required: true
+
+    - type: textarea
+      id: current-status
+      attributes:
+          label: Current Status in LocalTelemetry
+          description: What currently happens in LocalTelemetry?
+          placeholder: "Describe the current behavior (e.g., metric is missing from Settings > Layout, shows 0, or shows N/A)..."
+      validations:
+          required: true
+
+    - type: input
+      id: reference-reading
+      attributes:
+          label: Expected / Reference Reading (Optional)
+          description: What does official vendor software or another monitoring tool show?
+          placeholder: "e.g., 65 W in vendor software, 70 °C in monitoring utility"
+      validations:
+          required: false
+
+    - type: input
+      id: version
+      attributes:
+          label: LocalTelemetry Version
+          description: "The version you are using (e.g., v1.0.0). Check Settings > About."
+          placeholder: v1.0.0
+      validations:
+          required: true
+
+    - type: textarea
+      id: context
+      attributes:
+          label: Additional Context
+          description: Any other relevant details, driver versions, or screenshots.
+      validations:
+          required: false

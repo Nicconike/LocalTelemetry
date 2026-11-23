@@ -491,9 +491,9 @@ public class TrayIconManagerTests
         var hookCallback = typeof(TrayIconManager).GetMethod("MouseHookCallback", BindingFlags.Instance | BindingFlags.NonPublic)!;
 
         // Simulate hook struct at (500, 500)
-        var hookStruct = new LocalTelemetry.App.Win32.NativeMethods.MSLLHOOKSTRUCT
+        var hookStruct = new LocalTelemetry.App.Win32.NativeMethods.MsllHookStruct
         {
-            pt = new LocalTelemetry.App.Win32.NativeMethods.POINT { X = 500, Y = 500 }
+            pt = new LocalTelemetry.App.Win32.NativeMethods.Point { X = 500, Y = 500 }
         };
         IntPtr ptr = System.Runtime.InteropServices.Marshal.AllocHGlobal(System.Runtime.InteropServices.Marshal.SizeOf(hookStruct));
         try

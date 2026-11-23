@@ -399,10 +399,9 @@ public sealed class PawnIoDevice : IPawnIoTransport
         if (!tempDirs.Contains(winTemp, StringComparer.OrdinalIgnoreCase))
             tempDirs.Add(winTemp);
 
-        foreach (string dir in tempDirs)
+        foreach (string dir in tempDirs.Where(Directory.Exists))
         {
-            if (Directory.Exists(dir))
-                DeletePawnIoEntriesInDirectory(dir);
+            DeletePawnIoEntriesInDirectory(dir);
         }
     }
 

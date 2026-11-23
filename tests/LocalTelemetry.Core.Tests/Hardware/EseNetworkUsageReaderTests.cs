@@ -9,7 +9,7 @@ namespace LocalTelemetry.Core.Tests.Hardware;
 [Collection("TrafficHistory")]
 public class EseNetworkUsageReaderTests
 {
-    private static readonly object SyncLock = new();
+    private static readonly Lock SyncLock = new();
 
     [Fact]
     public void EseNetworkUsageReader_GetInterfaceName_MapsIanaTypesCorrectly()

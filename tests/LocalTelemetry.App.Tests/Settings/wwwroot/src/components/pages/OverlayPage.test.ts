@@ -196,4 +196,75 @@ describe('OverlayPage.svelte', () => {
         await tick();
         expect(document.body.textContent).toContain('Taskbar space is constrained');
     });
+
+    it('renders target displays section and handles display selection toggles', async () => {
+        settings.set({
+            showSystemTrayIcon: true,
+            overlay: {
+                visible: true,
+                position: 'left',
+                displayMode: 'custom',
+                enabledDisplays: ['primary'],
+                detectedDisplays: [
+                    { id: 'primary', name: 'Display 1 (Primary - 2048 x 1280)', isPrimary: true, hasTaskbar: true },
+                    { id: 'display_2', name: 'Display 2 (1920 x 1080)', isPrimary: false, hasTaskbar: true },
+                    { id: 'display_3', name: 'Display 3 (2560 x 1440)', isPrimary: false, hasTaskbar: false },
+                ],
+                doubleClickAction: 'none',
+                opacity: 100,
+                scale: 100,
+                fontSizePx: 18,
+                fontBold: false,
+                offsetX: 0,
+            },
+        } as any);
+
+        component = mount(OverlayPage, { target: document.body });
+        await tick();
+
+        expect(document.body.textContent).toContain('Target Displays');
+        expect(document.body.textContent).toContain('Display 1 (Primary - 2048 x 1280)');
+        expect(document.body.textContent).toContain('Display 2 (1920 x 1080)');
+        expect(document.body.textContent).toContain('(No taskbar detected)');
+
+        const checkboxes = document.querySelectorAll('.display-checkbox-item input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
+        expect(checkboxes).toHaveLength(3);
+        expect(checkboxes[0].checked).toBe(true);
+        expect(checkboxes[1].checked).toBe(false);
+
+        // Check Display 2
+        checkboxes[1].click();
+        await tick();
+
+        let currentSettings: any;
+        settings.subscribe(s => currentSettings = s)();
+        expect(currentSettings.overlay.enabledDisplays).toContain('display_2');
+    });
+
+    it('renders secondary option and shows warning note when only one display detected', async () => {
+        settings.set({
+            showSystemTrayIcon: true,
+            overlay: {
+                visible: true,
+                position: 'left',
+                displayMode: 'secondary',
+                enabledDisplays: ['primary'],
+                detectedDisplays: [
+                    { id: 'primary', name: 'Display 1 (Primary - 2048 x 1280)', isPrimary: true, hasTaskbar: true },
+                ],
+                doubleClickAction: 'none',
+                opacity: 100,
+                scale: 100,
+                fontSizePx: 18,
+                fontBold: false,
+                offsetX: 0,
+            },
+        } as any);
+
+        component = mount(OverlayPage, { target: document.body });
+        await tick();
+
+        expect(document.body.textContent).toContain('Secondary Display Only');
+        expect(document.body.textContent).toContain('No secondary display detected. The overlay will show on the primary display until another monitor is connected.');
+    });
 });

@@ -144,6 +144,31 @@ public sealed class HardwareInventoryTests : IDisposable
     }
 
     [Fact]
+    public void LogHardwareConfiguration_DiscreteGpuAsleep_PreservesDiscreteGpuFromPreviousState()
+    {
+        // First run: laptop with both Intel integrated and NVIDIA dedicated GPUs detected
+        var sysInfo1 = CreateMockSysInfo();
+        sysInfo1.GetGpus().Returns([
+            (Name: "Intel(R) UHD Graphics", Vendor: "Intel", IsDedicated: false, VramBytes: null, DriverVersion: "32.0.101.7088"),
+            (Name: "NVIDIA GeForce RTX 2060", Vendor: "NVIDIA", IsDedicated: true, VramBytes: 6442450944, DriverVersion: "550.00")
+        ]);
+        var state1 = HardwareInventory.LogHardwareConfiguration(sysInfo1, _stateFilePath);
+        state1.Graphics.Should().HaveCount(2);
+
+        // Second run: NVIDIA dGPU enters D3cold sleep, only Intel UHD returned by active enumeration
+        var sysInfo2 = CreateMockSysInfo();
+        sysInfo2.GetGpus().Returns([
+            (Name: "Intel(R) UHD Graphics", Vendor: "Intel", IsDedicated: false, VramBytes: null, DriverVersion: "32.0.101.7088")
+        ]);
+        var state2 = HardwareInventory.LogHardwareConfiguration(sysInfo2, _stateFilePath);
+
+        // Fingerprint must stay identical and dedicated GPU must be preserved
+        state2.Fingerprint.Should().Be(state1.Fingerprint);
+        state2.Graphics.Should().HaveCount(2);
+        state2.Graphics.Should().Contain(g => g.Contains("NVIDIA GeForce RTX 2060") && g.Contains("Dedicated"));
+    }
+
+    [Fact]
     public void LogHardwareConfiguration_BatteryFullChargedCapacityChanged_KeepsSameFingerprint()
     {
         var sysInfo1 = CreateMockSysInfo();

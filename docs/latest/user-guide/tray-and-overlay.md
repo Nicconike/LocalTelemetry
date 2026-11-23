@@ -53,17 +53,9 @@ LocalTelemetry automatically inspects your hardware components at startup (`Syst
 
 ## :layout-dashboard: Overlay Layout Presets
 
-LocalTelemetry provides eight curated layout presets in **Settings -> Layout** to quickly tailor telemetry to your workflow:
+LocalTelemetry includes eight curated layout presets (Default, Gaming, Compact, Micro, Thermals & Power, Workstation, Network & Traffic, and Full Telemetry), plus a Custom option.
 
-- **Default (10 Metrics)**: Balanced 5-column dual-row overview (CPU Usage & Temp, GPU Usage & Temp, GPU VRAM & Net Total, RAM Usage & Used, Download & Upload).
-- **Gaming (12 Metrics)**: Performance-focused layout featuring CPU/GPU clocks and wattage alongside temperatures, utilization, and dedicated GPU VRAM.
-- **Compact (6 Metrics)**: Minimalist layout displaying core load percentages and network speed.
-- **Micro (4 Metrics)**: Ultra-compact 2-column strip for narrow taskbars and small displays (CPU %, GPU %, RAM %, Download speed).
-- **Thermals & Power (8 Metrics)**: Dedicated dual-column CPU and GPU thermal, wattage, and clock diagnostics.
-- **Workstation (8+ Metrics)**: Productivity pairing featuring CPU compute, RAM pool, live network, and primary storage drive I/O.
-- **Network & Traffic (8 Metrics)**: Bandwidth focus highlighting live download/upload speeds, cumulative transfer, and core system load.
-- **Full Telemetry (20+ Metrics)**: Complete system monitoring tracking all available hardware sensors including per-drive NVMe/SATA I/O and battery telemetry.
-- **Custom**: Fully customizable layout created by adding, removing, swapping, or reordering metrics in the layout designer.
+To configure presets, reorder sensors, or use 2D column pairing and interactive swapping, see [Layout Customization](customization.md#layout-grid-layout).
 
 ## :layout-dashboard: Customized & Expanded Setups
 
@@ -139,9 +131,18 @@ In the settings dashboard under the **Overlay** tab, you can customize layout, g
 
 ## :monitor: Multi-Monitor Behavior
 
-LocalTelemetry anchors to your primary Windows taskbar. If you use multiple displays, the overlay sits seamlessly on your primary taskbar while secondary monitor taskbars remain clean and unobstructed.
+LocalTelemetry provides full multi-monitor support managed by `TaskbarOverlayManager`.
 
-Real-time display resolution changes and mixed-DPI transitions across monitors are tracked automatically, instantly scaling and repositioning the overlay without needing a restart.
+You can configure target displays in **Settings -> Overlay** under the **Target Displays** card:
+
+- **Primary Display Only** (`primary`): Anchors the overlay only to the primary Windows taskbar (`Shell_TrayWnd`).
+- **Secondary Display Only** (`secondary`): Anchors the overlay to secondary taskbars (`Shell_SecondaryTrayWnd`). If no secondary monitor exists, it shows on the primary display.
+- **All Displays** (`all`): Displays an independent overlay instance across all connected monitors with active taskbars.
+- **Custom Selection** (`custom`): Select specific displays from the detected display list.
+
+Each monitor runs an independent `TaskbarOverlay` instance. Each overlay adapts to its monitor DPI, dimensions, and theme. Secondary displays require the Windows option **Show my taskbar on all displays** enabled in Windows Taskbar Settings (`ms-settings:taskbar`).
+
+Real-time display resolution changes, monitor hotplugging, and mixed-DPI transitions are tracked automatically, instantly scaling and repositioning overlays without needing a restart.
 
 ## :folder-sync: Windows Explorer Restart Recovery
 

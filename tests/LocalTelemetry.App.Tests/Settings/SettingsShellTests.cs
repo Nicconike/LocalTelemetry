@@ -574,14 +574,14 @@ public class SettingsShellTests
         var titleBarMethod = typeof(SettingsShell).GetMethod("TitleBar_MouseLeftButtonDown", BindingFlags.NonPublic | BindingFlags.Instance);
         if (titleBarMethod is not null)
         {
-            var doubleClickArgs = new System.Windows.Input.MouseButtonEventArgs(
+            var doubleClickArgs = new MouseButtonEventArgs(
                 Mouse.PrimaryDevice,
                 0,
                 MouseButton.Left)
             {
                 RoutedEvent = UIElement.MouseLeftButtonDownEvent
             };
-            typeof(System.Windows.Input.MouseButtonEventArgs).GetProperty("ClickCount")?.SetValue(doubleClickArgs, 2);
+            typeof(MouseButtonEventArgs).GetProperty("ClickCount")?.SetValue(doubleClickArgs, 2);
 
             var actDblClick = () => titleBarMethod.Invoke(ctx.Shell, [null!, doubleClickArgs]);
             actDblClick.Should().NotThrow();
@@ -823,7 +823,7 @@ public class SettingsShellTests
     {
         using var ctx = new ShellContext();
         typeof(SettingsShell).GetField("_webViewReady", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(ctx.Shell, true);
-        var onLocationChanged = typeof(System.Windows.Window).GetMethod("OnLocationChanged", BindingFlags.NonPublic | BindingFlags.Instance);
+        var onLocationChanged = typeof(Window).GetMethod("OnLocationChanged", BindingFlags.NonPublic | BindingFlags.Instance);
         var act = () => onLocationChanged?.Invoke(ctx.Shell, [EventArgs.Empty]);
         act.Should().NotThrow();
     }
@@ -855,7 +855,7 @@ public class SettingsShellTests
     {
         using var ctx = new ShellContext();
         SettingsShell.SkipWebView2InitForTesting = true;
-        var onLoaded = typeof(SettingsShell).GetMethod("OnLoaded", BindingFlags.NonPublic | BindingFlags.Instance, null, [typeof(object), typeof(System.Windows.RoutedEventArgs)], null);
+        var onLoaded = typeof(SettingsShell).GetMethod("OnLoaded", BindingFlags.NonPublic | BindingFlags.Instance, null, [typeof(object), typeof(RoutedEventArgs)], null);
         var act = () => onLoaded!.Invoke(ctx.Shell, [null!, null!]);
         act.Should().NotThrow();
     }
@@ -1035,7 +1035,7 @@ public class SettingsShellTests
     {
         using var ctx = new ShellContext();
         typeof(SettingsShell).GetField("_webViewReady", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(ctx.Shell, true);
-        var onClosed = typeof(System.Windows.Window).GetMethod("OnClosed", BindingFlags.NonPublic | BindingFlags.Instance);
+        var onClosed = typeof(Window).GetMethod("OnClosed", BindingFlags.NonPublic | BindingFlags.Instance);
         var act = () => onClosed?.Invoke(ctx.Shell, [EventArgs.Empty]);
         act.Should().NotThrow();
     }
@@ -2300,7 +2300,7 @@ public class SettingsShellTests
         try
         {
             SettingsShell.SkipDragMoveForTesting = true;
-            var clickArgs = new System.Windows.Input.MouseButtonEventArgs(
+            var clickArgs = new MouseButtonEventArgs(
                 System.Windows.Input.Mouse.PrimaryDevice,
                 0,
                 System.Windows.Input.MouseButton.Left)

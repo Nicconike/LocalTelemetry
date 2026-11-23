@@ -17,11 +17,9 @@ public sealed class UpdateCheckService(AppSettings cfg, HttpClient? httpClient =
 {
     private readonly AppSettings _cfg = cfg;
     private readonly HttpClient _httpClient = httpClient ?? CreateDefaultHttpClient();
-#pragma warning disable S1075 // Official repository releases API and web URLs are invariant
-    private const string GitHubReleasesUrl = "https://api.github.com/repos/Nicconike/LocalTelemetry/releases?per_page=3";
-    private const string GitHubReleasesWebUrl = "https://github.com/Nicconike/LocalTelemetry/releases";
-
-#pragma warning restore S1075
+    private const string RepositoryPath = "Nicconike/LocalTelemetry";
+    private static readonly string GitHubReleasesUrl = $"https://api.github.com/repos/{RepositoryPath}/releases?per_page=3";
+    private static readonly string GitHubReleasesWebUrl = $"https://github.com/{RepositoryPath}/releases";
 
     private static HttpClient CreateDefaultHttpClient()
     {

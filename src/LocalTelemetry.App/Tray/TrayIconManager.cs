@@ -123,7 +123,7 @@ public sealed class TrayIconManager : IDisposable
     }
 
     /// <summary>Checks whether a screen point in physical coordinates is inside the overlay context menu.</summary>
-    internal bool IsPointInsideOverlayContextMenu(NativeMethods.POINT pt)
+    internal bool IsPointInsideOverlayContextMenu(NativeMethods.Point pt)
     {
         if (_overlayContextMenu is null || !_overlayContextMenu.Visible) return false;
 
@@ -396,7 +396,7 @@ public sealed class TrayIconManager : IDisposable
     {
         try
         {
-            var hookStruct = Marshal.PtrToStructure<NativeMethods.MSLLHOOKSTRUCT>(lParam);
+            var hookStruct = Marshal.PtrToStructure<NativeMethods.MsllHookStruct>(lParam);
             if (menu.Handle != IntPtr.Zero && NativeMethods.GetWindowRect(menu.Handle, out var rect))
             {
                 if (hookStruct.pt.X < rect.Left || hookStruct.pt.X > rect.Right ||
@@ -428,7 +428,7 @@ public sealed class TrayIconManager : IDisposable
         }
         else
         {
-            menu.BeginInvoke(new Action(() => menu.Close()));
+            menu.Close();
         }
     }
 

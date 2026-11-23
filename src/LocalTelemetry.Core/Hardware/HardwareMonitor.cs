@@ -144,9 +144,13 @@ public sealed class HardwareMonitor : IDisposable
     internal static bool ThrowInDevicePnPForTesting { get; set; }
     internal static bool ThrowInGatewayCheckForTesting { get; set; }
     internal static bool ThrowInPrimeNicForTesting { get; set; }
+    internal string? ActiveGpuLuid { get; set; }
 
     private readonly IHardwareLifecycleManager _lifecycleManager;
     private volatile bool _isSuspended;
+    private volatile bool _isPowerSuspended;
+    private volatile bool _isSessionLocked;
+    private volatile bool _needsPowerResumeWarmUp;
     private bool _disposed;
 
     // Constructor
@@ -166,6 +170,7 @@ public sealed class HardwareMonitor : IDisposable
         _lifecycleManager.PowerResumed += OnPowerResumed;
         _lifecycleManager.NetworkTopologyChanged += OnNetworkTopologyChanged;
         _lifecycleManager.DevicePnPChanged += OnDevicePnPChanged;
+        _lifecycleManager.SessionLockStateChanged += OnSessionLockStateChanged;
 
         try
         {
@@ -471,21 +476,78 @@ public sealed class HardwareMonitor : IDisposable
         var displayGuid = NativeMethods.GUID_DISPLAY;
         IntPtr devInfoSet = NativeMethods.SetupDiGetClassDevs(ref displayGuid, IntPtr.Zero,
             IntPtr.Zero, NativeMethods.DIGCF_PRESENT);
-        if (devInfoSet.ToInt64() == -1)
-            return;
+        if (devInfoSet.ToInt64() != -1)
+        {
+            try
+            {
+                EnumerateDisplayAdapters(devInfoSet);
+            }
+            finally
+            {
+                NativeMethods.SetupDiDestroyDeviceInfoList(devInfoSet);
+            }
+        }
 
-        try
+        // If no dedicated adapter was found with DIGCF_PRESENT, check all installed adapters (e.g. asleep in D3cold)
+        if (!_hasDedicatedGpu)
         {
-            EnumerateDisplayAdapters(devInfoSet);
-            string adapterLog = FormatActiveGpuAdapterLog(_gpuName, _gpuVendor, _hasDedicatedGpu);
-            Log.Info($"Active graphics adapter is {adapterLog}");
-            InitWddmGpu();
-            InitVendorGpuMonitor();
+            IntPtr allDevInfoSet = NativeMethods.SetupDiGetClassDevs(ref displayGuid, IntPtr.Zero,
+                IntPtr.Zero, 0);
+            if (allDevInfoSet.ToInt64() != -1)
+            {
+                try
+                {
+                    EnumerateDisplayAdapters(allDevInfoSet);
+                }
+                finally
+                {
+                    NativeMethods.SetupDiDestroyDeviceInfoList(allDevInfoSet);
+                }
+            }
         }
-        finally
+
+        // If still not found, check cached hardware state from previous runs
+        if (!_hasDedicatedGpu)
         {
-            NativeMethods.SetupDiDestroyDeviceInfoList(devInfoSet);
+            var prevState = HardwareInventory.ReadPreviousState();
+            if (prevState?.Graphics is { Count: > 0 })
+            {
+                var prevDed = prevState.Graphics.FirstOrDefault(g => g.Contains("(Dedicated", StringComparison.OrdinalIgnoreCase));
+                if (!string.IsNullOrEmpty(prevDed))
+                {
+                    string vendor = IntelVendor;
+                    if (prevDed.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase))
+                    {
+                        vendor = NvidiaVendor;
+                    }
+                    else if (prevDed.Contains("AMD", StringComparison.OrdinalIgnoreCase))
+                    {
+                        vendor = AmdVendor;
+                    }
+
+                    int parenIdx = prevDed.IndexOf(" (Dedicated", StringComparison.OrdinalIgnoreCase);
+                    string name = parenIdx > 0 ? prevDed[..parenIdx] : prevDed;
+
+                    _hasDedicatedGpu = true;
+                    _gpuVendor = vendor;
+                    _gpuName = name;
+                    if (vendor == NvidiaVendor)
+                    {
+                        InitNvGpu();
+                    }
+                    else if (vendor == AmdVendor)
+                    {
+                        InitAmdGpu();
+                    }
+                }
+            }
         }
+
+        string adapterLog = FormatActiveGpuAdapterLog(_gpuName, _gpuVendor, _hasDedicatedGpu);
+        Log.Info($"Active graphics adapter is {adapterLog}");
+        InitWddmGpu();
+        ActiveGpuLuid = WddmGpuMonitor.GetAdapterLuid(_gpuName);
+        InitVendorGpuMonitor();
     }
 
     private static string FormatActiveGpuAdapterLog(string gpuName, string gpuVendor, bool hasDedicatedGpu)
@@ -540,7 +602,7 @@ public sealed class HardwareMonitor : IDisposable
         {
             _hasDedicatedGpu = true;
         }
-        else if (firstIntegratedVendor is not null)
+        else if (!_hasDedicatedGpu && firstIntegratedVendor is not null)
         {
             _hasDedicatedGpu = false;
             _gpuVendor = firstIntegratedVendor;
@@ -617,10 +679,17 @@ public sealed class HardwareMonitor : IDisposable
 
     private void InitVendorGpuMonitor()
     {
-        if (_gpuVendor == NvidiaVendor) { return; }
-        if (_gpuVendor == AmdVendor) { InitAmdGpu(); }
-        else if (_gpuVendor == IntelVendor) { InitIntelGpu(); }
-        else Log.Debug("No compatible dedicated GPU monitor found");
+        if (_hasDedicatedGpu)
+        {
+            if (_gpuVendor == NvidiaVendor) { return; }
+            if (_gpuVendor == AmdVendor) { InitAmdGpu(); return; }
+            Log.Debug("No compatible dedicated GPU monitor found");
+            return;
+        }
+
+        // Integrated GPU monitoring is strictly for systems with NO dedicated GPU
+        if (_gpuVendor == IntelVendor) { InitIntelGpu(); }
+        else Log.Debug("No compatible GPU monitor found");
     }
 
     private static bool IsDiscreteBus(IntPtr devInfoSet, NativeMethods.SpDevinfoData devInfo)
@@ -801,7 +870,7 @@ public sealed class HardwareMonitor : IDisposable
     // Poll
     private void Poll()
     {
-        if (_isSuspended || _disposed) return;
+        if (_isSuspended || _isPowerSuspended || _isSessionLocked || _disposed) return;
         if (Interlocked.CompareExchange(ref _isPolling, 1, 0) != 0)
             return;
         try { SnapshotReady?.Invoke(BuildSnapshot()); }
@@ -809,18 +878,104 @@ public sealed class HardwareMonitor : IDisposable
         finally { Volatile.Write(ref _isPolling, 0); }
     }
 
+    private readonly record struct MetricDemands(
+        bool NeedCpuPct,
+        bool NeedCpuTemp,
+        bool NeedCpuFreq,
+        bool NeedCpuPower,
+        bool NeedRam,
+        bool NeedGpuPct,
+        bool NeedGpuTemp,
+        bool NeedGpuVram,
+        bool NeedGpuFreq,
+        bool NeedGpuPower,
+        bool NeedNet,
+        bool NeedDisk,
+        bool NeedBattery);
+
+    private MetricDemands GetMetricDemands()
+    {
+        if (_cfg.EnableFileLogging)
+        {
+            var mc = _cfg.Monitoring;
+            return new MetricDemands(
+                mc.EnableCpu,
+                mc.EnableCpu,
+                mc.EnableCpu,
+                mc.EnableCpu,
+                mc.EnableRam,
+                mc.EnableGpu,
+                mc.EnableGpu,
+                mc.EnableGpu,
+                mc.EnableGpu,
+                mc.EnableGpu,
+                mc.EnableNet,
+                mc.EnableDisk,
+                mc.EnableBattery);
+        }
+
+        var row = _cfg.Overlay?.Columns is { Count: > 0 } cols
+            ? new HashSet<string>(cols.SelectMany(c => c).Where(s => !string.IsNullOrEmpty(s)), StringComparer.OrdinalIgnoreCase)
+            : null;
+        var alerts = _cfg.Alerts is { Enabled: true } a ? a : null;
+
+        return ComputeMetricDemands(row, alerts);
+    }
+
+    private static bool NeedMetric(HashSet<string>? row, string metric, bool alert)
+        => (row is not null && row.Contains(metric)) || alert;
+
+    private static MetricDemands ComputeMetricDemands(HashSet<string>? row, Config.AlertConfig? alerts)
+    {
+        bool needCpuTemp = NeedMetric(row, Metrics.CpuTemp, alerts?.AlertCpuTemp == true);
+        bool needCpuFreq = NeedMetric(row, Metrics.CpuFreq, alerts?.AlertCpuFreq == true);
+        bool needCpuPower = NeedMetric(row, Metrics.CpuPower, alerts?.AlertCpuPower == true);
+
+        bool alertRam = alerts?.AlertRamUsage == true;
+        bool needRam = alertRam || (row is not null && (row.Contains(Metrics.RamPct) || row.Contains(Metrics.RamUsed)));
+
+        bool needGpuTemp = NeedMetric(row, Metrics.GpuTemp, alerts?.AlertGpuTemp == true);
+        bool needGpuVram = NeedMetric(row, Metrics.GpuVram, alerts?.AlertGpuVram == true);
+        bool needGpuFreq = NeedMetric(row, Metrics.GpuFreq, alerts?.AlertGpuFreq == true);
+        bool needGpuPower = NeedMetric(row, Metrics.GpuPower, alerts?.AlertGpuPower == true);
+
+        bool alertNet = alerts is not null && (alerts.AlertNetDaily || alerts.AlertNetMonthly);
+        bool needNet = alertNet || (row is not null && (row.Contains(Metrics.NetDown) || row.Contains(Metrics.NetUp) || row.Contains(Metrics.NetTotal)));
+
+        bool needDisk = row is not null && row.Any(m => m.StartsWith("disk", StringComparison.OrdinalIgnoreCase));
+
+        bool alertBat = alerts?.AlertBatteryLow == true;
+        bool needBattery = alertBat || (row is not null && (row.Contains(Metrics.BatteryPct) || row.Contains(Metrics.BatteryRate)));
+
+        return new MetricDemands(
+            true,
+            needCpuTemp,
+            needCpuFreq,
+            needCpuPower,
+            needRam,
+            true,
+            needGpuTemp,
+            needGpuVram,
+            needGpuFreq,
+            needGpuPower,
+            needNet,
+            needDisk,
+            needBattery);
+    }
+
     private TelemetrySnapshot BuildSnapshot()
     {
         var mc = _cfg.Monitoring;
+        var demands = GetMetricDemands();
 
-        var (cpuPct, cpuTemp, cpuFreq, cpuPower) = CollectCpuMetrics(mc);
+        var (cpuPct, cpuTemp, cpuFreq, cpuPower) = CollectCpuMetricsWithDemands(mc, demands);
         float ramPct = 0, ramUsedGb = 0, ramTotalGb = 0;
-        if (mc.EnableRam) ReadMemory(out ramPct, out ramUsedGb, out ramTotalGb);
+        if (mc.EnableRam && demands.NeedRam) ReadMemory(out ramPct, out ramUsedGb, out ramTotalGb);
 
-        var (gpuPct, gpuTemp, gpuVramUsed, gpuClock, gpuPower) = CollectGpuMetrics(mc);
-        var (netDown, netUp, nicName) = CollectNetMetrics(mc);
-        var (diskRead, diskWrite, disks) = CollectDiskMetrics(mc);
-        var (batteryPct, batteryCharging, batteryOnAC, batteryRate) = CollectBatteryMetrics(mc);
+        var (gpuPct, gpuTemp, gpuVramUsed, gpuClock, gpuPower) = CollectGpuMetricsWithDemands(mc, demands);
+        var (netDown, netUp, nicName) = CollectNetMetricsWithDemands(mc, demands);
+        var (diskRead, diskWrite, disks) = CollectDiskMetricsWithDemands(mc, demands);
+        var (batteryPct, batteryCharging, batteryOnAC, batteryRate) = CollectBatteryMetricsWithDemands(mc, demands);
 
         LogTickMetrics(mc,
             (cpuPct, cpuTemp, cpuFreq, cpuPower),
@@ -830,7 +985,7 @@ public sealed class HardwareMonitor : IDisposable
             (batteryPct, batteryCharging, batteryOnAC, batteryRate));
 
         long netTotal = 0;
-        if (mc.EnableNet)
+        if (mc.EnableNet && demands.NeedNet)
         {
             var (d, u) = TrafficHistoryStore.GetToday();
             netTotal = d + u;
@@ -865,36 +1020,45 @@ public sealed class HardwareMonitor : IDisposable
         };
     }
 
-    private (float cpuPct, float cpuTemp, float cpuFreq, float cpuPower) CollectCpuMetrics(Config.MonitoringConfig mc)
+    private (float cpuPct, float cpuTemp, float cpuFreq, float cpuPower) CollectCpuMetricsWithDemands(Config.MonitoringConfig mc, MetricDemands demands)
     {
         if (!mc.EnableCpu) return (0, 0, 0, 0);
-        return (ReadCpuPct(), ReadCpuTemp(), ReadCpuFreq(), ReadCpuPowerRapl());
+        float pct = demands.NeedCpuPct ? ReadCpuPct() : 0f;
+        float temp = demands.NeedCpuTemp ? ReadCpuTemp() : 0f;
+        float freq = demands.NeedCpuFreq ? ReadCpuFreq() : 0f;
+        float power = demands.NeedCpuPower ? ReadCpuPowerRapl() : 0f;
+        return (pct, temp, freq, power);
     }
 
-    private (float gpuPct, float gpuTemp, float gpuVramUsed, float gpuClock, float gpuPower) CollectGpuMetrics(Config.MonitoringConfig mc)
+    private (float gpuPct, float gpuTemp, float gpuVramUsed, float gpuClock, float gpuPower) CollectGpuMetricsWithDemands(Config.MonitoringConfig mc, MetricDemands demands)
     {
         if (!mc.EnableGpu) return (0, 0, 0, 0, 0);
+        if (!demands.NeedGpuPct && !demands.NeedGpuTemp && !demands.NeedGpuVram && !demands.NeedGpuFreq && !demands.NeedGpuPower)
+        {
+            return (0, 0, 0, 0, 0);
+        }
+
         NvGpuMonitor.NvGpuData? gpuData = _nvGpu?.Query();
         return (
-            ReadGpuPct(gpuData),
-            ReadGpuTemp(gpuData),
-            ReadGpuVramUsedMb(gpuData),
-            ReadGpuFreqMHz(gpuData),
-            ReadGpuPowerW(gpuData)
+            demands.NeedGpuPct ? ReadGpuPct(gpuData) : 0f,
+            demands.NeedGpuTemp ? ReadGpuTemp(gpuData) : 0f,
+            demands.NeedGpuVram ? ReadGpuVramUsedMb(gpuData) : 0f,
+            demands.NeedGpuFreq ? ReadGpuFreqMHz(gpuData) : 0f,
+            demands.NeedGpuPower ? ReadGpuPowerW(gpuData) : 0f
         );
     }
 
-    private (double netDown, double netUp, string nicName) CollectNetMetrics(Config.MonitoringConfig mc)
+    private (double netDown, double netUp, string nicName) CollectNetMetricsWithDemands(Config.MonitoringConfig mc, MetricDemands demands)
     {
-        if (!mc.EnableNet) return (0, 0, string.Empty);
+        if (!mc.EnableNet || !demands.NeedNet) return (0, 0, string.Empty);
         EnsureNicCounters();
         var (down, up) = ReadNetBytes();
         return (down, up, _nicInstanceName ?? string.Empty);
     }
 
-    private (double diskRead, double diskWrite, List<DiskSnapshot> disks) CollectDiskMetrics(Config.MonitoringConfig mc)
+    private (double diskRead, double diskWrite, List<DiskSnapshot> disks) CollectDiskMetricsWithDemands(Config.MonitoringConfig mc, MetricDemands demands)
     {
-        if (!mc.EnableDisk) return (0, 0, []);
+        if (!mc.EnableDisk || !demands.NeedDisk) return (0, 0, []);
 
         double diskRead = 0, diskWrite = 0;
         var disks = new List<DiskSnapshot>();
@@ -928,11 +1092,26 @@ public sealed class HardwareMonitor : IDisposable
         return (diskRead, diskWrite, disks);
     }
 
-    private (float batteryPct, bool batteryCharging, bool batteryOnAC, float batteryRate) CollectBatteryMetrics(Config.MonitoringConfig mc)
+    private (float batteryPct, bool batteryCharging, bool batteryOnAC, float batteryRate) CollectBatteryMetricsWithDemands(Config.MonitoringConfig mc, MetricDemands demands)
     {
-        if (!mc.EnableBattery) return (0, false, true, 0);
+        if (!mc.EnableBattery || !demands.NeedBattery) return (0, false, true, 0);
         return ReadBattery();
     }
+
+    internal (float cpuPct, float cpuTemp, float cpuFreq, float cpuPower) CollectCpuMetrics(Config.MonitoringConfig mc)
+        => CollectCpuMetricsWithDemands(mc, new MetricDemands(true, true, true, true, true, true, true, true, true, true, true, true, true));
+
+    internal (float gpuPct, float gpuTemp, float gpuVramUsed, float gpuClock, float gpuPower) CollectGpuMetrics(Config.MonitoringConfig mc)
+        => CollectGpuMetricsWithDemands(mc, new MetricDemands(true, true, true, true, true, true, true, true, true, true, true, true, true));
+
+    internal (double netDown, double netUp, string nicName) CollectNetMetrics(Config.MonitoringConfig mc)
+        => CollectNetMetricsWithDemands(mc, new MetricDemands(true, true, true, true, true, true, true, true, true, true, true, true, true));
+
+    internal (double diskRead, double diskWrite, List<DiskSnapshot> disks) CollectDiskMetrics(Config.MonitoringConfig mc)
+        => CollectDiskMetricsWithDemands(mc, new MetricDemands(true, true, true, true, true, true, true, true, true, true, true, true, true));
+
+    internal (float batteryPct, bool batteryCharging, bool batteryOnAC, float batteryRate) CollectBatteryMetrics(Config.MonitoringConfig mc)
+        => CollectBatteryMetricsWithDemands(mc, new MetricDemands(true, true, true, true, true, true, true, true, true, true, true, true, true));
 
     private void LogTickMetrics(
         Config.MonitoringConfig mc,
@@ -1211,25 +1390,21 @@ public sealed class HardwareMonitor : IDisposable
     {
         try
         {
-            if (gpu.HasValue) return gpu.Value.VramUsedMb;
-            if (_nvGpu is not null)
+            long totalRamBytes = SystemInfo.GetTotalRamBytes();
+            float maxGpuMemMb = totalRamBytes > 0 ? (float)(totalRamBytes / (1024.0 * 1024.0)) : 131072f;
+
+            if (TryReadDedicatedGpuVram(gpu, maxGpuMemMb, out float dedicatedVram))
             {
-                gpu = _nvGpu.Query();
-                if (gpu.HasValue) return gpu.Value.VramUsedMb;
+                return dedicatedVram;
             }
-            if (_amdGpu is not null && _amdGpu.IsAvailable)
+
+            if (_wddmGpu is not null)
             {
-                float vram = _amdGpu.GetVram().usedMb;
-                if (vram > 0) return vram;
-            }
-            if (_intelGpu is not null && _intelGpu.IsAvailable)
-            {
-                float vram = _intelGpu.GetVram().usedMb;
-                if (vram > 0) return vram;
-            }
-            if (!_hasDedicatedGpu && !string.IsNullOrEmpty(_gpuVendor) && _wddmGpu is not null)
-            {
-                return _wddmGpu.GetSharedMemoryUsedMb();
+                float sharedMb = _wddmGpu.GetGpuMemoryUsedMb(ActiveGpuLuid);
+                if (sharedMb > 0)
+                {
+                    return Math.Clamp(sharedMb, 0f, maxGpuMemMb);
+                }
             }
         }
         catch (Exception ex)
@@ -1237,6 +1412,48 @@ public sealed class HardwareMonitor : IDisposable
             LogMetricErrorOnce("gpu", "gpu_vram_exception", $"Failed to read GPU VRAM usage: {ex.Message}");
         }
         return 0f;
+    }
+
+    private bool TryReadDedicatedGpuVram(NvGpuMonitor.NvGpuData? gpu, float maxGpuMemMb, out float vram)
+    {
+        if (gpu.HasValue && gpu.Value.VramUsedMb > 0 && gpu.Value.VramUsedMb <= maxGpuMemMb)
+        {
+            vram = gpu.Value.VramUsedMb;
+            return true;
+        }
+
+        if (_nvGpu is not null)
+        {
+            gpu = _nvGpu.Query();
+            if (gpu.HasValue && gpu.Value.VramUsedMb > 0 && gpu.Value.VramUsedMb <= maxGpuMemMb)
+            {
+                vram = gpu.Value.VramUsedMb;
+                return true;
+            }
+        }
+
+        if (_amdGpu is { IsAvailable: true })
+        {
+            float amdVram = _amdGpu.GetVram().usedMb;
+            if (amdVram > 0 && amdVram <= maxGpuMemMb)
+            {
+                vram = amdVram;
+                return true;
+            }
+        }
+
+        if (_intelGpu is { IsAvailable: true })
+        {
+            float intelVram = _intelGpu.GetVram().usedMb;
+            if (intelVram > 0 && intelVram <= maxGpuMemMb)
+            {
+                vram = intelVram;
+                return true;
+            }
+        }
+
+        vram = 0f;
+        return false;
     }
 
     private float ReadGpuFreqMHz(NvGpuMonitor.NvGpuData? gpu = null)
@@ -1542,17 +1759,21 @@ public sealed class HardwareMonitor : IDisposable
         try
         {
             _lastWmiCpuTempQueryTicks = now;
-            using var searcher = new System.Management.ManagementObjectSearcher(@"root\wmi", "SELECT CurrentTemperature FROM MSAcpi_ThermalZoneTemperature");
-            foreach (var obj in searcher.Get())
+            using var searcher = new ManagementObjectSearcher(@"root\wmi", "SELECT CurrentTemperature FROM MSAcpi_ThermalZoneTemperature");
+            using var coll = searcher.Get();
+            foreach (ManagementBaseObject obj in coll)
             {
-                if (obj["CurrentTemperature"] is uint rawKelvin10 && rawKelvin10 > 2732)
+                using (obj)
                 {
-                    float celsius = (rawKelvin10 - 2732) / 10.0f;
-                    if (celsius is >= 15f and <= 125f)
+                    if (obj["CurrentTemperature"] is uint rawKelvin10 && rawKelvin10 > 2732)
                     {
-                        _wmiCpuTempAvailable = true;
-                        _wmiCpuTempFailures = 0;
-                        return celsius;
+                        float celsius = (rawKelvin10 - 2732) / 10.0f;
+                        if (celsius is >= 15f and <= 125f)
+                        {
+                            _wmiCpuTempAvailable = true;
+                            _wmiCpuTempFailures = 0;
+                            return celsius;
+                        }
                     }
                 }
             }
@@ -1810,7 +2031,7 @@ public sealed class HardwareMonitor : IDisposable
                 new ObjectQuery("SELECT RemainingCapacity, ChargeRate, DischargeRate FROM BatteryStatus"));
 
             using var coll = _batterySearcher.Get();
-            var mo = coll.Cast<ManagementBaseObject>().FirstOrDefault();
+            using var mo = coll.Cast<ManagementBaseObject>().FirstOrDefault();
             if (mo is null) return 0f;
 
             // Direct charge/discharge rate (milliwatts) - same source as HWInfo
@@ -1945,6 +2166,7 @@ public sealed class HardwareMonitor : IDisposable
 
     private void OnPowerSuspended()
     {
+        _isPowerSuspended = true;
         _isSuspended = true;
         try
         {
@@ -1968,22 +2190,28 @@ public sealed class HardwareMonitor : IDisposable
             try
             {
                 await Task.Delay(PowerResumeWarmUpDelayMs).ConfigureAwait(false);
+                _isPowerSuspended = false;
+                if (_isSessionLocked)
+                {
+                    _needsPowerResumeWarmUp = true;
+                    _isSuspended = true;
+                    Log.Info("System resumed from sleep, but workstation is locked: keeping hardware polling paused until unlock");
+                    return;
+                }
+
+                _isSuspended = false;
                 ExecutePowerResumeWarmUp();
             }
             catch (Exception ex)
             {
                 Log.Error($"Error during resume warm-up: {ex.Message}");
             }
-            finally
-            {
-                _isSuspended = false;
-            }
         });
     }
 
     internal void ExecutePowerResumeWarmUp()
     {
-        if (_disposed) return;
+        if (_disposed || _isSessionLocked) return;
 
         if (ThrowInPowerResumeWarmUpForTesting)
             throw new InvalidOperationException("Simulated power resume warm-up error");
@@ -1999,7 +2227,7 @@ public sealed class HardwareMonitor : IDisposable
 
     private void OnNetworkTopologyChanged()
     {
-        if (_isSuspended) return;
+        if (_isSuspended || _isPowerSuspended || _isSessionLocked) return;
         try
         {
             if (ThrowInNetworkChangeForTesting)
@@ -2017,7 +2245,7 @@ public sealed class HardwareMonitor : IDisposable
 
     private void OnDevicePnPChanged()
     {
-        if (_isSuspended) return;
+        if (_isSuspended || _isPowerSuspended || _isSessionLocked) return;
         try
         {
             if (ThrowInDevicePnPForTesting)
@@ -2032,6 +2260,39 @@ public sealed class HardwareMonitor : IDisposable
         }
     }
 
+    private void OnSessionLockStateChanged(bool isLocked)
+    {
+        if (_disposed) return;
+        _isSessionLocked = isLocked;
+        _isSuspended = _isPowerSuspended || _isSessionLocked;
+
+        if (isLocked)
+        {
+            Log.Info("Workstation locked: pausing hardware polling");
+            _timer?.Change(Timeout.Infinite, Timeout.Infinite);
+        }
+        else
+        {
+            Log.Info("Workstation unlocked: resuming hardware polling");
+            if (_isPowerSuspended)
+            {
+                Log.Debug("System power is still suspended; keeping polling paused");
+                return;
+            }
+
+            if (_needsPowerResumeWarmUp)
+            {
+                _needsPowerResumeWarmUp = false;
+                ExecutePowerResumeWarmUp();
+            }
+            else
+            {
+                int ms = Math.Max(100, _cfg.Monitoring.PollIntervalMs);
+                _timer?.Change(0, ms);
+            }
+        }
+    }
+
     /// <summary>Releases all managed and unmanaged resources.</summary>
     public void Dispose()
     {
@@ -2043,6 +2304,7 @@ public sealed class HardwareMonitor : IDisposable
         _lifecycleManager.PowerResumed -= OnPowerResumed;
         _lifecycleManager.NetworkTopologyChanged -= OnNetworkTopologyChanged;
         _lifecycleManager.DevicePnPChanged -= OnDevicePnPChanged;
+        _lifecycleManager.SessionLockStateChanged -= OnSessionLockStateChanged;
 
         _timer?.Dispose();
         _diskRead?.Dispose();

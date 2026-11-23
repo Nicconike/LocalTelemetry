@@ -108,7 +108,7 @@ internal static class WindowHelpers
         action.WorkingDirectory = System.IO.Path.GetDirectoryName(exe) ?? string.Empty;
 
         root.RegisterTaskDefinition(TaskName, task, 6, string.Empty, string.Empty, 3, string.Empty);
-        Log.Debug($"Created startup scheduled task '{TaskName}' -> {exe} --minimized");
+        Log.Info($"Created startup scheduled task '{TaskName}' -> {exe} --minimized");
     }
 
     private static void RemoveStartupTask()
@@ -132,11 +132,11 @@ internal static class WindowHelpers
             if (!exists) return;
 
             root.DeleteTask(TaskName, 0);
-            Log.Debug($"Removed startup scheduled task '{TaskName}'");
+            Log.Info($"Removed startup scheduled task '{TaskName}'");
         }
         catch (Exception ex) when (ex is COMException or System.IO.FileNotFoundException)
         {
-            Log.Debug($"Startup scheduled task '{TaskName}' delete failed ({ex.Message.TrimEnd('\r', '\n')})");
+            Log.Info($"Startup scheduled task '{TaskName}' delete skipped ({ex.Message.TrimEnd('\r', '\n')})");
         }
 
         try
@@ -162,37 +162,17 @@ internal static class WindowHelpers
     {
         try
         {
-            if (StartupQueryExitCode is not null)
+            if (IsScheduledTaskStartupEnabled())
             {
-                if (StartupQueryExitCode() == 0) return true;
-            }
-            else
-            {
-                var psi = new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "schtasks.exe"),
-                    Arguments = $"/Query /TN \"{TaskName}\"",
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-                using var p = System.Diagnostics.Process.Start(psi);
-                p?.WaitForExit(2000);
-                if (p?.ExitCode == 0) return true;
+                return true;
             }
 
-            if (RunKeyQuery is not null)
+            if (IsRegistryStartupEnabled())
             {
-                if (RunKeyQuery(AppName)) return true;
-            }
-            else
-            {
-                using RegistryKey? hkcuKey = Registry.CurrentUser.OpenSubKey(RunKey);
-                if (hkcuKey?.GetValue(AppName) is not null) return true;
-
-                using RegistryKey? hklmKey = Registry.LocalMachine.OpenSubKey(RunKey);
-                if (hklmKey?.GetValue(AppName) is not null) return true;
+                return true;
             }
 
+            Log.Info($"Startup scheduled task '{TaskName}' does not exist or is disabled");
             return false;
         }
         catch (Exception ex)
@@ -200,6 +180,77 @@ internal static class WindowHelpers
             Log.Error(ex, "Failed to check if run at startup is enabled");
             return false;
         }
+    }
+
+    private static bool IsScheduledTaskStartupEnabled()
+    {
+        if (StartupQueryExitCode is not null)
+        {
+            return StartupQueryExitCode() == 0;
+        }
+
+        try
+        {
+            dynamic scheduler = ConnectScheduler();
+            dynamic root = scheduler.GetFolder("\\");
+            dynamic task = root.GetTask(TaskName);
+            if (task is not null)
+            {
+                bool isEnabled = task.Enabled;
+                Log.Info($"Startup scheduled task '{TaskName}' found via Task Scheduler COM (enabled={isEnabled})");
+                return isEnabled;
+            }
+        }
+        catch (Exception comEx)
+        {
+            Log.Debug(comEx, "Task Scheduler COM query failed, trying schtasks.exe fallback");
+            return CheckSchtasksFallback();
+        }
+
+        return false;
+    }
+
+    private static bool CheckSchtasksFallback()
+    {
+        var psi = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "schtasks.exe"),
+            Arguments = $"/Query /TN \"{TaskName}\"",
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        using var p = System.Diagnostics.Process.Start(psi);
+        p?.WaitForExit(2000);
+        if (p?.ExitCode == 0)
+        {
+            Log.Info($"Startup scheduled task '{TaskName}' found via schtasks.exe fallback");
+            return true;
+        }
+        return false;
+    }
+
+    private static bool IsRegistryStartupEnabled()
+    {
+        if (RunKeyQuery is not null)
+        {
+            return RunKeyQuery(AppName);
+        }
+
+        using RegistryKey? hkcuKey = Registry.CurrentUser.OpenSubKey(RunKey);
+        if (hkcuKey?.GetValue(AppName) is not null)
+        {
+            Log.Info("Found startup entry in HKCU Run registry key");
+            return true;
+        }
+
+        using RegistryKey? hklmKey = Registry.LocalMachine.OpenSubKey(RunKey);
+        if (hklmKey?.GetValue(AppName) is not null)
+        {
+            Log.Info("Found startup entry in HKLM Run registry key");
+            return true;
+        }
+
+        return false;
     }
 
     // color helpers

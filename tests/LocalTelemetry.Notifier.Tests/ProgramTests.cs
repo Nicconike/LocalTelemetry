@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.IO;
 using System.IO.Pipes;
 using System.Reflection;
 using System.Text;
@@ -196,7 +195,7 @@ public class ProgramTests
         var wrapperType = typeof(Program).GetNestedType("NamedPipeServerStreamWrapper", BindingFlags.NonPublic);
         wrapperType.Should().NotBeNull();
 
-        using var pipe = new System.IO.Pipes.NamedPipeServerStream("TestPipeNotifierWrapper", PipeDirection.In, 1, PipeTransmissionMode.Message, PipeOptions.Asynchronous);
+        using var pipe = new NamedPipeServerStream("TestPipeNotifierWrapper", PipeDirection.In, 1, PipeTransmissionMode.Message, PipeOptions.Asynchronous);
         var wrapper = (Program.INotifierPipeServer)Activator.CreateInstance(wrapperType, [pipe])!;
 
         wrapper.Stream.Should().NotBeNull();
@@ -562,18 +561,10 @@ public class ProgramTests
     [Fact]
     public void Program_UnhandledExceptionHandler_Coverage()
     {
-        var cType = typeof(Program).GetNestedType("<>c", BindingFlags.NonPublic);
-        cType.Should().NotBeNull();
-        var method = cType.GetMethod("<Main>b__16_0", BindingFlags.NonPublic | BindingFlags.Instance);
-        method.Should().NotBeNull();
-
-        var singletonField = cType.GetField("<>9", BindingFlags.NonPublic | BindingFlags.Static);
-        var instance = singletonField?.GetValue(null) ?? Activator.CreateInstance(cType, nonPublic: true);
-
-        var actEx = () => method.Invoke(instance, [null, new UnhandledExceptionEventArgs(new InvalidOperationException("Test crash"), false)]);
+        var actEx = () => Program.OnUnhandledException(null, new UnhandledExceptionEventArgs(new InvalidOperationException("Test crash"), false));
         actEx.Should().NotThrow();
 
-        var actNonEx = () => method.Invoke(instance, [null, new UnhandledExceptionEventArgs("Not an exception", false)]);
+        var actNonEx = () => Program.OnUnhandledException(null, new UnhandledExceptionEventArgs("Not an exception", false));
         actNonEx.Should().NotThrow();
     }
 

@@ -2596,7 +2596,7 @@ public class SystemInfoTests
             if (isDiscreteMethod is not null)
             {
                 // Intel Arc
-                var devInfo = new LocalTelemetry.Core.Hardware.NativeMethods.SpDevinfoData();
+                var devInfo = new NativeMethods.SpDevinfoData();
                 ((bool)isDiscreteMethod.Invoke(null, ["Intel(R) Arc(TM) A770", "Intel", IntPtr.Zero, devInfo])!).Should().BeTrue();
                 // AMD RX
                 ((bool)isDiscreteMethod.Invoke(null, ["AMD Radeon RX 6700 XT", "AMD", IntPtr.Zero, devInfo])!).Should().BeTrue();

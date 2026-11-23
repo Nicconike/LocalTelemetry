@@ -42,6 +42,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
     private int _overlayWidth = 200;
     private int _overlayHeight = 30;
     private float _autoScaleFactor = 1.0f;
+    private float _spacingScaleFactor = 1.0f;
     private bool _lastReportedSpaceConstrained;
     private int _lastReportedSlotWidth = -1;
     private IntPtr _mouseHook = IntPtr.Zero;
@@ -97,6 +98,9 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
         }
     }
 
+    /// <summary>Gets the target display info for this overlay instance.</summary>
+    public DisplayInfo? TargetDisplay => _embedder.TargetDisplay;
+
     /// <summary>
     /// Initialises a new overlay instance. The window is not created until <see cref="Show"/> is called.
     /// </summary>
@@ -108,6 +112,16 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
         _embedder = embedder;
         _uiCtx = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
         UpdateKeyColor();
+    }
+
+    /// <summary>
+    /// Initialises a new overlay instance targeting a specific display.
+    /// </summary>
+    /// <param name="cfg">Application settings used for layout, colors and behaviour.</param>
+    /// <param name="display">Target display monitor.</param>
+    public TaskbarOverlay(AppSettings cfg, DisplayInfo display)
+        : this(cfg, new TaskbarEmbedder(cfg, display))
+    {
     }
 
     /// <summary>Creates (or re-shows) the overlay window and embeds it in the taskbar.</summary>
@@ -174,8 +188,6 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
         Visible = true;
         if (!SkipShowWindowForTesting)
             NativeMethods.ShowWindow(Handle, NativeMethods.SW_SHOWNOACTIVATE);
-        if (!SkipMouseHookForTesting)
-            StartMouseHook();
         if (!SkipShowWindowForTesting)
             RefreshOverlay();
     }
@@ -187,8 +199,8 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
         DetectSystemTheme();
         if (!SkipTimersForTesting && _themeTimer is null)
         {
-            _themeTimer = new System.Threading.Timer(_ => ThemeTick(), null, 2_000, 2_000);
-            Log.Debug("Windows theme polling timer started (2s interval)");
+            _themeTimer = new System.Threading.Timer(_ => ThemeTick(), null, 20_000, 20_000);
+            Log.Debug("Windows theme polling timer started (20s interval)");
         }
     }
 
@@ -196,9 +208,26 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
     {
         if (SkipTimersForTesting || _watchTimer is not null) return;
 
-        _lastTrayHwnd = TaskbarEmbedder.FindExplorerTrayWnd();
+        _lastTrayHwnd = _embedder.GetTargetTrayWnd();
         _watchTimer = new System.Threading.Timer(_ => WatchTick(), null, 5_000, 5_000);
         _posTimer = new System.Threading.Timer(_ => PosTick(), null, 1_000, 1_000);
+    }
+
+    /// <summary>Pauses background timers while workstation is locked or suspended.</summary>
+    public void PauseTimers()
+    {
+        _watchTimer?.Change(Timeout.Infinite, Timeout.Infinite);
+        _posTimer?.Change(Timeout.Infinite, Timeout.Infinite);
+        _themeTimer?.Change(Timeout.Infinite, Timeout.Infinite);
+    }
+
+    /// <summary>Resumes background timers when workstation is active and unlocked.</summary>
+    public void ResumeTimers()
+    {
+        if (SkipTimersForTesting) return;
+        _watchTimer?.Change(5_000, 5_000);
+        _posTimer?.Change(1_000, 1_000);
+        _themeTimer?.Change(20_000, 20_000);
     }
 
     /// <summary>Hides the overlay window without destroying it.</summary>
@@ -491,7 +520,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
     public Func<bool>? IsContextMenuOpen { get; set; }
 
     /// <summary>Callback to check if a physical screen point is inside the overlay context menu.</summary>
-    internal Func<NativeMethods.POINT, bool>? IsPointInsideContextMenu { get; set; }
+    internal Func<NativeMethods.Point, bool>? IsPointInsideContextMenu { get; set; }
 
     /// <summary>Callback to query the screen bounds of the overlay context menu.</summary>
     public Func<Rectangle>? GetContextMenuBounds { get; set; }
@@ -511,17 +540,20 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
 
         try
         {
+            if (!SkipMouseHookForTesting)
+                StartMouseHook();
             ShowContextMenuAction.Invoke(pos);
         }
         catch (Exception ex)
         {
             Log.Error(ex, $"Exception occurred while invoking ShowContextMenuAction at ({pos.X}, {pos.Y})");
+            StopMouseHook();
         }
     }
 
     private void WmPaint()
     {
-        var ps = new NativeMethods.PAINTSTRUCT();
+        var ps = new NativeMethods.PaintStruct();
         var hdc = NativeMethods.BeginPaint(Handle, ref ps);
         if (hdc == IntPtr.Zero) return;
         try
@@ -646,14 +678,14 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
         var drawFlags = TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding;
 
         int rowH = TextRenderer.MeasureText(g, "Ay↓g", font, Size.Empty, drawFlags).Height + 6;
-        int colCount = (oc.Row1.Count + 1) / 2;
-        bool hasRow2 = oc.Row1.Count > 1;
+        int colCount = oc.Columns.Count;
         var cols = BuildColumns(g, font, drawFlags, oc, mc, colCount);
         if (cols.Count == 0) return;
+        bool hasRow2 = cols.Any(c => c.BotOn);
 
         int vPad = (int)(8 * _dpi + 0.5f);
         int wndH = hasRow2 ? rowH * 2 + RowGap + vPad * 2 : rowH + vPad * 2;
-        int gap = (int)(ItemSpace * _dpi * _autoScaleFactor + 0.5f);
+        int gap = Math.Max((int)(ItemSpace * _dpi * _autoScaleFactor * _spacingScaleFactor + 0.5f), 2);
 
         int yTop, yBot;
         if (hasRow2)
@@ -761,14 +793,12 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
         OverlayConfig oc, MonitoringConfig mc, int colCount)
     {
         var rawParts = new List<(int colIdx, bool isTop, string id, string rawPart)>();
-        int total = oc.Row1.Count;
 
         for (int i = 0; i < colCount; i++)
         {
-            int topIdx = i * 2;
-            int botIdx = i * 2 + 1;
-            string topId = topIdx < total ? oc.Row1[topIdx] : "";
-            string botId = botIdx < total ? oc.Row1[botIdx] : "";
+            var col = oc.Columns[i];
+            string topId = col.Count > 0 ? col[0] : "";
+            string botId = col.Count > 1 ? col[1] : "";
 
             if (IsEligible(topId, mc))
             {
@@ -957,6 +987,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
     private Size MeasureSize()
     {
         _autoScaleFactor = 1.0f;
+        _spacingScaleFactor = 1.0f;
         var unconstrained = MeasureSizeInternal();
         int available = _embedder.CalculateAvailableSlotWidth();
         if (available <= 0)
@@ -966,7 +997,16 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
 
         if (available > 0 && unconstrained.Width > available)
         {
-            float ratio = (float)available / unconstrained.Width;
+            // Stage 1: Compress inter-chip spacing first to preserve full font legibility
+            _spacingScaleFactor = 0.5f;
+            var compressed = MeasureSizeInternal();
+            if (compressed.Width <= available)
+            {
+                return new Size(compressed.Width, compressed.Height);
+            }
+
+            // Stage 2: Calculate the exact continuous scale percentage required to fit the slot
+            float ratio = (float)available / compressed.Width;
             _autoScaleFactor = Math.Clamp(ratio, 0.60f, 1.0f);
             var scaled = MeasureSizeInternal();
             if (scaled.Width > available && _autoScaleFactor > 0.60f)
@@ -989,11 +1029,11 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
         using var g = Graphics.FromImage(bmp);
         var font = BuildFont();
 
-        int colCount = (oc.Row1.Count + 1) / 2;
-        bool hasRow2 = oc.Row1.Count > 1;
+        int colCount = oc.Columns.Count;
         var flags = TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding;
         var cols = BuildColumns(g, font, flags, oc, mc, colCount);
-        int gap = (int)(ItemSpace * _dpi * _autoScaleFactor + 0.5f);
+        bool hasRow2 = cols.Any(c => c.BotOn);
+        int gap = Math.Max((int)(ItemSpace * _dpi * _autoScaleFactor * _spacingScaleFactor + 0.5f), 2);
         int w = gap;
         foreach (var col in cols)
             w += col.FullW + gap;
@@ -1136,7 +1176,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
         if (SkipTimersForTesting) return;
         if (!_cfg.Overlay.Visible || _disposed) return;
 
-        var current = TaskbarEmbedder.FindExplorerTrayWnd();
+        var current = _embedder.GetTargetTrayWnd();
         if (current == IntPtr.Zero) return;
 
         bool trayChanged = current != _lastTrayHwnd;
@@ -1248,7 +1288,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
     internal Rectangle GetScreenBounds()
     {
         if (Handle == IntPtr.Zero || _overlayWidth <= 0 || _overlayHeight <= 0) return Rectangle.Empty;
-        var pt = new NativeMethods.POINT { X = 0, Y = 0 };
+        var pt = new NativeMethods.Point { X = 0, Y = 0 };
         NativeMethods.ClientToScreen(Handle, ref pt);
         return new Rectangle(pt.X, pt.Y, _overlayWidth, _overlayHeight);
     }
@@ -1284,12 +1324,13 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
 
         if (isButtonDown && IsContextMenuOpen?.Invoke() == true)
         {
-            var hookStruct = Marshal.PtrToStructure<NativeMethods.MSLLHOOKSTRUCT>(lParam);
+            var hookStruct = Marshal.PtrToStructure<NativeMethods.MsllHookStruct>(lParam);
             if (IsPointInsideContextMenu is not null)
             {
                 if (!IsPointInsideContextMenu(hookStruct.pt))
                 {
                     CloseContextMenuAction?.Invoke();
+                    StopMouseHook();
                 }
             }
             else
@@ -1299,6 +1340,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
                 if (!bounds.Contains(clickPt))
                 {
                     CloseContextMenuAction?.Invoke();
+                    StopMouseHook();
                 }
             }
         }
@@ -1317,7 +1359,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
             return false;
         }
 
-        var hookStruct = Marshal.PtrToStructure<NativeMethods.MSLLHOOKSTRUCT>(lParam);
+        var hookStruct = Marshal.PtrToStructure<NativeMethods.MsllHookStruct>(lParam);
         var pt = new Point(hookStruct.pt.X, hookStruct.pt.Y);
         if (!GetScreenBounds().Contains(pt))
         {
@@ -1330,7 +1372,7 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
     private static bool IsTargetOrDescendant(IntPtr hwnd, IntPtr target) =>
         target != IntPtr.Zero && (hwnd == target || NativeMethods.GetAncestor(hwnd, NativeMethods.GA_ROOT) == target);
 
-    internal bool IsOverlayOrTaskbarAtPoint(NativeMethods.POINT pt)
+    internal bool IsOverlayOrTaskbarAtPoint(NativeMethods.Point pt)
     {
         if (SkipEmbedForTesting || SkipShowWindowForTesting)
         {

@@ -87,4 +87,14 @@
             DestinationFiles="@(WwwFiles->'$(PublishDir)wwwroot\%(RecursiveDir)%(Filename)%(Extension)')"
             SkipUnchangedFiles="true" />
     </Target>
+    <Target Name="CopyWebView2Loader" AfterTargets="Build;Publish">
+        <ItemGroup>
+            <WebView2Files Include="$(OutDir)WebView2Loader.dll" />
+            <WebView2NativeFiles Include="$(OutDir)runtimes\win-x64\native\WebView2Loader.dll" />
+        </ItemGroup>
+        <Copy Condition="'$(PublishDir)' != '' and Exists('$(OutDir)WebView2Loader.dll')" SourceFiles="@(WebView2Files)"
+            DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
+        <Copy Condition="'$(PublishDir)' != '' and Exists('$(OutDir)runtimes\win-x64\native\WebView2Loader.dll')" SourceFiles="@(WebView2NativeFiles)"
+            DestinationFolder="$(PublishDir)runtimes\win-x64\native" SkipUnchangedFiles="true" />
+    </Target>
 </Project>

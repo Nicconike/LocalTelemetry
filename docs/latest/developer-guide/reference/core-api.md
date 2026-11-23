@@ -25,6 +25,7 @@ public interface IHardwareLifecycleManager : IDisposable
     event Action? PowerResumed;
     event Action? NetworkTopologyChanged;
     event Action? DevicePnPChanged;
+    event Action<bool>? SessionLockStateChanged;
 
     void NotifyDisplayChanged();
     void NotifyDevicePnPChanged();
@@ -36,7 +37,7 @@ public interface IHardwareLifecycleManager : IDisposable
 - **Namespace:** `LocalTelemetry.Core.Hardware`
 - **Implements:** `IHardwareLifecycleManager`
 
-Singleton implementation that hooks Windows system events (`SystemEvents.PowerModeChanged`, `NetworkChange.NetworkAvailabilityChanged`, `NetworkChange.NetworkAddressChanged`) and processes debounced hardware state changes.
+Singleton implementation that hooks Windows system events (`SystemEvents.PowerModeChanged`, `NetworkChange.NetworkAvailabilityChanged`, `NetworkChange.NetworkAddressChanged`, `SystemEvents.SessionSwitch`) and processes debounced hardware state changes.
 
 ```csharp
 [SupportedOSPlatform("windows")]
@@ -56,6 +57,7 @@ public sealed class HardwareLifecycleManager : IHardwareLifecycleManager
 | `PowerResumed` | Operating system resumes from sleep or hibernation (`PowerModes.Resume`). | Waits 3 seconds for hardware warm-up, invokes `ResetGpuMonitors()` across all GPU backends, re-initializes network adapter counters, and resumes polling. |
 | `NetworkTopologyChanged` | IP address changes, network adapter connects/disconnects, or default gateway switches. | Refreshes NIC list and re-initializes network performance counters. |
 | `DevicePnPChanged` | Storage device arrival/removal or USB PnP event (`WM_DEVICECHANGE`). | Refreshes physical disk lists and SCSI/NVMe bus descriptors via `DiskQuery`. |
+| `SessionLockStateChanged` | Windows workstation is locked (`SessionLock`) or unlocked (`SessionUnlock`). | Pauses polling loop during workstation lock to conserve CPU and power; resumes polling on unlock. |
 
 #### Timing Constants
 
@@ -289,15 +291,15 @@ public sealed record DiskSnapshot
 | `NetUpBps` | `double` | `Bytes/sec` | Current upload throughput rate across active network interfaces. |
 | `NetDownBytesDelta` | `double` | `Bytes` | Download byte differential transferred during the last polling interval. |
 | `NetUpBytesDelta` | `double` | `Bytes` | Upload byte differential transferred during the last polling interval. |
-| `NetInterfaceName` | `string` | — | Display name of the network adapter currently routed. |
+| `NetInterfaceName` | `string` | - | Display name of the network adapter currently routed. |
 | `NetTotalBytes` | `long` | `Bytes` | Cumulative bytes transferred since application launch. |
-| `Disks` | `List<DiskSnapshot>` | — | List of individual physical disk snapshots. |
+| `Disks` | `List<DiskSnapshot>` | - | List of individual physical disk snapshots. |
 | `DiskReadMbps` | `float` | `MB/s` | Aggregate disk read throughput in Megabytes per second. |
 | `DiskWriteMbps` | `float` | `MB/s` | Aggregate disk write throughput in Megabytes per second. |
-| `PrimaryDiskType` | `string` | — | Bus interface label for the primary OS drive (`"NVMe"`, `"SATA"`, `"SSD"`, `"HDD"`). |
+| `PrimaryDiskType` | `string` | - | Bus interface label for the primary OS drive (`"NVMe"`, `"SATA"`, `"SSD"`, `"HDD"`). |
 | `BatteryPct` | `float` | `%` | Remaining battery capacity percentage (0.0 if not installed). |
-| `BatteryIsCharging` | `bool` | — | `true` when the battery is receiving active charging current. |
-| `IsOnACPower` | `bool` | — | `true` when external AC line power is connected. |
+| `BatteryIsCharging` | `bool` | - | `true` when the battery is receiving active charging current. |
+| `IsOnACPower` | `bool` | - | `true` when external AC line power is connected. |
 | `BatteryChargeRateW` | `float` | `Watts` | Battery charge or discharge rate in Watts (positive = charge, negative = discharge). |
 | `Timestamp` | `DateTime` | `UTC` | Exact timestamp when sensor readings were captured. |
 

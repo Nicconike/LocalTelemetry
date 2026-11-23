@@ -10,22 +10,11 @@ This page details system requirements, installation methods, administrative driv
 | **Architecture**     | [**x86-64 / AMD64**](https://en.wikipedia.org/wiki/X86-64) ([x64 compatible](https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/x64-architecture)) | [**x86-64 / AMD64**](https://en.wikipedia.org/wiki/X86-64) (Intel or AMD)                                                     |
 | **Permissions**      | **Administrator (UAC)** *(required for hardware sensor driver)*                                                                                                     | **Administrator (UAC)** *(silent boot via Task Scheduler)*                                                                    |
 | **System RAM**       | **2 GB** (Windows 10) / [**4 GB**](https://www.microsoft.com/en-in/windows/windows-11-specifications?r=1) (Windows 11)                                              | **8 GB or higher**                                                                                                            |
-| **App Footprint**    | **~30-40 MB RAM** (overlay) / **~40-100 MB dynamic** (Settings UI)                                                          | **~35-50 MB RAM**                                                                                                             |
-| **Disk Space**       | **~70 MB** initial footprint (**37 MB** installation folder + **~30 MB** WebView2 user cache)                                                                       | **100 MB+** (recommended for long-term traffic history & logs)                                                                 |
+| **App Footprint**    | **~15–20 MB RAM** (background taskbar monitoring) / **~40–60 MB** (Settings window active)                                          | **~15–20 MB RAM**                                                                                                             |
+| **Disk Space**       | **~30 MB** Initial footprint (**36 MB** installation folder + **~30 MB** WebView2 user cache)                                                                       | **70 MB+** (recommended for long-term traffic history & logs)                                                                 |
 | **.NET Runtime**     | [**Microsoft .NET 10 Desktop Runtime (x64)**](https://aka.ms/dotnet/10.0/windowsdesktop-runtime-win-x64.exe)                                                        | [**.NET 10 Desktop Runtime**](https://aka.ms/dotnet/10.0/windowsdesktop-runtime-win-x64.exe) *(Auto-downloaded by installer)* |
 | **UI Runtime**       | [**Microsoft Edge WebView2 Runtime**](https://go.microsoft.com/fwlink/p/?LinkId=2124703)                                                                            | [**WebView2 Runtime**](https://go.microsoft.com/fwlink/p/?LinkId=2124703) *(Pre-installed on Windows 11)*                     |
 | **Hardware Driver**  | [**PawnIO Kernel Driver**](https://github.com/namazso/PawnIO) *(bundled with app, ~3.4 MB)*                                                                         | **PawnIO Kernel Driver** *(installed automatically offline)*                                                                  |
-
-### :info: Baseline OS & Hardware Specifications
-
-In accordance with official [Microsoft Windows 11 Specifications](https://www.microsoft.com/en-in/windows/windows-11-specifications?r=1) and [Windows Hardware Driver Documentation](https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/x64-architecture):
-
-- **Processor**: 1 GHz or faster with 2 or more cores on a compatible 64-bit [x86-64 / AMD64](https://en.wikipedia.org/wiki/X86-64) processor (Intel or AMD).
-- **System Memory**: Minimum **2 GB** on 64-bit Windows 10, or **4 GB** on [Windows 11](https://www.microsoft.com/en-in/windows/windows-11-specifications?r=1). LocalTelemetry maintains an ultralight footprint of **~35-50 MB RAM** during background taskbar monitoring.
-- **Storage Footprint**: Minimum **~70 MB** initial disk space across the installation directory (**37 MB** in `C:\Program Files\LocalTelemetry`, as reported in Windows *Installed apps*) and user profile cache (**~30 MB** in `%LOCALAPPDATA%\LocalTelemetry` for WebView2 runtime cache, settings, and logs). Portable mode requires **~34 MB** on extraction and expands to **~65 MB** once the local WebView2 settings cache is generated. **100 MB** or more of free disk space is recommended for long-term network usage history and log files.
-- **System Firmware**: UEFI with Secure Boot capability and TPM 2.0 (standard Windows 11 hardware baseline; LocalTelemetry operates seamlessly with Secure Boot enabled).
-- **Display & Taskbar**: Standard Windows taskbar with support for primary or secondary display positioning at any scaling factor (100%-200% DPI).
-- **Graphics Subsystem**: DirectX 11 / 12 compatible GPU with WDDM 2.0+ display driver (for GPU telemetry via `D3DKMTQueryStatistics` or vendor APIs NVML / ADL / ControlLib).
 
 > [!WARNING]
 > **Unsupported Architectures**: 32-bit (x86) Windows editions and ARM processors (such as Qualcomm Snapdragon X Elite, Snapdragon Plus, Surface Pro X, etc.) are **not supported**. Under 64-bit Windows, [kernel-mode drivers cannot run under emulation](https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/x64-architecture) and must execute natively on x86-64 hardware.
@@ -45,10 +34,10 @@ In accordance with official [Microsoft Windows 11 Specifications](https://www.mi
     - **Create a Desktop shortcut**
     - **Run LocalTelemetry at Windows startup** (registers a Windows Task Scheduler job with elevated rights)
 6. Click **Install**:
-    - Application binaries and the uninstaller are installed to `C:\Program Files\LocalTelemetry` (**~37 MB** total, as reported in Windows *Installed apps*).
+    - Application binaries and the uninstaller are installed to `C:\Program Files\LocalTelemetry` (**~36 MB** total, as reported in Windows *Installed apps*).
     - The bundled **PawnIO** kernel sensor driver (~3.4 MB) is registered and started silently offline without external downloads.
     - An `app.mode` marker file (`standard`) is created in the installation folder. LocalTelemetry detects this file and routes configuration (`settings.json`), traffic history (`internet_usage.jsonl`), diagnostic logs, and WebView2 runtime cache (`webview2_data/`, **~30 MB**) to `%LOCALAPPDATA%\LocalTelemetry`.
-    - Upon completion, LocalTelemetry launches automatically, opening the Settings dashboard and placing an icon in your System Tray.
+    - Upon completion, LocalTelemetry launches automatically, opening the Settings window and placing an icon in your System Tray.
 
 > [!IMPORTANT]
 > **Internet Connection for First-Time Setup**: Because most users will not have the .NET 10 Desktop Runtime installed, an active internet connection is required during initial setup so the installer can fetch the runtime package. Once installed, all subsequent launches, driver initialization, and telemetry operations run completely offline.
@@ -75,27 +64,52 @@ scoop update localtelemetry
     - [**Microsoft .NET 10 Desktop Runtime (x64)**](https://aka.ms/dotnet/10.0/windowsdesktop-runtime-win-x64.exe)
     - [**Microsoft WebView2 Runtime**](https://go.microsoft.com/fwlink/p/?LinkId=2124703) *(Included by default on Windows 11)*
 2. Download `LocalTelemetry-win-x64.zip` from [GitHub Releases](https://github.com/Nicconike/LocalTelemetry/releases) (~10 MB archive).
-3. Extract the ZIP archive into any folder of your choice (e.g. `D:\Software\LocalTelemetry`). The extracted application requires **~34 MB** of disk space.
+3. Extract the ZIP archive into any folder of your choice (e.g. `D:\Software\LocalTelemetry`). The extracted application requires **~33 MB** of disk space.
 4. Run `LocalTelemetry.exe` as Administrator.
 
 > [!NOTE]
 > In portable mode (when no `app.mode` file exists in the executable folder), all configuration (`settings.json`), network usage history (`internet_usage.jsonl`), diagnostic logs, and the WebView2 runtime cache (`webview2_data/`, **~30 MB**) are stored directly inside the extracted folder alongside `LocalTelemetry.exe` (**~65 MB** total once launched). The bundled PawnIO kernel sensor driver initializes silently on first elevated launch.
 
-### :shield-check: Verifying Downloaded Binaries (Cosign & SLSA)
+### :shield-check: Verifying Downloaded Binaries (Checksums, Cosign & SLSA)
 
-Every release includes cryptographic checksums, Sigstore Cosign signature bundles, and SLSA provenance attestations:
+Every GitHub Release includes cryptographic SHA-256 hashes (`checksums.txt`), Sigstore Cosign signature bundles (`.sigstore.json`), and SLSA provenance attestations:
+
+#### 1. SHA-256 Checksum Verification
+
+Download `checksums.txt` and your binary into the same directory. Compute the file hash in PowerShell:
 
 ```powershell
-# 1. Compare the SHA-256 hashes against checksums.txt
-Get-FileHash .\LocalTelemetrySetup.exe, .\LocalTelemetry-win-x64.zip -Algorithm SHA256
+Get-FileHash .\LocalTelemetrySetup.exe -Algorithm SHA256
+```
 
-# 2. Verify keyless signatures with Cosign
+Or verify all release binaries automatically against `checksums.txt`:
+
+```powershell
+Get-Content .\checksums.txt | ForEach-Object {
+    $expectedHash, $filename = -split $_
+    if (Test-Path $filename) {
+        $actualHash = (Get-FileHash $filename -Algorithm SHA256).Hash
+        [PSCustomObject]@{ File = $filename; Valid = ($actualHash -eq $expectedHash) }
+    }
+}
+```
+
+#### 2. Keyless Signature Verification (Cosign)
+
+Verify release binaries with Sigstore keyless OpenID Connect (OIDC) signatures:
+
+```powershell
 cosign verify-blob --bundle .\LocalTelemetrySetup.exe.sigstore.json `
     --certificate-identity-regexp "https://github.com/Nicconike/LocalTelemetry/.*" `
     --certificate-oidc-issuer "https://token.actions.githubusercontent.com" `
     .\LocalTelemetrySetup.exe
+```
 
-# 3. Verify SLSA build provenance attestations
+#### 3. SLSA Build Provenance Verification
+
+Verify build attestations directly with the GitHub CLI:
+
+```powershell
 gh attestation verify .\LocalTelemetrySetup.exe --repo Nicconike/LocalTelemetry
 gh attestation verify .\LocalTelemetry-win-x64.zip --repo Nicconike/LocalTelemetry
 ```
@@ -126,7 +140,7 @@ LocalTelemetry requires Administrator privileges to load the `PawnIO` kernel dri
 
 1. :shield-alert: **UAC Elevation Prompt**: Whenever you manually start LocalTelemetry, Windows displays a standard User Account Control (UAC) prompt to grant administrative privileges for kernel sensor drivers.
 2. :bell-off: **Silent Driver Setup**: LocalTelemetry verifies that the `PawnIO` hardware driver is present. If missing, it installs the driver silently in the background using the elevated process permissions.
-3. :settings: **Settings & Tray Launch**: Once hardware sensors are initialized, the Settings dashboard opens on screen and the tray icon appears in the notification area.
+3. :settings: **Settings & Tray Launch**: Once hardware sensors are initialized, the Settings window opens on screen and the tray icon appears in the notification area.
 
 ### :monitor-cog: How does "Start with Windows" avoid UAC prompts on reboot?
 

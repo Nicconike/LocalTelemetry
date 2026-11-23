@@ -31,6 +31,12 @@ The settings panel is organized into 10 dedicated tabs matching the exact naviga
 - **Opacity**: Adjust overlay opacity (`20%` to `100%`).
 - **Scale**: Adjust overlay scaling multiplier (`80%` to `200%`).
 - **Double-Click Action**: Configure what happens when double-clicking the overlay (`None`, `Open Task Manager`, or `Open Settings`).
+- **Target Displays**: Choose where the overlay renders across connected monitors:
+  - `Primary Display Only` (default): Shows only on the primary display.
+  - `Secondary Display Only`: Shows on secondary displays (falls back to primary display if no secondary monitor is detected).
+  - `All Displays`: Shows an independent overlay instance on every connected display with an active taskbar.
+  - `Custom Selection`: Select specific displays from the detected display list with checkboxes.
+  - *Windows Requirement*: Secondary displays require **Show my taskbar on all displays** enabled in Windows Taskbar Settings (`ms-settings:taskbar`).
 - **Taskbar Space Constraint Banner**: Warns when the available taskbar slot is narrower than the overlay. LocalTelemetry scales down and clamps coordinates to prevent overlap. Includes a **Dismiss** button and a link to open Windows Taskbar Settings (`ms-settings:taskbar`). The banner resets automatically when space constraints ease.
 
 ![Overlay Settings Tab](/images/overlay-settings.png)
@@ -38,7 +44,7 @@ The settings panel is organized into 10 dedicated tabs matching the exact naviga
 
 ### :activity: Monitoring
 
-- **Active Trackers**: Toggle individual hardware polling components on or off (CPU, GPU, RAM, Network, Disk, and Battery on portable devices). Toggling off an unused component completely halts its background polling loop and driver queries to eliminate unnecessary CPU wakeups.
+- **Active Trackers**: Toggle individual hardware polling components on or off via dedicated component cards (CPU, GPU, RAM, Network, Disk, and Battery on portable devices). Toggling off an unused component completely halts its background polling loop and driver queries to eliminate unnecessary CPU wakeups.
 - **Computation Modes**:
   - **CPU Clock Mode**: Choose between `Average` (mean clock frequency across all active cores) or `Max Active Core` (highest clocked core frequency).
   - **CPU Utilization Mode**: Choose between `Overall (Task Manager)` (average system-wide load) or `Max Thread (Gaming)` (highest loaded thread, ideal for spotting single-core bottlenecks).
@@ -54,7 +60,7 @@ The settings panel is organized into 10 dedicated tabs matching the exact naviga
 
 - **Layout Presets**: Select quick arrangements for your taskbar:
   - **Default**: Balanced 5-column layout tracking core utilization, temperatures, memory, and network throughput.
-  - **Gaming**: Tailored for gameplay performance, thermals, and dedicated GPU VRAM consumption.
+  - **Gaming**: Performance-focused 6-column layout with CPU metrics on top (Usage, Temp, Power) paired with GPU metrics on the bottom (Usage, Temp, Power, VRAM), alongside RAM (Usage %, Used) and network telemetry (Download, Upload, Session Total).
   - **Compact**: Minimalist single-row layout displaying core load percentages and network speed.
   - **Micro**: Ultra-compact 2-column strip for narrow taskbars and small displays.
   - **Thermals & Power**: Dedicated diagnostics for CPU/GPU temperatures, wattage, and core clocks.
@@ -62,13 +68,18 @@ The settings panel is organized into 10 dedicated tabs matching the exact naviga
   - **Network & Traffic**: Bandwidth focus featuring live transfer rates, cumulative usage, and core load.
   - **Full Telemetry**: Expanded layout displaying all available metrics including clocks, power draw, and disk I/O.
   - **Custom**: User-defined sequence created by selecting, removing, or reordering metrics.
-- **Column Pairing & Swapping**: Group metrics into 2-row vertical columns with one-click swap and left/right shift controls.
+- **Column Pairing & Swapping**: Group metrics into 2-row vertical columns. Click `⇅ Swap` to enter interactive swap mode and click any column to exchange positions. Columns with an empty bottom row show a `+ Pair Metric` dropdown to add a paired sensor. Use `◀` and `▶` to shift columns left or right, and `✕` to remove an entire column.
 - **Metric Drag-and-Drop Ordering**: Drag metrics (or use the up/down arrows) to change the exact column sequence on the taskbar overlay.
-- **Add / Remove Metrics**: Select which hardware metrics are displayed on the overlay (such as NVMe disk I/O, laptop battery status, package wattage, and core clocks) or remove unneeded sensors. Battery metrics are automatically hidden on desktop computers without a battery.
+- **Add / Remove Metrics**: Select which hardware metrics are displayed on the overlay (such as NVMe disk I/O, laptop battery status, package wattage, and core clocks) or remove unneeded sensors. Metrics for absent hardware (such as battery on desktop systems) are automatically hidden from selection lists and presets.
 - **Reset Layout to Defaults**: Click the **Reset Layout to Defaults** button to instantly restore the standard 5-column default layout (CPU Usage & Temp, GPU Usage & Temp, GPU VRAM & Total Transferred, RAM Usage & Used, and Download & Upload speeds).
 
 ![Layout Settings Tab](/images/layout-settings.png)
 *Layout configuration tab for reordering and selecting hardware metrics.*
+
+<video controls autoplay loop muted playsinline style="width: 100%; border-radius: 8px; margin: 16px 0;">
+  <source src="/videos/customization.mp4" type="video/mp4" />
+  <img src="/videos/customization.gif" alt="Settings & Layout Customization Walkthrough" />
+</video>
 
 ![Customized Taskbar Overlay Result](/images/overlay.png)
 *Resulting customized taskbar overlay displaying active NVMe disk throughput and battery vitals alongside core metrics.*

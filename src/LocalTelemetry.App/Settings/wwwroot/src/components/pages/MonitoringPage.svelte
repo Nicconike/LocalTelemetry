@@ -55,10 +55,17 @@
         >
             <div class="tracker-grid">
                 {#each visibleCategories as cat}
-                    <Toggle
-                        bind:checked={$settings.monitoring[`track${cat.key}`]}
-                        label={cat.label}
-                    />
+                    <div
+                        class="tracker-card"
+                        class:active={$settings.monitoring[`track${cat.key}`]}
+                    >
+                        <span class="tracker-label">{cat.label}</span>
+                        <Toggle
+                            bind:checked={
+                                $settings.monitoring[`track${cat.key}`]
+                            }
+                        />
+                    </div>
                 {/each}
             </div>
         </SectionCard>
@@ -67,10 +74,10 @@
             title="Computation Modes"
             description="Customize CPU clock/utilization calculations and GPU reporting source."
         >
-            <div class="log-grid" style="grid-template-columns: 1fr;">
-                <div class="log-card">
-                    <span class="log-label">CPU Clock Mode</span>
-                    <div class="btn-group">
+            <div class="computation-container">
+                <div class="computation-row">
+                    <span class="computation-label">CPU Clock Mode</span>
+                    <div class="btn-group mode-btn-group">
                         {#each ["average", "max"] as val}
                             <button
                                 class="btn-mode"
@@ -87,9 +94,9 @@
                         {/each}
                     </div>
                 </div>
-                <div class="log-card">
-                    <span class="log-label">CPU Usage Mode</span>
-                    <div class="btn-group">
+                <div class="computation-row">
+                    <span class="computation-label">CPU Usage Mode</span>
+                    <div class="btn-group mode-btn-group">
                         {#each ["overall", "max"] as val}
                             <button
                                 class="btn-mode"
@@ -106,9 +113,9 @@
                         {/each}
                     </div>
                 </div>
-                <div class="log-card">
-                    <span class="log-label">GPU Usage Source</span>
-                    <div class="btn-group">
+                <div class="computation-row">
+                    <span class="computation-label">GPU Usage Source</span>
+                    <div class="btn-group mode-btn-group">
                         {#each ["driver", "wddm"] as val}
                             <button
                                 class="btn-mode"
@@ -200,6 +207,64 @@
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: var(--space-2);
+    }
+    .tracker-card {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: var(--space-2) var(--space-3);
+        background: var(--color-bg);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
+        transition:
+            border-color var(--transition),
+            background var(--transition);
+    }
+    .tracker-card:hover {
+        border-color: var(--color-text-muted);
+    }
+    .tracker-card.active {
+        border-color: color-mix(
+            in srgb,
+            var(--color-primary) 40%,
+            var(--color-border)
+        );
+    }
+    .tracker-label {
+        font-size: var(--text-sm);
+        font-weight: 500;
+        color: var(--color-text);
+    }
+    .computation-container {
+        display: flex;
+        flex-direction: column;
+    }
+    .computation-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: var(--space-2) 0;
+        border-bottom: 1px solid var(--color-divider);
+        gap: var(--space-3);
+    }
+    .computation-row:last-child {
+        border-bottom: none;
+    }
+    .computation-label {
+        font-size: var(--text-sm);
+        font-weight: 500;
+        color: var(--color-text);
+        white-space: nowrap;
+    }
+    .mode-btn-group {
+        width: 320px;
+        min-width: 280px;
+        flex-shrink: 0;
+    }
+    .mode-btn-group .btn-mode {
+        flex: 1;
+        text-align: center;
+        padding: 5px 8px;
     }
     .log-grid {
         display: grid;

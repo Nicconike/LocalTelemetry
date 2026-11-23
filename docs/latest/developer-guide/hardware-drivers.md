@@ -181,7 +181,7 @@ When Windows display adapters restart (e.g. driver update, GPU TDR recovery, or 
 
 ### :microchip: Integrated Graphics (iGPU) Architecture & Fallback Hierarchy (Desktops & Laptops)
 
-On systems without a dedicated graphics card — including desktop PCs (e.g. Intel UHD 730/770, AMD Radeon Graphics on Ryzen 7000/8000/9000 and G-series CPUs), SFF workstations, mini PCs, and laptops — discrete hardware sensors are unavailable:
+On systems without a dedicated graphics card - including desktop PCs (e.g. Intel UHD 730/770, AMD Radeon Graphics on Ryzen 7000/8000/9000 and G-series CPUs), SFF workstations, mini PCs, and laptops - discrete hardware sensors are unavailable:
 
 - **Adapter Categorization & Desktop Bus Filtering**: `HardwareMonitor.EnumerateDisplayAdapters` scans display devices. It inspects known integrated GPU naming signatures (`IsKnownIntegratedGpu`) before evaluating PCI bus indices. This ensures desktop processors on secondary internal PCIe buses are not misclassified as dedicated cards. It sets `_hasDedicatedGpu` to `true` when a discrete GPU is found, or `false` when only integrated adapters exist.
 - **Unified Adapter Logging**: Formats the active adapter as `Active graphics adapter is {gpuName} ({kind}, {gpuVendor})` on startup.

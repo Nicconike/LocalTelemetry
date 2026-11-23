@@ -91,7 +91,7 @@ public sealed partial class IntelGpuMonitor : IDisposable
     {
         if (!IsAvailable || _memHandle == IntPtr.Zero) return (0, 0);
         int ret = _native.GetVram(_memHandle, out ulong totalBytes, out ulong freeBytes);
-        if (ret != CtlResultSuccess) return (0, 0);
+        if (ret != CtlResultSuccess || totalBytes == 0 || freeBytes > totalBytes) return (0, 0);
         float totalMb = (float)(totalBytes / (1024.0 * 1024.0));
         float usedMb = (float)((totalBytes - freeBytes) / (1024.0 * 1024.0));
         return (usedMb, totalMb);

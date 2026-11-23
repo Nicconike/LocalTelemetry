@@ -33,6 +33,7 @@ public sealed partial class App : WpfApplication
     private HardwareMonitor? _monitor;
     private NetUsageLogger? _netLogger;
     private TaskbarOverlay? _overlay;
+    private TaskbarOverlayManager? _overlayManager;
     private TrayIconManager? _tray;
     private AlertService? _alerts;
     private SettingsShell? _settingsShell;
@@ -44,6 +45,8 @@ public sealed partial class App : WpfApplication
     private Mutex? _singleInstanceMutex;
     private EventWaitHandle? _singleInstanceEvent;
     private RegisteredWaitHandle? _singleInstanceWaitHandle;
+    private bool _isAppSessionLocked;
+    private bool _isAppPowerSuspended;
     internal static string SingleInstanceMutexName { get; set; } = @"Local\LocalTelemetry_App_SingleInstance";
     internal static string SingleInstanceEventName { get; set; } = @"Local\LocalTelemetry_App_ShowSettingsEvent";
     internal const string ShowSettingsMessageName = "LocalTelemetry_ShowSettingsWindow_Message";
@@ -67,7 +70,7 @@ public sealed partial class App : WpfApplication
     internal static string SettingsReloadEventName { get; set; } = @"Local\LocalTelemetry_Settings_ReloadEvent";
     internal static string SettingsCloseEventName { get; set; } = @"Local\LocalTelemetry_Settings_CloseEvent";
     internal static string SettingsTrafficUpdatedEventName { get; set; } = @"Local\LocalTelemetry_Settings_TrafficUpdatedEvent";
-    internal static bool LaunchSettingsOutOfProcess { get; set; } = false;
+    internal static bool LaunchSettingsOutOfProcess { get; set; } = true;
     internal static Action<ProcessStartInfo>? SettingsProcessLauncher { get; set; }
 
     // Test seams
@@ -233,6 +236,9 @@ public sealed partial class App : WpfApplication
         RegisterSingleInstanceWaitHandle();
         return true;
     }
+
+    private const string VisibilityVisible = "visible";
+    private const string VisibilityHidden = "hidden";
 
     // Startup
     protected override void OnStartup(WpfStartupEventArgs e)
@@ -557,7 +563,8 @@ public sealed partial class App : WpfApplication
     private TrafficHistoryFile InitializeCoreServicesAndHistory(bool fileRunAtStartup)
     {
         _services = BuildContainer();
-        _overlay = _services.GetRequiredService<TaskbarOverlay>();
+        _overlayManager = _services.GetRequiredService<TaskbarOverlayManager>();
+        _overlay = _overlayManager.PrimaryOverlay;
         _tray = _services.GetRequiredService<TrayIconManager>();
         _tray.SetTrayVisible(_cfg.ShowSystemTrayIcon);
         _tray.SetOverlayVisible(_cfg.Overlay.Visible);
@@ -579,7 +586,7 @@ public sealed partial class App : WpfApplication
         if (fileRunAtStartup != _cfg.RunAtStartup)
         {
             _cfg.Save();
-            Log.Debug($"Synchronized Windows startup state (startup {(_cfg.RunAtStartup ? "enabled" : "disabled")})");
+            Log.Info($"Synchronized Windows startup state (startup {(_cfg.RunAtStartup ? "enabled" : "disabled")})");
         }
 
         WireEvents();
@@ -592,7 +599,12 @@ public sealed partial class App : WpfApplication
         bool minimized = Array.Exists(args, a => a == "--minimized") || _cfg.StartMinimized;
 
         if (!SuppressOverlayForTesting && _cfg.Overlay.Visible)
-            _overlay?.Show();
+        {
+            if (_overlayManager is not null)
+                _overlayManager.Show();
+            else
+                _overlay?.Show();
+        }
 
         if (!SuppressHardwareMonitorForTesting)
             _monitor?.Start();
@@ -600,7 +612,7 @@ public sealed partial class App : WpfApplication
         if (!minimized)
             OpenSettings();
 
-        Log.Info($"Application started (overlay {(_cfg.Overlay.Visible ? "visible" : "hidden")}, mode {(minimized ? "minimized" : "normal")})");
+        Log.Info($"Application started (overlay {(_cfg.Overlay.Visible ? VisibilityVisible : VisibilityHidden)}, mode {(minimized ? "minimized" : "normal")})");
     }
 
     private void StartBackgroundInitialization(TrafficHistoryFile historyFile)
@@ -619,13 +631,34 @@ public sealed partial class App : WpfApplication
                 Log.Error(ex, "Failed to log hardware configuration");
             }
 
-            ApplyVendorColors(_cfg);
-            LaunchNotifier();
-            RunSrumPreImport(historyFile);
+            try
+            {
+                ApplyVendorColors(_cfg);
+                if (_cfg.Alerts.Enabled && _cfg.Alerts.ShowToastNotif)
+                {
+                    LaunchNotifier();
+                }
+                else
+                {
+                    EnsureNotifierStopped();
+                }
+                RunSrumPreImport(historyFile);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Background initialization encountered an error");
+            }
 
-            if (_cfg.RunAtStartup)
-                WindowHelpers.SetStartup(true);
-        });
+            try
+            {
+                NativeMethods.EmptyWorkingSet(Process.GetCurrentProcess().Handle);
+                Log.Debug("Post-startup working set trimmed successfully");
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "Failed to trim working set after background initialization");
+            }
+        }).ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
     }
 
     private bool _metricsWasEnabled;
@@ -654,7 +687,7 @@ public sealed partial class App : WpfApplication
 
     private static void HandleUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
     {
-        Log.Error($"Unobserved Task exception: {e.Exception?.GetType().Name}: {e.Exception?.Message}");
+        Log.Error(e.Exception, "Unobserved Task exception");
         e.SetObserved();
     }
 
@@ -704,6 +737,13 @@ public sealed partial class App : WpfApplication
             {
                 SrumImporterAction(historyFile.FilePath).GetAwaiter().GetResult();
                 SignalTrafficUpdated();
+                return;
+            }
+
+            bool hasRecords = historyFile.GetAllRecords().Any(r => r.DownBytes > 0 || r.UpBytes > 0);
+            if (hasRecords)
+            {
+                Log.Debug("Historical traffic records already present; skipping initial SRUM import");
                 return;
             }
 
@@ -767,8 +807,8 @@ public sealed partial class App : WpfApplication
             sc.AddSingleton(PawnIoManagerOverride);
         else
             sc.AddSingleton<IPawnIoManager, PawnIoManagerWrapper>();
-        sc.AddSingleton<TaskbarEmbedder>();
-        sc.AddSingleton<TaskbarOverlay>();
+        sc.AddSingleton<TaskbarOverlayManager>();
+        sc.AddSingleton(sp => sp.GetRequiredService<TaskbarOverlayManager>().PrimaryOverlay);
         sc.AddSingleton<TrayIconManager>();
         sc.AddSingleton<NotificationClient>();
         sc.AddSingleton<AlertService>();
@@ -779,72 +819,166 @@ public sealed partial class App : WpfApplication
     // Event wiring
     private void WireEvents()
     {
-        if (_tray is null || _overlay is null || _monitor is null) return;
+        if (_tray is null || _monitor is null || (_overlayManager is null && _overlay is null)) return;
+
+        Action<System.Drawing.Point> showCtx = ShowTrayContextMenu;
+
+        WireTrayEvents();
+        if (_overlayManager is not null)
+        {
+            WireOverlayManagerEvents(showCtx);
+        }
+        else if (_overlay is not null)
+        {
+            WireSingleOverlay(showCtx);
+        }
+
+        _monitor.SnapshotReady += HandleSnapshotReady;
+        WireLifecycleEvents();
+    }
+
+    private void WireLifecycleEvents()
+    {
+        var lifecycle = HardwareLifecycleManager.Instance;
+        lifecycle.PowerSuspended += HandlePowerSuspended;
+        lifecycle.PowerResumed += HandlePowerResumed;
+        lifecycle.SessionLockStateChanged += HandleSessionLockStateChanged;
+    }
+
+    private void HandlePowerSuspended()
+    {
+        _isAppPowerSuspended = true;
+        _overlayManager?.PauseAllTimers();
+        _overlay?.PauseTimers();
+    }
+
+    private void HandlePowerResumed()
+    {
+        _isAppPowerSuspended = false;
+        if (!_isAppSessionLocked)
+        {
+            _overlayManager?.ResumeAllTimers();
+            _overlay?.ResumeTimers();
+        }
+    }
+
+    private void HandleSessionLockStateChanged(bool isLocked)
+    {
+        _isAppSessionLocked = isLocked;
+        if (isLocked)
+        {
+            _overlayManager?.PauseAllTimers();
+            _overlay?.PauseTimers();
+        }
+        else if (!_isAppPowerSuspended)
+        {
+            _overlayManager?.ResumeAllTimers();
+            _overlay?.ResumeTimers();
+        }
+    }
+
+    private void WireSingleOverlay(Action<System.Drawing.Point> showCtx)
+    {
+        if (_overlay is null || _tray is null) return;
+        _overlay.ShowContextMenuAction = showCtx;
+        _overlay.IsContextMenuOpen = () => _tray.IsOverlayContextMenuOpen;
+        _overlay.IsPointInsideContextMenu = pt => _tray.IsPointInsideOverlayContextMenu(pt);
+        _overlay.GetContextMenuBounds = () => _tray.OverlayContextMenuBounds;
+        _overlay.CloseContextMenuAction = () =>
+        {
+            _tray.CloseOverlayContextMenu();
+            _overlay.StopMouseHook();
+        };
+        _overlay.OnOpenSettingsRequested = () => OpenSettings();
+        _overlay.OnToggleOverlayRequested = () =>
+        {
+            _cfg.Overlay.Visible = !_cfg.Overlay.Visible;
+            Log.Info($"User toggled overlay visibility via overlay menu to {(_cfg.Overlay.Visible ? VisibilityVisible : VisibilityHidden)}");
+            _cfg.Save();
+            HandleSettingsApplied();
+        };
+        _overlay.OnExitRequested = () => QuitApp();
+        _overlay.OnDoubleClick += HandleOverlayDoubleClickAction;
+    }
+
+    private void ShowTrayContextMenu(System.Drawing.Point pt)
+    {
+        try
+        {
+            if (ThrowInTrayContextMenuForTesting)
+                throw new InvalidOperationException("Simulated context menu failure");
+            Log.Debug($"Forwarding right-click context menu display to TrayIconManager at ({pt.X}, {pt.Y})");
+            _tray?.ShowOverlayContextMenu(pt);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, $"Failed to show context menu via tray manager at ({pt.X}, {pt.Y})");
+        }
+    }
+
+    private void WireTrayEvents()
+    {
+        if (_tray is null) return;
 
         _tray.OpenSettingsRequested += () => OpenSettings();
         _tray.QuitRequested += () => QuitApp();
         _tray.ToggleOverlayRequested += () =>
         {
             _cfg.Overlay.Visible = !_cfg.Overlay.Visible;
-            Log.Info($"User toggled overlay visibility via system tray to {(_cfg.Overlay.Visible ? "visible" : "hidden")}");
+            Log.Info($"User toggled overlay visibility via system tray to {(_cfg.Overlay.Visible ? VisibilityVisible : VisibilityHidden)}");
             _cfg.Save();
             HandleSettingsApplied();
         };
-        _tray.TaskManagerRequested += () =>
-        {
-            LaunchTaskManager();
-        };
+        _tray.TaskManagerRequested += () => LaunchTaskManager();
         _tray.TaskbarCreated += () =>
         {
-            if (_cfg.Overlay.Visible)
+            if (!_cfg.Overlay.Visible) return;
+            if (_overlayManager is not null)
             {
-                _overlay.RecoverTaskbar("TaskbarCreated notification from explorer");
+                _overlayManager.RecoverTaskbars("TaskbarCreated notification from explorer");
+            }
+            else
+            {
+                _overlay?.RecoverTaskbar("TaskbarCreated notification from explorer");
             }
         };
+    }
 
-        _overlay.ShowContextMenuAction = pt =>
+    private void WireOverlayManagerEvents(Action<System.Drawing.Point> showCtx)
+    {
+        if (_overlayManager is null || _tray is null) return;
+
+        _overlayManager.ShowContextMenuAction = showCtx;
+        _overlayManager.IsContextMenuOpen = () => _tray.IsOverlayContextMenuOpen;
+        _overlayManager.IsPointInsideContextMenu = pt => _tray.IsPointInsideOverlayContextMenu(pt);
+        _overlayManager.GetContextMenuBounds = () => _tray.OverlayContextMenuBounds;
+        _overlayManager.CloseContextMenuAction = () =>
         {
-            try
-            {
-                if (ThrowInTrayContextMenuForTesting)
-                    throw new InvalidOperationException("Simulated context menu failure");
-                Log.Debug($"Forwarding right-click context menu display to TrayIconManager at ({pt.X}, {pt.Y})");
-                _tray.ShowOverlayContextMenu(pt);
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, $"Failed to show context menu via tray manager at ({pt.X}, {pt.Y})");
-            }
+            _tray.CloseOverlayContextMenu();
+            _overlayManager.StopMouseHook();
         };
-
-        _overlay.IsContextMenuOpen = () => _tray.IsOverlayContextMenuOpen;
-        _overlay.IsPointInsideContextMenu = pt => _tray.IsPointInsideOverlayContextMenu(pt);
-        _overlay.GetContextMenuBounds = () => _tray.OverlayContextMenuBounds;
-        _overlay.CloseContextMenuAction = () => _tray.CloseOverlayContextMenu();
-
-        _overlay.OnOpenSettingsRequested = () => OpenSettings();
-        _overlay.OnToggleOverlayRequested = () =>
+        _overlayManager.OnOpenSettingsRequested = () => OpenSettings();
+        _overlayManager.OnToggleOverlayRequested = () =>
         {
             _cfg.Overlay.Visible = !_cfg.Overlay.Visible;
-            Log.Info($"User toggled overlay visibility via overlay menu to {(_cfg.Overlay.Visible ? "visible" : "hidden")}");
+            Log.Info($"User toggled overlay visibility via overlay menu to {(_cfg.Overlay.Visible ? VisibilityVisible : VisibilityHidden)}");
             _cfg.Save();
             HandleSettingsApplied();
         };
-        _overlay.OnExitRequested = () => QuitApp();
+        _overlayManager.OnExitRequested = () => QuitApp();
+        _overlayManager.OnDoubleClick += HandleOverlayDoubleClickAction;
+    }
 
-        _overlay.OnDoubleClick += (action) =>
+    private void HandleOverlayDoubleClickAction(string action)
+    {
+        if (string.Equals(action, "taskmanager", StringComparison.OrdinalIgnoreCase))
         {
-            if (string.Equals(action, "taskmanager", StringComparison.OrdinalIgnoreCase))
-            {
-                LaunchTaskManager();
-            }
-            else if (string.Equals(action, "settings", StringComparison.OrdinalIgnoreCase))
-            {
-                OpenSettings();
-            }
-        };
-
-        _monitor.SnapshotReady += HandleSnapshotReady;
+            LaunchTaskManager();
+        }
+        else if (string.Equals(action, "settings", StringComparison.OrdinalIgnoreCase))
+        {
+            OpenSettings();
+        }
     }
 
     private void LaunchTaskManager()
@@ -881,7 +1015,10 @@ public sealed partial class App : WpfApplication
         _netLogger!.Record(snap);
         _alerts!.Evaluate(snap);
 
-        _overlay!.UpdateSnapshot(snap);
+        if (_overlayManager is not null)
+            _overlayManager.UpdateSnapshot(snap);
+        else
+            _overlay!.UpdateSnapshot(snap);
 
         if (_tray is not null)
             Dispatcher.InvokeAsync(() => _tray.Update(snap));
@@ -1016,7 +1153,11 @@ public sealed partial class App : WpfApplication
 
     private void WireSettingsShellLifecycle(Action<bool, int> slotChangedHandler)
     {
-        if (_overlay is not null)
+        if (_overlayManager is not null)
+        {
+            _overlayManager.TaskbarSpaceConstraintChanged += slotChangedHandler;
+        }
+        else if (_overlay is not null)
         {
             _overlay.TaskbarSpaceConstraintChanged += slotChangedHandler;
         }
@@ -1025,7 +1166,11 @@ public sealed partial class App : WpfApplication
         _settingsShell!.SettingsApplied += HandleSettingsApplied;
         _settingsShell.Closed += (_, _) =>
         {
-            if (_overlay is not null)
+            if (_overlayManager is not null)
+            {
+                _overlayManager.TaskbarSpaceConstraintChanged -= slotChangedHandler;
+            }
+            else if (_overlay is not null)
             {
                 _overlay.TaskbarSpaceConstraintChanged -= slotChangedHandler;
             }
@@ -1058,7 +1203,7 @@ public sealed partial class App : WpfApplication
                 ? SettingsShellFactory(_cfg, _netLogger!)
                 : new SettingsShell(_cfg, _netLogger!);
 
-            _settingsShell.TaskbarSlotStatusProvider = () => (_overlay?.IsTaskbarSpaceConstrained ?? false, _overlay?.AvailableSlotWidth ?? 0);
+            _settingsShell.TaskbarSlotStatusProvider = () => (_overlayManager?.IsTaskbarSpaceConstrained ?? _overlay?.IsTaskbarSpaceConstrained ?? false, _overlayManager?.AvailableSlotWidth ?? _overlay?.AvailableSlotWidth ?? 0);
             Action<bool, int> slotChangedHandler = (constrained, width) =>
             {
                 _settingsShell?.NotifyTaskbarSlotChanged(constrained, width);
@@ -1087,7 +1232,11 @@ public sealed partial class App : WpfApplication
 
     private void HandleSettingsApplied()
     {
-        if (_overlay is null) { Log.Error("Cannot apply settings to taskbar overlay (overlay instance is null)"); return; }
+        if (_overlayManager is null && _overlay is null)
+        {
+            Log.Error("Cannot apply settings to taskbar overlay (overlay instance is null)");
+            return;
+        }
 
         Log.Debug($"Applied settings to overlay (visible: {_cfg.Overlay.Visible})");
 
@@ -1099,28 +1248,14 @@ public sealed partial class App : WpfApplication
 
         _tray?.SetTrayVisible(_cfg.ShowSystemTrayIcon);
         _tray?.SetOverlayVisible(_cfg.Overlay.Visible);
-        if (_cfg.Overlay.Visible)
-        {
-            _overlay.Show();
-            _overlay.RefreshOverlay();
-        }
-        else
-        {
-            _overlay.Hide();
-        }
+        SyncOverlayVisibility();
 
         if (_settingsShell is not null && _settingsShell.IsLoaded)
         {
             _settingsShell.SendUpdatedSettings();
         }
 
-        // Restart hardware monitor with new poll interval
-        int ms = Math.Max(100, _cfg.Monitoring.PollIntervalMs);
-        if (ms != _lastPollIntervalMs)
-        {
-            _lastPollIntervalMs = ms;
-            _monitor?.Restart(ms);
-        }
+        SyncMonitorInterval();
 
         // Toggle metrics logging (system log is always on)
         bool shouldLog = _cfg.EnableFileLogging;
@@ -1131,6 +1266,44 @@ public sealed partial class App : WpfApplication
             EnsureNotifierLaunched();
         else
             EnsureNotifierStopped();
+    }
+
+    private void SyncOverlayVisibility()
+    {
+        if (_cfg.Overlay.Visible)
+        {
+            if (_overlayManager is not null)
+            {
+                _overlayManager.Show();
+                _overlayManager.RefreshOverlays();
+            }
+            else if (_overlay is not null)
+            {
+                _overlay.Show();
+                _overlay.RefreshOverlay();
+            }
+        }
+        else
+        {
+            if (_overlayManager is not null)
+            {
+                _overlayManager.Hide();
+            }
+            else if (_overlay is not null)
+            {
+                _overlay.Hide();
+            }
+        }
+    }
+
+    private void SyncMonitorInterval()
+    {
+        int ms = Math.Max(100, _cfg.Monitoring.PollIntervalMs);
+        if (ms != _lastPollIntervalMs)
+        {
+            _lastPollIntervalMs = ms;
+            _monitor?.Restart(ms);
+        }
     }
 
     /// <summary>Full quit - stops monitor, saves settings, exits process.</summary>
@@ -1207,7 +1380,12 @@ public sealed partial class App : WpfApplication
 
     internal void EnsureNotifierStopped()
     {
-        if (!_notifierLaunched && _notifierProcess is null) return;
+        if (!_notifierLaunched && _notifierProcess is null)
+        {
+            KillOrphanedNotifierProcesses();
+            return;
+        }
+
         _notifierLaunched = false;
         try
         {
@@ -1249,6 +1427,38 @@ public sealed partial class App : WpfApplication
                 Log.Debug(disposeEx, "Failed to dispose notifier process during exception handling");
             }
             _notifierProcess = null;
+        }
+        finally
+        {
+            KillOrphanedNotifierProcesses();
+        }
+    }
+
+    private static void KillOrphanedNotifierProcesses()
+    {
+        try
+        {
+            foreach (var proc in Process.GetProcessesByName("LocalTelemetry.Notifier"))
+            {
+                try
+                {
+                    using (proc)
+                    {
+                        if (!proc.HasExited)
+                        {
+                            proc.Kill(entireProcessTree: true);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Debug(ex, "Failed to terminate orphaned notifier process");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to enumerate notifier processes for termination");
         }
     }
 
@@ -1417,6 +1627,7 @@ public sealed partial class App : WpfApplication
         Log.SessionEnd("Application Quit", uptime);
 
         // Dispose UI elements immediately so the overlay + tray icon vanish.
+        _overlayManager?.Dispose();
         _overlay?.Dispose();
         _tray?.Dispose();
 

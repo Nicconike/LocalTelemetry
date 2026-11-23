@@ -53,7 +53,11 @@
             return (
                 JSON.stringify(currentClean) !== JSON.stringify(pristineClean)
             );
-        } catch {
+        } catch (err) {
+            console.debug(
+                "Failed comparing clean settings, falling back to raw JSON",
+                err,
+            );
             return JSON.stringify($settings) !== $pristineSettings;
         }
     });
@@ -210,7 +214,12 @@
                                 parsed.overlay.availableSlotWidth;
                             return JSON.stringify(parsed);
                         }
-                    } catch {}
+                    } catch (err) {
+                        console.debug(
+                            "Failed updating slot metrics in pristine settings",
+                            err,
+                        );
+                    }
                     return p;
                 });
             });
@@ -219,7 +228,6 @@
             requestNics();
             requestSystemInfo();
             requestTrafficMonths();
-            requestTrafficHistoryAll();
             return () => {
                 unsub1();
                 unsub2();

@@ -16,6 +16,7 @@ public sealed class WddmGpuMonitor : IDisposable
     private IntPtr _query;
     private IntPtr _counter;
     private IntPtr _sharedMemCounter;
+    private IntPtr _committedMemCounter;
     private IntPtr _buffer;
     private int _bufferCapacity;
     private bool _primed;
@@ -96,6 +97,17 @@ public sealed class WddmGpuMonitor : IDisposable
             _sharedMemCounter = IntPtr.Zero;
         }
 
+        int committedStatus = PdhAddEnglishCounterFunc(
+            _query,
+            @"\GPU Adapter Memory(*)\Total Committed",
+            IntPtr.Zero,
+            out _committedMemCounter);
+        if (committedStatus != 0)
+        {
+            Log.Debug($"Failed to add GPU adapter committed memory counter (status 0x{committedStatus:X8})");
+            _committedMemCounter = IntPtr.Zero;
+        }
+
         // Collect initial baseline - rate counters need two samples for a delta.
         status = PdhCollectQueryDataFunc(_query);
         if (status != 0)
@@ -131,6 +143,7 @@ public sealed class WddmGpuMonitor : IDisposable
             _query = IntPtr.Zero;
             _counter = IntPtr.Zero;
             _sharedMemCounter = IntPtr.Zero;
+            _committedMemCounter = IntPtr.Zero;
         }
 
         if (_buffer != IntPtr.Zero)
@@ -193,38 +206,85 @@ public sealed class WddmGpuMonitor : IDisposable
     }
 
     /// <summary>
-    /// Returns current shared GPU memory usage in megabytes across active adapters.
+    /// Returns current GPU memory usage in megabytes for the specified adapter LUID or overall active adapters.
     /// Used for integrated GPUs which dynamically allocate from host system RAM.
     /// </summary>
-    public float GetSharedMemoryUsedMb()
+    public float GetGpuMemoryUsedMb(string? luidFilter = null)
     {
-        if (!IsAvailable || _disposed || _sharedMemCounter == IntPtr.Zero) return 0f;
+        if (!IsAvailable || _disposed) return 0f;
+
+        IntPtr counter = _committedMemCounter != IntPtr.Zero ? _committedMemCounter : _sharedMemCounter;
+        if (counter == IntPtr.Zero) return 0f;
 
         try
         {
-            if (!FetchCounterArray(_sharedMemCounter, out uint itemCount))
+            if (!FetchCounterArray(counter, out uint itemCount))
                 return 0f;
 
-            double maxBytes = 0.0;
-            for (uint i = 0; i < itemCount; i++)
-            {
-                int offset = (int)i * ItemStride;
-                uint cStatus = unchecked((uint)Marshal.ReadInt32(_buffer, offset + CStatusOffset));
-                if (cStatus != 0) continue;
+            long totalRamBytes = SystemInfo.GetTotalRamBytes();
+            if (totalRamBytes <= 0) totalRamBytes = 128L * 1024 * 1024 * 1024;
 
-                double bytes = BitConverter.Int64BitsToDouble(
-                    Marshal.ReadInt64(_buffer, offset + ValueOffset));
-                if (bytes > maxBytes) maxBytes = bytes;
-            }
-
-            return (float)(maxBytes / (1024.0 * 1024.0));
+            double chosenBytes = SelectAdapterMemoryBytes(itemCount, luidFilter, totalRamBytes);
+            return (float)(chosenBytes / (1024.0 * 1024.0));
         }
         catch (Exception ex)
         {
-            Log.Debug(ex, "Failed to query WDDM GPU shared memory usage");
+            Log.Debug(ex, "Failed to query WDDM GPU memory usage");
             return 0f;
         }
     }
+
+    private double SelectAdapterMemoryBytes(uint itemCount, string? luidFilter, long totalRamBytes)
+    {
+        double matchedBytes = 0.0;
+        double maxFallbackBytes = 0.0;
+
+        for (uint i = 0; i < itemCount; i++)
+        {
+            if (!TryReadItemBytes((int)i * ItemStride, totalRamBytes, out double bytes, out string? instanceName))
+                continue;
+
+            if (MatchesLuid(instanceName, luidFilter))
+            {
+                matchedBytes = bytes;
+                break;
+            }
+
+            if (bytes > maxFallbackBytes)
+                maxFallbackBytes = bytes;
+        }
+
+        return matchedBytes > 0.0 ? matchedBytes : maxFallbackBytes;
+    }
+
+    private bool TryReadItemBytes(int offset, long totalRamBytes, out double bytes, out string? instanceName)
+    {
+        bytes = 0.0;
+        instanceName = null;
+
+        uint cStatus = unchecked((uint)Marshal.ReadInt32(_buffer, offset + CStatusOffset));
+        if (cStatus != 0) return false;
+
+        bytes = BitConverter.Int64BitsToDouble(Marshal.ReadInt64(_buffer, offset + ValueOffset));
+        if (bytes <= 0.0 || bytes >= totalRamBytes || double.IsNaN(bytes) || double.IsInfinity(bytes))
+            return false;
+
+        IntPtr namePtr = Marshal.ReadIntPtr(_buffer, offset + NameOffset);
+        instanceName = namePtr != IntPtr.Zero ? Marshal.PtrToStringUni(namePtr) : null;
+        return instanceName is null || !instanceName.Contains("1414", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool MatchesLuid(string? instanceName, string? luidFilter)
+    {
+        return !string.IsNullOrEmpty(luidFilter)
+            && instanceName is not null
+            && instanceName.Contains(luidFilter, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Legacy overload for backward compatibility with existing callers and tests.
+    /// </summary>
+    public float GetSharedMemoryUsedMb() => GetGpuMemoryUsedMb();
 
     private void HandleQueryError()
     {
@@ -339,6 +399,7 @@ public sealed class WddmGpuMonitor : IDisposable
         _query = IntPtr.Zero;
         _counter = IntPtr.Zero;
         _sharedMemCounter = IntPtr.Zero;
+        _committedMemCounter = IntPtr.Zero;
         _buffer = IntPtr.Zero;
         _bufferCapacity = 0;
     }
@@ -379,4 +440,96 @@ public sealed class WddmGpuMonitor : IDisposable
 
     [DllImport("pdh.dll")]
     private static extern int PdhCloseQuery(IntPtr query);
+
+    // DXGI Interop for GPU adapter LUID resolution
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct DxgiAdapterDesc1
+    {
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+        public string Description;
+        public uint VendorId;
+        public uint DeviceId;
+        public uint SubSysId;
+        public uint Revision;
+        public UIntPtr DedicatedVideoMemory;
+        public UIntPtr DedicatedSystemMemory;
+        public UIntPtr SharedSystemMemory;
+        public uint LuidLow;
+        public int LuidHigh;
+        public uint Flags;
+    }
+
+    [DllImport("dxgi.dll")]
+    private static extern int CreateDXGIFactory1([In] ref Guid riid, out IntPtr ppFactory);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int EnumAdapters1Delegate(IntPtr thisPtr, uint Adapter, out IntPtr ppAdapter);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int GetDesc1Delegate(IntPtr thisPtr, out DxgiAdapterDesc1 pDesc);
+
+    /// <summary>
+    /// Resolves the adapter LUID string (e.g. <c>luid_0x00000000_0x000144e4</c>) matching the active GPU via DXGI.
+    /// Used to target performance counter instances precisely.
+    /// </summary>
+    public static string? GetAdapterLuid(string? gpuName = null)
+    {
+        try
+        {
+            Guid factoryGuid = new("7b7166ec-21c7-44ae-b21a-c9ae321ae369");
+            if (CreateDXGIFactory1(ref factoryGuid, out IntPtr factoryPtr) != 0 || factoryPtr == IntPtr.Zero)
+                return null;
+
+            try
+            {
+                IntPtr factoryVtable = Marshal.ReadIntPtr(factoryPtr);
+                IntPtr enumPtr = Marshal.ReadIntPtr(factoryVtable, 12 * IntPtr.Size);
+                var enumAdapters1 = Marshal.GetDelegateForFunctionPointer<EnumAdapters1Delegate>(enumPtr);
+
+                uint i = 0;
+                string? firstHardwareLuid = null;
+
+                while (enumAdapters1(factoryPtr, i, out IntPtr adapterPtr) == 0 && adapterPtr != IntPtr.Zero)
+                {
+                    try
+                    {
+                        IntPtr vtable = Marshal.ReadIntPtr(adapterPtr);
+                        IntPtr getDesc1Ptr = Marshal.ReadIntPtr(vtable, 10 * IntPtr.Size);
+                        var getDesc1 = Marshal.GetDelegateForFunctionPointer<GetDesc1Delegate>(getDesc1Ptr);
+                        getDesc1(adapterPtr, out DxgiAdapterDesc1 desc);
+
+                        // Skip software renderers (DXGI_ADAPTER_FLAG_SOFTWARE = 2)
+                        if ((desc.Flags & 2) == 0)
+                        {
+                            string luidStr = $"luid_0x{desc.LuidHigh:x8}_0x{desc.LuidLow:x8}";
+                            if (!string.IsNullOrEmpty(gpuName) &&
+                                (desc.Description.Contains(gpuName, StringComparison.OrdinalIgnoreCase) ||
+                                 gpuName.Contains(desc.Description, StringComparison.OrdinalIgnoreCase)))
+                            {
+                                return luidStr;
+                            }
+
+                            firstHardwareLuid ??= luidStr;
+                        }
+                    }
+                    finally
+                    {
+                        Marshal.Release(adapterPtr);
+                    }
+                    i++;
+                }
+
+                return firstHardwareLuid;
+            }
+            finally
+            {
+                Marshal.Release(factoryPtr);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to resolve GPU adapter LUID via DXGI");
+            return null;
+        }
+    }
 }

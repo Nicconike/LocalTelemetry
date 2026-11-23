@@ -40,14 +40,14 @@ LocalTelemetry/
 │   │   │   └── PawnIo/          # Kernel driver transport, Intel MSR & AMD Ryzen SMU readers
 │   │   └── Models/              # Metrics.cs, TelemetrySnapshot, OverlayDeploymentState, UpdateCheckResult
 │   ├── LocalTelemetry.App/      # WPF Desktop host & Win32 taskbar integration
-│   │   ├── Overlay/             # TaskbarOverlay.cs (GDI+ rendering, DPI scaling, watchdog)
+│   │   ├── Overlay/             # TaskbarOverlay.cs, TaskbarOverlayManager.cs (multi-monitor coordination, GDI+ rendering, DPI scaling)
 │   │   ├── Services/            # AlertService.cs, NotificationClient.cs, UpdateCheckService.cs
 │   │   ├── Settings/            # SettingsShell.xaml & Svelte 5 WebView2 frontend
 │   │   │   └── wwwroot/         # Svelte 5 (Vite + Bun + TypeScript) settings single-page app
 │   │   │       ├── src/         # Svelte components (App, Sidebar, 10 Pages, UI primitives, types, utils)
 │   │   │       └── package.json # Frontend dependencies
 │   │   ├── Tray/                # TrayIconManager.cs (WinForms NotifyIcon & custom dark context menus)
-│   │   ├── Win32/               # TaskbarEmbedder.cs (SetParent taskbar child reparenting & positioning)
+│   │   ├── Win32/               # TaskbarEmbedder.cs, DisplayInfo.cs (display enumeration, child reparenting & positioning)
 │   │   ├── App.xaml.cs          # WPF application entry point, UAC elevation & DI container
 │   │   └── Uninstall.bat        # Portable mode driver, service & registry cleanup script
 │   └── LocalTelemetry.Notifier/ # Standalone toast notification helper executable

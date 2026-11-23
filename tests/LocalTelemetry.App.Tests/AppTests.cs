@@ -494,7 +494,7 @@ public class AppTests
     public void App_EnsureNotifierStopped_WhenProcessNotNullAndExited_DisposesProcessSafely()
     {
         var app = GetOrCreateApp();
-        var proc = new System.Diagnostics.Process();
+        var proc = new Process();
         typeof(App).GetField("_notifierProcess", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, proc);
         typeof(App).GetField("_notifierLaunched", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, true);
 
@@ -741,9 +741,9 @@ public class AppTests
         actUnobserved.Should().NotThrow();
 
         var dispatcherMethod = typeof(App).GetMethod("HandleDispatcherUnhandledException", BindingFlags.NonPublic | BindingFlags.Static);
-        var dispArgs = (System.Windows.Threading.DispatcherUnhandledExceptionEventArgs)
-            RuntimeHelpers.GetUninitializedObject(typeof(System.Windows.Threading.DispatcherUnhandledExceptionEventArgs));
-        typeof(System.Windows.Threading.DispatcherUnhandledExceptionEventArgs)
+        var dispArgs = (DispatcherUnhandledExceptionEventArgs)
+            RuntimeHelpers.GetUninitializedObject(typeof(DispatcherUnhandledExceptionEventArgs));
+        typeof(DispatcherUnhandledExceptionEventArgs)
             .GetField("_exception", BindingFlags.NonPublic | BindingFlags.Instance)?
             .SetValue(dispArgs, new InvalidOperationException("Test dispatcher ex"));
         var actDisp = () => dispatcherMethod!.Invoke(null, [new object(), dispArgs]);
@@ -759,10 +759,10 @@ public class AppTests
 
         var app = GetOrCreateApp();
         var onStartupMethod = typeof(App).GetMethod("OnStartup", BindingFlags.NonPublic | BindingFlags.Instance);
-        var args = (System.Windows.StartupEventArgs)
-            RuntimeHelpers.GetUninitializedObject(typeof(System.Windows.StartupEventArgs));
+        var args = (StartupEventArgs)
+            RuntimeHelpers.GetUninitializedObject(typeof(StartupEventArgs));
 
-        var field = typeof(System.Windows.StartupEventArgs).GetField("_args", BindingFlags.NonPublic | BindingFlags.Instance);
+        var field = typeof(StartupEventArgs).GetField("_args", BindingFlags.NonPublic | BindingFlags.Instance);
         field?.SetValue(args, NonElevatedArgs);
 
         onStartupMethod!.Invoke(app, [args]);
@@ -839,8 +839,8 @@ public class AppTests
         appFields.GetField("_notifClient", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(app, notifClient);
 
         var onExitMethod = typeof(App).GetMethod("OnExit", BindingFlags.NonPublic | BindingFlags.Instance);
-        var exitArgs = (System.Windows.ExitEventArgs)
-            RuntimeHelpers.GetUninitializedObject(typeof(System.Windows.ExitEventArgs));
+        var exitArgs = (ExitEventArgs)
+            RuntimeHelpers.GetUninitializedObject(typeof(ExitEventArgs));
 
         var act = () => onExitMethod!.Invoke(app, [exitArgs]);
         act.Should().NotThrow();
@@ -907,7 +907,7 @@ public class AppTests
     public void App_LaunchTaskManager_WhenProcessLauncherThrows_HandlesErrorGracefully()
     {
         var app = GetOrCreateApp();
-        Action<System.Diagnostics.ProcessStartInfo>? priorLauncher = App.TaskManagerProcessLauncher;
+        Action<ProcessStartInfo>? priorLauncher = App.TaskManagerProcessLauncher;
         try
         {
             App.TaskManagerProcessLauncher = _ => throw new InvalidOperationException("Failed to launch task manager");
@@ -1139,9 +1139,9 @@ public class AppTests
 
         // 3. HandleDispatcherUnhandledException
         var handleDispatcher = typeof(App).GetMethod("HandleDispatcherUnhandledException", BindingFlags.NonPublic | BindingFlags.Static);
-        var dispArgs = (System.Windows.Threading.DispatcherUnhandledExceptionEventArgs)RuntimeHelpers.GetUninitializedObject(
-            typeof(System.Windows.Threading.DispatcherUnhandledExceptionEventArgs));
-        typeof(System.Windows.Threading.DispatcherUnhandledExceptionEventArgs)
+        var dispArgs = (DispatcherUnhandledExceptionEventArgs)RuntimeHelpers.GetUninitializedObject(
+            typeof(DispatcherUnhandledExceptionEventArgs));
+        typeof(DispatcherUnhandledExceptionEventArgs)
             .GetField("_exception", BindingFlags.NonPublic | BindingFlags.Instance)?
             .SetValue(dispArgs, new InvalidOperationException("Dispatcher boom"));
         handleDispatcher!.Invoke(null, [app, dispArgs]);
@@ -1566,10 +1566,10 @@ public class AppTests
                 var cfg = new AppSettings();
                 var history = new TrafficHistoryFile(tmp);
                 using var netLogger = new NetUsageLogger(cfg, history);
-                using var notifClient = new global::LocalTelemetry.App.Services.NotificationClient();
-                using var overlayFallback = overlay is null ? new TaskbarOverlay(cfg, new global::LocalTelemetry.App.Win32.TaskbarEmbedder(cfg)) : null;
+                using var notifClient = new NotificationClient();
+                using var overlayFallback = overlay is null ? new TaskbarOverlay(cfg, new TaskbarEmbedder(cfg)) : null;
                 var effectiveOverlay = overlay ?? overlayFallback!;
-                var alerts = new global::LocalTelemetry.App.Services.AlertService(cfg, effectiveOverlay, notifClient, netLogger);
+                var alerts = new AlertService(cfg, effectiveOverlay, notifClient, netLogger);
 
                 overlayFieldToRestore.SetValue(app, effectiveOverlay);
                 netLoggerField.SetValue(app, netLogger);
@@ -1744,10 +1744,12 @@ public class AppTests
             var openSettings = typeof(App).GetMethod("OpenSettings", BindingFlags.NonPublic | BindingFlags.Instance)!;
             var origShellFactory = App.SettingsShellFactory;
             var origSuppressSettings = App.SuppressSettingsWindowForTesting;
+            var origOutOfProc = App.LaunchSettingsOutOfProcess;
             try
             {
                 App.SettingsShellFactory = null;
                 App.SuppressSettingsWindowForTesting = false;
+                App.LaunchSettingsOutOfProcess = false;
                 SettingsShell.SkipShowForTesting = true;
                 openSettings.Invoke(app, null);
 
@@ -1758,6 +1760,7 @@ public class AppTests
             {
                 App.SettingsShellFactory = origShellFactory;
                 App.SuppressSettingsWindowForTesting = origSuppressSettings;
+                App.LaunchSettingsOutOfProcess = origOutOfProc;
             }
 
             // 10. Test StartUserInterface with Suppress flags false (lines 234, 237)
@@ -1858,7 +1861,7 @@ public class AppTests
             launchMethod.Invoke(app, null);
 
             capturedPsi.Should().NotBeNull();
-            capturedPsi!.Arguments.Should().Be("--settings");
+            capturedPsi.Arguments.Should().Be("--settings");
             capturedPsi.UseShellExecute.Should().BeTrue();
         }
         finally

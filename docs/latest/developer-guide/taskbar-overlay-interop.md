@@ -1,10 +1,10 @@
 # :app-window: Win32 Taskbar Hooking & Overlay Interop
 
-LocalTelemetry embeds a high-performance GDI+ render surface (`NativeWindow`) directly into the native Windows taskbar process (`Shell_TrayWnd`).
+LocalTelemetry embeds a high-performance GDI+ render surface (`NativeWindow`) directly into native Windows taskbar processes (`Shell_TrayWnd` for primary display, `Shell_SecondaryTrayWnd` for secondary monitors).
 
 ## :layers: Win32 Taskbar Hierarchy & State Machine
 
-The taskbar overlay management is handled inside `TaskbarOverlay.cs` and `TaskbarEmbedder.cs`.
+Taskbar overlay lifecycle across displays is coordinated by `TaskbarOverlayManager.cs`, delegating to individual `TaskbarOverlay.cs` and `TaskbarEmbedder.cs` instances.
 
 ```mermaid
 %%{init: {'theme': 'dark', 'themeVariables': {'fontSize': '13px'}, 'flowchart': {'nodeSpacing': 35, 'rankSpacing': 40, 'subGraphTitleMargin': {'top': 12, 'bottom': 20}, 'curve': 'linear'}}}%%

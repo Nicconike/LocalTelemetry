@@ -8,14 +8,11 @@
         <PlatformTarget>x64</PlatformTarget>
         <RuntimeIdentifier>win-x64</RuntimeIdentifier>
         <UseWindowsForms>true</UseWindowsForms>
-        <UseWPF>true</UseWPF>
         <AssemblyName>LocalTelemetry.Notifier</AssemblyName>
         <RootNamespace>LocalTelemetry.Notifier</RootNamespace>
         <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
     </PropertyGroup>
-    <ItemGroup>
-        <PackageReference Include="SonarAnalyzer.CSharp" Version="10.35.0.4138" PrivateAssets="all" />
-    </ItemGroup>
+
 
     <ItemGroup>
         <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">

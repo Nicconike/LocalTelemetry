@@ -73,15 +73,15 @@
 
     const gamingMetrics = [
         "cpu_pct",
-        "cpu_temp",
-        "cpu_freq",
-        "cpu_power",
         "gpu_pct",
+        "cpu_temp",
         "gpu_temp",
-        "gpu_freq",
+        "cpu_power",
         "gpu_power",
-        "ram_pct",
+        "net_total",
         "gpu_vram",
+        "ram_pct",
+        "ram_used",
         "net_down",
         "net_up",
     ];
@@ -166,7 +166,7 @@
         {
             id: "gaming",
             label: "Gaming",
-            tooltip: "CPU and GPU clock and wattage telemetry with memory pool",
+            tooltip: "CPU top row and GPU bottom row with wattage, memory, and network telemetry",
             count: gamingMetrics.length,
         },
         {
@@ -235,127 +235,234 @@
         }
     }
 
-    let items = $derived(
-        $settings ? ($settings.overlay.row1 || []).filter((x) => x) : [],
-    );
+    function toColumns(flatList) {
+        const cols = [];
+        for (let i = 0; i < flatList.length; i += 2) {
+            if (i + 1 < flatList.length) {
+                cols.push([flatList[i], flatList[i + 1]]);
+            } else {
+                cols.push([flatList[i]]);
+            }
+        }
+        return cols;
+    }
+
+    function serializeColumns(cols) {
+        return (cols || []).map((c) => c.join("/")).join(",");
+    }
+
+    let currentCols = $derived.by(() => {
+        if (!$settings?.overlay) return [];
+        if ($settings.overlay.columns !== undefined && Array.isArray($settings.overlay.columns)) {
+            return $settings.overlay.columns.filter((c) => Array.isArray(c) && c.length > 0);
+        }
+        if ($settings.overlay.row1 !== undefined && Array.isArray($settings.overlay.row1)) {
+            return toColumns($settings.overlay.row1.filter(Boolean));
+        }
+        return [];
+    });
+
+    let items = $derived(currentCols.flatMap((c) => c));
 
     let activePreset = $derived.by(() => {
-        const cur = items.join(",");
-        if (cur === defaultMetrics.join(",")) return "default";
-        if (cur === gamingMetrics.join(",")) return "gaming";
-        if (cur === compactMetrics.join(",")) return "compact";
-        if (cur === microMetrics.join(",")) return "micro";
-        if (cur === thermalsMetrics.join(",")) return "thermals";
-        if (cur === getWorkstationMetrics().join(",")) return "workstation";
-        if (cur === networkMetrics.join(",")) return "network";
-        if (cur === getFullMetrics().join(",")) return "full";
+        const cur = serializeColumns(currentCols);
+        if (cur === serializeColumns(toColumns(defaultMetrics))) return "default";
+        if (cur === serializeColumns(toColumns(gamingMetrics))) return "gaming";
+        if (cur === serializeColumns(toColumns(compactMetrics))) return "compact";
+        if (cur === serializeColumns(toColumns(microMetrics))) return "micro";
+        if (cur === serializeColumns(toColumns(thermalsMetrics))) return "thermals";
+        if (cur === serializeColumns(toColumns(getWorkstationMetrics()))) return "workstation";
+        if (cur === serializeColumns(toColumns(networkMetrics))) return "network";
+        if (cur === serializeColumns(toColumns(getFullMetrics()))) return "full";
         return "custom";
     });
 
     let columns = $derived.by(() => {
         const cols = [];
-        for (let i = 0; i < items.length; i += 2) {
+        let linearIdx = 0;
+        for (let i = 0; i < currentCols.length; i++) {
+            const c = currentCols[i];
+            const topIdx = linearIdx++;
+            const hasBot = c.length > 1;
+            const botIdx = hasBot ? linearIdx++ : -1;
             cols.push({
-                colIdx: Math.floor(i / 2),
-                topIdx: i,
-                topId: items[i],
-                botIdx: i + 1 < items.length ? i + 1 : -1,
-                botId: i + 1 < items.length ? items[i + 1] : null,
+                colIdx: i,
+                topIdx,
+                topId: c[0],
+                botIdx,
+                botId: hasBot ? c[1] : null,
             });
         }
         return cols;
     });
 
     function applyPreset(presetId) {
-        save(getPresetMetrics(presetId), presetId);
+        saveColumns(toColumns(getPresetMetrics(presetId)), presetId);
     }
 
-    function save(nextItems, presetId) {
+    function saveColumns(nextCols, presetId) {
         const next = deepClone($settings);
-        const filtered = nextItems.filter((x) => x);
-        next.overlay.row1 = filtered;
+        const validCols = (nextCols || []).filter((c) => Array.isArray(c) && c.length > 0);
+        next.overlay.columns = validCols;
+        next.overlay.row1 = validCols.flatMap((c) => c);
+
         if (presetId) {
             next.overlay.layoutPreset = presetId;
         } else {
-            const cur = filtered.join(",");
-            if (cur === defaultMetrics.join(","))
+            const cur = serializeColumns(validCols);
+            if (cur === serializeColumns(toColumns(defaultMetrics)))
                 next.overlay.layoutPreset = "default";
-            else if (cur === gamingMetrics.join(","))
+            else if (cur === serializeColumns(toColumns(gamingMetrics)))
                 next.overlay.layoutPreset = "gaming";
-            else if (cur === compactMetrics.join(","))
+            else if (cur === serializeColumns(toColumns(compactMetrics)))
                 next.overlay.layoutPreset = "compact";
-            else if (cur === microMetrics.join(","))
+            else if (cur === serializeColumns(toColumns(microMetrics)))
                 next.overlay.layoutPreset = "micro";
-            else if (cur === thermalsMetrics.join(","))
+            else if (cur === serializeColumns(toColumns(thermalsMetrics)))
                 next.overlay.layoutPreset = "thermals";
-            else if (cur === getWorkstationMetrics().join(","))
+            else if (cur === serializeColumns(toColumns(getWorkstationMetrics())))
                 next.overlay.layoutPreset = "workstation";
-            else if (cur === networkMetrics.join(","))
+            else if (cur === serializeColumns(toColumns(networkMetrics)))
                 next.overlay.layoutPreset = "network";
-            else if (cur === getPresetMetrics("full").join(","))
+            else if (cur === serializeColumns(toColumns(getPresetMetrics("full"))))
                 next.overlay.layoutPreset = "full";
             else next.overlay.layoutPreset = "custom";
         }
+        swapSourceCol = -1;
         settings.set(next);
     }
 
+    function saveFlat(flatList) {
+        let ptr = 0;
+        const next = currentCols.map((c) => {
+            const col = [];
+            for (let i = 0; i < c.length; i++) {
+                if (ptr < flatList.length) {
+                    col.push(flatList[ptr++]);
+                }
+            }
+            return col;
+        });
+        saveColumns(next, "custom");
+    }
+
     function resetLayout() {
-        save([...defaultMetrics], "default");
+        saveColumns(toColumns(defaultMetrics), "default");
     }
 
     function moveUp(idx) {
         if (!$settings) return;
-        const cur = ($settings.overlay.row1 || []).filter((x) => x);
+        const cur = [...items];
         if (idx <= 0 || idx >= cur.length) return;
         [cur[idx - 1], cur[idx]] = [cur[idx], cur[idx - 1]];
-        save(cur, "custom");
+        saveFlat(cur);
     }
 
     function moveDown(idx) {
         if (!$settings) return;
-        const cur = ($settings.overlay.row1 || []).filter((x) => x);
+        const cur = [...items];
         if (idx < 0 || idx >= cur.length - 1) return;
         [cur[idx], cur[idx + 1]] = [cur[idx + 1], cur[idx]];
-        save(cur, "custom");
+        saveFlat(cur);
+    }
+
+    function findColRow(idx) {
+        let count = 0;
+        for (let c = 0; c < currentCols.length; c++) {
+            for (let r = 0; r < currentCols[c].length; r++) {
+                if (count === idx) return { colIdx: c, rowIdx: r };
+                count++;
+            }
+        }
+        return null;
     }
 
     function remove(idx) {
         if (!$settings) return;
-        const cur = ($settings.overlay.row1 || []).filter((x) => x);
-        if (idx < 0 || idx >= cur.length) return;
-        cur.splice(idx, 1);
-        save(cur, "custom");
+        const target = findColRow(idx);
+        if (!target) return;
+        const next = currentCols.map((c) => [...c]);
+        const col = next[target.colIdx];
+        if (col.length > 1) {
+            col.splice(target.rowIdx, 1);
+        } else {
+            next.splice(target.colIdx, 1);
+        }
+        saveColumns(next, "custom");
     }
 
     function add(metricId) {
         if (!metricId || !$settings) return;
-        const cur = ($settings.overlay.row1 || []).filter((x) => x);
-        if (cur.includes(metricId)) return;
-        cur.push(metricId);
-        save(cur, "custom");
+        if (items.includes(metricId)) return;
+        const next = currentCols.map((c) => [...c]);
+        next.push([metricId]);
+        saveColumns(next, "custom");
+    }
+
+    function pairMetric(colIdx, metricId) {
+        if (!metricId || !$settings) return;
+        if (items.includes(metricId)) return;
+        if (colIdx < 0 || colIdx >= currentCols.length) return;
+        const next = currentCols.map((c) => [...c]);
+        if (next[colIdx].length === 1) {
+            next[colIdx].push(metricId);
+            saveColumns(next, "custom");
+        }
+    }
+
+    function removeColumn(colIdx) {
+        if (colIdx < 0 || colIdx >= currentCols.length) return;
+        const next = currentCols.map((c) => [...c]);
+        next.splice(colIdx, 1);
+        saveColumns(next, "custom");
+    }
+
+    function swapRowsInColumn(colIdx) {
+        if (colIdx < 0 || colIdx >= currentCols.length) return;
+        const next = currentCols.map((c) => [...c]);
+        if (next[colIdx].length > 1) {
+            [next[colIdx][0], next[colIdx][1]] = [next[colIdx][1], next[colIdx][0]];
+            saveColumns(next, "custom");
+        }
     }
 
     function swapColumn(colIdx) {
-        const top = 2 * colIdx;
-        const bot = top + 1;
-        if (bot >= items.length) return;
-        const next = [...items];
-        [next[top], next[bot]] = [next[bot], next[top]];
-        save(next, "custom");
+        swapRowsInColumn(colIdx);
+    }
+
+    let swapSourceCol = $state(-1);
+
+    function handleSwapClick(colIdx) {
+        if (columns.length <= 1) return;
+        if (columns.length === 2) {
+            swapColumns(0, 1);
+            swapSourceCol = -1;
+            return;
+        }
+        if (swapSourceCol === -1) {
+            swapSourceCol = colIdx;
+        } else if (swapSourceCol === colIdx) {
+            swapSourceCol = -1;
+        } else {
+            swapColumns(swapSourceCol, colIdx);
+            swapSourceCol = -1;
+        }
+    }
+
+    function swapColumns(colIdx1, colIdx2) {
+        if (colIdx1 === colIdx2 || colIdx1 < 0 || colIdx2 < 0) return;
+        if (colIdx1 >= currentCols.length || colIdx2 >= currentCols.length) return;
+        const next = currentCols.map((c) => [...c]);
+        [next[colIdx1], next[colIdx2]] = [next[colIdx2], next[colIdx1]];
+        saveColumns(next, "custom");
     }
 
     function moveColumn(colIdx, direction) {
         const targetCol = colIdx + direction;
-        if (targetCol < 0) return;
-        const cols = [];
-        for (let i = 0; i < items.length; i += 2) {
-            const pair = [items[i]];
-            if (i + 1 < items.length) pair.push(items[i + 1]);
-            cols.push(pair);
-        }
-        if (targetCol >= cols.length) return;
-        [cols[colIdx], cols[targetCol]] = [cols[targetCol], cols[colIdx]];
-        save(cols.flat(), "custom");
+        if (colIdx < 0 || targetCol < 0 || colIdx >= currentCols.length || targetCol >= currentCols.length) return;
+        const next = currentCols.map((c) => [...c]);
+        [next[colIdx], next[targetCol]] = [next[targetCol], next[colIdx]];
+        saveColumns(next, "custom");
     }
 
     function formatMetric(id) {
@@ -418,7 +525,7 @@
             dropIdx = -1;
             return;
         }
-        const cur = ($settings.overlay.row1 || []).filter((x) => x);
+        const cur = [...items];
         if (
             dragIdx < 0 ||
             dragIdx >= cur.length ||
@@ -431,7 +538,7 @@
         }
         const [moved] = cur.splice(dragIdx, 1);
         cur.splice(idx, 0, moved);
-        save(cur, "custom");
+        saveFlat(cur);
         dragIdx = -1;
         dropIdx = -1;
     }
@@ -545,50 +652,49 @@
 
                 <div class="columns-container">
                     {#each columns as col (col.colIdx)}
-                        <div class="column-card">
+                        <div
+                            class="column-card"
+                            class:swap-source={swapSourceCol === col.colIdx}
+                        >
                             <div class="column-head">
                                 <div class="column-title-group">
                                     <span class="column-tag"
                                         >Column {col.colIdx + 1}</span
                                     >
-                                    <span class="column-desc">
-                                        {formatMetric(col.topId)}{col.botId
-                                            ? ` / ${formatMetric(col.botId)}`
-                                            : ""}
-                                    </span>
                                 </div>
                                 <div class="column-actions">
-                                    {#if col.botId}
+                                    {#if columns.length > 1}
                                         <button
                                             type="button"
                                             class="btn-col-action btn-swap"
-                                            title="Swap Top and Bottom row metrics"
+                                            class:active={swapSourceCol === col.colIdx}
+                                            title={swapSourceCol === -1
+                                                ? "Swap this column with another column"
+                                                : swapSourceCol === col.colIdx
+                                                    ? "Cancel swap"
+                                                    : `Swap Column ${col.colIdx + 1} with Column ${swapSourceCol + 1}`}
                                             onclick={() =>
-                                                swapColumn(col.colIdx)}
+                                                handleSwapClick(col.colIdx)}
                                         >
-                                            ⇅ Swap
+                                            {#if swapSourceCol === -1}
+                                                ⇅ Swap
+                                            {:else if swapSourceCol === col.colIdx}
+                                                ✕ Cancel
+                                            {:else}
+                                                ⇅ With Col {swapSourceCol + 1}
+                                            {/if}
                                         </button>
                                     {/if}
                                     <button
                                         type="button"
-                                        class="btn-col-action"
-                                        title="Move column left"
-                                        disabled={col.colIdx === 0}
-                                        onclick={() =>
-                                            moveColumn(col.colIdx, -1)}
+                                        class="btn-col-action btn-col-remove"
+                                        title="Remove entire column"
+                                        onclick={() => {
+                                            if (swapSourceCol !== -1) swapSourceCol = -1;
+                                            removeColumn(col.colIdx);
+                                        }}
                                     >
-                                        ◀ Col
-                                    </button>
-                                    <button
-                                        type="button"
-                                        class="btn-col-action"
-                                        title="Move column right"
-                                        disabled={col.colIdx >=
-                                            columns.length - 1}
-                                        onclick={() =>
-                                            moveColumn(col.colIdx, 1)}
-                                    >
-                                        Col ▶
+                                        ✖ Col
                                     </button>
                                 </div>
                             </div>
@@ -612,10 +718,10 @@
                                 <span class="drag-handle">&#x2630;</span>
                                 <span class="metric-idx">{col.topIdx + 1}.</span
                                 >
-                                <span class="row-badge top">Top Row</span>
                                 <span class="metric-name"
                                     >{formatMetric(col.topId)}</span
                                 >
+                                <span class="row-badge top">Top Row</span>
                                 <div class="metric-actions">
                                     <button
                                         class="btn-icon"
@@ -662,11 +768,11 @@
                                     <span class="metric-idx"
                                         >{col.botIdx + 1}.</span
                                     >
-                                    <span class="row-badge bottom"
-                                        >Bottom Row</span
-                                    >
                                     <span class="metric-name"
                                         >{formatMetric(col.botId)}</span
+                                    >
+                                    <span class="row-badge bottom"
+                                        >Bottom Row</span
                                     >
                                     <div class="metric-actions">
                                         <button
@@ -695,9 +801,26 @@
                             {:else}
                                 <div class="col-slot empty-slot">
                                     <span class="empty-slot-text"
-                                        >Empty Bottom Row (add a metric below to
-                                        pair)</span
+                                        >Empty Bottom Row</span
                                     >
+                                    {#if available.length > 0}
+                                        <select
+                                            class="pair-select"
+                                            aria-label="Pair metric in column {col.colIdx + 1}"
+                                            onchange={(e) => {
+                                                const el = e.currentTarget;
+                                                if (el.value) {
+                                                    pairMetric(col.colIdx, el.value);
+                                                    el.value = "";
+                                                }
+                                            }}
+                                        >
+                                            <option value="">+ Pair Metric</option>
+                                            {#each available as m (m.id)}
+                                                <option value={m.id}>{m.label}</option>
+                                            {/each}
+                                        </select>
+                                    {/if}
                                 </div>
                             {/if}
                         </div>
@@ -984,6 +1107,10 @@
             var(--color-border)
         );
     }
+    .column-card.swap-source {
+        border-color: var(--color-primary);
+        box-shadow: 0 0 0 1px var(--color-primary);
+    }
     .column-head {
         display: flex;
         justify-content: space-between;
@@ -1008,14 +1135,6 @@
         padding: 1px 7px;
         border-radius: var(--radius-sm);
         flex-shrink: 0;
-    }
-    .column-desc {
-        font-size: 12px;
-        color: var(--color-text-muted);
-        font-weight: 500;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
     }
     .column-actions {
         display: flex;
@@ -1060,6 +1179,15 @@
         );
         border-color: var(--color-primary);
     }
+    .btn-col-action.btn-swap.active {
+        background: var(--color-primary);
+        color: #fff;
+        border-color: var(--color-primary);
+    }
+    .btn-col-action.btn-col-remove:hover:not(:disabled) {
+        color: var(--color-error);
+        border-color: var(--color-error);
+    }
 
     .row-badge {
         font-size: 10px;
@@ -1071,6 +1199,7 @@
         white-space: nowrap;
         flex-shrink: 0;
         user-select: none;
+        margin-left: auto;
     }
     .row-badge.top {
         background: color-mix(in srgb, var(--color-primary) 14%, transparent);
@@ -1129,6 +1258,26 @@
         font-size: var(--text-xs);
         color: var(--color-text-muted);
         font-style: italic;
+    }
+    .pair-select {
+        color-scheme: dark;
+        font-size: var(--text-xs);
+        padding: 3px 8px;
+        background: var(--color-surface-2);
+        color: var(--color-text);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        transition: border-color var(--transition);
+        outline: none;
+    }
+    .pair-select:hover,
+    .pair-select:focus-visible {
+        border-color: var(--color-primary);
+    }
+    .pair-select option {
+        background-color: var(--color-surface-2);
+        color: var(--color-text);
     }
 
     .drag-handle {
@@ -1197,9 +1346,21 @@
         padding: var(--space-1) var(--space-2);
         border-radius: var(--radius-sm);
         border: 1px solid var(--color-border);
-        background: var(--color-bg);
+        background: var(--color-surface-2);
         color: var(--color-text);
         font-size: var(--text-sm);
+        color-scheme: dark;
+        cursor: pointer;
+        transition: border-color var(--transition);
+        outline: none;
+    }
+    .add-select:hover,
+    .add-select:focus-visible {
+        border-color: var(--color-primary);
+    }
+    .add-select option {
+        background-color: var(--color-surface-2);
+        color: var(--color-text);
     }
     .empty {
         font-size: var(--text-sm);

@@ -396,17 +396,25 @@ describe('LayoutPage.svelte', () => {
         expect(defaultBtn).toBeDefined();
         expect(fullBtn).toBeDefined();
 
-        // 1. Click Gaming preset: CPU columns first, then GPU, RAM, Network
+        // 1. Click Gaming preset: CPU top row, GPU bottom row, Total/VRAM, RAM, Network
         gamingBtn!.click();
         await tick();
 
         let row1 = get(settings)!.overlay.row1;
-        expect(row1[0]).toBe('cpu_pct'); // Col 0 Top
-        expect(row1[1]).toBe('cpu_temp'); // Col 0 Bot
-        expect(row1[2]).toBe('cpu_freq'); // Col 1 Top
-        expect(row1[3]).toBe('cpu_power'); // Col 1 Bot
-        expect(row1[4]).toBe('gpu_pct'); // Col 2 Top
-        expect(row1[5]).toBe('gpu_temp'); // Col 2 Bot
+        expect(row1).toEqual([
+            'cpu_pct',   // Col 0 Top: CPU %
+            'gpu_pct',   // Col 0 Bot: GPU %
+            'cpu_temp',  // Col 1 Top: CPU Temp
+            'gpu_temp',  // Col 1 Bot: GPU Temp
+            'cpu_power', // Col 2 Top: CPU Power
+            'gpu_power', // Col 2 Bot: GPU Power
+            'net_total', // Col 3 Top: Net Total
+            'gpu_vram',  // Col 3 Bot: GPU VRAM
+            'ram_pct',   // Col 4 Top: RAM %
+            'ram_used',  // Col 4 Bot: RAM Used
+            'net_down',  // Col 5 Top: Net Down
+            'net_up',    // Col 5 Bot: Net Up
+        ]);
         expect(gamingBtn!.classList.contains('active')).toBe(true);
 
         // 2. Click Compact preset
@@ -482,7 +490,12 @@ describe('LayoutPage.svelte', () => {
         expect(microBtn!.classList.contains('active')).toBe(false);
     });
 
-    it('renders live mini-taskbar preview and allows swapping top and bottom metrics within a column', async () => {
+    it('renders live mini-taskbar preview and allows swapping columns directly when exactly 2 columns exist', async () => {
+        settings.set({
+            monitoring: { trackCpu: true, trackGpu: true, trackRam: true, trackNet: true },
+            overlay: { row1: ['cpu_pct', 'cpu_temp', 'gpu_pct', 'gpu_temp'] },
+        } as any);
+
         component = mount(LayoutPage, { target: document.body });
         await tick();
 
@@ -493,21 +506,60 @@ describe('LayoutPage.svelte', () => {
 
         // Check column cards exist
         const colCards = document.body.querySelectorAll('.column-card');
-        expect(colCards.length).toBeGreaterThanOrEqual(2);
+        expect(colCards).toHaveLength(2);
 
-        // Click swap button in Column 1 (swapping cpu_pct and ram_pct)
-        const swapBtn = document.body.querySelector('button.btn-swap') as HTMLButtonElement | null;
-        expect(swapBtn).not.toBeNull();
+        // Click swap button in Column 0 (swaps Column 0 and Column 1 when 2 columns exist)
+        const swapBtns = document.body.querySelectorAll('button.btn-swap') as NodeListOf<HTMLButtonElement>;
+        expect(swapBtns).toHaveLength(2);
 
-        swapBtn!.click();
+        swapBtns[0].click();
         await tick();
 
-        const row1 = get(settings)!.overlay.row1;
-        expect(row1[0]).toBe('ram_pct');
-        expect(row1[1]).toBe('cpu_pct');
+        let row1 = get(settings)!.overlay.row1;
+        expect(row1[0]).toBe('gpu_pct');
+        expect(row1[1]).toBe('gpu_temp');
+        expect(row1[2]).toBe('cpu_pct');
+        expect(row1[3]).toBe('cpu_temp');
     });
 
-    it('moves entire column left and right via column reorder buttons', async () => {
+    it('swaps any two columns via column swap buttons when more than 2 columns exist', async () => {
+        settings.set({
+            monitoring: { trackCpu: true, trackGpu: true, trackRam: true, trackNet: true },
+            overlay: { row1: ['cpu_pct', 'cpu_temp', 'gpu_pct', 'gpu_temp', 'ram_pct', 'ram_used'] },
+        } as any);
+
+        component = mount(LayoutPage, { target: document.body });
+        await tick();
+
+        // 3 columns: Col 0 (CPU), Col 1 (GPU), Col 2 (RAM)
+        let swapBtns = document.body.querySelectorAll('button.btn-swap') as NodeListOf<HTMLButtonElement>;
+        expect(swapBtns).toHaveLength(3);
+
+        // Click Swap on Col 0 -> activates swap mode
+        swapBtns[0].click();
+        await tick();
+
+        // Target swap button on Col 2 now says "With Col 1"
+        swapBtns = document.body.querySelectorAll('button.btn-swap') as NodeListOf<HTMLButtonElement>;
+        expect(swapBtns[2].textContent).toContain('With Col 1');
+
+        // Click target on Col 2 -> Col 0 and Col 2 swap places
+        swapBtns[2].click();
+        await tick();
+
+        let row1 = get(settings)!.overlay.row1;
+        // Col 0 is now RAM
+        expect(row1[0]).toBe('ram_pct');
+        expect(row1[1]).toBe('ram_used');
+        // Col 1 remains GPU
+        expect(row1[2]).toBe('gpu_pct');
+        expect(row1[3]).toBe('gpu_temp');
+        // Col 2 is now CPU
+        expect(row1[4]).toBe('cpu_pct');
+        expect(row1[5]).toBe('cpu_temp');
+    });
+
+    it('removes entire column via column remove button', async () => {
         settings.set({
             monitoring: { trackCpu: true, trackGpu: true, trackRam: true, trackNet: true },
             overlay: { row1: ['cpu_pct', 'cpu_temp', 'gpu_pct', 'gpu_temp'] },
@@ -516,29 +568,70 @@ describe('LayoutPage.svelte', () => {
         component = mount(LayoutPage, { target: document.body });
         await tick();
 
-        // Col 0: cpu_pct, cpu_temp | Col 1: gpu_pct, gpu_temp
-        const moveRightBtns = document.body.querySelectorAll('button[title="Move column right"]') as NodeListOf<HTMLButtonElement>;
-        expect(moveRightBtns.length).toBeGreaterThanOrEqual(1);
+        const removeColBtns = document.body.querySelectorAll('button[title="Remove entire column"]') as NodeListOf<HTMLButtonElement>;
+        expect(removeColBtns).toHaveLength(2);
 
-        // Move Col 0 to the right
-        moveRightBtns[0].click();
+        // Remove Col 0
+        removeColBtns[0].click();
         await tick();
 
-        let row1 = get(settings)!.overlay.row1;
-        expect(row1[0]).toBe('gpu_pct');
-        expect(row1[1]).toBe('gpu_temp');
-        expect(row1[2]).toBe('cpu_pct');
-        expect(row1[3]).toBe('cpu_temp');
+        const row1 = get(settings)!.overlay.row1;
+        expect(row1).toEqual(['gpu_pct', 'gpu_temp']);
+    });
 
-        // Move Col 1 back to the left
-        const moveLeftBtns = document.body.querySelectorAll('button[title="Move column left"]') as NodeListOf<HTMLButtonElement>;
-        moveLeftBtns[1].click();
+    it('allows a column to contain only 1 metric without shifting subsequent columns', async () => {
+        settings.set({
+            monitoring: { trackCpu: true, trackGpu: true, trackRam: true },
+            overlay: { columns: [['cpu_pct', 'cpu_temp'], ['gpu_pct', 'gpu_temp']] },
+        } as any);
+
+        component = mount(LayoutPage, { target: document.body });
         await tick();
 
-        row1 = get(settings)!.overlay.row1;
-        expect(row1[0]).toBe('cpu_pct');
-        expect(row1[1]).toBe('cpu_temp');
-        expect(row1[2]).toBe('gpu_pct');
-        expect(row1[3]).toBe('gpu_temp');
+        // 4 total remove buttons: cpu_pct, cpu_temp, gpu_pct, gpu_temp
+        const removeBtns = document.body.querySelectorAll('button.btn-remove') as NodeListOf<HTMLButtonElement>;
+        expect(removeBtns).toHaveLength(4);
+
+        // Remove cpu_temp (index 1, bottom of Col 0)
+        removeBtns[1].click();
+        await tick();
+
+        const curCols = get(settings)!.overlay.columns;
+        expect(curCols).toHaveLength(2);
+        // Column 0 now has only 1 metric
+        expect(curCols[0]).toEqual(['cpu_pct']);
+        // Column 1 was NOT pulled up or altered
+        expect(curCols[1]).toEqual(['gpu_pct', 'gpu_temp']);
+
+        // Empty bottom slot should show pair-select
+        const pairSelect = document.body.querySelector('select.pair-select') as HTMLSelectElement | null;
+        expect(pairSelect).not.toBeNull();
+
+        // Pair ram_pct into Column 0
+        pairSelect!.value = 'ram_pct';
+        pairSelect!.dispatchEvent(new Event('change', { bubbles: true }));
+        await tick();
+
+        const pairedCols = get(settings)!.overlay.columns;
+        expect(pairedCols[0]).toEqual(['cpu_pct', 'ram_pct']);
+        expect(pairedCols[1]).toEqual(['gpu_pct', 'gpu_temp']);
+    });
+
+    it('supports an overlay with only 1 single metric overall', async () => {
+        settings.set({
+            monitoring: { trackCpu: true },
+            overlay: { columns: [['cpu_pct']] },
+        } as any);
+
+        component = mount(LayoutPage, { target: document.body });
+        await tick();
+
+        const curCols = get(settings)!.overlay.columns;
+        expect(curCols).toHaveLength(1);
+        expect(curCols[0]).toEqual(['cpu_pct']);
+
+        const rows = document.body.querySelectorAll('.metric-name');
+        expect(rows).toHaveLength(1);
+        expect(rows[0].textContent).toContain('CPU Usage');
     });
 });

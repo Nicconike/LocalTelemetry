@@ -44,7 +44,7 @@ public static class HardwareInventory
 
     /// <summary>
     /// Evaluates hardware configuration, compares against <see cref="AppSettings.HardwareStatePath"/>,
-    /// logs the result (condensed if unchanged, full if changed/first-run), and updates the cached state file.
+    /// logs the result (condensed if unchanged, delta if changed, full on first-run), and updates the cached state file.
     /// </summary>
     public static HardwareState LogHardwareConfiguration(
         ISystemInfo sysInfo,
@@ -52,11 +52,12 @@ public static class HardwareInventory
         bool forceFull = false)
     {
         stateFilePath ??= AppSettings.HardwareStatePath;
+        HardwareState? previousState = ReadPreviousState(stateFilePath);
 
         var (systemLine, osVersion, formFactor) = BuildSystemInfo(sysInfo);
         string motherboardLine = BuildMotherboardInfo(sysInfo);
         string processorLine = BuildProcessorInfo(sysInfo);
-        var gpuLines = BuildGpuInfo(sysInfo);
+        var gpuLines = BuildGpuInfo(sysInfo, previousState);
         var (diskLines, primaryDiskType, diskCount) = BuildStorageInfo(sysInfo);
         string memoryLine = BuildMemoryInfo(sysInfo);
         var (batteryLine, batteryFingerprint) = BuildBatteryInfo(sysInfo);
@@ -81,7 +82,6 @@ public static class HardwareInventory
             Battery = batteryLine
         };
 
-        HardwareState? previousState = ReadPreviousState(stateFilePath);
         bool unchanged = !forceFull
             && previousState is not null
             && string.Equals(previousState.Fingerprint, fingerprint, StringComparison.Ordinal);
@@ -94,19 +94,27 @@ public static class HardwareInventory
             return currentState;
         }
 
-        var logDetails = new HardwareLogDetails(
-            systemLine,
-            osVersion,
-            formFactor,
-            motherboardLine,
-            processorLine,
-            gpuLines,
-            diskLines,
-            primaryDiskType,
-            diskCount,
-            memoryLine,
-            batteryLine);
-        LogFullHardwareDetails(logDetails);
+        if (previousState is not null && !forceFull)
+        {
+            LogHardwareDelta(previousState, currentState, primaryDiskType, diskCount);
+        }
+        else
+        {
+            var logDetails = new HardwareLogDetails(
+                systemLine,
+                osVersion,
+                formFactor,
+                motherboardLine,
+                processorLine,
+                gpuLines,
+                diskLines,
+                primaryDiskType,
+                diskCount,
+                memoryLine,
+                batteryLine);
+            LogFullHardwareDetails(logDetails);
+        }
+
         SaveStateQuietly(stateFilePath, currentState);
         return currentState;
     }
@@ -152,30 +160,41 @@ public static class HardwareInventory
         return $"{cpuName} ({string.Join(", ", cpuParts)})";
     }
 
-    private static List<string> BuildGpuInfo(ISystemInfo sysInfo)
+    private static List<string> BuildGpuInfo(ISystemInfo sysInfo, HardwareState? previousState)
     {
         var gpuList = sysInfo.GetGpus();
         var gpuLines = new List<string>();
-        if (gpuList == null) return gpuLines;
-
-        foreach (var g in gpuList)
+        if (gpuList != null)
         {
-            var parts = new List<string>
+            foreach (var g in gpuList)
             {
-                g.IsDedicated ? "Dedicated" : "Integrated"
-            };
-            if (g.VramBytes.HasValue && g.VramBytes.Value > 0)
-            {
-                double vramGb = g.VramBytes.Value / (1024.0 * 1024.0 * 1024.0);
-                string vramStr = vramGb >= 1.0 ? $"{Math.Round(vramGb)} GB" : $"{Math.Round(g.VramBytes.Value / (1024.0 * 1024.0))} MB";
-                parts.Add($"VRAM {vramStr}");
+                var parts = new List<string>
+                {
+                    g.IsDedicated ? "Dedicated" : "Integrated"
+                };
+                if (g.VramBytes.HasValue && g.VramBytes.Value > 0)
+                {
+                    double vramGb = g.VramBytes.Value / (1024.0 * 1024.0 * 1024.0);
+                    string vramStr = vramGb >= 1.0 ? $"{Math.Round(vramGb)} GB" : $"{Math.Round(g.VramBytes.Value / (1024.0 * 1024.0))} MB";
+                    parts.Add($"VRAM {vramStr}");
+                }
+                if (!string.IsNullOrWhiteSpace(g.DriverVersion))
+                {
+                    parts.Add($"driver {g.DriverVersion}");
+                }
+                gpuLines.Add($"{g.Name} ({string.Join(", ", parts)})");
             }
-            if (!string.IsNullOrWhiteSpace(g.DriverVersion))
-            {
-                parts.Add($"driver {g.DriverVersion}");
-            }
-            gpuLines.Add($"{g.Name} ({string.Join(", ", parts)})");
         }
+
+        // If no dedicated GPU was detected in current active enumeration, but a dedicated GPU was previously recorded,
+        // preserve the dedicated GPU (e.g. laptop dGPU asleep in D3cold power state).
+        if (!gpuLines.Any(line => line.Contains("(Dedicated", StringComparison.OrdinalIgnoreCase))
+            && previousState?.Graphics != null)
+        {
+            gpuLines.AddRange(previousState.Graphics.Where(prevGpu =>
+                prevGpu.Contains("(Dedicated", StringComparison.OrdinalIgnoreCase) && !gpuLines.Contains(prevGpu)));
+        }
+
         return gpuLines;
     }
 
@@ -252,8 +271,9 @@ public static class HardwareInventory
         return (batteryLine, batteryFingerprint);
     }
 
-    private static HardwareState? ReadPreviousState(string? stateFilePath)
+    internal static HardwareState? ReadPreviousState(string? stateFilePath = null)
     {
+        stateFilePath ??= AppSettings.HardwareStatePath;
         if (string.IsNullOrEmpty(stateFilePath) || !File.Exists(stateFilePath))
             return null;
 
@@ -281,6 +301,59 @@ public static class HardwareInventory
         int DiskCount,
         string MemoryLine,
         string BatteryLine);
+
+    private static void LogHardwareDelta(HardwareState prev, HardwareState curr, string primaryDiskType, int diskCount)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("Hardware change detected:");
+
+        if (!string.Equals(prev.SystemModel, curr.SystemModel, StringComparison.Ordinal)
+            || !string.Equals(prev.OsVersion, curr.OsVersion, StringComparison.Ordinal)
+            || !string.Equals(prev.FormFactor, curr.FormFactor, StringComparison.Ordinal))
+        {
+            sb.AppendLine($"  System: {curr.SystemModel}, OS {curr.OsVersion}, form factor {curr.FormFactor}");
+        }
+
+        if (!string.Equals(prev.Motherboard, curr.Motherboard, StringComparison.Ordinal))
+        {
+            sb.AppendLine($"  Motherboard: {curr.Motherboard}");
+        }
+
+        if (!string.Equals(prev.Processor, curr.Processor, StringComparison.Ordinal))
+        {
+            sb.AppendLine($"  Processor: {curr.Processor}");
+        }
+
+        if (!prev.Graphics.SequenceEqual(curr.Graphics))
+        {
+            foreach (var gpu in curr.Graphics)
+            {
+                sb.AppendLine($"  Graphics: {gpu}");
+            }
+        }
+
+        if (!prev.Storage.SequenceEqual(curr.Storage))
+        {
+            sb.AppendLine($"  Storage: {diskCount} physical drive(s), primary {primaryDiskType}");
+            foreach (var disk in curr.Storage)
+            {
+                sb.AppendLine($"    {disk}");
+            }
+        }
+
+        if (!string.Equals(prev.Memory, curr.Memory, StringComparison.Ordinal))
+        {
+            sb.AppendLine($"  Memory: {curr.Memory}");
+        }
+
+        if (!string.Equals(prev.Battery, curr.Battery, StringComparison.Ordinal)
+            && !curr.Battery.StartsWith("None", StringComparison.OrdinalIgnoreCase))
+        {
+            sb.AppendLine($"  Battery: {curr.Battery}");
+        }
+
+        Log.Info(sb.ToString().TrimEnd());
+    }
 
     private static void LogFullHardwareDetails(HardwareLogDetails details)
     {

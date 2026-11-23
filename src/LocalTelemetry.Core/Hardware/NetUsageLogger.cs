@@ -9,7 +9,7 @@ public sealed class NetUsageLogger : IDisposable
 {
     private readonly AppSettings _cfg;
     private readonly TrafficHistoryFile _historyFile;
-    private readonly System.Threading.Lock _lock = new();
+    private readonly Lock _lock = new();
     private readonly Dictionary<string, (double down, double up)> _perInterface = [];
     private DateTime _lastDate;
     private DateTime _lastSnapTime;

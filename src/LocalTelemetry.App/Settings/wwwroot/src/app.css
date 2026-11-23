@@ -78,6 +78,15 @@ textarea {
     color: inherit;
 }
 
+select {
+    color-scheme: dark;
+}
+
+option {
+    background-color: var(--color-surface-2);
+    color: var(--color-text);
+}
+
 button {
     cursor: pointer;
     background: none;

@@ -126,6 +126,7 @@ begin
         Action.Arguments := '--minimized';
         Action.WorkingDirectory := ExpandConstant('{app}');
         RootFolder.RegisterTaskDefinition(StartupTaskName, Task, 6, '', '', 3, '');
+        Log('CreateStartupTask succeeded: registered task ' + StartupTaskName);
         Result := True; finally Scheduler := Unassigned; RootFolder := Unassigned; Task := Unassigned; Trigger := Unassigned; Action := Unassigned; end; except
         Log('CreateStartupTask failed: ' + GetExceptionMessage);
     end;

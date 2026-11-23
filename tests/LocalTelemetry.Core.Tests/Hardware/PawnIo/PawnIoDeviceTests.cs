@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Net.Http;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using FluentAssertions;
@@ -446,7 +445,7 @@ public class PawnIoDeviceTests
         try
         {
             var runInstaller = typeof(PawnIoDevice).GetMethod("RunInstaller", BindingFlags.NonPublic | BindingFlags.Static)!;
-            int code = (int)runInstaller.Invoke(null, [new System.Diagnostics.ProcessStartInfo("cmd.exe")])!;
+            int code = (int)runInstaller.Invoke(null, [new ProcessStartInfo("cmd.exe")])!;
             code.Should().Be(-1);
 
             bool started = PawnIoDevice.StartDriverService();
@@ -514,7 +513,7 @@ public class PawnIoDeviceTests
         }
 
         // 5. Execute with non-null input array
-        using var invalidHandle = new Microsoft.Win32.SafeHandles.SafeFileHandle(new IntPtr(-1), false);
+        using var invalidHandle = new SafeFileHandle(new IntPtr(-1), false);
         var device = new PawnIoDevice(invalidHandle);
         var res = device.Execute("test_fn", [12345UL], 1);
         res.Should().BeEmpty();
@@ -526,7 +525,7 @@ public class PawnIoDeviceTests
         try
         {
             // 1. TryCreate with CreateFileOverride
-            PawnIoDevice.CreateFileOverride = _ => new Microsoft.Win32.SafeHandles.SafeFileHandle(new IntPtr(1234), false);
+            PawnIoDevice.CreateFileOverride = _ => new SafeFileHandle(new IntPtr(1234), false);
             var dev = PawnIoDevice.TryCreate();
             dev.Should().NotBeNull();
 

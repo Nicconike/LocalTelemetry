@@ -12,8 +12,10 @@ Instead of running floating widgets, desktop gadgets, or heavy overlays that obs
 
 To read the personal story, background, and engineering philosophy behind this project, see [**Why I Built LocalTelemetry**](/about/).
 
-![LocalTelemetry Default Taskbar Overlay](/images/overlay-default.png)
-*Default out-of-the-box taskbar overlay displaying 5 dual-row columns with automatic hardware vendor brand colors applied.*
+<video controls autoplay loop muted playsinline style="width: 100%; max-width: 732px; border-radius: 8px; margin: 16px 0;">
+  <source src="/videos/LocalTelemetry.mp4" type="video/mp4" />
+  <img src="/videos/LocalTelemetry.gif" alt="LocalTelemetry Application Walkthrough" />
+</video>
 
 ## :zap: Core Capabilities
 

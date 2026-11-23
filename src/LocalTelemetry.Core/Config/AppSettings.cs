@@ -275,6 +275,10 @@ public sealed class OverlayConfig
 {
     /// <summary>Whether the overlay is visible on the taskbar.</summary>
     public bool Visible { get; set; } = false;
+    /// <summary>Display targeting mode: <c>"primary"</c>, <c>"all"</c>, <c>"secondary"</c>, or <c>"custom"</c>.</summary>
+    public string DisplayMode { get; set; } = "primary";
+    /// <summary>List of enabled display keys when DisplayMode is <c>"custom"</c> (e.g. <c>"primary"</c>, <c>"display_2"</c>, <c>"display_3"</c>).</summary>
+    public List<string> EnabledDisplays { get; set; } = ["primary"];
     /// <summary>Taskbar placement: <c>"left"</c>, <c>"center"</c> or <c>"right"</c>.</summary>
     public string Placement { get; set; } = "left";
     /// <summary>Horizontal offset in pixels from the chosen placement.</summary>
@@ -327,8 +331,14 @@ public sealed class OverlayConfig
     /// <summary>Active layout preset name (<c>"default"</c>, <c>"gaming"</c>, <c>"compact"</c>, <c>"micro"</c>, <c>"thermals"</c>, <c>"workstation"</c>, <c>"network"</c>, <c>"full"</c>, or <c>"custom"</c>).</summary>
     public string LayoutPreset { get; set; } = "default";
 
-    /// <summary>Combined metric ID list (even indices = top row, odd indices = bottom row).</summary>
-    public List<string> Row1 { get; set; } = [Metrics.CpuPct, Metrics.CpuTemp, Metrics.GpuPct, Metrics.GpuTemp, Metrics.GpuVram, Metrics.NetTotal, Metrics.RamPct, Metrics.RamUsed, Metrics.NetDown, Metrics.NetUp];
+    /// <summary>Column list where each column contains 1 or 2 metric IDs (top and optional bottom row).</summary>
+    public List<List<string>> Columns { get; set; } = [
+        [Metrics.CpuPct, Metrics.CpuTemp],
+        [Metrics.GpuPct, Metrics.GpuTemp],
+        [Metrics.GpuVram, Metrics.NetTotal],
+        [Metrics.RamPct, Metrics.RamUsed],
+        [Metrics.NetDown, Metrics.NetUp]
+    ];
 }
 
 // Alert Config
@@ -442,7 +452,7 @@ public sealed class UpdateConfig
         try
         {
             var asm = System.Reflection.Assembly.GetEntryAssembly() ?? typeof(AppSettings).Assembly;
-            var infoAttr = asm.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>();
+            var infoAttr = asm.GetCustomAttribute<AssemblyInformationalVersionAttribute>();
             string ver = infoAttr?.InformationalVersion ?? asm.GetName().Version?.ToString() ?? string.Empty;
             int plusIdx = ver.IndexOf('+');
             if (plusIdx > 0)

@@ -278,32 +278,35 @@ public static class DiskQuery
 
             foreach (ManagementBaseObject mo in coll)
             {
-                int idx = Convert.ToInt32(mo["Index"]);
-                string model = mo["Model"]?.ToString()?.Trim() ?? "";
-                string iface = mo["InterfaceType"]?.ToString()?.Trim() ?? "";
-                string pnpId = mo["PNPDeviceID"]?.ToString() ?? "";
-                string win32Media = mo["MediaType"]?.ToString() ?? "";
-                ulong? size = mo["Size"] as ulong?;
-
-                if (IsExcludedDrive(iface, pnpId, win32Media, idx, out string busType))
-                    continue;
-
-                string mediaType = DetermineMediaType(msftMediaTypes, idx, busType, model);
-                string displayType = DetermineDisplayType(busType, mediaType);
-                bool isBoot = bootIdx.HasValue && bootIdx.Value == idx;
-                string vendor = ExtractVendorFromModel(model);
-
-                results.Add(new DiskInfo
+                using (mo)
                 {
-                    DiskIndex = idx,
-                    Model = model,
-                    Vendor = vendor,
-                    BusType = busType,
-                    MediaType = mediaType,
-                    DisplayType = displayType,
-                    SizeBytes = (long?)size,
-                    IsBootDrive = isBoot,
-                });
+                    int idx = Convert.ToInt32(mo["Index"]);
+                    string model = mo["Model"]?.ToString()?.Trim() ?? "";
+                    string iface = mo["InterfaceType"]?.ToString()?.Trim() ?? "";
+                    string pnpId = mo["PNPDeviceID"]?.ToString() ?? "";
+                    string win32Media = mo["MediaType"]?.ToString() ?? "";
+                    ulong? size = mo["Size"] as ulong?;
+
+                    if (IsExcludedDrive(iface, pnpId, win32Media, idx, out string busType))
+                        continue;
+
+                    string mediaType = DetermineMediaType(msftMediaTypes, idx, busType, model);
+                    string displayType = DetermineDisplayType(busType, mediaType);
+                    bool isBoot = bootIdx.HasValue && bootIdx.Value == idx;
+                    string vendor = ExtractVendorFromModel(model);
+
+                    results.Add(new DiskInfo
+                    {
+                        DiskIndex = idx,
+                        Model = model,
+                        Vendor = vendor,
+                        BusType = busType,
+                        MediaType = mediaType,
+                        DisplayType = displayType,
+                        SizeBytes = (long?)size,
+                        IsBootDrive = isBoot,
+                    });
+                }
             }
         }
         catch (Exception ex) { Diagnostics.Log.Error(ex, "Failed to query physical drives"); }
@@ -322,10 +325,13 @@ public static class DiskQuery
             using var coll = searcher.Get();
             foreach (ManagementBaseObject mo in coll)
             {
-                string devId = mo["DeviceId"]?.ToString() ?? "";
-                string mType = ParseMsftMediaType(mo["MediaType"]);
-                if (!string.IsNullOrEmpty(devId) && !string.IsNullOrEmpty(mType))
-                    msftMediaTypes[devId] = mType;
+                using (mo)
+                {
+                    string devId = mo["DeviceId"]?.ToString() ?? "";
+                    string mType = ParseMsftMediaType(mo["MediaType"]);
+                    if (!string.IsNullOrEmpty(devId) && !string.IsNullOrEmpty(mType))
+                        msftMediaTypes[devId] = mType;
+                }
             }
         }
         catch (Exception ex)
@@ -523,8 +529,11 @@ public static class DiskQuery
             using var results = searcher.Get();
             foreach (ManagementBaseObject mo in results)
             {
-                var di = mo["DiskIndex"];
-                if (di is int idx) return idx;
+                using (mo)
+                {
+                    var di = mo["DiskIndex"];
+                    if (di is int idx) return idx;
+                }
             }
         }
         catch (Exception ex) { Diagnostics.Log.Error(ex, "Failed to determine boot drive index via WMI disk partition"); }

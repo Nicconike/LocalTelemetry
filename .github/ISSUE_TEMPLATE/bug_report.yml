@@ -48,18 +48,22 @@ body:
       validations:
           required: true
 
-    - type: dropdown
+    - type: input
       id: windows-version
       attributes:
-          label: Windows Version
-          options:
-              - Windows 11 24H2
-              - Windows 11 23H2
-              - Windows 11 22H2
-              - Windows 10 22H2
-              - Other (specify in Additional Context)
+          label: Windows Version & OS Build
+          description: "Your Windows edition and build number (run 'winver' or check Windows Settings > System > About)."
+          placeholder: "e.g., Windows 11 24H2 (Build 26100.2161)"
       validations:
           required: true
+
+    - type: input
+      id: cpu
+      attributes:
+          label: CPU Model
+          placeholder: "e.g., AMD Ryzen 7 7800X3D, Intel Core i7-14700K"
+      validations:
+          required: false
 
     - type: input
       id: gpu

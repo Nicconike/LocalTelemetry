@@ -24,7 +24,7 @@ public sealed class NvGpuMonitor : IDisposable
     public static NvGpuData? LatestData { get; private set; }
 
     private readonly INvGpuNative _native;
-    private readonly object _syncLock = new();
+    private readonly Lock _syncLock = new();
     private IntPtr _device = IntPtr.Zero;
     private bool _initialized;
     private DateTime _lastFailureTime = DateTime.MinValue;
@@ -155,8 +155,7 @@ public sealed class NvGpuMonitor : IDisposable
 
                 if (!ReadTemperature(ref data, ref metricsRead) ||
                     !ReadUtilization(ref data, ref metricsRead) ||
-                    !ReadMemory(ref data, ref metricsRead) ||
-                    !ReadClocksAndPower(ref data, ref metricsRead))
+                    !ReadMemory(ref data, ref metricsRead))
                 {
                     return null;
                 }
@@ -164,6 +163,11 @@ public sealed class NvGpuMonitor : IDisposable
                 if (metricsRead == 0)
                 {
                     return HandleNoMetricsRead();
+                }
+
+                if (!ReadClocksAndPower(ref data, ref metricsRead))
+                {
+                    return null;
                 }
 
                 _consecutiveUnknownFailures = 0;

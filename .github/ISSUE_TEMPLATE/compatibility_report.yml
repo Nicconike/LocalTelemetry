@@ -1,0 +1,71 @@
+name: Shell / Taskbar Compatibility
+description: Report an issue with third-party taskbar or shell tools (ExplorerPatcher, StartAllBack, RetroBar, Windhawk, etc.)
+labels: [bug]
+body:
+    - type: markdown
+      attributes:
+          value: |
+              Use this form if LocalTelemetry conflicts with a taskbar modification or shell customizer.
+
+    - type: input
+      id: shell-tool
+      attributes:
+          label: Shell / Taskbar Tool
+          description: Name and version of the shell modification tool.
+          placeholder: "e.g., ExplorerPatcher, StartAllBack, RetroBar, Windhawk"
+      validations:
+          required: true
+
+    - type: input
+      id: windows-version
+      attributes:
+          label: Windows Version & OS Build
+          description: "Your Windows edition and build number (run 'winver' or check Windows Settings > System > About)."
+          placeholder: "e.g., Windows 11 24H2 (Build 26100.2161)"
+      validations:
+          required: true
+
+    - type: textarea
+      id: description
+      attributes:
+          label: Description of Conflict
+          description: Explain how the overlay or application behaves with the shell tool.
+          placeholder: "Describe the unexpected behavior (e.g., overlay clips, overlaps taskbar elements, or fails to attach)..."
+      validations:
+          required: true
+
+    - type: textarea
+      id: steps
+      attributes:
+          label: Steps to Reproduce
+          placeholder: |
+              1. Enable the shell modification tool
+              2. Launch LocalTelemetry
+              3. Observe the behavior on the taskbar
+      validations:
+          required: true
+
+    - type: input
+      id: version
+      attributes:
+          label: LocalTelemetry Version
+          description: "The version you are using (e.g., v1.0.0). Check Settings > About."
+          placeholder: v1.0.0
+      validations:
+          required: true
+
+    - type: textarea
+      id: screenshots
+      attributes:
+          label: Screenshots
+          description: If applicable, add screenshots to show the conflict.
+      validations:
+          required: false
+
+    - type: textarea
+      id: context
+      attributes:
+          label: Additional Context
+          description: Taskbar alignment (center/left), position (top/bottom), multi-monitor settings, or logs.
+      validations:
+          required: false

@@ -30,7 +30,8 @@ function getLatestTag(): string {
     try {
         const gitBin = resolveGitBinary();
         return execFileSync(gitBin, ['describe', '--tags', '--abbrev=0'], { encoding: 'utf-8' }).trim();
-    } catch {
+    } catch (err) {
+        console.debug?.(`Failed to resolve latest tag, defaulting to HEAD~10: ${err}`);
         return 'HEAD~10';
     }
 }
@@ -39,7 +40,8 @@ function getPreviousTag(tag: string): string {
     const gitBin = resolveGitBinary();
     try {
         return execFileSync(gitBin, ['describe', '--tags', '--abbrev=0', `${tag}^`], { encoding: 'utf-8' }).trim();
-    } catch {
+    } catch (err) {
+        console.debug?.(`Failed to resolve previous tag for ${tag}, defaulting to HEAD~10: ${err}`);
         return 'HEAD~10';
     }
 }
@@ -74,8 +76,8 @@ function updateGitHubRelease(tag: string, notes: string): void {
             if (fs.existsSync(tempFile)) {
                 fs.unlinkSync(tempFile);
             }
-        } catch {
-            // Ignore cleanup failure
+        } catch (err) {
+            console.warn(`Failed to clean temporary changelog file ${tempFile}:`, err);
         }
     }
 }
@@ -84,7 +86,8 @@ function getCommitDate(ref: string): string {
     try {
         const gitBin = resolveGitBinary();
         return execFileSync(gitBin, ['log', '-1', '--format=%cI', ref], { encoding: 'utf-8' }).trim();
-    } catch {
+    } catch (err) {
+        console.debug?.(`Failed to retrieve commit date for ref ${ref}: ${err}`);
         return new Date().toISOString();
     }
 }
@@ -94,7 +97,8 @@ function getRepoUrl(): string {
         const gitBin = resolveGitBinary();
         const raw = execFileSync(gitBin, ['config', '--get', 'remote.origin.url'], { encoding: 'utf-8' });
         return cleanRepoUrl(raw);
-    } catch {
+    } catch (err) {
+        console.debug?.(`Failed to retrieve git remote URL: ${err}`);
         return 'https://github.com/Nicconike/LocalTelemetry';
     }
 }

@@ -1,4 +1,3 @@
-using System.IO;
 using System.Runtime.CompilerServices;
 
 namespace LocalTelemetry.Notifier;
@@ -10,7 +9,7 @@ namespace LocalTelemetry.Notifier;
 /// </summary>
 internal static class NotifierLog
 {
-    private static readonly object _lock = new();
+    private static readonly Lock _lock = new();
     private static StreamWriter? _writer;
 
     /// <summary>Captures the last error encountered during logging operations.</summary>

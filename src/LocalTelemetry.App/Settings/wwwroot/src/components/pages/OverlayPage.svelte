@@ -29,6 +29,34 @@
         { value: "settings", label: "Open Settings" },
     ];
 
+    const displayModeOptions = [
+        { value: "primary", label: "Primary Display Only" },
+        { value: "secondary", label: "Secondary Display Only" },
+        { value: "all", label: "All Displays" },
+        { value: "custom", label: "Custom Selection" },
+    ];
+
+    function toggleDisplay(id, checked) {
+        settings.update((s) => {
+            if (!s) return s;
+            const current = new Set(s.overlay.enabledDisplays || ["primary"]);
+            if (checked) {
+                current.add(id);
+            } else {
+                if (current.size > 1 || !current.has(id)) {
+                    current.delete(id);
+                }
+            }
+            return {
+                ...s,
+                overlay: {
+                    ...s.overlay,
+                    enabledDisplays: Array.from(current),
+                },
+            };
+        });
+    }
+
     let dismissed = $state(false);
 
     $effect(() => {
@@ -130,6 +158,59 @@
                 unit="%"
             />
         </SectionCard>
+        <SectionCard title="Target Displays">
+            <Select
+                label="Display mode"
+                bind:value={$settings.overlay.displayMode}
+                options={displayModeOptions}
+            />
+            {#if $settings.overlay.displayMode === "secondary" && !($settings.overlay.detectedDisplays || []).some((d) => !d.isPrimary)}
+                <div class="display-note">
+                    <span>
+                        No secondary display detected. The overlay will show on the primary display until another monitor is connected.
+                    </span>
+                </div>
+            {/if}
+            {#if $settings.overlay.displayMode === "custom"}
+                <div class="display-list">
+                    <span class="display-list-title">Enable overlay on:</span>
+                    {#each $settings.overlay.detectedDisplays || [] as disp}
+                        <label class="display-checkbox-item">
+                            <input
+                                type="checkbox"
+                                checked={$settings.overlay.enabledDisplays?.includes(
+                                    disp.id,
+                                )}
+                                onchange={(e) =>
+                                    toggleDisplay(
+                                        disp.id,
+                                        e.currentTarget.checked,
+                                    )}
+                            />
+                            <span class="display-name">{disp.name}</span>
+                            {#if !disp.hasTaskbar}
+                                <span class="no-taskbar-badge"
+                                    >(No taskbar detected)</span
+                                >
+                            {/if}
+                        </label>
+                    {/each}
+                </div>
+            {/if}
+            <div class="display-note">
+                <span
+                    >Tip: Secondary displays require <strong
+                        >Show my taskbar on all displays</strong
+                    > enabled in Windows Settings.</span
+                >
+                <button
+                    type="button"
+                    class="link-btn"
+                    onclick={() => openUrl("ms-settings:taskbar")}
+                    >Open Windows Taskbar Settings</button
+                >
+            </div>
+        </SectionCard>
     </div>
 {/if}
 
@@ -138,6 +219,66 @@
         display: flex;
         flex-direction: column;
         gap: var(--space-3);
+    }
+    .display-list {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+        padding: var(--space-2) 0;
+    }
+    .display-list-title {
+        color: var(--color-text-muted);
+        font-size: var(--text-xs);
+        font-weight: 500;
+        text-transform: uppercase;
+    }
+    .display-checkbox-item {
+        align-items: center;
+        cursor: pointer;
+        display: flex;
+        font-size: var(--text-sm);
+        gap: var(--space-2);
+        user-select: none;
+    }
+    .display-checkbox-item input[type="checkbox"] {
+        accent-color: var(--color-primary);
+        cursor: pointer;
+        height: 16px;
+        width: 16px;
+    }
+    .display-name {
+        color: var(--color-text);
+    }
+    .no-taskbar-badge {
+        color: var(--color-warning);
+        font-size: var(--text-xs);
+        font-style: italic;
+    }
+    .display-note {
+        align-items: flex-start;
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+        margin-top: var(--space-2);
+        padding-top: var(--space-2);
+        border-top: 1px solid var(--color-border);
+        color: var(--color-text-muted);
+        font-size: var(--text-xs);
+        line-height: 1.4;
+    }
+    .link-btn {
+        background: transparent;
+        border: none;
+        color: var(--color-primary);
+        cursor: pointer;
+        font-size: var(--text-xs);
+        font-weight: 500;
+        padding: 0;
+        text-decoration: underline;
+        transition: opacity var(--transition);
+    }
+    .link-btn:hover {
+        opacity: 0.8;
     }
     h2 {
         font-size: var(--text-lg);

@@ -51,7 +51,7 @@ public class NotificationClientTests
     {
         using var client = new NotificationClient("NonExistentPipe_" + Guid.NewGuid().ToString("N"), 1000);
         using var cts = new CancellationTokenSource();
-        cts.Cancel(); // Already canceled token before entering wait
+        await cts.CancelAsync(); // Already canceled token before entering wait
 
         var act = async () => await client.SendToastAsync("Title", "Body", null, cts.Token);
         await act.Should().NotThrowAsync();
@@ -134,7 +134,7 @@ public class NotificationClientTests
         msgType.GetProperty("Action")?.SetValue(msg, "ShowToast");
 
         // Passing invalid negative timeout (-5) causes ConnectAsync to throw ArgumentOutOfRangeException, hitting catch (Exception ex)
-        var task = (Task)method!.Invoke(client, [msg, 0, -5, CancellationToken.None])!;
+        var task = (Task)method.Invoke(client, [msg, 0, -5, CancellationToken.None])!;
         await task;
     }
 }

@@ -35,6 +35,13 @@ export interface MonitoringDto {
     logBatteryMode: number;
 }
 
+export interface DetectedDisplayDto {
+    id: string;
+    name: string;
+    isPrimary: boolean;
+    hasTaskbar: boolean;
+}
+
 export interface OverlayDto {
     visible: boolean;
     doubleClickAction: string;
@@ -52,11 +59,16 @@ export interface OverlayDto {
     groupColors: Record<string, string>;
     defaultMetricColors: Record<string, string>;
     followWindowsTheme: boolean;
+    layoutPreset?: string;
+    columns: string[][];
     row1: string[];
     userCustomizedMetricColors: string[];
     userCustomizedGroupColors: string[];
     taskbarSpaceConstrained?: boolean;
     availableSlotWidth?: number;
+    displayMode?: 'primary' | 'all' | 'custom';
+    enabledDisplays?: string[];
+    detectedDisplays?: DetectedDisplayDto[];
 }
 
 export interface AlertsDto {
@@ -89,7 +101,7 @@ export interface AlertsDto {
     netMonthlyMaxGb: number;
     showToastNotif: boolean;
     flashOverlay: boolean;
-    sustainedSecs: number;
+    sustainedSecs?: number;
     cooldownSecs: number;
     fireOncePerSession: boolean;
 }

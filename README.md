@@ -18,7 +18,7 @@
                 <img src="https://img.shields.io/github/license/nicconike/localtelemetry?logo=github&logoColor=white&color=0DBCBF&labelColor=101318" alt="License" />
             </a>
             <a href="https://discord.gg/M2QevSgW3S">
-                <img src="https://img.shields.io/badge/Chat_on-Discord-0DBCBF?logo=discord&logoColor=5865F2&labelColor=101318" alt="Discord" />
+                <img src="https://img.shields.io/badge/Join-Discord-0DBCBF?logo=discord&logoColor=5865F2&labelColor=101318" alt="Discord" />
             </a>
         </summary>
         <br />
@@ -70,9 +70,33 @@
     <a href="https://nicconike.github.io/LocalTelemetry/user-guide/metrics-and-sensors">Supported Sensors</a>
     ·
     <a href="https://nicconike.github.io/LocalTelemetry/user-guide/customization">Customization</a>
-    ·
-    <a href="https://discord.gg/M2QevSgW3S">Discord</a>
 </p>
+
+---
+
+## Table of Contents
+
+- [Table of Contents](#table-of-contents)
+- [Quick Install](#quick-install)
+- [Why LocalTelemetry?](#why-localtelemetry)
+    - [Feature Comparison](#feature-comparison)
+- [Key Features](#key-features)
+- [Visual Overview](#visual-overview)
+    - [1. Application Walkthrough](#1-application-walkthrough)
+    - [2. Live Taskbar Overlay](#2-live-taskbar-overlay)
+    - [3. Settings \& Customization](#3-settings--customization)
+    - [4. Traffic History Calendar](#4-traffic-history-calendar)
+- [Installation Options](#installation-options)
+    - [Option 1: Setup Wizard Installer (Recommended)](#option-1-setup-wizard-installer-recommended)
+    - [Option 2: Scoop Package Manager](#option-2-scoop-package-manager)
+    - [Option 3: Portable ZIP](#option-3-portable-zip)
+- [Verifying Downloads \& Checksums](#verifying-downloads--checksums)
+    - [1. SHA-256 Checksum Verification](#1-sha-256-checksum-verification)
+    - [2. Sigstore Cosign Keyless Signatures](#2-sigstore-cosign-keyless-signatures)
+    - [3. SLSA Build Provenance](#3-slsa-build-provenance)
+- [System Requirements](#system-requirements)
+- [Support \& Community](#support--community)
+- [License](#license)
 
 ---
 
@@ -103,9 +127,9 @@ LocalTelemetry provides hardware monitoring in the taskbar: lightweight, native,
 | Capability | LocalTelemetry | Typical Vendor Suites |
 | :--- | :---: | :---: |
 | **Windows 11 Taskbar Integration** | Embedded next to clock (no floating windows) | Floating overlay or tray tooltip only |
-| **Background Memory Footprint** | **~35–50 MB RAM** (~40–150 MB dynamic with Settings) | 400–900 MB RAM across helper processes |
+| **Background Memory Footprint** | **~15–20 MB RAM** (~40–60 MB when Settings window is active) | 400–100 MB RAM across helper processes |
 | **Low-Level Hardware Access** | Direct Intel MSR & AMD SMN registers via PawnIO | Proprietary services or high-latency queries |
-| **Layout Customization** | 8 curated presets with column swapping & drag-and-drop ordering | Fixed dashboard layouts |
+| **Layout Customization** | 8 curated presets with column swapping & drag-and-drop ordering | Fixed vendor window layouts |
 | **Network Traffic Accounting** | Daily upload & download history with calendar heatmap | None |
 | **Privacy & Connectivity** | 100% offline with zero telemetry or tracking | Mandatory accounts & cloud telemetry |
 | **Game-Safe Alerts** | Non-focus-stealing toasts with 10°C thermal hysteresis | Minimizes or interrupts full-screen games |
@@ -126,37 +150,36 @@ LocalTelemetry provides hardware monitoring in the taskbar: lightweight, native,
 
 ## Visual Overview
 
-### 1. Live Taskbar Overlay
+### 1. Application Walkthrough
 
-Embeds directly into the Windows taskbar, matching system fonts and scaling automatically across multiple display DPIs:
-
-<p align="center">
-    <img src="docs/public/images/overlay.png" alt="LocalTelemetry Taskbar Overlay" style="border-radius: 8px;" />
-</p>
-
-### 2. Svelte 5 Configuration Dashboard
-
-Configure layout presets, polling intervals, and custom brand color schemes (Intel, AMD, NVIDIA, Corsair, Samsung) effortlessly:
+A complete look at LocalTelemetry in action-real-time CPU, GPU, RAM, disk, and network telemetry with seamless system tray and taskbar integration:
 
 <p align="center">
-    <img src="docs/public/images/layout-settings.png" alt="Taskbar Layout Settings" style="border-radius: 8px; width: 48%; display: inline-block;" />
-    <img src="docs/public/images/monitoring-settings.png" alt="Hardware Monitoring Settings" style="border-radius: 8px; width: 48%; display: inline-block;" />
+    <img src="docs/public/videos/LocalTelemetry.gif" alt="LocalTelemetry Application Walkthrough" style="border-radius: 8px; max-width: 85%;" />
 </p>
 
-### 3. Traffic History Calendar
+### 2. Live Taskbar Overlay
+
+Embeds directly into the Windows taskbar next to your system clock, matching system fonts and scaling automatically across multiple display DPIs:
+
+<p align="center">
+    <img src="docs/public/videos/default-overlay.gif" alt="LocalTelemetry Live Taskbar Overlay" style="border-radius: 8px;" />
+</p>
+
+### 3. Settings & Customization
+
+Configure layout presets, 2D column pairing, polling intervals, and custom brand color schemes (Intel, AMD, NVIDIA, Corsair, Samsung) effortlessly in the Settings window:
+
+<p align="center">
+    <img src="docs/public/videos/customization.gif" alt="LocalTelemetry Settings & Customization Walkthrough" style="border-radius: 8px; max-width: 90%;" />
+</p>
+
+### 4. Traffic History Calendar
 
 Inspect daily upload and download totals per network adapter with JSONL backup imports and historical Windows network usage backfilling:
 
 <p align="center">
     <img src="docs/public/images/traffic-settings.png" alt="Traffic History Calendar" style="border-radius: 8px; max-width: 85%;" />
-</p>
-
-### 4. Non-Intrusive Threshold Alerts
-
-Configure warning limits for CPU/GPU temperatures, clocks, or power. Toast alerts appear cleanly without interrupting gameplay, with anti-spike filtering and persistent overlay highlights:
-
-<p align="center">
-    <img src="docs/public/images/toast-alert.png" alt="Threshold Toast Alert" style="border-radius: 8px;" />
 </p>
 
 ---
@@ -184,29 +207,51 @@ scoop install localtelemetry
 2. Download `LocalTelemetry-win-x64.zip` from [**GitHub Releases**](https://github.com/Nicconike/LocalTelemetry/releases).
 3. Extract and run `LocalTelemetry.exe` as Administrator.
 
-<details>
-<summary><strong>Verify Binary Signatures & SLSA Provenance</strong></summary>
+---
 
-<br />
+## Verifying Downloads & Checksums
 
-Every release includes cryptographic hashes (`checksums.txt`), Sigstore Cosign signature bundles, and [SLSA](https://slsa.dev/) build attestations:
+Every GitHub Release includes cryptographic SHA-256 hashes (`checksums.txt`), Sigstore Cosign signature bundles (`.sigstore.json`), and SLSA build provenance attestations.
+
+### 1. SHA-256 Checksum Verification
+
+Download `checksums.txt` and your binary into the same folder. Compute the file hash in PowerShell:
 
 ```powershell
-# 1. Compare SHA-256 hashes against checksums.txt
-Get-FileHash .\LocalTelemetrySetup.exe, .\LocalTelemetry-win-x64.zip -Algorithm SHA256
+Get-FileHash .\LocalTelemetrySetup.exe -Algorithm SHA256
+```
 
-# 2. Verify keyless signatures with Cosign
+Or verify all release binaries automatically against `checksums.txt`:
+
+```powershell
+Get-Content .\checksums.txt | ForEach-Object {
+    $expectedHash, $filename = -split $_
+    if (Test-Path $filename) {
+        $actualHash = (Get-FileHash $filename -Algorithm SHA256).Hash
+        [PSCustomObject]@{ File = $filename; Valid = ($actualHash -eq $expectedHash) }
+    }
+}
+```
+
+### 2. Sigstore Cosign Keyless Signatures
+
+Verify release binaries using keyless OpenID Connect (OIDC) signatures:
+
+```powershell
 cosign verify-blob --bundle .\LocalTelemetrySetup.exe.sigstore.json `
     --certificate-identity-regexp "https://github.com/Nicconike/LocalTelemetry/.*" `
     --certificate-oidc-issuer "https://token.actions.githubusercontent.com" `
     .\LocalTelemetrySetup.exe
+```
 
-# 3. Verify SLSA build provenance attestations
+### 3. SLSA Build Provenance
+
+Verify supply chain build attestations using the GitHub CLI:
+
+```powershell
 gh attestation verify .\LocalTelemetrySetup.exe --repo Nicconike/LocalTelemetry
 gh attestation verify .\LocalTelemetry-win-x64.zip --repo Nicconike/LocalTelemetry
 ```
-
-</details>
 
 ---
 
@@ -217,7 +262,8 @@ gh attestation verify .\LocalTelemetry-win-x64.zip --repo Nicconike/LocalTelemet
 | **Operating System** | **Windows 10** (64-bit, v2004+ / build 19041) | **Windows 11** (64-bit, v22H2+) |
 | **Architecture** | **x86-64 / AMD64** (Intel / AMD) | **x86-64 / AMD64** |
 | **Permissions** | **Administrator** *(Required for PawnIO MSR kernel driver)* | **Administrator** |
-| **Memory** | **2 GB RAM** | **4 GB RAM or higher** |
+| **System RAM** | **2 GB RAM** | **4 GB RAM or higher** |
+| **App Footprint** | **~15–30 MB RAM** (background taskbar monitoring) | **~40–60 MB RAM** (when Settings window is active) |
 | **Runtimes** | **.NET 10 Desktop Runtime** & **WebView2** | **.NET 10 Desktop Runtime** & **WebView2** |
 
 ---

@@ -73,7 +73,7 @@ public class TaskbarOverlayTests
     public void InternalDrawing_Row1AndRow2_FlashAndThemeRendering()
     {
         var cfg = new AppSettings();
-        cfg.Overlay.Row1 = ["cpu_pct", "cpu_temp", "ram_pct", "net_down", "gpu_pct", "gpu_temp", "ram_used", "net_up"];
+        cfg.Overlay.Columns = [["cpu_pct", "cpu_temp"], ["ram_pct", "net_down"], ["gpu_pct", "gpu_temp"], ["ram_used", "net_up"]];
         cfg.Overlay.MetricColors["cpu_pct"] = "#FF0000";
 
         var embedder = new TaskbarEmbedder(cfg);
@@ -234,13 +234,13 @@ public class TaskbarOverlayTests
         cfg.Overlay.Visible = true;
         cfg.Overlay.FollowWindowsTheme = true;
         cfg.Overlay.DoubleClickAction = "settings";
-        cfg.Overlay.Row1 = [
-            "cpu_pct", "cpu_temp", "cpu_freq", "cpu_power",
-            "ram_pct", "ram_used",
-            "gpu_pct", "gpu_temp", "gpu_vram", "gpu_freq", "gpu_power",
-            "net_down", "net_up", "net_total",
-            "battery_pct", "battery_rate",
-            "disk_disk0_read", "disk_disk0_write"
+        cfg.Overlay.Columns = [
+            ["cpu_pct", "cpu_temp"], ["cpu_freq", "cpu_power"],
+            ["ram_pct", "ram_used"],
+            ["gpu_pct", "gpu_temp"], ["gpu_vram", "gpu_freq"], ["gpu_power", "net_down"],
+            ["net_up", "net_total"],
+            ["battery_pct", "battery_rate"],
+            ["disk_disk0_read", "disk_disk0_write"]
         ];
 
         var embedder = new TaskbarEmbedder(cfg);
@@ -319,7 +319,7 @@ public class TaskbarOverlayTests
     {
         var cfg = new AppSettings();
         cfg.Overlay.Visible = true;
-        cfg.Overlay.Row1 = [Metrics.CpuPct, Metrics.RamPct, Metrics.GpuPct, Metrics.NetDown];
+        cfg.Overlay.Columns = [[Metrics.CpuPct, Metrics.RamPct], [Metrics.GpuPct, Metrics.NetDown]];
 
         var embedder = new TaskbarEmbedder(cfg);
         using var overlay = new TaskbarOverlay(cfg, embedder);
@@ -339,10 +339,10 @@ public class TaskbarOverlayTests
 
         // Exercise mouse hook procedure
         var mouseProc = typeof(TaskbarOverlay).GetMethod("MouseHookCallback", BindingFlags.NonPublic | BindingFlags.Instance);
-        var structPtr = System.Runtime.InteropServices.Marshal.AllocHGlobal(System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.MSLLHOOKSTRUCT>());
+        var structPtr = System.Runtime.InteropServices.Marshal.AllocHGlobal(System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.MsllHookStruct>());
         try
         {
-            System.Runtime.InteropServices.Marshal.StructureToPtr(new NativeMethods.MSLLHOOKSTRUCT { pt = new NativeMethods.POINT { X = 10, Y = 10 } }, structPtr, false);
+            System.Runtime.InteropServices.Marshal.StructureToPtr(new NativeMethods.MsllHookStruct { pt = new NativeMethods.Point { X = 10, Y = 10 } }, structPtr, false);
 
             // WM_RBUTTONDOWN then WM_RBUTTONUP (context menu)
             mouseProc!.Invoke(overlay, [0, (IntPtr)NativeMethods.WM_RBUTTONDOWN, structPtr]);
@@ -400,7 +400,7 @@ public class TaskbarOverlayTests
     public void TaskbarOverlay_DrawItems_SingleRow_And_CustomSettings_Coverage()
     {
         var cfg = new AppSettings();
-        cfg.Overlay.Row1 = [Metrics.CpuPct]; // Single row layout
+        cfg.Overlay.Columns = [[Metrics.CpuPct]]; // Single row layout
         cfg.Overlay.FontBold = false;
         cfg.Overlay.ScalePct = 120;
         cfg.Overlay.ValueColor = "#00FF00";
@@ -420,7 +420,7 @@ public class TaskbarOverlayTests
         actDrawSingle.Should().NotThrow();
 
         // Empty row
-        cfg.Overlay.Row1 = [];
+        cfg.Overlay.Columns = [];
         var actDrawEmpty = () => drawContent!.Invoke(overlay, [g]);
         actDrawEmpty.Should().NotThrow();
     }
@@ -476,7 +476,7 @@ public class TaskbarOverlayTests
         method.Should().NotBeNull();
 
         // In test mode (SkipEmbedForTesting || SkipShowWindowForTesting), returns true
-        var result = (bool)method.Invoke(overlay, [new NativeMethods.POINT { X = 50, Y = 50 }])!;
+        var result = (bool)method.Invoke(overlay, [new NativeMethods.Point { X = 50, Y = 50 }])!;
         result.Should().BeTrue();
     }
 
@@ -658,11 +658,11 @@ public class TaskbarOverlayTests
         overlay.CloseContextMenuAction = () => closeContextMenuCalled = true;
 
         var mouseProc = typeof(TaskbarOverlay).GetMethod("MouseHookCallback", BindingFlags.NonPublic | BindingFlags.Instance);
-        var structPtr = System.Runtime.InteropServices.Marshal.AllocHGlobal(System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.MSLLHOOKSTRUCT>());
+        var structPtr = System.Runtime.InteropServices.Marshal.AllocHGlobal(System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.MsllHookStruct>());
         try
         {
             // Click outside the context menu bounds (at 10, 10)
-            System.Runtime.InteropServices.Marshal.StructureToPtr(new NativeMethods.MSLLHOOKSTRUCT { pt = new NativeMethods.POINT { X = 10, Y = 10 } }, structPtr, false);
+            System.Runtime.InteropServices.Marshal.StructureToPtr(new NativeMethods.MsllHookStruct { pt = new NativeMethods.Point { X = 10, Y = 10 } }, structPtr, false);
             mouseProc!.Invoke(overlay, [0, (IntPtr)NativeMethods.WM_LBUTTONDOWN, structPtr]);
 
             closeContextMenuCalled.Should().BeTrue();
@@ -692,7 +692,7 @@ public class TaskbarOverlayTests
         {
             var cfg = new AppSettings();
             cfg.Overlay.Visible = true;
-            cfg.Overlay.Row1 = ["cpu_pct", "ram_pct"];
+            cfg.Overlay.Columns = [["cpu_pct", "ram_pct"]];
 
             var embedder = new TaskbarEmbedder(cfg);
             using var overlay = new TaskbarOverlay(cfg, embedder);
@@ -930,5 +930,122 @@ public class TaskbarOverlayTests
         eventCount.Should().Be(3);
         notifiedConstrained.Should().Be(false);
         notifiedWidth.Should().Be(500);
+    }
+
+    [WpfFact]
+    public void TaskbarOverlay_MeasureSize_MultiStageDownsizing_Stage1_CompressesSpacing()
+    {
+        var cfg = new AppSettings();
+        cfg.Overlay.Columns = [[Metrics.CpuPct, Metrics.RamPct], [Metrics.GpuPct, Metrics.NetDown]];
+        var embedder = new TaskbarEmbedder(cfg);
+        using var overlay = new TaskbarOverlay(cfg, embedder);
+
+        var measureInternal = typeof(TaskbarOverlay).GetMethod("MeasureSizeInternal", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var initialSize = (Size)measureInternal.Invoke(overlay, null)!;
+
+        // Stage 1 target: slot width matches compressed width with spacing compressed to 0.5f
+        var spacingField = typeof(TaskbarOverlay).GetField("_spacingScaleFactor", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        spacingField.SetValue(overlay, 0.5f);
+        var compressedSize = (Size)measureInternal.Invoke(overlay, null)!;
+        spacingField.SetValue(overlay, 1.0f);
+
+        typeof(TaskbarEmbedder).GetField("<AvailableSlotWidth>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(embedder, compressedSize.Width);
+
+        var measureSize = typeof(TaskbarOverlay).GetMethod("MeasureSize", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var measured = (Size)measureSize.Invoke(overlay, null)!;
+
+        var autoScaleField = typeof(TaskbarOverlay).GetField("_autoScaleFactor", BindingFlags.NonPublic | BindingFlags.Instance)!;
+
+        measured.Width.Should().BeLessThanOrEqualTo(initialSize.Width);
+        ((float)spacingField.GetValue(overlay)!).Should().Be(0.5f);
+        ((float)autoScaleField.GetValue(overlay)!).Should().Be(1.0f);
+    }
+
+    [WpfFact]
+    public void TaskbarOverlay_MeasureSize_MultiStageDownsizing_Stage2_ContinuousScaling()
+    {
+        var cfg = new AppSettings();
+        cfg.Overlay.Columns = [[Metrics.CpuPct, Metrics.RamPct], [Metrics.GpuPct, Metrics.NetDown]];
+        var embedder = new TaskbarEmbedder(cfg);
+        using var overlay = new TaskbarOverlay(cfg, embedder);
+
+        var measureInternal = typeof(TaskbarOverlay).GetMethod("MeasureSizeInternal", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var initialSize = (Size)measureInternal.Invoke(overlay, null)!;
+
+        // Target: 75% of initial width, requiring continuous scaling factor between 0.60 and 0.90
+        int targetWidth = (int)(initialSize.Width * 0.75f);
+        typeof(TaskbarEmbedder).GetField("<AvailableSlotWidth>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(embedder, targetWidth);
+
+        var measureSize = typeof(TaskbarOverlay).GetMethod("MeasureSize", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var measured = (Size)measureSize.Invoke(overlay, null)!;
+
+        var spacingField = typeof(TaskbarOverlay).GetField("_spacingScaleFactor", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var autoScaleField = typeof(TaskbarOverlay).GetField("_autoScaleFactor", BindingFlags.NonPublic | BindingFlags.Instance)!;
+
+        ((float)spacingField.GetValue(overlay)!).Should().Be(0.5f);
+        ((float)autoScaleField.GetValue(overlay)!).Should().BeInRange(0.60f, 0.90f);
+        measured.Width.Should().BeLessThanOrEqualTo(initialSize.Width);
+    }
+
+    [WpfFact]
+    public void TaskbarOverlay_MeasureSize_MultiStageDownsizing_Stage3_ReadabilityFloorClamp()
+    {
+        var cfg = new AppSettings();
+        cfg.Overlay.Columns = [[Metrics.CpuPct, Metrics.RamPct], [Metrics.GpuPct, Metrics.NetDown]];
+        var embedder = new TaskbarEmbedder(cfg);
+        using var overlay = new TaskbarOverlay(cfg, embedder);
+
+        // Target: extremely narrow slot (e.g. 15px) requiring clamp to 0.60f floor
+        typeof(TaskbarEmbedder).GetField("<AvailableSlotWidth>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(embedder, 15);
+
+        var measureSize = typeof(TaskbarOverlay).GetMethod("MeasureSize", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var measured = (Size)measureSize.Invoke(overlay, null)!;
+
+        var autoScaleField = typeof(TaskbarOverlay).GetField("_autoScaleFactor", BindingFlags.NonPublic | BindingFlags.Instance)!;
+
+        ((float)autoScaleField.GetValue(overlay)!).Should().Be(0.60f);
+        measured.Width.Should().BeGreaterThan(0);
+    }
+
+    [WpfFact]
+    public void TaskbarOverlay_SingleMetricColumn_MeasuresAndRendersWithoutExtraRowHeight()
+    {
+        var cfgSingle = new AppSettings();
+        cfgSingle.Overlay.Columns = [[Metrics.CpuPct]];
+        var embedderSingle = new TaskbarEmbedder(cfgSingle);
+        using var overlaySingle = new TaskbarOverlay(cfgSingle, embedderSingle);
+
+        var measureSingle = typeof(TaskbarOverlay).GetMethod("MeasureSize", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var szSingle = (Size)measureSingle.Invoke(overlaySingle, null)!;
+
+        var cfgDual = new AppSettings();
+        cfgDual.Overlay.Columns = [[Metrics.CpuPct, Metrics.CpuTemp]];
+        var embedderDual = new TaskbarEmbedder(cfgDual);
+        using var overlayDual = new TaskbarOverlay(cfgDual, embedderDual);
+
+        var szDual = (Size)measureSingle.Invoke(overlayDual, null)!;
+
+        // Single metric overlay should be strictly shorter than dual metric overlay
+        szSingle.Height.Should().BeLessThan(szDual.Height);
+    }
+
+    [WpfFact]
+    public void TaskbarOverlay_MixedColumns_RendersTopRowOnlyInSingleMetricColumn()
+    {
+        var cfg = new AppSettings();
+        // Col 0 has 1 metric; Col 1 has 2 metrics
+        cfg.Overlay.Columns = [[Metrics.CpuPct], [Metrics.GpuPct, Metrics.GpuTemp]];
+        var embedder = new TaskbarEmbedder(cfg);
+        using var overlay = new TaskbarOverlay(cfg, embedder);
+
+        using var bmp = new Bitmap(300, 50);
+        using var g = Graphics.FromImage(bmp);
+
+        var drawContent = typeof(TaskbarOverlay).GetMethod("DrawContent", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var act = () => drawContent.Invoke(overlay, [g]);
+        act.Should().NotThrow();
     }
 }

@@ -7,7 +7,7 @@ namespace LocalTelemetry.Core.Tests.Hardware;
 [Collection("TrafficHistory")]
 public class TrafficHistoryStoreTests
 {
-    private static readonly object SyncLock = new();
+    private static readonly Lock SyncLock = new();
 
     [Fact]
     public void TrafficHistoryStore_InitializeAndDelegates()

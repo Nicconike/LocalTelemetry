@@ -26,6 +26,9 @@ public interface IHardwareLifecycleManager : IDisposable
     /// <summary>Fired when hardware devices (USB, storage, PnP) arrive or are removed.</summary>
     event Action? DevicePnPChanged;
 
+    /// <summary>Fired when the Windows user session is locked (<c>true</c>) or unlocked (<c>false</c>).</summary>
+    event Action<bool>? SessionLockStateChanged;
+
     /// <summary>Notifies the manager of an external display configuration change (e.g. from WM_DISPLAYCHANGE).</summary>
     void NotifyDisplayChanged();
 
@@ -50,8 +53,11 @@ public sealed class HardwareLifecycleManager : IHardwareLifecycleManager
     public event Action? PowerResumed;
     public event Action? NetworkTopologyChanged;
     public event Action? DevicePnPChanged;
+    public event Action<bool>? SessionLockStateChanged;
 
-    private readonly object _lock = new();
+    private static event Action<bool>? GlobalSessionLockStateChanged;
+
+    private readonly Lock _lock = new();
     private bool _disposed;
     private bool _isSuspended;
     private DateTime _lastDisplayEvent = DateTime.MinValue;
@@ -73,6 +79,7 @@ public sealed class HardwareLifecycleManager : IHardwareLifecycleManager
     /// </summary>
     public HardwareLifecycleManager()
     {
+        GlobalSessionLockStateChanged += OnGlobalSessionLockStateChanged;
         try
         {
             if (SubscribeSystemEventsHook is not null)
@@ -156,11 +163,17 @@ public sealed class HardwareLifecycleManager : IHardwareLifecycleManager
         }
     }
 
+    private void OnGlobalSessionLockStateChanged(bool isLocked)
+    {
+        if (_disposed) return;
+        SessionLockStateChanged?.Invoke(isLocked);
+    }
+
     private static void OnSessionSwitch(object? sender, SessionSwitchEventArgs e)
     {
         try
         {
-            string reason = e.Reason switch
+            string reason = e?.Reason switch
             {
                 SessionSwitchReason.SessionLock => "Session locked",
                 SessionSwitchReason.SessionUnlock => "Session unlocked",
@@ -168,9 +181,21 @@ public sealed class HardwareLifecycleManager : IHardwareLifecycleManager
                 SessionSwitchReason.SessionLogoff => "User logged off",
                 SessionSwitchReason.RemoteConnect => "Remote desktop connected",
                 SessionSwitchReason.RemoteDisconnect => "Remote desktop disconnected",
-                _ => e.Reason.ToString()
+                _ => e?.Reason.ToString() ?? "Unknown"
             };
             Log.Info($"Windows session event ({reason})");
+
+            if (e is not null)
+            {
+                if (e.Reason == SessionSwitchReason.SessionLock)
+                {
+                    GlobalSessionLockStateChanged?.Invoke(true);
+                }
+                else if (e.Reason == SessionSwitchReason.SessionUnlock)
+                {
+                    GlobalSessionLockStateChanged?.Invoke(false);
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -278,6 +303,7 @@ public sealed class HardwareLifecycleManager : IHardwareLifecycleManager
         {
             if (_disposed) return;
             _disposed = true;
+            GlobalSessionLockStateChanged -= OnGlobalSessionLockStateChanged;
         }
 
         try

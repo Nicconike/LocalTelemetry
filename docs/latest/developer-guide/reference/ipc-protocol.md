@@ -241,6 +241,9 @@ interface MonitoringDto {
 
 interface OverlayDto {
     visible: boolean;
+    displayMode: 'primary' | 'all' | 'secondary' | 'custom';
+    enabledDisplays: string[];
+    detectedDisplays?: DetectedDisplayDto[];
     doubleClickAction: 'settings' | 'taskmanager' | 'none';
     position: 'left' | 'right';
     taskbarAlignment?: 'left' | 'center'; // Dynamically detected Windows 11 alignment
@@ -256,7 +259,14 @@ interface OverlayDto {
     groupColors: Record<string, string>;
     followWindowsTheme: boolean;
     layoutPreset: 'default' | 'gaming' | 'compact' | 'micro' | 'thermals' | 'workstation' | 'network' | 'full' | 'custom';
-    row1: string[];
+    columns: string[][];
+}
+
+interface DetectedDisplayDto {
+    id: string;
+    name: string;
+    isPrimary: boolean;
+    hasTaskbar: boolean;
 }
 
 interface AlertsDto {

@@ -60,10 +60,10 @@ public static class Metrics
         new(BatteryRate, "BAT", "Charge Rate", "W",    "battery"),
     ];
 
+    private static readonly Dictionary<string, MetricDescriptor> _allMetricsById = AllMetrics.ToDictionary(m => m.Id);
+
     /// <summary>Lookup dictionary by metric ID for fast O(1) access in render hot paths.</summary>
-#pragma warning disable S2386, S3887 // AllMetricsById is mutated dynamically by RegisterDisk when physical disks are discovered
-    public static readonly Dictionary<string, MetricDescriptor> AllMetricsById = AllMetrics.ToDictionary(m => m.Id);
-#pragma warning restore S2386, S3887
+    public static IReadOnlyDictionary<string, MetricDescriptor> AllMetricsById => _allMetricsById;
 
     /// <summary>Registers or updates per-disk metric descriptors for a given disk index.</summary>
     /// <param name="id">Disk identifier (e.g. "disk0").</param>
@@ -77,7 +77,7 @@ public static class Metrics
         };
         foreach (var m in list)
         {
-            if (AllMetricsById.TryGetValue(m.Id, out var existing))
+            if (_allMetricsById.TryGetValue(m.Id, out var existing))
             {
                 int idx = AllMetrics.IndexOf(existing);
                 if (idx >= 0)
@@ -89,7 +89,7 @@ public static class Metrics
             {
                 AllMetrics.Add(m);
             }
-            AllMetricsById[m.Id] = m;
+            _allMetricsById[m.Id] = m;
         }
     }
 

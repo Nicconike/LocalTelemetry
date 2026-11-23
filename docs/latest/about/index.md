@@ -1,72 +1,66 @@
-# :heart: Why I Built LocalTelemetry
+# :heart: Why LocalTelemetry Exists
 
-I built **LocalTelemetry** because I wanted a lightweight, reliable hardware and network monitor that lives strictly on the Windows taskbar.
+**LocalTelemetry** was created out of personal necessity. Other monitoring tools only offered the bare essentials, lacked modern taskbar integration, and suffered from recurring driver issues.
 
----
-
-## :goal: The Initial Goal: Essentials on the Taskbar
-
-When I started, I did not want floating widgets, desktop gadgets, or heavy overlays that obstruct the screen.
-
-I only wanted to see my essential performance vitals in one glance:
-
-- **CPU and GPU usage**
-- **Hardware temperatures**
-- **Live network download and upload speeds**
-
-The Windows taskbar is always accessible. Placing these metrics directly on the taskbar lets me check my hardware at any moment without switching windows or interrupting my work or games.
+LocalTelemetry was built to do everything properly: a **comprehensive, zero-bloat hardware and network monitor** that lives natively on the Windows taskbar.
 
 ---
 
-## :shield-alert: The Antivirus False Alarm Problem
+## :goal: What Other Tools Offered vs. What Was Missing
 
-The biggest frustration with existing free monitoring tools was **constant antivirus false positives**.
+For years, other taskbar monitoring utilities typically only offered the basics:
 
-Almost every time my system booted, Windows Defender flagged my monitoring utilities:
+- **CPU and GPU usage percentages**
+- **Basic core temperatures**
+- **Simple network upload and download speeds**
 
-> *"Threat detected: Trojan / Vulnerable Driver Blocked"*
-
-These alerts caused constant panic and doubt. Every reboot brought scary warnings about malware. I had to inspect logs, check file hashes, and verify that my computer was safe.
-
-The root cause comes down to driver signing economics:
-
-1. Reading low-level processor registers requires a kernel-mode driver.
-2. Official Extended Validation (EV) code-signing certificates cost **$250 to $400 every year**. An independent open-source project cannot afford this annual fee.
-3. Because of this barrier, older free tools bundled unmaintained drivers like `WinRing0`. Microsoft Defender flags these legacy drivers as vulnerable and treats tools loading them as threats.
+When **Windows 11** removed support for legacy taskbar deskbands, other tools broke down. Some required third-party shell injectors, while others relied on floating desktop gadgets that obstructed games, code editors, and full-screen work. The taskbar is the one place on Windows that is **always accessible without getting in the way**.
 
 ---
 
-## :sparkles: The Solution: PawnIO
+## :shield-alert: The Daily Login False-Positive Problem
 
-I wanted a clean architecture that permanently eliminates false virus alarms.
+By late 2025, an even more frustrating issue appeared. **Every single day, right at Windows login**, my antivirus popped up with a security warning:
 
-That is why I chose **[PawnIO](https://github.com/namazso/PawnIO)**.
+> *"Threat detected: Malware / Trojan in Temp folder"*
 
-PawnIO is a modern, secure, and officially signed Windows kernel driver. Major open-source projects, including **LibreHardwareMonitor (LHM)**, use and trust PawnIO.
+Starting up the computer every morning only to be greeted by a virus alert in the **`%TEMP%` directory** caused constant annoyance and doubt. After investigating the logs and inspecting the flagged files, the cause became clear: the monitoring tool running at startup was **repeatedly dropping driver files into the temporary directory every time I logged in**, triggering security heuristics.
 
-With PawnIO, LocalTelemetry gets direct kernel access for temperature and power monitoring with **zero Defender false alarms**, full Secure Boot support, and clean scans on Antivirus softwares.
+In **April 2026**, tired of daily login false positives, I decided to do everything myself and build a clean application from scratch.
 
 ---
 
-## :rocket: How LocalTelemetry Evolved
+## :sparkles: Learning the Kernel Landscape & Choosing PawnIO
 
-Once the core taskbar monitor was solid, I kept improving it.
+Building LocalTelemetry from the ground up was an eye-opening journey into low-level Windows systems programming:
 
-What started as a simple monitor for temperatures, usage, and network speeds grew into a comprehensive utility. I added unique capabilities you will not find in other taskbar monitors:
+1. **Kernel Access Is Unavoidable**: Reading low-level processor registers (**MSR / SMN**) and direct hardware vitals strictly requires a kernel-mode driver.
+2. **The Certificate Barrier**: Microsoft requires kernel drivers to be signed with an Extended Validation (EV) code-signing certificate, costing **$250 to $400 every year**. Because free independent utilities cannot afford this recurring fee, other tools cut corners by dropping outdated or unmaintained driver binaries into temp folders.
+3. **The Clean Solution**: While researching sustainable architectures, I discovered **[PawnIO](https://github.com/namazso/PawnIO)** - a modern, secure, and officially signed kernel driver trusted by established projects like **LibreHardwareMonitor**.
 
+PawnIO installs properly as a verified system driver. It gives LocalTelemetry direct kernel access with **zero temporary file drops at login**, **zero antivirus false positives**, and **full Secure Boot and Core Isolation (HVCI) compliance**.
+
+---
+
+## :rocket: A Complete Monitoring Suite
+
+Rather than settling for the bare-bones stats of other tools, LocalTelemetry was engineered to implement a complete set of practical capabilities:
+
+- **Actual Wattage, Not Just Percentages**: Direct package power draw in **Watts** for CPU and GPU, measured straight from hardware registers.
 - **Real-Time Disk Activity**: Live read and write throughput directly beside CPU and GPU metrics.
-- **Laptop Battery Metrics**: Live charge and discharge rates in Watts.
-- **Gapless Network History**: Imports historical data from the Windows System Resource Usage Monitor (**SRUM**) database so your bandwidth history never has gaps.
-- **Per-Metric Customization**: Custom colors, custom metric order, and authentic manufacturer brand palettes.
-- **Focus-Safe Toast Alerts**: Alerts sent through an out-of-process helper over Named Pipes so notifications never minimize full-screen games or steal keyboard focus.
+- **Laptop Battery Health**: Live charge and discharge rates in **Watts**, battery wear levels, and cycle counts.
+- **Gapless Network History**: Automatically imports historical records from the Windows System Resource Usage Monitor (**SRUM**) database so bandwidth history never has gaps, saved locally in lightweight **JSON Lines**.
+- **Flexible Placement & Appearance**: Dock on either the **left or right side** of the taskbar, adapting to **centered and left-aligned taskbars**, with custom OEM brand palettes (**Intel, AMD, NVIDIA, Corsair, Samsung**, etc) and drag-and-drop metric reordering.
+- **Game-Safe Alerts**: Warning notifications run through an isolated background helper over **Named Pipes**, ensuring alerts **never minimize full-screen games** or steal keyboard focus.
+- **100% Offline Privacy**: Zero telemetry, zero analytics and zero cloud calls. All data stays strictly on your machine.
 
 ---
 
-## :heart-pulse: Support LocalTelemetry
+## :heart-pulse: Support the Project
 
-LocalTelemetry is 100% free and open source under the **GPL-3.0 license**. If LocalTelemetry improves your daily desktop experience, you can support the project:
+LocalTelemetry is 100% free and open source under the **GPL-3.0 license**. If LocalTelemetry improves your daily desktop experience:
 
-- :star: **Star on GitHub**: Star [**LocalTelemetry on GitHub**](https://github.com/Nicconike/LocalTelemetry) to help more people discover the project.
-- :heart: **Like on AlternativeTo**: Upvote and review [**LocalTelemetry on AlternativeTo**](https://alternativeto.net/software/localtelemetry/about/?utm_source=badge&utm_medium=referral) to help users find a lightweight alternative.
-- :message-square: **Join the Discord**: Chat with the community and share your setup on [**Discord Server**](https://discord.gg/M2QevSgW3S).
-- :bug: **Report Bugs & Suggest Features**: Open an issue on [**GitHub Issue Tracker**](https://github.com/Nicconike/LocalTelemetry/issues).
+- :star: **Star on GitHub**: Star [**LocalTelemetry on GitHub**](https://github.com/Nicconike/LocalTelemetry) to help more people discover it.
+- :heart: **Like on AlternativeTo**: Upvote and review [**LocalTelemetry on AlternativeTo**](https://alternativeto.net/software/localtelemetry/about/?utm_source=badge&utm_medium=referral).
+- :message-square: **Join the Community**: Share ideas and chat with us on the [**Discord Server**](https://discord.gg/M2QevSgW3S).
+- :bug: **Suggest Sensors & Features**: Open an issue on our [**GitHub Issue Tracker**](https://github.com/Nicconike/LocalTelemetry/issues).

@@ -48,6 +48,7 @@ function makePayload(): SettingsDto {
             groupColors: {},
             defaultMetricColors: {},
             followWindowsTheme: true,
+            columns: [],
             row1: [],
             userCustomizedMetricColors: [],
             userCustomizedGroupColors: [],
@@ -545,7 +546,7 @@ describe('App.svelte', () => {
         activePage.set('unknown_page');
         saveStatus.set('idle');
         await tick();
-        expect(document.querySelector('.content')?.children.length).toBe(0);
+        expect(document.querySelector('.content')?.children).toHaveLength(0);
 
         // Set saveStatus to saved when clean to cover auto-save class
         saveStatus.set('saved');

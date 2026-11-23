@@ -52,7 +52,7 @@ Graphics card telemetry tracks GPU core utilization, video memory consumption, c
 
 ### :microchip: Integrated Graphics (iGPU) Telemetry (Desktops & Laptops)
 
-Systems without a dedicated graphics card — including desktop PCs (e.g. Intel Core i3/i5/i7/i9 with UHD Graphics, AMD Ryzen 7000/8000/9000 CPUs, and G-series APUs), mini PCs, and laptops — lack discrete board sensors. When no dedicated GPU is present, LocalTelemetry activates specialized fallbacks:
+Systems without a dedicated graphics card - including desktop PCs (e.g. Intel Core i3/i5/i7/i9 with UHD Graphics, AMD Ryzen 7000/8000/9000 CPUs, and G-series APUs), mini PCs, and laptops - lack discrete board sensors. When no dedicated GPU is present, LocalTelemetry activates specialized fallbacks:
 
 - **Shared Video Memory**: Integrated GPUs dynamically share system RAM. LocalTelemetry queries the WDDM shared memory performance counter (`\GPU Adapter Memory(*)\Shared Usage`), reporting active allocated shared memory in MB.
 - **On-Die Temperature**: Integrated graphics share the silicon package with the processor. LocalTelemetry reports package digital thermal sensor (DTS) temperatures, matching tools such as Lenovo Vantage and HWiNFO.
