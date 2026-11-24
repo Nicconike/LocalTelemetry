@@ -112,15 +112,15 @@ In the settings dashboard under the **Overlay** tab, you can customize layout, g
 *Overlay configuration tab in the Svelte 5 settings dashboard.*
 
 - :eye: **Show Overlay**: Master toggle to show or hide the taskbar overlay.
-- :arrow-left-right: **Position in taskbar**: LocalTelemetry automatically detects your Windows 11 taskbar alignment:
-  - **Centered Taskbar Icons**:
+- :arrow-left-right: **Position in taskbar**: LocalTelemetry automatically detects your taskbar layout:
+  - **Windows 11 Centered Taskbar Icons**:
     - `Left Side`: Anchors the overlay to the left side of the taskbar, adjacent to the Widgets button.
     - `Right Side`: Anchors the overlay to the right side, directly to the left of the system tray.
-  - **Left-Aligned Taskbar Icons**:
-    - `Next to Apps` (`left`): Detects the right edge of running application icons. It places the overlay immediately after your last pinned or active app.
-    - `Before System Tray` (`right`): Anchors the overlay immediately to the left of the system notification area.
+  - **Windows 10 & Windows 11 Left-Aligned Taskbars**:
+    - `Next to Apps` (`left` / `beside_apps`): Detects the right edge of running application icons. It places the overlay immediately after your last pinned or active app.
+    - `Before System Tray` (`right`): Anchors the overlay immediately to the left of the system notification area or adjacent deskbands (such as Windows 10 News & Interests or weather widgets).
     - *Fresh Setup Default*: On left-aligned taskbars, fresh setups default to `Before System Tray` to avoid overlapping pinned applications.
-- :ruler: **Offset from Edge**: Adjust horizontal pixel distance from the chosen taskbar anchor (`0px` to `200px`).
+- :ruler: **Offset from Edge**: Adjust horizontal pixel distance from the chosen taskbar anchor (`0px` to `200px`) on both Windows 10 and Windows 11.
 - :blend: **Opacity**: Adjust overlay transparency from `20%` to `100%`.
 - :zoom-in: **Scale**: Adjust the display scale multiplier from `80%` to `200%`.
 - :triangle-alert: **Space Congestion Warning**: When open taskbar application buttons squeeze available space, a warning banner appears with a **Dismiss** button and a shortcut to Windows Taskbar Settings (`ms-settings:taskbar`). The warning banner auto-recovers when space opens up.

@@ -728,6 +728,70 @@ begin
     end;
 end;
 
+function BuildUserDataCleanupSummary(const DataDirs: TStringList; RemoveSettings, RemoveTraffic, RemoveLogs, AnySelected: Boolean): string;
+var
+    I: Integer;
+    PreservedCount: Integer;
+    PathsMsg, HeaderMsg, ItemsMsg: string;
+begin
+    PathsMsg := '';
+    for I := 0 to DataDirs.Count - 1 do
+    begin
+        if I > 0 then
+            PathsMsg := PathsMsg + #13#10;
+        PathsMsg := PathsMsg + DataDirs[I];
+    end;
+
+    if not AnySelected then
+    begin
+        Result := 'All application data and preferences have been preserved at:' + #13#10 + PathsMsg;
+        Exit;
+    end;
+
+    if RemoveSettings and RemoveTraffic and RemoveLogs then
+    begin
+        Result := 'All selected application data has been removed.';
+        Exit;
+    end;
+
+    PreservedCount := 0;
+    ItemsMsg := '';
+    if not RemoveSettings then
+    begin
+        PreservedCount := PreservedCount + 1;
+        ItemsMsg := ItemsMsg + ' - Application Settings & Preferences' + #13#10;
+    end;
+    if not RemoveTraffic then
+    begin
+        PreservedCount := PreservedCount + 1;
+        ItemsMsg := ItemsMsg + ' - Network Traffic History' + #13#10;
+    end;
+    if not RemoveLogs then
+    begin
+        PreservedCount := PreservedCount + 1;
+        ItemsMsg := ItemsMsg + ' - Cache & Diagnostic Logs' + #13#10;
+    end;
+
+    if PreservedCount = 1 then
+    begin
+        if not RemoveTraffic then
+            HeaderMsg := 'Your preserved network traffic history has been kept at:'
+        else if not RemoveSettings then
+            HeaderMsg := 'Your preserved application settings and preferences have been kept at:'
+        else
+            HeaderMsg := 'Your preserved cache and diagnostic logs have been kept at:';
+
+        Result := 'The selected application data has been removed.' + #13#10 + #13#10 +
+                  HeaderMsg + #13#10 + PathsMsg;
+    end
+    else
+    begin
+        Result := 'The selected application data has been removed.' + #13#10 + #13#10 +
+                  'The following preserved data has been kept at:' + #13#10 +
+                  ItemsMsg + #13#10 + PathsMsg;
+    end;
+end;
+
 var
     UninstallDriverNeedsReboot: Boolean;
 
@@ -822,16 +886,11 @@ begin
                     end;
                 end;
 
-                if (not UninstallSilent) and (not (RemoveSettings and RemoveTraffic and RemoveLogs)) then
+                if not UninstallSilent then
                 begin
-                    PreservedMsg := 'Your preserved application data has been kept at:' + #13#10;
-                    for I := 0 to DataDirs.Count - 1 do
-                    begin
-                        if I > 0 then
-                            PreservedMsg := PreservedMsg + #13#10;
-                        PreservedMsg := PreservedMsg + DataDirs[I];
-                    end;
-                    MsgBox(PreservedMsg, mbInformation, MB_OK);
+                    PreservedMsg := BuildUserDataCleanupSummary(DataDirs, RemoveSettings, RemoveTraffic, RemoveLogs, AnySelected);
+                    if PreservedMsg <> '' then
+                        MsgBox(PreservedMsg, mbInformation, MB_OK);
                 end;
             end;
 

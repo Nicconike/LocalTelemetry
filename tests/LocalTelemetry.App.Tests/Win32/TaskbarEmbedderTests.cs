@@ -426,6 +426,51 @@ public class TaskbarEmbedderTests
     }
 
     [Fact]
+    public void TaskbarEmbedder_ComputeBandX_Win10_PlacementOffset_And_DeskBandDetection()
+    {
+        var cfg = new AppSettings();
+        var embedder = new TaskbarEmbedder(cfg);
+
+        using var fakeParent = new Form { Width = 1920, Height = 40 };
+        using var fakeBand = new Form { Width = 600, Height = 40 };
+        using var fakeWeatherDeskBand = new Form { Width = 150, Height = 40, Left = 1500 };
+        fakeParent.Show();
+        fakeBand.Show();
+        fakeWeatherDeskBand.Show();
+
+        NativeMethods.SetParent(fakeBand.Handle, fakeParent.Handle);
+        NativeMethods.SetParent(fakeWeatherDeskBand.Handle, fakeParent.Handle);
+
+        NativeMethods.MoveWindow(fakeBand.Handle, 0, 0, 600, 40, true);
+        NativeMethods.MoveWindow(fakeWeatherDeskBand.Handle, 1500, 0, 150, 40, true);
+
+        typeof(TaskbarEmbedder).GetField("_parentHwnd", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, fakeParent.Handle);
+        typeof(TaskbarEmbedder).GetField("_taskBandHwnd", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, fakeBand.Handle);
+        typeof(TaskbarEmbedder).GetField("_isWin11", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, false);
+
+        var computeBandX = typeof(TaskbarEmbedder).GetMethod("ComputeBandX", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var rect = new NativeMethods.Rect { Left = 0, Top = 0, Right = 1920, Bottom = 40 };
+
+        cfg.Overlay.Placement = "right";
+        cfg.Overlay.PlacementOffset = 0;
+        int x0 = (int)computeBandX.Invoke(embedder, [rect, new Size(200, 30)])!;
+        x0.Should().BeLessThanOrEqualTo(1300);
+
+        cfg.Overlay.PlacementOffset = 50;
+        int x50 = (int)computeBandX.Invoke(embedder, [rect, new Size(200, 30)])!;
+        x50.Should().Be(x0 - 50);
+
+        cfg.Overlay.Placement = "beside_apps";
+        cfg.Overlay.PlacementOffset = 10;
+        int xBeside = (int)computeBandX.Invoke(embedder, [rect, new Size(200, 30)])!;
+        xBeside.Should().BeGreaterThan(0);
+
+        fakeParent.Close();
+        fakeBand.Close();
+        fakeWeatherDeskBand.Close();
+    }
+
+    [Fact]
     public void TaskbarEmbedder_ResolveParentAndTaskBand_Win11Mode_ReturnsTrue()
     {
         var cfg = new AppSettings();

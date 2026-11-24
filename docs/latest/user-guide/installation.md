@@ -192,8 +192,8 @@ To inspect the low-level kernel driver architecture, MSR register mappings (`0x1
     - **Application Settings** (`settings.json`, `hardware_state.json`): Checked by default.
     - **Traffic History** (`internet_usage.jsonl`, `internet_usage.dat`): **Unchecked by default** to prevent accidental loss of recorded network bandwidth history.
     - **Cache & Diagnostic Logs** (`logs/`, `webview2_data/`, `temp/`): Checked by default.
-    - **Remove Selected** (Default button): Permanently deletes selected items. It cleans up empty data directories.
-    - **Keep All**: Preserves all data. The uninstaller displays the exact folder paths where your configuration and bandwidth database remain.
+    - **Remove Selected** (Default button): Permanently deletes selected items. The uninstaller displays a confirmation prompt that accurately lists the removed items and the exact folder paths of any preserved data (such as network traffic history).
+    - **Keep All**: Preserves all data. The uninstaller displays the exact folder paths where all configuration, traffic history and logs remain.
     - **Silent Uninstallation**: In silent mode (`/SILENT` or `/VERYSILENT`), the dialog is skipped. All user data remains safely preserved by default.
 
 ### :folder-x: Portable Mode Removal

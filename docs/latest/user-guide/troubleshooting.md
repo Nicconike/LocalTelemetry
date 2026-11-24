@@ -81,8 +81,8 @@ LocalTelemetry uses an out-of-process notifier (`LocalTelemetry.Notifier.exe`) t
 ### :move: Overlay placement, clipping, or auto-hide issues
 
 - **Explorer Restart Watchdog**: If the Windows taskbar crashes or restarts, an integrated background watchdog checks the taskbar handle every 5 seconds and automatically re-embeds the overlay. If it does not reappear immediately, right-click the system tray icon and choose **Show Overlay**.
-- **Taskbar Space Constrained Warning**: If the available taskbar slot is narrower than the overlay, the Overlay settings tab displays a warning banner and clamps the overlay. To resolve the constraint, reduce enabled metrics in **Layout**, lower the **Scale** slider, or turn off Windows Widgets in Windows Taskbar Settings (`ms-settings:taskbar`).
-- **Adjust Edge Offset**: If taskbar icons overlap the overlay, open **Settings &rarr; Overlay** and adjust **Offset from Edge** (`0px` to `200px`) or toggle **Position in taskbar** between `Left side` and `Right side`.
+- **Taskbar Space Constrained Warning**: If the available taskbar slot is narrower than the overlay, the Overlay settings tab displays a warning banner and clamps the overlay. To resolve the constraint, reduce enabled metrics in **Layout**, lower the **Scale** slider, or turn off taskbar widgets in Windows Settings (`ms-settings:taskbar`).
+- **Adjust Edge Offset**: If taskbar icons, system deskbands, or weather widgets (including Windows 10 News and Interests) overlap the overlay, open **Settings &rarr; Overlay** and adjust **Offset from Edge** (`0px` to `200px`) or toggle **Position in taskbar** between `Left side` and `Right side`.
 
 ### :file-exclamation-point: "Start with Windows" does not launch after moving folders (Portable Mode)
 

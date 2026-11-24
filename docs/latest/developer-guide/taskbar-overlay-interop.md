@@ -120,13 +120,14 @@ On centered taskbars, the app icons occupy the center band:
 - **Left Placement (`left`)**: Anchors relative to the Windows Widgets button edge (`_leftWidgetRightEdge + PlacementOffset`).
 - **Right Placement (`right`)**: Anchors directly before the system notification area (`_trayLeftEdge - Width - PlacementOffset`).
 
-### 3. Left-Aligned Taskbar Positioning
+### 3. Left-Aligned & Classic Taskbar Positioning (Windows 10 & Windows 11)
 
-On left-aligned taskbars, app icons start from the Start button and expand toward the right:
+On left-aligned taskbars (including Windows 10 classic ReBar shells), app icons start from the Start button and expand toward the right:
 
 - **Application Band Boundary Detection (`GetAppListRightEdge` & `GetAppListLeftEdge`)**:
-  - Inspects UIAutomation elements for `Taskbar.TaskListButtonPanel` or native `MSTaskListWClass`.
-  - Determines the exact left and right boundaries of running and pinned applications.
+  - On Windows 11, inspects UIAutomation elements for `Taskbar.TaskListButtonPanel` or native `MSTaskListWClass`.
+  - On Windows 10, queries the native `MSTaskSwWClass` taskband inside `ReBarWindow32`.
+  - Scans for adjacent taskbar elements and deskbands (such as News & Interests or weather widgets) to clamp the right boundary.
 - **Taskbar Space Congestion Detection (`IsTaskbarSpaceConstrained`)**:
   - Calculates the available horizontal gap (`AvailableSlotWidth`) between running app icons and the system tray or widgets.
   - Sets `IsTaskbarSpaceConstrained` to `true` when the measured slot is narrower than the overlay width (`overlayWidth > availableWidth`).
@@ -137,11 +138,12 @@ On left-aligned taskbars, app icons start from the Start button and expand towar
     $$\text{X} = \text{clientAppRight} + \text{PlacementOffset}$$
 
 - **Position Before System Tray (`right`)**:
-  - Positions the overlay immediately before the system notification area:
+  - Positions the overlay immediately before the system notification area or adjacent deskband:
 
     $$\text{X} = \text{clientRightBoundary} - \text{Width} - \text{PlacementOffset}$$
 
-- **Boundary Clamping**:
+- **TaskBand Shrinking & Boundary Clamping**:
+  - Dynamically shrinks `MSTaskSwWClass` accounting for `PlacementOffset` on Windows 10 classic taskbars to prevent clipping running application buttons.
   - Clamps computed coordinates via `Math.Clamp(x, minX, maxX)` to keep the overlay within bounds and prevent visual overlap.
 
 ---
