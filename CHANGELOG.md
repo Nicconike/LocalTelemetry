@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com), and this project adheres to [Semantic Versioning](https://semver.org) & [Conventional Commits](https://conventionalcommits.org).
 
+## [1.3.0-beta.8](https://github.com/Nicconike/LocalTelemetry/compare/v1.3.0-beta.7...v1.3.0-beta.8) (24-11-2026)
+
+### Bug Fixes
+
+* **overlay:** apply placement offset and avoid ExplorerPatcher weather overlap on Win10 ([ec1b5d1](https://github.com/Nicconike/LocalTelemetry/commit/ec1b5d15b96b785f49bdf0f57c38a070e8117b64)), closes [#28](https://github.com/Nicconike/LocalTelemetry/issues/28)
+
 ## [1.3.0-beta.7](https://github.com/Nicconike/LocalTelemetry/compare/v1.3.0-beta.6...v1.3.0-beta.7) (24-11-2026)
 
 ### Bug Fixes
