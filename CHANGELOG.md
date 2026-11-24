@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com), and this project adheres to [Semantic Versioning](https://semver.org) & [Conventional Commits](https://conventionalcommits.org).
 
+## [1.3.0-beta.7](https://github.com/Nicconike/LocalTelemetry/compare/v1.3.0-beta.6...v1.3.0-beta.7) (24-11-2026)
+
+### Bug Fixes
+
+* **hardware:** decouple dedicated GPU VRAM ceiling from host system RAM ([3be84f7](https://github.com/Nicconike/LocalTelemetry/commit/3be84f7f0c43591fb1b7f33dfb256698c4842578))
+
 ## [1.3.0-beta.6](https://github.com/Nicconike/LocalTelemetry/compare/v1.3.0-beta.5...v1.3.0-beta.6) (23-11-2026)
 
 ### Features
