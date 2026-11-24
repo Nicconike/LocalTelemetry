@@ -1386,14 +1386,13 @@ public sealed class HardwareMonitor : IDisposable
         return false;
     }
 
+    private const float MaxDedicatedVramMb = 524288f;
+
     private float ReadGpuVramUsedMb(NvGpuMonitor.NvGpuData? gpu = null)
     {
         try
         {
-            long totalRamBytes = SystemInfo.GetTotalRamBytes();
-            float maxGpuMemMb = totalRamBytes > 0 ? (float)(totalRamBytes / (1024.0 * 1024.0)) : 131072f;
-
-            if (TryReadDedicatedGpuVram(gpu, maxGpuMemMb, out float dedicatedVram))
+            if (TryReadDedicatedGpuVram(gpu, out float dedicatedVram))
             {
                 return dedicatedVram;
             }
@@ -1403,7 +1402,9 @@ public sealed class HardwareMonitor : IDisposable
                 float sharedMb = _wddmGpu.GetGpuMemoryUsedMb(ActiveGpuLuid);
                 if (sharedMb > 0)
                 {
-                    return Math.Clamp(sharedMb, 0f, maxGpuMemMb);
+                    long totalRamBytes = SystemInfo.GetTotalRamBytes();
+                    float maxSharedMemMb = totalRamBytes > 0 ? (float)(totalRamBytes / (1024.0 * 1024.0)) : 131072f;
+                    return Math.Clamp(sharedMb, 0f, maxSharedMemMb);
                 }
             }
         }
@@ -1414,9 +1415,9 @@ public sealed class HardwareMonitor : IDisposable
         return 0f;
     }
 
-    private bool TryReadDedicatedGpuVram(NvGpuMonitor.NvGpuData? gpu, float maxGpuMemMb, out float vram)
+    private bool TryReadDedicatedGpuVram(NvGpuMonitor.NvGpuData? gpu, out float vram)
     {
-        if (gpu.HasValue && gpu.Value.VramUsedMb > 0 && gpu.Value.VramUsedMb <= maxGpuMemMb)
+        if (gpu.HasValue && gpu.Value.VramUsedMb > 0 && gpu.Value.VramUsedMb <= MaxDedicatedVramMb)
         {
             vram = gpu.Value.VramUsedMb;
             return true;
@@ -1425,7 +1426,7 @@ public sealed class HardwareMonitor : IDisposable
         if (_nvGpu is not null)
         {
             gpu = _nvGpu.Query();
-            if (gpu.HasValue && gpu.Value.VramUsedMb > 0 && gpu.Value.VramUsedMb <= maxGpuMemMb)
+            if (gpu.HasValue && gpu.Value.VramUsedMb > 0 && gpu.Value.VramUsedMb <= MaxDedicatedVramMb)
             {
                 vram = gpu.Value.VramUsedMb;
                 return true;
@@ -1435,7 +1436,7 @@ public sealed class HardwareMonitor : IDisposable
         if (_amdGpu is { IsAvailable: true })
         {
             float amdVram = _amdGpu.GetVram().usedMb;
-            if (amdVram > 0 && amdVram <= maxGpuMemMb)
+            if (amdVram > 0 && amdVram <= MaxDedicatedVramMb)
             {
                 vram = amdVram;
                 return true;
@@ -1445,7 +1446,7 @@ public sealed class HardwareMonitor : IDisposable
         if (_intelGpu is { IsAvailable: true })
         {
             float intelVram = _intelGpu.GetVram().usedMb;
-            if (intelVram > 0 && intelVram <= maxGpuMemMb)
+            if (intelVram > 0 && intelVram <= MaxDedicatedVramMb)
             {
                 vram = intelVram;
                 return true;
