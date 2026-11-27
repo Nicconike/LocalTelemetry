@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com), and this project adheres to [Semantic Versioning](https://semver.org) & [Conventional Commits](https://conventionalcommits.org).
 
+## [1.3.0-beta.9](https://github.com/Nicconike/LocalTelemetry/compare/v1.3.0-beta.8...v1.3.0-beta.9) (27-11-2026)
+
+### Features
+
+* **telemetry:** expand storage telemetry, taskbar space clamping, and deduplicate themes ([05ba754](https://github.com/Nicconike/LocalTelemetry/commit/05ba7544aa4cfb285373aacd080e2951b8900ea7))
+
 ## [1.3.0-beta.8](https://github.com/Nicconike/LocalTelemetry/compare/v1.3.0-beta.7...v1.3.0-beta.8) (24-11-2026)
 
 ### Bug Fixes
