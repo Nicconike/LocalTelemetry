@@ -1,11 +1,31 @@
 <script>
-    import { settings } from "../../lib/store.ts";
+    import { settings, pristineSettings } from "../../lib/store.ts";
+    import { deepClone } from "../../lib/utils.ts";
     import Toggle from "../ui/Toggle.svelte";
     import Slider from "../ui/Slider.svelte";
     import SectionCard from "../ui/SectionCard.svelte";
 
     function onMasterToggleChange() {
-        if (!$settings?.alerts?.enabled) return;
+        if (!$settings?.alerts?.enabled) {
+            if ($pristineSettings) {
+                try {
+                    const p = JSON.parse($pristineSettings);
+                    if (p?.alerts && !p.alerts.enabled) {
+                        settings.update((s) => {
+                            if (!s) return s;
+                            return {
+                                ...s,
+                                alerts: deepClone(p.alerts),
+                            };
+                        });
+                        return;
+                    }
+                } catch (err) {
+                    console.debug("Failed parsing pristine settings during alert master toggle revert", err);
+                }
+            }
+            return;
+        }
 
         // If user is enabling alerts and no metric is selected, auto-enable sensible safety defaults
         const anyActive =
@@ -19,13 +39,23 @@
             $settings.alerts.alertGpuTemp ||
             $settings.alerts.alertGpuFreq ||
             $settings.alerts.alertGpuPower ||
+            $settings.alerts.alertDiskTemp ||
             $settings.alerts.alertNetDaily ||
             $settings.alerts.alertNetMonthly ||
             $settings.alerts.alertBatteryLow;
 
         if (!anyActive) {
-            $settings.alerts.alertCpuTemp = true;
-            $settings.alerts.cpuTempMaxC = 90;
+            settings.update((s) => {
+                if (!s?.alerts) return s;
+                return {
+                    ...s,
+                    alerts: {
+                        ...s.alerts,
+                        alertCpuTemp: true,
+                        cpuTempMaxC: 90,
+                    },
+                };
+            });
         }
     }
 
@@ -42,6 +72,7 @@
                     $settings.alerts.alertGpuTemp ||
                     $settings.alerts.alertGpuFreq ||
                     $settings.alerts.alertGpuPower ||
+                    $settings.alerts.alertDiskTemp ||
                     $settings.alerts.alertNetDaily ||
                     $settings.alerts.alertNetMonthly ||
                     $settings.alerts.alertBatteryLow),
@@ -198,6 +229,18 @@
                         max={400}
                         step={5}
                         unit="W"
+                    />
+                </div>
+
+                <h3 class="section-subtitle">Storage</h3>
+                <div class="alert-row">
+                    <Toggle bind:checked={$settings.alerts.alertDiskTemp} />
+                    <Slider
+                        label="Disk Temp"
+                        bind:value={$settings.alerts.diskTempMaxC}
+                        min={45}
+                        max={90}
+                        unit="°C"
                     />
                 </div>
 

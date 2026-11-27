@@ -121,6 +121,7 @@ The WPF host (`SettingsShell.xaml.cs`) initializes WebView2 with a virtual host 
 - **Virtual Host Domain**: Mapped via `SetVirtualHostNameToFolderMapping("localtelemetry.settings", wwwRoot, DenyCors)`.
 - **Navigation Target**: Loaded from `https://localtelemetry.settings/index.html`.
 - **Dropdown Blur Guard**: Moving or dragging the window triggers `document.activeElement?.blur()` in JavaScript to prevent detached native combobox popups.
+- **Working Set Memory Optimization**: Upon `NavigationCompleted` and during window close, invokes `NativeMethods.EmptyWorkingSet()`, trimming idle physical pages and keeping private working set RAM at **10–20 MB** while the dashboard is active.
 - **Title Bar Diagnostics**: Periodically computes LocalTelemetry's own process CPU utilization and displays it in the window title.
 
 ---

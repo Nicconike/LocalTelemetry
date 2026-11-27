@@ -13,6 +13,7 @@ public class MetricsTests
 
         Metrics.AllMetricsById.Should().ContainKey("disk_testdisk_read");
         Metrics.AllMetricsById.Should().ContainKey("disk_testdisk_write");
+        Metrics.AllMetricsById.Should().ContainKey("disk_testdisk_temp");
 
         // Duplicate registration should be no-op
         Metrics.RegisterDisk("testdisk", "DISK_TEST");
@@ -146,6 +147,7 @@ public class MetricsTests
             Id = "disk0",
             ReadMBps = 1500.0f,
             WriteMBps = 2.5f,
+            TemperatureC = 48,
         };
 
         var s = new TelemetrySnapshot
@@ -155,6 +157,12 @@ public class MetricsTests
 
         Metrics.Format("disk_disk0_read", s, false, false).Should().Be("1.5GB/s");
         Metrics.Format("disk_disk0_write", s, false, false).Should().Be("2.5MB/s");
+        Metrics.Format("disk_disk0_temp", s, false, false).Should().Be("48°C");
+        Metrics.Format("disk_disk0_temp", s, false, true).Should().Be("118°F");
+
+        var diskNoTemp = disk with { TemperatureC = null };
+        var sNoTemp = s with { Disks = [diskNoTemp] };
+        Metrics.Format("disk_disk0_temp", sNoTemp, false, false).Should().Be("--");
 
         var diskKb = disk with { WriteMBps = 0.5f };
         var sKb = s with { Disks = [diskKb] };
@@ -180,6 +188,8 @@ public class MetricsTests
         Metrics.WidestValueString(Metrics.NetTotal, false, false).Should().Be("999.99TB");
         Metrics.WidestValueString(Metrics.BatteryRate, false, false).Should().Be("+999.9W");
         Metrics.WidestValueString("disk_disk0_read", false, false).Should().Be("999.9GB/s");
+        Metrics.WidestValueString("disk_disk0_temp", false, false).Should().Be("100°C");
+        Metrics.WidestValueString("disk_disk0_temp", false, true).Should().Be("212°F");
         Metrics.WidestValueString("unknown_metric", false, false).Should().Be("9999");
     }
 }

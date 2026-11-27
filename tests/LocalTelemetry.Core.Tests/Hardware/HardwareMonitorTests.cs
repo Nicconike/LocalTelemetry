@@ -2892,4 +2892,28 @@ public class HardwareMonitorTests
             HardwareMonitor.PowerResumeWarmUpDelayMs = prevDelay;
         }
     }
+
+    [Fact]
+    public void CollectDiskMetrics_CachesTemperatures_BetweenSensorIntervals()
+    {
+        var cfg = BasicCfg();
+        cfg.Monitoring.EnableDisk = true;
+        cfg.Monitoring.PollIntervalMs = 1000;
+        using var m = CreateMonitor(cfg);
+
+        var fakeList = new List<(PerformanceCounter read, PerformanceCounter write)> { (null!, null!) };
+        SetField(m, "_perDiskCounters", fakeList);
+
+        var cachedTemps = (Dictionary<int, int?>)typeof(HardwareMonitor).GetField("_cachedDiskTemps", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(m)!;
+        cachedTemps[0] = 48;
+        typeof(HardwareMonitor).GetField("_lastDiskTempQuery", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(m, DateTime.UtcNow);
+
+        var (_, _, disks) = m.CollectDiskMetrics(cfg.Monitoring);
+        disks.Should().HaveCount(1);
+        disks[0].TemperatureC.Should().Be(48);
+
+        var onPnP = typeof(HardwareMonitor).GetMethod("OnDevicePnPChanged", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        onPnP.Invoke(m, null);
+        cachedTemps.Should().BeEmpty();
+    }
 }

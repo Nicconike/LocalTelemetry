@@ -262,16 +262,22 @@ public static class BrandColorDefaults
     private static void PopulateDiskMetrics(Dictionary<string, string> result)
     {
         var disks = SystemInfo.GetAllDisks();
+        string oemColor = SystemInfo.GetSystemOemColor();
         bool multiDisk = disks.Count > 1;
         for (int i = 0; i < disks.Count; i++)
         {
             var disk = disks[i];
             string perDiskColor = ResolveDiskColor(disk.Vendor, disk.Model);
+            if (string.IsNullOrEmpty(perDiskColor))
+            {
+                perDiskColor = oemColor;
+            }
             string label = multiDisk ? $"DISK {i + 1}" : "DISK";
             string mfr = string.IsNullOrEmpty(disk.Vendor) ? disk.Model : disk.Vendor;
-            string color = LogAndResolveColor(label, mfr, perDiskColor, "#AAAAAA");
-            result[$"disk_disk{i}_read"] = color;
-            result[$"disk_disk{i}_write"] = color;
+            Log.Debug($"Detected {label} vendor: {mfr} ({perDiskColor})");
+            result[$"disk_disk{i}_read"] = perDiskColor;
+            result[$"disk_disk{i}_write"] = perDiskColor;
+            result[$"disk_disk{i}_temp"] = perDiskColor;
         }
     }
 

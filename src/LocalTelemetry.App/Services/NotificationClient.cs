@@ -70,8 +70,9 @@ public class NotificationClient : IDisposable
         {
             await _lock.WaitAsync(cancellationToken);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
+            Log.Debug(ex, "SendAsync operation was cancelled while awaiting lock");
             return;
         }
 
@@ -117,8 +118,9 @@ public class NotificationClient : IDisposable
             Log.Error("Failed to connect to notification service (service may not be running)");
             return AttemptResult.Stop;
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
+            Log.Debug(ex, "ExecuteAttemptAsync operation was cancelled");
             return AttemptResult.Stop;
         }
         catch (Exception ex)

@@ -89,11 +89,29 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
     {
         bool constrained = _embedder.IsTaskbarSpaceConstrained;
         int slotWidth = _embedder.AvailableSlotWidth;
-        if (constrained != _lastReportedSpaceConstrained || slotWidth != _lastReportedSlotWidth)
+        bool initial = _lastReportedSlotWidth == -1;
+        bool stateChanged = constrained != _lastReportedSpaceConstrained;
+        bool widthShifted = constrained && Math.Abs(slotWidth - _lastReportedSlotWidth) > 30;
+
+        if (initial || stateChanged || widthShifted)
         {
             _lastReportedSpaceConstrained = constrained;
             _lastReportedSlotWidth = slotWidth;
-            Log.Debug($"Taskbar space constraint updated: constrained={constrained}, slotWidth={slotWidth}px, autoScale={_autoScaleFactor:F2}");
+            if (stateChanged || (initial && constrained))
+            {
+                if (constrained)
+                {
+                    Log.Info($"Taskbar space limited; overlay automatically scaled to fit available space ({slotWidth}px slot).");
+                }
+                else
+                {
+                    Log.Info($"Taskbar space restored; overlay running at normal size ({slotWidth}px slot).");
+                }
+            }
+            else if (widthShifted)
+            {
+                Log.Debug($"Taskbar slot width adjusted to {slotWidth}px while constrained.");
+            }
             TaskbarSpaceConstraintChanged?.Invoke(constrained, slotWidth);
         }
     }
@@ -156,8 +174,9 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
             return;
         }
 
+        string displayInfo = TargetDisplay is not null ? $" on {TargetDisplay.FriendlyName}" : "";
         ActivateOverlayWindow();
-        Log.Info($"Taskbar overlay shown (child mode, {sz.Width}x{sz.Height})");
+        Log.Info($"Taskbar overlay shown (child mode, {sz.Width}x{sz.Height}{displayInfo})");
     }
 
     private void TryReshowExistingWindow()
@@ -233,7 +252,8 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
     /// <summary>Hides the overlay window without destroying it.</summary>
     public void Hide()
     {
-        Log.Info("Taskbar overlay hidden");
+        string displayInfo = TargetDisplay is not null ? $" on {TargetDisplay.FriendlyName}" : "";
+        Log.Info($"Taskbar overlay hidden{displayInfo}");
         if (Handle == IntPtr.Zero || !NativeMethods.IsWindow(Handle))
         {
             Visible = false;
@@ -870,7 +890,12 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
 
         string diskId = id[5..last];
         string aspect = id[(last + 1)..];
-        string suffix = aspect == "read" ? "R" : "W";
+        string suffix = aspect switch
+        {
+            "read" => "R",
+            "temp" => "T",
+            _ => "W",
+        };
         int idx = diskId.StartsWith("disk") && int.TryParse(diskId[4..], out int di) ? di : -1;
 
         if (idx >= 0 && idx < _snap.Disks.Count && !string.IsNullOrEmpty(_snap.Disks[idx].BusType))
@@ -974,7 +999,19 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
             return alertBrush;
         }
 
-        string hex = oc.MetricColors.TryGetValue(id, out var userColor) ? userColor : oc.ValueColor;
+        string hex;
+        if (oc.MetricColors.TryGetValue(id, out var userColor) && !string.IsNullOrEmpty(userColor))
+        {
+            hex = userColor;
+        }
+        else if (oc.DefaultMetricColors.TryGetValue(id, out var defColor) && !string.IsNullOrEmpty(defColor))
+        {
+            hex = defColor;
+        }
+        else
+        {
+            hex = oc.ValueColor;
+        }
         var c = AdjustForTheme(WindowHelpers.ParseHex(hex, Color.White), _isLightTheme);
         int argb = c.ToArgb();
         if (_brushCache.TryGetValue(argb, out var cached))
@@ -989,10 +1026,18 @@ public sealed class TaskbarOverlay : NativeWindow, IDisposable
         _autoScaleFactor = 1.0f;
         _spacingScaleFactor = 1.0f;
         var unconstrained = MeasureSizeInternal();
+        _embedder.NaturalOverlayWidth = unconstrained.Width;
         int available = _embedder.CalculateAvailableSlotWidth();
         if (available <= 0)
         {
             available = _embedder.AvailableSlotWidth;
+        }
+
+        if (available <= 0 && _embedder.IsTaskbarSpaceConstrained)
+        {
+            _spacingScaleFactor = 0.5f;
+            _autoScaleFactor = 0.60f;
+            return MeasureSizeInternal();
         }
 
         if (available > 0 && unconstrained.Width > available)

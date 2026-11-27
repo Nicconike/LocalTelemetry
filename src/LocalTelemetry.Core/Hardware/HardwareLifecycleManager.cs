@@ -68,6 +68,7 @@ public sealed class HardwareLifecycleManager : IHardwareLifecycleManager
     private int _lastMonitorCount;
     private const int DebounceMs = 3000;
     private const int NetworkDebounceMs = 2000;
+    private readonly Timer? _networkTrailingTimer;
 
     internal static Action<HardwareLifecycleManager>? SubscribeSystemEventsHook { get; set; }
     internal static Action<HardwareLifecycleManager>? SubscribeNetworkChangeHook { get; set; }
@@ -79,6 +80,7 @@ public sealed class HardwareLifecycleManager : IHardwareLifecycleManager
     /// </summary>
     public HardwareLifecycleManager()
     {
+        _networkTrailingTimer = new Timer(_ => FireNetworkTopologyChanged(), null, Timeout.Infinite, Timeout.Infinite);
         GlobalSessionLockStateChanged += OnGlobalSessionLockStateChanged;
         try
         {
@@ -159,7 +161,7 @@ public sealed class HardwareLifecycleManager : IHardwareLifecycleManager
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.WriteLine($"[HardwareLifecycleManager] Error logging session ending: {ex.Message}");
+            Log.Error(ex, "Error processing session ending event");
         }
     }
 
@@ -199,7 +201,7 @@ public sealed class HardwareLifecycleManager : IHardwareLifecycleManager
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.WriteLine($"[HardwareLifecycleManager] Error logging session switch: {ex.Message}");
+            Log.Error(ex, "Error processing session switch event");
         }
     }
 
@@ -217,13 +219,38 @@ public sealed class HardwareLifecycleManager : IHardwareLifecycleManager
     {
         if (_isSuspended) return;
 
+        bool fireImmediate = false;
         lock (_lock)
         {
             var now = DateTime.UtcNow;
-            if ((now - _lastNetworkEvent).TotalMilliseconds < NetworkDebounceMs) return;
-            _lastNetworkEvent = now;
+            if ((now - _lastNetworkEvent).TotalMilliseconds >= NetworkDebounceMs)
+            {
+                _lastNetworkEvent = now;
+                fireImmediate = true;
+            }
         }
 
+        if (fireImmediate)
+        {
+            FireNetworkTopologyChanged();
+        }
+
+        try
+        {
+            if (!_disposed)
+            {
+                _networkTrailingTimer?.Change(750, Timeout.Infinite);
+            }
+        }
+        catch (ObjectDisposedException ex)
+        {
+            Log.Debug(ex, "Network trailing timer disposed during trigger");
+        }
+    }
+
+    private void FireNetworkTopologyChanged()
+    {
+        if (_isSuspended || _disposed) return;
         try
         {
             Log.Debug("Network topology or availability changed; notifying network monitor");
@@ -304,6 +331,7 @@ public sealed class HardwareLifecycleManager : IHardwareLifecycleManager
             if (_disposed) return;
             _disposed = true;
             GlobalSessionLockStateChanged -= OnGlobalSessionLockStateChanged;
+            _networkTrailingTimer?.Dispose();
         }
 
         try

@@ -160,7 +160,7 @@ The mode is determined at launch by checking for the `app.mode` marker file in t
 
 | Property | Type | Valid Range / Values | Default | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `pollIntervalMs` | `integer` | `100` to `10000` | `1000` | Polling loop refresh timer in milliseconds. |
+| `pollIntervalMs` | `integer` | `1000` to `10000` | `1000` | Polling loop refresh timer in milliseconds. |
 | `enableCpu` | `boolean` | `true`, `false` | `true` | Enables CPU telemetry polling. |
 | `enableGpu` | `boolean` | `true`, `false` | `true` | Enables GPU telemetry polling. |
 | `enableRam` | `boolean` | `true`, `false` | `true` | Enables RAM telemetry polling. |
@@ -241,6 +241,8 @@ The mode is determined at launch by checking for the `app.mode` marker file in t
 | `gpuFreqMinMhz` | `float` | `100.0` to `3500.0` | `300.0` | GPU frequency low threshold in MHz. |
 | `alertGpuPower` | `boolean` | `true`, `false` | `false` | High GPU power alert toggle. |
 | `gpuPowerMaxW` | `float` | `20.0` to `700.0` | `150.0` | GPU power threshold in Watts. |
+| `alertDiskTemp` | `boolean` | `true`, `false` | `false` | High disk temperature alert toggle. |
+| `diskTempMaxC` | `float` | `45.0` to `90.0` | `70.0` | Disk temperature threshold in °C. |
 | `alertBatteryLow` | `boolean` | `true`, `false` | `false` | Low battery charge alert toggle. |
 | `batteryLowPct` | `float` | `5.0` to `50.0` | `20.0` | Low battery threshold in %. |
 | `alertNetDaily` | `boolean` | `true`, `false` | `false` | Daily network bandwidth quota alert toggle. |

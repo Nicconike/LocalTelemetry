@@ -80,5 +80,7 @@ public sealed record DiskSnapshot
     public float ReadMBps { get; init; }
     /// <summary>Disk write speed in MB/s.</summary>
     public float WriteMBps { get; init; }
+    /// <summary>Disk temperature in degrees Celsius, or null if unavailable.</summary>
+    public int? TemperatureC { get; init; }
 }
 

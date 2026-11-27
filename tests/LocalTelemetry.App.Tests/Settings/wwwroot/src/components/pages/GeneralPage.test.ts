@@ -33,6 +33,7 @@ describe('GeneralPage.svelte', () => {
         expect(document.body.textContent).toContain('General');
         expect(document.body.textContent).toContain('Startup');
         expect(document.body.textContent).toContain('Polling Interval');
+        expect(document.body.textContent).not.toContain('0.5 s');
     });
 
     it('disables tray icon toggle when overlay is not visible to prevent lockout', async () => {

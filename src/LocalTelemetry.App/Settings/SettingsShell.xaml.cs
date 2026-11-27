@@ -942,6 +942,7 @@ public sealed partial class SettingsShell : Window
             }
             catch (Exception ex)
             {
+                Log.Error(ex, "Traffic history file access failed during import");
                 PostWindowsImportResult(false, 0, 0, 0, $"Traffic history not initialized: {ex.Message}");
                 return;
             }
@@ -1062,7 +1063,12 @@ public sealed partial class SettingsShell : Window
                 formattedSize = d.FormattedSize,
                 sizeGb = d.SizeBytes.HasValue ? $"{d.SizeBytes.Value / (1024.0 * 1024.0 * 1024.0):F1}" : null,
                 diskIndex = d.DiskIndex,
-                boot = d.IsBootDrive
+                boot = d.IsBootDrive,
+                health = d.HealthStatus,
+                temperatureC = d.TemperatureC,
+                remainingLifePercent = d.RemainingLifePercent,
+                totalWrittenTb = d.TotalWrittenTb.HasValue ? $"{d.TotalWrittenTb.Value:F1}" : null,
+                totalReadTb = d.TotalReadTb.HasValue ? $"{d.TotalReadTb.Value:F1}" : null,
             }).ToList(),
             ["motherboardMfr"] = SystemInfo.GetMotherboardManufacturer(),
             ["motherboardModel"] = SystemInfo.GetMotherboardProductName(),
@@ -1628,6 +1634,16 @@ public sealed partial class SettingsShell : Window
             _ => "Double-click action set to Open Settings",
         },
         "overlay.followwindowstheme" => $"Follow Windows theme {ToggleStr(newVal)}",
+        "overlay.displaymode" => newVal.ToLowerInvariant() switch
+        {
+            "primary" => "Overlay display mode set to Primary Display",
+            "secondary" => "Overlay display mode set to Secondary Displays",
+            "all" => "Overlay display mode set to All Displays",
+            "custom" => "Overlay display mode set to Custom Displays",
+            _ => $"Overlay display mode set to {newVal}",
+        },
+        "overlay.enableddisplays" => $"Enabled displays set to {newVal}",
+        "overlay.taskbarspaceconstrained" or "overlay.availableslotwidth" => "",
         OverlayLayoutPresetPath => $"Layout preset updated to '{GetPresetDisplayName(newVal)}'",
         OverlayColumnsPath or OverlayRow1Path or OverlayMetricsPath => FormatOverlayLayoutChange(oldVal, newVal),
         _ when normPath.StartsWith("overlay.metriccolors.", StringComparison.Ordinal) =>

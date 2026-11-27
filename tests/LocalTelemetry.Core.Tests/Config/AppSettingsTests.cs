@@ -72,7 +72,7 @@ public sealed class AppSettingsTests : IDisposable
             ShowSystemTrayIcon = false,
             EnableFileLogging = false,
             WindowTheme = "dark",
-            Monitoring = new MonitoringConfig { PollIntervalMs = 500 },
+            Monitoring = new MonitoringConfig { PollIntervalMs = 2000 },
             Overlay = new OverlayConfig { Visible = true }
         };
         custom.Save();
@@ -83,7 +83,7 @@ public sealed class AppSettingsTests : IDisposable
         reloaded.ShowSystemTrayIcon.Should().BeFalse();
         reloaded.EnableFileLogging.Should().BeFalse();
         reloaded.WindowTheme.Should().Be("dark");
-        reloaded.Monitoring.PollIntervalMs.Should().Be(500);
+        reloaded.Monitoring.PollIntervalMs.Should().Be(2000);
         reloaded.Overlay.Visible.Should().BeTrue();
     }
 
@@ -456,5 +456,16 @@ public sealed class AppSettingsTests : IDisposable
         var loaded = AppSettings.Load();
         loaded.Overlay.DisplayMode.Should().Be("custom");
         loaded.Overlay.EnabledDisplays.Should().BeEquivalentTo("primary", "display_2", "display_3");
+    }
+
+    [Fact]
+    public void MigrateConfig_ClampsSubSecondPollIntervalTo1000()
+    {
+        var settings = new AppSettings();
+        settings.Monitoring.PollIntervalMs = 500;
+        var method = typeof(AppSettings).GetMethod("MigrateConfig", BindingFlags.NonPublic | BindingFlags.Static)!;
+        method.Invoke(null, [settings]);
+
+        settings.Monitoring.PollIntervalMs.Should().Be(1000);
     }
 }

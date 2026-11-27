@@ -50,6 +50,12 @@
                               ? `Disk ${displayIdx} Write (${d.busType})`
                               : `Disk ${displayIdx} Write`,
                       },
+                      {
+                          id: `disk_disk${i}_temp`,
+                          label: d.busType
+                              ? `Disk ${displayIdx} Temp (${d.busType})`
+                              : `Disk ${displayIdx} Temp`,
+                      },
                   ];
               }),
     );
@@ -103,11 +109,17 @@
     }
 
     function getMetricColor(id) {
-        return $settings?.overlay?.metricColors?.[id] ?? fallbackHex;
+        if ($settings?.overlay?.metricColors?.[id]) {
+            return $settings.overlay.metricColors[id];
+        }
+        return getDefaultColor(id);
     }
 
     function getDefaultColor(id) {
-        return $settings?.overlay?.defaultMetricColors?.[id] ?? fallbackHex;
+        if ($settings?.overlay?.defaultMetricColors?.[id]) {
+            return $settings.overlay.defaultMetricColors[id];
+        }
+        return fallbackHex;
     }
 
     function hasOverride(id) {

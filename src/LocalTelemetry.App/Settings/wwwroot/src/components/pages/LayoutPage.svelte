@@ -42,6 +42,7 @@
             return [
                 { id: `disk_disk${i}_read`, label: `${t}${num} Read` },
                 { id: `disk_disk${i}_write`, label: `${t}${num} Write` },
+                { id: `disk_disk${i}_temp`, label: `${t}${num} Temp` },
             ];
         });
     }
@@ -166,7 +167,8 @@
         {
             id: "gaming",
             label: "Gaming",
-            tooltip: "CPU top row and GPU bottom row with wattage, memory, and network telemetry",
+            tooltip:
+                "CPU top row and GPU bottom row with wattage, memory, and network telemetry",
             count: gamingMetrics.length,
         },
         {
@@ -253,10 +255,18 @@
 
     let currentCols = $derived.by(() => {
         if (!$settings?.overlay) return [];
-        if ($settings.overlay.columns !== undefined && Array.isArray($settings.overlay.columns)) {
-            return $settings.overlay.columns.filter((c) => Array.isArray(c) && c.length > 0);
+        if (
+            $settings.overlay.columns !== undefined &&
+            Array.isArray($settings.overlay.columns)
+        ) {
+            return $settings.overlay.columns.filter(
+                (c) => Array.isArray(c) && c.length > 0,
+            );
         }
-        if ($settings.overlay.row1 !== undefined && Array.isArray($settings.overlay.row1)) {
+        if (
+            $settings.overlay.row1 !== undefined &&
+            Array.isArray($settings.overlay.row1)
+        ) {
             return toColumns($settings.overlay.row1.filter(Boolean));
         }
         return [];
@@ -266,14 +276,20 @@
 
     let activePreset = $derived.by(() => {
         const cur = serializeColumns(currentCols);
-        if (cur === serializeColumns(toColumns(defaultMetrics))) return "default";
+        if (cur === serializeColumns(toColumns(defaultMetrics)))
+            return "default";
         if (cur === serializeColumns(toColumns(gamingMetrics))) return "gaming";
-        if (cur === serializeColumns(toColumns(compactMetrics))) return "compact";
+        if (cur === serializeColumns(toColumns(compactMetrics)))
+            return "compact";
         if (cur === serializeColumns(toColumns(microMetrics))) return "micro";
-        if (cur === serializeColumns(toColumns(thermalsMetrics))) return "thermals";
-        if (cur === serializeColumns(toColumns(getWorkstationMetrics()))) return "workstation";
-        if (cur === serializeColumns(toColumns(networkMetrics))) return "network";
-        if (cur === serializeColumns(toColumns(getFullMetrics()))) return "full";
+        if (cur === serializeColumns(toColumns(thermalsMetrics)))
+            return "thermals";
+        if (cur === serializeColumns(toColumns(getWorkstationMetrics())))
+            return "workstation";
+        if (cur === serializeColumns(toColumns(networkMetrics)))
+            return "network";
+        if (cur === serializeColumns(toColumns(getFullMetrics())))
+            return "full";
         return "custom";
     });
 
@@ -302,7 +318,9 @@
 
     function saveColumns(nextCols, presetId) {
         const next = deepClone($settings);
-        const validCols = (nextCols || []).filter((c) => Array.isArray(c) && c.length > 0);
+        const validCols = (nextCols || []).filter(
+            (c) => Array.isArray(c) && c.length > 0,
+        );
         next.overlay.columns = validCols;
         next.overlay.row1 = validCols.flatMap((c) => c);
 
@@ -320,11 +338,15 @@
                 next.overlay.layoutPreset = "micro";
             else if (cur === serializeColumns(toColumns(thermalsMetrics)))
                 next.overlay.layoutPreset = "thermals";
-            else if (cur === serializeColumns(toColumns(getWorkstationMetrics())))
+            else if (
+                cur === serializeColumns(toColumns(getWorkstationMetrics()))
+            )
                 next.overlay.layoutPreset = "workstation";
             else if (cur === serializeColumns(toColumns(networkMetrics)))
                 next.overlay.layoutPreset = "network";
-            else if (cur === serializeColumns(toColumns(getPresetMetrics("full"))))
+            else if (
+                cur === serializeColumns(toColumns(getPresetMetrics("full")))
+            )
                 next.overlay.layoutPreset = "full";
             else next.overlay.layoutPreset = "custom";
         }
@@ -421,7 +443,10 @@
         if (colIdx < 0 || colIdx >= currentCols.length) return;
         const next = currentCols.map((c) => [...c]);
         if (next[colIdx].length > 1) {
-            [next[colIdx][0], next[colIdx][1]] = [next[colIdx][1], next[colIdx][0]];
+            [next[colIdx][0], next[colIdx][1]] = [
+                next[colIdx][1],
+                next[colIdx][0],
+            ];
             saveColumns(next, "custom");
         }
     }
@@ -451,7 +476,8 @@
 
     function swapColumns(colIdx1, colIdx2) {
         if (colIdx1 === colIdx2 || colIdx1 < 0 || colIdx2 < 0) return;
-        if (colIdx1 >= currentCols.length || colIdx2 >= currentCols.length) return;
+        if (colIdx1 >= currentCols.length || colIdx2 >= currentCols.length)
+            return;
         const next = currentCols.map((c) => [...c]);
         [next[colIdx1], next[colIdx2]] = [next[colIdx2], next[colIdx1]];
         saveColumns(next, "custom");
@@ -459,7 +485,13 @@
 
     function moveColumn(colIdx, direction) {
         const targetCol = colIdx + direction;
-        if (colIdx < 0 || targetCol < 0 || colIdx >= currentCols.length || targetCol >= currentCols.length) return;
+        if (
+            colIdx < 0 ||
+            targetCol < 0 ||
+            colIdx >= currentCols.length ||
+            targetCol >= currentCols.length
+        )
+            return;
         const next = currentCols.map((c) => [...c]);
         [next[colIdx], next[targetCol]] = [next[targetCol], next[colIdx]];
         saveColumns(next, "custom");
@@ -493,6 +525,7 @@
         if (id && id.startsWith("disk_")) {
             const m = allMetrics.find((x) => x.id === id);
             if (m) return m.label;
+            if (id.endsWith("_temp")) return "Disk Temp";
             const isRead = id.endsWith("_read");
             return `Disk ${isRead ? "Read" : "Write"}`;
         }
@@ -667,12 +700,13 @@
                                         <button
                                             type="button"
                                             class="btn-col-action btn-swap"
-                                            class:active={swapSourceCol === col.colIdx}
+                                            class:active={swapSourceCol ===
+                                                col.colIdx}
                                             title={swapSourceCol === -1
                                                 ? "Swap this column with another column"
                                                 : swapSourceCol === col.colIdx
-                                                    ? "Cancel swap"
-                                                    : `Swap Column ${col.colIdx + 1} with Column ${swapSourceCol + 1}`}
+                                                  ? "Cancel swap"
+                                                  : `Swap Column ${col.colIdx + 1} with Column ${swapSourceCol + 1}`}
                                             onclick={() =>
                                                 handleSwapClick(col.colIdx)}
                                         >
@@ -690,7 +724,8 @@
                                         class="btn-col-action btn-col-remove"
                                         title="Remove entire column"
                                         onclick={() => {
-                                            if (swapSourceCol !== -1) swapSourceCol = -1;
+                                            if (swapSourceCol !== -1)
+                                                swapSourceCol = -1;
                                             removeColumn(col.colIdx);
                                         }}
                                     >
@@ -806,18 +841,26 @@
                                     {#if available.length > 0}
                                         <select
                                             class="pair-select"
-                                            aria-label="Pair metric in column {col.colIdx + 1}"
+                                            aria-label="Pair metric in column {col.colIdx +
+                                                1}"
                                             onchange={(e) => {
                                                 const el = e.currentTarget;
                                                 if (el.value) {
-                                                    pairMetric(col.colIdx, el.value);
+                                                    pairMetric(
+                                                        col.colIdx,
+                                                        el.value,
+                                                    );
                                                     el.value = "";
                                                 }
                                             }}
                                         >
-                                            <option value="">+ Pair Metric</option>
+                                            <option value=""
+                                                >+ Pair Metric</option
+                                            >
                                             {#each available as m (m.id)}
-                                                <option value={m.id}>{m.label}</option>
+                                                <option value={m.id}
+                                                    >{m.label}</option
+                                                >
                                             {/each}
                                         </select>
                                     {/if}

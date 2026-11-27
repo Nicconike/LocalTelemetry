@@ -5,9 +5,9 @@
     import Select from "../ui/Select.svelte";
 
     const intervalOptions = [
-        { value: 500, label: "0.5 s" },
         { value: 1000, label: "1 s" },
         { value: 2000, label: "2 s" },
+        { value: 3000, label: "3 s" },
         { value: 5000, label: "5 s" },
     ];
 </script>
@@ -28,7 +28,9 @@
                 bind:checked={$settings.showSystemTrayIcon}
                 label="Show System Tray Icon"
                 disabled={!$settings.overlay?.visible}
-                description={!$settings.overlay?.visible ? "Cannot disable: Overlay is hidden (at least one entry point must remain enabled)" : ""}
+                description={!$settings.overlay?.visible
+                    ? "Cannot disable: Overlay is hidden (at least one entry point must remain enabled)"
+                    : ""}
             />
         </SectionCard>
 

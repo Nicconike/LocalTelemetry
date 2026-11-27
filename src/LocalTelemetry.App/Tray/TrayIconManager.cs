@@ -462,6 +462,23 @@ public sealed class TrayIconManager : IDisposable
         return text.Length > 63 ? text[..63] : text;
     }
 
+    /// <summary>Displays a notification balloon tip from the system tray icon.</summary>
+    /// <param name="title">Notification title.</param>
+    /// <param name="text">Notification message text.</param>
+    /// <param name="icon">Icon style to display.</param>
+    public void ShowBalloonTip(string title, string text, ToolTipIcon icon = ToolTipIcon.Warning)
+    {
+        if (SkipUiForTesting || !_tray.Visible) return;
+        try
+        {
+            _tray.ShowBalloonTip(4000, title, text, icon);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to display tray balloon tip");
+        }
+    }
+
     // Disposal
     /// <summary>Releases the tray icon and its associated resources.</summary>
     public void Dispose()

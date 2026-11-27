@@ -1285,6 +1285,12 @@ public class SettingsShellTests
         ((string?)method.Invoke(null, ["overlay.row1", "overlay.row1", "[\"cpu_pct\",\"gpu_temp\"]", "[\"gpu_temp\",\"cpu_pct\"]"])).Should().Be("Metrics layout reordered");
         ((string?)method.Invoke(null, ["overlay.metriccolors.cpu_pct", "overlay.metriccolors.cpu_pct", "#fff", "#000"])).Should().Contain("CPU Usage");
         ((string?)method.Invoke(null, ["overlay.groupcolors.cpu", "overlay.groupcolors.cpu", "#fff", "#000"])).Should().Contain("Cpu");
+        ((string?)method.Invoke(null, ["overlay.displaymode", "overlay.displaymode", "primary", "secondary"])).Should().Be("Overlay display mode set to Secondary Displays");
+        ((string?)method.Invoke(null, ["overlay.displaymode", "overlay.displaymode", "secondary", "all"])).Should().Be("Overlay display mode set to All Displays");
+        ((string?)method.Invoke(null, ["overlay.displaymode", "overlay.displaymode", "all", "primary"])).Should().Be("Overlay display mode set to Primary Display");
+        ((string?)method.Invoke(null, ["overlay.displaymode", "overlay.displaymode", "primary", "custom"])).Should().Be("Overlay display mode set to Custom Displays");
+        ((string?)method.Invoke(null, ["overlay.enableddisplays", "overlay.enableddisplays", "", "[\"primary\"]"])).Should().Be("Enabled displays set to [\"primary\"]");
+        ((string?)method.Invoke(null, ["overlay.taskbarspaceconstrained", "overlay.taskbarspaceconstrained", "", "true"])).Should().BeEmpty();
         ((string?)method.Invoke(null, ["overlay.usercustomized", "overlay.usercustomized", "", ""])).Should().BeEmpty();
         ((string?)method.Invoke(null, ["overlay.unknown", "overlay.unknown", "", ""])).Should().BeNull();
     }

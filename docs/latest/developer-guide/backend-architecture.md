@@ -100,7 +100,7 @@ flowchart TD
 
 ### :activity: HardwareMonitor (Telemetry Polling Coordinator)
 
-- The central engine coordinating all sensor polling loops on a background worker timer (`100 ms` to `10000 ms`, configured via `AppSettings.Monitoring.PollIntervalMs`).
+- The central engine coordinating all sensor polling loops on a background worker timer (configured via `AppSettings.Monitoring.PollIntervalMs`, minimum `1000 ms`).
 - Subscribes to `HardwareLifecycleManager` events for power transitions, display changes, and network topology shifts.
 - Queries specialized hardware readers on each tick:
   - `IntelMsrReader.cs` & `AmdMsrReader.cs` (via `PawnIo` kernel driver for temperature, clock frequency, and RAPL package power).
@@ -198,10 +198,12 @@ flowchart TD
 - Parses semantic version strings using a SemVer 2.0 parser that compares major, minor, patch, and pre-release identifiers (`-rc`, `-beta`, `-alpha`).
 - Dispatches `updateCheckResult` WebMessages to the Svelte 5 frontend with changelogs and direct download URLs.
 
-## :refresh-cw: Polling Interval Dynamics & Zero-Allocation Pipeline
+## :refresh-cw: Tiered Polling Dynamics & Zero-Allocation Pipeline
 
-LocalTelemetry maintains a low CPU (< 0.1%) and memory footprint (~15–20 MB RAM in background mode, ~40–60 MB with the Settings window open) by employing a zero-allocation polling strategy:
+LocalTelemetry maintains a minimal CPU (< 0.1%) and memory footprint (~10–15 MB RAM in background mode, ~10–20 MB with the Settings window open via active working set trimming):
 
-- Fixed-size reusable byte and string buffers for register and IOCTL reading.
-- Double-buffered GDI+ drawing cached directly in unmanaged memory.
-- Telemetry timer ticks run on background worker threads without dispatching to the UI thread unless an overlay render tick is due.
+- **Tiered Polling Architecture**: Dynamic rate counters (CPU %, GPU %, RAM %, Network RX/TX, and Disk MB/s) sample on your configured polling interval (minimum 1000 ms). Physical sensors with high thermal mass and PCIe bus implications (Storage Disk SMART temperatures) update on an adaptive 2-second thermal cadence (`Math.Max(2000, PollIntervalMs)`), eliminating bus wakeups on idle storage drives.
+- **Working Set Optimization**: Calls `EmptyWorkingSet()` upon WebView2 navigation and window close, releasing unreferenced pages immediately.
+- **Fixed-Size Buffers**: Fixed-size reusable byte and string buffers for register and IOCTL reading.
+- **Unmanaged GDI+ Buffering**: Double-buffered GDI+ drawing cached directly in unmanaged memory.
+- **Worker Thread Execution**: Telemetry timer ticks run on background worker threads without dispatching to the UI thread unless an overlay render tick is due.

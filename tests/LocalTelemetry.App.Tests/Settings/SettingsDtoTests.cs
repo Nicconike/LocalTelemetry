@@ -54,6 +54,8 @@ public class SettingsDtoTests
                 Enabled = true,
                 AlertCpuTemp = true,
                 CpuTempMaxC = 95f,
+                AlertDiskTemp = true,
+                DiskTempMaxC = 75,
                 CooldownSecs = 120
             }
         };
@@ -85,6 +87,8 @@ public class SettingsDtoTests
         dto.Alerts.Enabled.Should().BeTrue();
         dto.Alerts.AlertCpuTemp.Should().BeTrue();
         dto.Alerts.CpuTempMaxC.Should().Be(95f);
+        dto.Alerts.AlertDiskTemp.Should().BeTrue();
+        dto.Alerts.DiskTempMaxC.Should().Be(75);
         dto.Alerts.CooldownSecs.Should().Be(120);
         dto.Alerts.SustainedSecs.Should().Be(3);
     }

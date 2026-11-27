@@ -242,17 +242,24 @@ const KEYWORD_TYPE_MAP: Readonly<Record<string, string>> = {
     fix: 'fix',
     repair: 'fix',
     resolve: 'fix',
+    detect: 'fix',
+    prevent: 'fix',
+    eliminate: 'fix',
+    adjust: 'fix',
+    shrink: 'fix',
     refactor: 'refactor',
     decompose: 'refactor',
     simplify: 'refactor',
     optimize: 'perf',
     tune: 'perf',
+    increase: 'perf',
     test: 'test',
     assert: 'test',
     mock: 'test',
     doc: 'docs',
     docs: 'docs',
     document: 'docs',
+    update: 'docs',
 };
 
 const ENGINEERING_TYPE_DOMAINS: Readonly<Record<string, string>> = {
@@ -432,55 +439,92 @@ export interface DomainEntry {
     shortHash: string;
 }
 
-const BULLET_CONVENTIONAL_REGEX = /^[-*]\s+([a-z]+)(?:!|\(([^)]+)\)!?)?:\s*(.+)$/i;
-const BULLET_KEYWORD_REGEX = /^[-*]\s+([A-Za-z]+)\b[:\s]+(.+)$/;
-const HEADER_REGEX = /^([a-z]+)(?:!|\(([^)]+)\)!?)?:\s*(.+)$/i;
+const BULLET_CONVENTIONAL_REGEX = /^[-*]\s+([a-z]+)(?:\(([^)]+)\))?!?:\s*/i;
+const BULLET_KEYWORD_REGEX = /^[-*]\s+([A-Za-z]+)(?::\s*|\s+)/;
+const HEADER_REGEX = /^([a-z]+)(?:\(([^)]+)\))?!?:\s*/i;
+
+function parseConventionalBullet(
+    line: string,
+    parentScope: string,
+    fullHash: string,
+    shortHash: string,
+): DomainEntry | null {
+    const convMatch = BULLET_CONVENTIONAL_REGEX.exec(line);
+    if (!convMatch) return null;
+
+    const rawType = convMatch[1];
+    const rawScope = convMatch[2] || parentScope;
+    const rawSubject = line.slice(convMatch[0].length).trim();
+    if (!rawSubject) return null;
+    const isBreaking = line.includes('BREAKING CHANGE:') || rawType.endsWith('!') || line.startsWith('- breaking:') || line.startsWith('* breaking:');
+
+    const category = resolveChangeCategory(rawType, isBreaking, rawScope, rawSubject);
+    if (!category) return null;
+
+    return {
+        category,
+        domain: resolveDomainLabel(rawType, rawScope, rawSubject),
+        subject: cleanSubject(rawSubject),
+        hash: fullHash,
+        shortHash,
+    };
+}
+
+function parseKeywordBullet(
+    line: string,
+    parentType: string,
+    parentScope: string,
+    fullHash: string,
+    shortHash: string,
+): DomainEntry | null {
+    const kwMatch = BULLET_KEYWORD_REGEX.exec(line);
+    if (!kwMatch) return null;
+
+    const verb = kwMatch[1].toLowerCase();
+    let rawType = KEYWORD_TYPE_MAP[verb] || parentType;
+
+    if (/\b(?:unit\s+)?tests?\b|\bcoverage\b/i.test(line)) {
+        rawType = 'test';
+    } else if (/\b(?:docs?|documentation|readme|guide)\b/i.test(line)) {
+        rawType = 'docs';
+    }
+
+    if (!rawType) return null;
+
+    const remainder = line.slice(kwMatch[0].length).trim();
+    if (!remainder) return null;
+    const fullSubject = `${kwMatch[1]} ${remainder}`;
+    const category = resolveChangeCategory(rawType, false, parentScope, fullSubject);
+    if (!category) return null;
+
+    return {
+        category,
+        domain: resolveDomainLabel(rawType, parentScope, fullSubject),
+        subject: cleanSubject(fullSubject),
+        hash: fullHash,
+        shortHash,
+    };
+}
 
 function extractSubBullets(
     bodyLines: string[],
     fullHash: string,
     shortHash: string,
+    parentType = '',
+    parentScope = '',
 ): DomainEntry[] {
     const entries: DomainEntry[] = [];
     for (const rawLine of bodyLines) {
         const line = rawLine.trim();
-        const convMatch = BULLET_CONVENTIONAL_REGEX.exec(line);
-        if (convMatch) {
-            const rawType = convMatch[1];
-            const rawScope = convMatch[2] || '';
-            const rawSubject = convMatch[3];
-            const isBreaking = line.includes('BREAKING CHANGE:') || rawType.endsWith('!') || line.startsWith('- breaking:') || line.startsWith('* breaking:');
-
-            const category = resolveChangeCategory(rawType, isBreaking, rawScope, rawSubject);
-            if (category) {
-                entries.push({
-                    category,
-                    domain: resolveDomainLabel(rawType, rawScope, rawSubject),
-                    subject: cleanSubject(rawSubject),
-                    hash: fullHash,
-                    shortHash,
-                });
-            }
+        const convEntry = parseConventionalBullet(line, parentScope, fullHash, shortHash);
+        if (convEntry) {
+            entries.push(convEntry);
             continue;
         }
 
-        const kwMatch = BULLET_KEYWORD_REGEX.exec(line);
-        if (kwMatch) {
-            const verb = kwMatch[1].toLowerCase();
-            const rawType = KEYWORD_TYPE_MAP[verb];
-            if (!rawType) continue;
-
-            const fullSubject = `${kwMatch[1]} ${kwMatch[2].trim()}`;
-            const category = resolveChangeCategory(rawType, false, '', fullSubject);
-            if (category) {
-                entries.push({
-                    category,
-                    domain: resolveDomainLabel(rawType, '', fullSubject),
-                    subject: cleanSubject(fullSubject),
-                    hash: fullHash,
-                    shortHash,
-                });
-            }
+        const kwEntry = parseKeywordBullet(line, parentType, parentScope, fullHash, shortHash);
+        if (kwEntry) {
+            entries.push(kwEntry);
         }
     }
     return entries;
@@ -497,19 +541,20 @@ function parseSingleHeaderEntry(
     if (headerMatch) {
         const rawType = headerMatch[1];
         const rawScope = headerMatch[2] || '';
-        const rawSubject = headerMatch[3];
-
-        const category = resolveChangeCategory(rawType, isBreaking, rawScope, rawSubject);
-        if (category) {
-            return [
-                {
-                    category,
-                    domain: resolveDomainLabel(rawType, rawScope, rawSubject),
-                    subject: cleanSubject(rawSubject),
-                    hash: fullHash,
-                    shortHash,
-                },
-            ];
+        const rawSubject = headerLine.slice(headerMatch[0].length).trim();
+        if (rawSubject) {
+            const category = resolveChangeCategory(rawType, isBreaking, rawScope, rawSubject);
+            if (category) {
+                return [
+                    {
+                        category,
+                        domain: resolveDomainLabel(rawType, rawScope, rawSubject),
+                        subject: cleanSubject(rawSubject),
+                        hash: fullHash,
+                        shortHash,
+                    },
+                ];
+            }
         }
         return [];
     }
@@ -547,7 +592,11 @@ export function parseCommitEntries(commit: {
     const bodyLines = lines.slice(1);
     const bodyText = bodyLines.join('\n');
 
-    const subBulletEntries = extractSubBullets(bodyLines, fullHash, shortHash);
+    const headerMatch = HEADER_REGEX.exec(headerLine);
+    const parentType = headerMatch ? headerMatch[1].toLowerCase() : '';
+    const parentScope = headerMatch ? (headerMatch[2] || '') : '';
+
+    const subBulletEntries = extractSubBullets(bodyLines, fullHash, shortHash, parentType, parentScope);
     if (subBulletEntries.length > 0) {
         return subBulletEntries;
     }

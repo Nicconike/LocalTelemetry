@@ -51,16 +51,16 @@ describe('SystemPage.svelte', () => {
             deviceName: 'RIG-ALPHA',
             systemType: 'Desktop',
             systemModel: 'Custom Workstation',
-            motherboardMfr: 'ASUS',
-            motherboardModel: 'ROG MAXIMUS Z790',
+            motherboardMfr: 'TestBoardVendor',
+            motherboardModel: 'Test Board Model Pro',
             motherboardVersion: 'Rev 1.0',
             motherboardSerial: 'SN-12345678',
             bios: 'AMI 2101',
             biosUefi: true,
-            psu: 'Corsair AX1600i',
-            psuCapacity: '1600W Titanium',
-            cpu: 'Intel Core i9-14900KS',
-            cpuVendor: 'GenuineIntel',
+            psu: 'Test PSU Titanium 1000W',
+            psuCapacity: '1000W Titanium',
+            cpu: 'Test CPU 24-Core Model',
+            cpuVendor: 'TestCpuVendor',
             cpuCores: 24,
             cpuThreads: 32,
             cpuBaseSpeedMhz: 3200,
@@ -69,7 +69,7 @@ describe('SystemPage.svelte', () => {
             cpuTdpWatts: 150,
             installedRamGb: 64,
             ramGb: 63.8,
-            ramMfr: 'G.Skill',
+            ramMfr: 'TestRamVendor',
             ramSpeed: '6000 MT/s',
             ramType: 'DDR5',
             ramSlots: 4,
@@ -79,14 +79,14 @@ describe('SystemPage.svelte', () => {
             ],
             gpus: [
                 {
-                    name: 'NVIDIA GeForce RTX 4090',
+                    name: 'Test GPU Dedicated 24GB',
                     dedicated: true,
                     vramGb: 24,
                     driver: '560.94',
                     tdpW: 450
                 },
                 {
-                    name: 'Intel UHD Graphics 770',
+                    name: 'Test GPU Integrated',
                     dedicated: false,
                     vramGb: 0,
                     driver: '31.0.101',
@@ -95,14 +95,14 @@ describe('SystemPage.svelte', () => {
             ],
             disks: [
                 {
-                    model: 'Samsung 990 PRO 2TB',
+                    model: 'Test NVMe SSD 2TB',
                     boot: true,
                     formattedSize: '1.81 TB',
                     displayType: 'NVMe SSD',
                     busType: 'NVMe'
                 },
                 {
-                    model: 'Crucial MX500 4TB',
+                    model: 'Test SATA SSD 4TB',
                     boot: false,
                     sizeGb: 4000,
                     busType: 'SCSI'
@@ -140,28 +140,28 @@ describe('SystemPage.svelte', () => {
                     displayType: 'External SSD'
                 }
             ],
-            nics: ['Intel I226-V 2.5GbE', 'Intel Wi-Fi 7 BE200']
+            nics: ['Test Ethernet Adapter 2.5GbE', 'Test Wi-Fi Adapter']
         } as any);
 
         component = mount(SystemPage, { target: document.body });
         await tick();
 
-        expect(document.body.textContent).toContain('ASUS ROG MAXIMUS Z790');
+        expect(document.body.textContent).toContain('TestBoardVendor Test Board Model Pro');
         expect(document.body.textContent).toContain('UEFI');
-        expect(document.body.textContent).toContain('Corsair AX1600i');
+        expect(document.body.textContent).toContain('Test PSU Titanium 1000W');
         expect(document.body.textContent).toContain('3.2 GHz');
         expect(document.body.textContent).toContain('6.2 GHz');
         expect(document.body.textContent).toContain('64.0 GB');
         expect(document.body.textContent).toContain('63.8 GB usable');
-        expect(document.body.textContent).toContain('G.Skill');
+        expect(document.body.textContent).toContain('TestRamVendor');
         expect(document.body.textContent).toContain('Module 1');
-        expect(document.body.textContent).toContain('NVIDIA GeForce RTX 4090');
+        expect(document.body.textContent).toContain('Test GPU Dedicated 24GB');
         expect(document.body.textContent).toContain('Dedicated');
         expect(document.body.textContent).toContain('Integrated');
-        expect(document.body.textContent).toContain('Samsung 990 PRO 2TB');
+        expect(document.body.textContent).toContain('Test NVMe SSD 2TB');
         expect(document.body.textContent).toContain('Boot');
         expect(document.body.textContent).toContain('[NVMe SSD]');
-        expect(document.body.textContent).toContain('Intel I226-V 2.5GbE');
+        expect(document.body.textContent).toContain('Test Ethernet Adapter 2.5GbE');
     });
 
     it('renders laptop with battery specifications and legacy bios mode', async () => {
@@ -169,12 +169,12 @@ describe('SystemPage.svelte', () => {
             os: 'Windows 11 Home',
             deviceName: 'LAPTOP-ZEN',
             systemType: 'Laptop',
-            motherboardModel: 'ZenBook UX8406',
+            motherboardModel: 'Test Laptop Board',
             biosUefi: false,
-            cpu: 'AMD Ryzen 9 8945HS',
+            cpu: 'Test Mobile CPU',
             ramGb: 32,
-            batteryManufacturer: 'SMP',
-            batteryDeviceName: 'UX8406-BAT',
+            batteryManufacturer: 'TestBatteryVendor',
+            batteryDeviceName: 'TEST-BATTERY-01',
             batteryDesignCapacity: '75000 mWh',
             batteryFullChargedCapacity: '73500 mWh',
             batteryHealthPct: 98,
@@ -189,11 +189,11 @@ describe('SystemPage.svelte', () => {
         await tick();
 
         expect(document.body.textContent).toContain('Laptop');
-        expect(document.body.textContent).toContain('ZenBook UX8406');
+        expect(document.body.textContent).toContain('Test Laptop Board');
         expect(document.body.textContent).toContain('Legacy');
         expect(document.body.textContent).toContain('Battery');
-        expect(document.body.textContent).toContain('SMP');
-        expect(document.body.textContent).toContain('UX8406-BAT');
+        expect(document.body.textContent).toContain('TestBatteryVendor');
+        expect(document.body.textContent).toContain('TEST-BATTERY-01');
         expect(document.body.textContent).toContain('75000 mWh');
         expect(document.body.textContent).toContain('98%');
         expect(document.body.textContent).toContain('2%');
@@ -204,12 +204,12 @@ describe('SystemPage.svelte', () => {
         systemInfo.set({
             os: 'Windows 11 Home',
             deviceName: 'MIN-PC',
-            cpu: 'Intel Processor N100',
+            cpu: 'Test Entry CPU',
             installedRamGb: 16,
             ramGb: 0,
             gpus: [
                 {
-                    name: 'Intel UHD Graphics',
+                    name: 'Test Basic GPU',
                     dedicated: false,
                 }
             ],
@@ -246,7 +246,7 @@ describe('SystemPage.svelte', () => {
         systemInfo.set({
             os: 'Windows 11 Pro',
             systemType: 'Laptop',
-            cpu: 'Core Ultra 7',
+            cpu: 'Test CPU Mobile Pro',
             installedRamGb: 0,
             ramGb: 16,
             ramModules: [{ sizeGb: 16, speed: '' }],
@@ -297,9 +297,9 @@ describe('SystemPage.svelte', () => {
         systemInfo.set({
             os: 'Windows 11',
             systemType: '',
-            motherboardMfr: 'MSI',
+            motherboardMfr: 'TestBoardMfr',
             motherboardModel: '',
-            cpu: 'AMD Ryzen 5',
+            cpu: 'Test CPU Model A',
             disks: [],
             gpus: [],
             nics: []
@@ -309,15 +309,15 @@ describe('SystemPage.svelte', () => {
         await tick();
 
         expect(document.body.textContent).toContain('Desktop');
-        expect(document.body.textContent).toContain('MSI');
+        expect(document.body.textContent).toContain('TestBoardMfr');
 
         // Case 2: motherboardModel only (no mfr)
         systemInfo.set({
             os: 'Windows 11',
             systemType: 'Workstation',
             motherboardMfr: '',
-            motherboardModel: 'B650M-PLUS',
-            cpu: 'AMD Ryzen 7',
+            motherboardModel: 'TestModel-Plus',
+            cpu: 'Test CPU Model B',
             disks: [],
             gpus: [],
             nics: []
@@ -325,6 +325,54 @@ describe('SystemPage.svelte', () => {
         await tick();
 
         expect(document.body.textContent).toContain('Workstation');
-        expect(document.body.textContent).toContain('B650M-PLUS');
+        expect(document.body.textContent).toContain('TestModel-Plus');
+    });
+
+    it('renders storage health, temperature, remaining life, and reads/writes', async () => {
+        systemInfo.set({
+            os: 'Test OS 11',
+            cpu: 'Generic Test CPU @ 3.00GHz',
+            deviceName: 'TEST-DEVICE',
+            disks: [
+                {
+                    model: 'NVMe Test Drive Alpha 1TB',
+                    boot: true,
+                    formattedSize: '1 TB',
+                    displayType: 'NVMe SSD',
+                    health: 'Healthy',
+                    remainingLifePercent: 99,
+                    temperatureC: 48,
+                    totalWrittenTb: '16.5',
+                    totalReadTb: '14.6',
+                },
+                {
+                    model: 'SATA Test Drive Beta 2TB',
+                    boot: false,
+                    formattedSize: '2 TB',
+                    displayType: 'SATA SSD',
+                    health: 'Warning',
+                    remainingLifePercent: 91,
+                    temperatureC: 40,
+                    totalWrittenTb: '60.1',
+                    totalReadTb: '71.6',
+                }
+            ],
+            gpus: [],
+            nics: [],
+        } as any);
+
+        component = mount(SystemPage, { target: document.body });
+        await tick();
+
+        expect(document.body.textContent).toContain('NVMe Test Drive Alpha 1TB');
+        expect(document.body.textContent).toContain('Healthy');
+        expect(document.body.textContent).toContain('99% life');
+        expect(document.body.textContent).toContain('Total Writes: 16.5 TBW');
+        expect(document.body.textContent).toContain('Total Reads: 14.6 TBR');
+
+        expect(document.body.textContent).toContain('Warning');
+        expect(document.body.textContent).toContain('91% life');
+        expect(document.body.textContent).toContain('Total Writes: 60.1 TBW');
+        expect(document.body.textContent).toContain('Total Reads: 71.6 TBR');
     });
 });

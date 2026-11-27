@@ -37,9 +37,24 @@ public sealed class TaskbarEmbedder(AppSettings cfg, DisplayInfo? targetDisplay 
     private IntPtr _parentHwnd = IntPtr.Zero;
     private IntPtr _taskBandHwnd = IntPtr.Zero;
     private IntPtr _currentOverlayHwnd = IntPtr.Zero;
+    private int _lastPositionedX = int.MinValue;
+    private int _lastPositionedWidth = int.MinValue;
     private NativeMethods.Rect _taskBandOri;
     private bool _taskBandSaved;
     private bool _isWin11;
+
+    internal static readonly System.Collections.Concurrent.ConcurrentDictionary<IntPtr, byte> ActiveOverlayHwnds = new();
+
+    private static bool IsAppOverlayWindow(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero) return false;
+        if (ActiveOverlayHwnds.ContainsKey(hwnd)) return true;
+
+        var titleBuf = new char[64];
+        int len = NativeMethods.GetWindowText(hwnd, titleBuf, titleBuf.Length);
+        if (len <= 0) return false;
+        return new string(titleBuf, 0, len).Equals("LocalTelemetry_Overlay", StringComparison.Ordinal);
+    }
 
     private Rectangle _taskbarRect;
     private uint _taskbarEdge;
@@ -65,6 +80,8 @@ public sealed class TaskbarEmbedder(AppSettings cfg, DisplayInfo? targetDisplay 
     /// <summary>Gets the measured width in pixels of the taskbar slot available for the overlay.</summary>
     public int AvailableSlotWidth { get; private set; }
 
+    internal int NaturalOverlayWidth { get; set; }
+
     private int _trayLeftEdge = -1;
     private int _leftWidgetRightEdge = -1;
     private int _rightWidgetLeftEdge = -1;
@@ -85,6 +102,8 @@ public sealed class TaskbarEmbedder(AppSettings cfg, DisplayInfo? targetDisplay 
             State = OverlayDeploymentState.Failed;
             return false;
         }
+
+        ActiveOverlayHwnds.TryAdd(overlayHwnd, 0);
 
         RefreshTaskbarInfo();
         _trayLeftEdge = ResolveTrayLeftEdge(GetTargetTrayWnd(), IsSecondaryTaskbar);
@@ -135,6 +154,7 @@ public sealed class TaskbarEmbedder(AppSettings cfg, DisplayInfo? targetDisplay 
     /// <param name="overlayHwnd">Handle to the overlay window.</param>
     public void Detach(IntPtr overlayHwnd)
     {
+        ActiveOverlayHwnds.TryRemove(overlayHwnd, out _);
         RestoreTaskBand();
         if (overlayHwnd != IntPtr.Zero && NativeMethods.IsWindow(overlayHwnd))
         {
@@ -427,6 +447,10 @@ public sealed class TaskbarEmbedder(AppSettings cfg, DisplayInfo? targetDisplay 
         childLeft = 0;
         if (child == rebar || child == trayNotify || child == clock || !NativeMethods.IsWindowVisible(child))
             return false;
+
+        if (IsAppOverlayWindow(child))
+            return false;
+
         if (!NativeMethods.GetWindowRect(child, out var cr) || cr.Width <= 0 || cr.Height <= 0)
             return false;
 
@@ -468,7 +492,7 @@ public sealed class TaskbarEmbedder(AppSettings cfg, DisplayInfo? targetDisplay 
         IntPtr clock = SafeFindWindowEx(tray, IntPtr.Zero, "TrayClockWClass", null);
         if (clock == IntPtr.Zero)
             clock = SafeFindWindowEx(tray, IntPtr.Zero, "ClockCompWidget", null);
-        if (clock != IntPtr.Zero && NativeMethods.GetWindowRect(clock, out var clockRect) && clockRect.Width > 0)
+        if (clock != IntPtr.Zero && !IsAppOverlayWindow(clock) && NativeMethods.GetWindowRect(clock, out var clockRect) && clockRect.Width > 0)
         {
             return clockRect.Left;
         }
@@ -851,6 +875,7 @@ public sealed class TaskbarEmbedder(AppSettings cfg, DisplayInfo? targetDisplay 
         while ((child = SafeFindWindowEx(tray, child, null, null)) != IntPtr.Zero)
         {
             if (!NativeMethods.IsWindowVisible(child)) continue;
+            if (IsAppOverlayWindow(child)) continue;
             if (!NativeMethods.GetWindowRect(child, out var cr) || cr.Width <= 0) continue;
 
             // If docked on the right side and doesn't span the majority of the taskbar
@@ -882,7 +907,7 @@ public sealed class TaskbarEmbedder(AppSettings cfg, DisplayInfo? targetDisplay 
         {
             var task = Task.Run(() => PerformTaskbarScanWorker(tray, tr, taskbarWidth, taskbarLeft));
             task.ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
-            if (task.Wait(TimeSpan.FromMilliseconds(200)))
+            if (task.Wait(TimeSpan.FromMilliseconds(500)))
             {
                 var result = task.Result;
                 _taskbarScanCache[tray] = result;
@@ -916,6 +941,12 @@ public sealed class TaskbarEmbedder(AppSettings cfg, DisplayInfo? targetDisplay 
             cacheReq.Add(AutomationElement.AutomationIdProperty);
             cacheReq.Add(AutomationElement.BoundingRectangleProperty);
             cacheReq.Add(AutomationElement.IsOffscreenProperty);
+            cacheReq.Add(AutomationElement.ControlTypeProperty);
+
+            NativeMethods.GetWindowThreadProcessId(tray, out uint explorerPid);
+            var filter = explorerPid != 0
+                ? (Condition)new PropertyCondition(AutomationElement.ProcessIdProperty, (int)explorerPid)
+                : Condition.TrueCondition;
 
             AutomationElement? root;
             AutomationElementCollection? allElements = null;
@@ -924,7 +955,7 @@ public sealed class TaskbarEmbedder(AppSettings cfg, DisplayInfo? targetDisplay 
                 root = AutomationElement.FromHandle(tray);
                 if (root is not null)
                 {
-                    allElements = root.FindAll(TreeScope.Descendants, Condition.TrueCondition);
+                    allElements = root.FindAll(TreeScope.Descendants, filter);
                 }
             }
 
@@ -935,18 +966,18 @@ public sealed class TaskbarEmbedder(AppSettings cfg, DisplayInfo? targetDisplay 
             int trayL = int.MaxValue;
             bool isSecondary = IsSecondaryTrayWindow(tray);
 
+            int nativeTray = FindNativeTrayLeft(tray, tr);
+            if (nativeTray != int.MaxValue)
+            {
+                trayL = nativeTray;
+            }
+
             if (allElements is not null)
             {
                 foreach (AutomationElement elem in allElements)
                 {
                     ProcessCachedTaskbarElement(elem, tbw, midX, ref appsR, ref appsL, ref trayL);
                 }
-            }
-
-            int nativeTray = FindNativeTrayLeft(tray, tr);
-            if (nativeTray != int.MaxValue && nativeTray < trayL)
-            {
-                trayL = nativeTray;
             }
 
             int finalAppsR = appsR != int.MinValue ? appsR : -1;
@@ -981,21 +1012,27 @@ public sealed class TaskbarEmbedder(AppSettings cfg, DisplayInfo? targetDisplay 
 
             string cls = elem.Cached.ClassName ?? string.Empty;
             string id = elem.Cached.AutomationId ?? string.Empty;
+            var ctrlType = elem.Cached.ControlType;
 
-            bool isApp = cls.StartsWith("Taskbar.", StringComparison.OrdinalIgnoreCase)
-                         || cls.StartsWith("StartButton", StringComparison.OrdinalIgnoreCase)
-                         || cls.StartsWith("SearchBox", StringComparison.OrdinalIgnoreCase)
-                         || id.Equals("TaskList", StringComparison.OrdinalIgnoreCase)
-                         || id.Equals("TaskbarItemsContainer", StringComparison.OrdinalIgnoreCase);
-
-            if (isApp)
-            {
-                appsR = Math.Max(appsR, (int)r.Right);
-                appsL = Math.Min(appsL, (int)r.Left);
-            }
-            else if ((int)r.Left >= midX && IsRightDockedId(id))
+            bool isRightDocked = (int)r.Left >= midX && (IsRightDockedId(id) || cls.Contains("Tray", StringComparison.OrdinalIgnoreCase) || cls.Contains("Clock", StringComparison.OrdinalIgnoreCase));
+            if (isRightDocked)
             {
                 trayL = Math.Min(trayL, (int)r.Left);
+            }
+            else
+            {
+                bool isApp = cls.StartsWith("Taskbar", StringComparison.OrdinalIgnoreCase)
+                             || cls.StartsWith("Start", StringComparison.OrdinalIgnoreCase)
+                             || cls.StartsWith("Search", StringComparison.OrdinalIgnoreCase)
+                             || id.StartsWith("Task", StringComparison.OrdinalIgnoreCase)
+                             || id.StartsWith("App", StringComparison.OrdinalIgnoreCase)
+                             || (ctrlType == ControlType.Button && r.Width < (tbw * 0.4));
+
+                if (isApp && (trayL == int.MaxValue || (int)r.Right <= trayL))
+                {
+                    appsR = Math.Max(appsR, (int)r.Right);
+                    appsL = Math.Min(appsL, (int)r.Left);
+                }
             }
         }
         catch (Exception ex)
@@ -1059,6 +1096,7 @@ public sealed class TaskbarEmbedder(AppSettings cfg, DisplayInfo? targetDisplay 
         _lastWidgetNegativeQueryTicks = 0;
         _trayAutomationCache.Clear();
         _taskbarScanCache.Clear();
+        ActiveOverlayHwnds.Clear();
     }
 
     private static void LogWidgetEdgeChange(int edge, string message)
@@ -1070,11 +1108,42 @@ public sealed class TaskbarEmbedder(AppSettings cfg, DisplayInfo? targetDisplay 
 
     private int QueryLegacyTaskBandRightEdge()
     {
-        if (_taskBandHwnd != IntPtr.Zero && NativeMethods.IsWindow(_taskBandHwnd)
-            && NativeMethods.GetWindowRect(_taskBandHwnd, out var bandRect) && bandRect.Width > 0)
+        if (_taskBandHwnd == IntPtr.Zero || !NativeMethods.IsWindow(_taskBandHwnd))
+            return -1;
+
+        int buttonRight = QueryLegacyTaskBandButtonsRightEdge();
+        if (buttonRight > 0)
+        {
+            return buttonRight;
+        }
+
+        if (NativeMethods.GetWindowRect(_taskBandHwnd, out var bandRect) && bandRect.Width > 0)
         {
             return bandRect.Right;
         }
+
+        return -1;
+    }
+
+    private int QueryLegacyTaskBandButtonsRightEdge()
+    {
+        try
+        {
+            var bandElem = AutomationElement.FromHandle(_taskBandHwnd);
+            if (bandElem is not null)
+            {
+                int maxBtn = FindMaxButtonRight(bandElem);
+                if (maxBtn != -1 && maxBtn != int.MinValue)
+                {
+                    return maxBtn;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to query taskband button edge via UIAutomation");
+        }
+
         return -1;
     }
 
@@ -1131,11 +1200,16 @@ public sealed class TaskbarEmbedder(AppSettings cfg, DisplayInfo? targetDisplay 
             Log.Debug(ex, "Failed to determine app list right edge via UIAutomation");
         }
 
+        if (_cachedAppListRightEdge > 0)
+        {
+            return _cachedAppListRightEdge;
+        }
+
         int fallback = !IsTaskbarCentered()
             ? _taskbarRect.Left + (_taskbarRect.Width / 3)
             : _taskbarRect.Left + (_taskbarRect.Width / 2);
         _cachedAppListRightEdge = fallback;
-        _lastAppListQueryTicks = now;
+        _lastAppListQueryTicks = now - (Stopwatch.Frequency * 28);
         return fallback;
     }
 
@@ -1201,7 +1275,7 @@ public sealed class TaskbarEmbedder(AppSettings cfg, DisplayInfo? targetDisplay 
             });
             task.ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
 
-            if (task.Wait(TimeSpan.FromMilliseconds(250)))
+            if (task.Wait(TimeSpan.FromMilliseconds(1500)))
             {
                 return task.Result;
             }
@@ -1304,11 +1378,16 @@ public sealed class TaskbarEmbedder(AppSettings cfg, DisplayInfo? targetDisplay 
             Log.Debug(ex, "Failed to determine app list left edge via UIAutomation");
         }
 
+        if (_cachedAppListLeftEdge > 0)
+        {
+            return _cachedAppListLeftEdge;
+        }
+
         int fallback = !IsTaskbarCentered()
             ? _taskbarRect.Left
             : _taskbarRect.Left + (_taskbarRect.Width / 4);
         _cachedAppListLeftEdge = fallback;
-        _lastAppListLeftQueryTicks = now;
+        _lastAppListLeftQueryTicks = now - (Stopwatch.Frequency * 28);
         return fallback;
     }
 
@@ -1387,7 +1466,7 @@ public sealed class TaskbarEmbedder(AppSettings cfg, DisplayInfo? targetDisplay 
             var task = Task.Run(() => QueryAppListLeftEdgeWorker(tray));
             task.ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
 
-            if (task.Wait(TimeSpan.FromMilliseconds(250)))
+            if (task.Wait(TimeSpan.FromMilliseconds(1500)))
             {
                 return task.Result;
             }
@@ -1836,13 +1915,16 @@ public sealed class TaskbarEmbedder(AppSettings cfg, DisplayInfo? targetDisplay 
         NativeMethods.GetWindowRect(_taskBandHwnd, out var cur);
         int gap = WindowHelpers.Scale(4, 1f);
         int overlayW = overlaySize.Width + gap + Math.Max(0, _cfg.Overlay.PlacementOffset);
-        int newBandW = Math.Max(cur.Width - overlayW, 50);
 
         int clientOriLeft = 0;
         if (_parentHwnd != IntPtr.Zero && NativeMethods.GetWindowRect(_parentHwnd, out var parentRect))
         {
             clientOriLeft = Math.Max(0, _taskBandOri.Left - parentRect.Left);
         }
+
+        int appsRight = ResolveClientAppsRight(clientOriLeft + 50);
+        int minButtonsWidth = Math.Max(50, appsRight - clientOriLeft);
+        int newBandW = Math.Max(cur.Width - overlayW, minButtonsWidth);
 
         if (_cfg.Overlay.Placement == "left")
         {
@@ -1927,6 +2009,13 @@ public sealed class TaskbarEmbedder(AppSettings cfg, DisplayInfo? targetDisplay 
             x = Math.Max(parentRect.Width - sz.Width, 0);
 
         int y = Math.Max(0, (parentRect.Height - sz.Height) / 2);
+
+        if (_lastPositionedX == int.MinValue || Math.Abs(x - _lastPositionedX) > 2 || sz.Width != _lastPositionedWidth)
+        {
+            _lastPositionedX = x;
+            _lastPositionedWidth = sz.Width;
+            Log.Debug($"Taskbar overlay positioned at x={x}, y={y}, width={sz.Width} (slot={AvailableSlotWidth}px, constrained={IsTaskbarSpaceConstrained})");
+        }
 
         int targetX = x;
         int targetY = y;
@@ -2024,6 +2113,21 @@ public sealed class TaskbarEmbedder(AppSettings cfg, DisplayInfo? targetDisplay 
         }
 
         int offset = _cfg.Overlay.PlacementOffset;
+        if (!_isWin11 && _taskBandHwnd != IntPtr.Zero && NativeMethods.IsWindow(_taskBandHwnd))
+        {
+            NativeMethods.GetWindowRect(_taskBandHwnd, out var bandRect);
+            var bandPt = new NativeMethods.Point { X = bandRect.Left, Y = bandRect.Top };
+            NativeMethods.ScreenToClient(_parentHwnd, ref bandPt);
+            if (_cfg.Overlay.Placement == "left")
+            {
+                return Math.Max(0, bandPt.X - (2 * offset));
+            }
+
+            int rightBound = FindRebarDeskBandRightBound(bandPt.X, parentRect.Width);
+            int appsRight = ResolveClientAppsRight(bandPt.X + bandRect.Width);
+            return Math.Max(0, rightBound - appsRight - (2 * offset));
+        }
+
         if (IsTaskbarCentered() && _cfg.Overlay.Placement == "left")
         {
             return CalculateLeftSlotWidth(offset);
@@ -2046,6 +2150,7 @@ public sealed class TaskbarEmbedder(AppSettings cfg, DisplayInfo? targetDisplay 
         while ((rebarChild = SafeFindWindowEx(_parentHwnd, rebarChild, null, null)) != IntPtr.Zero)
         {
             if (rebarChild == _currentOverlayHwnd || rebarChild == _taskBandHwnd || !NativeMethods.IsWindowVisible(rebarChild)) continue;
+            if (IsAppOverlayWindow(rebarChild)) continue;
             if (!NativeMethods.GetWindowRect(rebarChild, out var cr) || cr.Width <= 0 || cr.Height <= 0) continue;
 
             var pt = new NativeMethods.Point { X = cr.Left, Y = 0 };
@@ -2059,6 +2164,18 @@ public sealed class TaskbarEmbedder(AppSettings cfg, DisplayInfo? targetDisplay 
         return rightBound;
     }
 
+    private int ResolveClientAppsRight(int fallbackX)
+    {
+        int appRightScreen = GetAppListRightEdge();
+        if (appRightScreen > 0 && _parentHwnd != IntPtr.Zero)
+        {
+            var appPt = new NativeMethods.Point { X = appRightScreen, Y = 0 };
+            NativeMethods.ScreenToClient(_parentHwnd, ref appPt);
+            return Math.Max(0, appPt.X);
+        }
+        return fallbackX;
+    }
+
     private int ComputeBandWin10X(NativeMethods.Rect parentRect, Size sz)
     {
         NativeMethods.GetWindowRect(_taskBandHwnd, out var bandRect);
@@ -2066,28 +2183,37 @@ public sealed class TaskbarEmbedder(AppSettings cfg, DisplayInfo? targetDisplay 
         NativeMethods.ScreenToClient(_parentHwnd, ref bandPt);
 
         int offset = _cfg.Overlay.PlacementOffset;
-        int rightBound = FindRebarDeskBandRightBound(bandPt.X, parentRect.Width);
-
-        int appsRight = bandPt.X + bandRect.Width;
-        int availableWidth = Math.Max(0, rightBound - appsRight - (2 * offset));
-        AvailableSlotWidth = availableWidth;
-        IsTaskbarSpaceConstrained = availableWidth > 0 && sz.Width > availableWidth;
+        int checkWidth = NaturalOverlayWidth > 0 ? NaturalOverlayWidth : sz.Width;
 
         if (_cfg.Overlay.Placement == "left")
         {
-            return Math.Max(0, bandPt.X - sz.Width - offset);
+            int availableLeft = Math.Max(0, bandPt.X - (2 * offset));
+            AvailableSlotWidth = availableLeft;
+            IsTaskbarSpaceConstrained = bandPt.X > 0 && (availableLeft == 0 || checkWidth > availableLeft);
+
+            int minLeftX = offset;
+            int maxLeftX = Math.Max(minLeftX, bandPt.X - sz.Width - offset);
+            return Math.Clamp(bandPt.X - sz.Width - offset, minLeftX, maxLeftX);
         }
+
+        int rightBound = FindRebarDeskBandRightBound(bandPt.X, parentRect.Width);
+        int appsRight = ResolveClientAppsRight(bandPt.X + bandRect.Width);
+        int availableWidth = Math.Max(0, rightBound - appsRight - (2 * offset));
+        AvailableSlotWidth = availableWidth;
+        IsTaskbarSpaceConstrained = rightBound > 0 && (availableWidth == 0 || checkWidth > availableWidth);
 
         if (_cfg.Overlay.Placement == "beside_apps")
         {
-            return Math.Min(appsRight + offset, Math.Max(0, rightBound - sz.Width));
+            int minX = appsRight + offset;
+            int maxX = Math.Max(minX, rightBound - sz.Width);
+            return Math.Clamp(minX, minX, maxX);
         }
 
         // "right" (default on Windows 10)
-        int targetX = rightBound - sz.Width - offset;
-        int minX = Math.Max(0, appsRight);
-        int maxX = Math.Max(minX, rightBound - sz.Width);
-        return Math.Clamp(targetX, 0, maxX);
+        int minRightX = appsRight + offset;
+        int maxRightX = Math.Max(minRightX, rightBound - sz.Width);
+        int preferredRightX = rightBound - sz.Width - offset;
+        return Math.Clamp(preferredRightX, minRightX, maxRightX);
     }
 
     private int ResolveClientRightBoundary(NativeMethods.Rect parentRect)
@@ -2126,19 +2252,22 @@ public sealed class TaskbarEmbedder(AppSettings cfg, DisplayInfo? targetDisplay 
         int offset = _cfg.Overlay.PlacementOffset;
         int availableWidth = Math.Max(0, clientRightBoundary - clientAppRight - (2 * offset));
         AvailableSlotWidth = availableWidth;
-        IsTaskbarSpaceConstrained = availableWidth > 0 && sz.Width > availableWidth;
+        int checkWidth = NaturalOverlayWidth > 0 ? NaturalOverlayWidth : sz.Width;
+        IsTaskbarSpaceConstrained = clientRightBoundary > 0 && (availableWidth == 0 || checkWidth > availableWidth);
 
-        int maxRight = Math.Max(clientAppRight, clientRightBoundary - sz.Width);
-        int x = _cfg.Overlay.Placement is "beside_apps" or "left"
-            ? clientAppRight + offset
+        int minX = clientAppRight + offset;
+        int maxX = Math.Max(minX, clientRightBoundary - sz.Width);
+        int preferredX = _cfg.Overlay.Placement is "beside_apps" or "left"
+            ? minX
             : clientRightBoundary - sz.Width - offset;
 
-        return Math.Clamp(x, clientAppRight, maxRight);
+        return Math.Clamp(preferredX, minX, maxX);
     }
 
     private int ComputeBandCenteredX(Size sz, int clientRightBoundary)
     {
         int offset = _cfg.Overlay.PlacementOffset;
+        int checkWidth = NaturalOverlayWidth > 0 ? NaturalOverlayWidth : sz.Width;
         if (_cfg.Overlay.Placement == "left")
         {
             int leftEdge = _leftWidgetRightEdge != -1 ? _leftWidgetRightEdge : GetLeftWidgetRightEdge();
@@ -2157,7 +2286,7 @@ public sealed class TaskbarEmbedder(AppSettings cfg, DisplayInfo? targetDisplay 
 
             int availableWidth = Math.Max(0, clientAppLeft - clientLeftEdge - (2 * offset));
             AvailableSlotWidth = availableWidth;
-            IsTaskbarSpaceConstrained = availableWidth > 0 && sz.Width > availableWidth;
+            IsTaskbarSpaceConstrained = clientAppLeft > 0 && (availableWidth == 0 || checkWidth > availableWidth);
 
             int preferredX = clientLeftEdge + offset;
             if (preferredX < clientAppLeft)
@@ -2176,7 +2305,7 @@ public sealed class TaskbarEmbedder(AppSettings cfg, DisplayInfo? targetDisplay 
 
         int availableRightWidth = Math.Max(0, clientRightBoundary - clientAppRight - (2 * offset));
         AvailableSlotWidth = availableRightWidth;
-        IsTaskbarSpaceConstrained = availableRightWidth > 0 && sz.Width > availableRightWidth;
+        IsTaskbarSpaceConstrained = clientRightBoundary > 0 && (availableRightWidth == 0 || checkWidth > availableRightWidth);
 
         int preferredRightX = clientRightBoundary - sz.Width - offset;
         int minRightX = clientAppRight + offset;

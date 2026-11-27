@@ -66,6 +66,7 @@ function makePayload(): SettingsDto {
             alertCpuPower: false,
             alertGpuFreq: false,
             alertGpuPower: false,
+            alertDiskTemp: false,
             alertNetDaily: false,
             alertNetMonthly: false,
             cpuUsageMaxPct: 90,
@@ -74,6 +75,7 @@ function makePayload(): SettingsDto {
             gpuVramMaxMb: 8192,
             cpuTempMaxC: 90,
             gpuTempMaxC: 90,
+            diskTempMaxC: 70,
             batteryLowPct: 20,
             cpuFreqMinMhz: 400,
             cpuPowerMaxW: 100,
@@ -221,6 +223,36 @@ describe('App.svelte', () => {
         toggle.dispatchEvent(new Event('change'));
         await tick();
         expect(bar!.classList.contains('visible')).toBe(false);
+    });
+
+    it('discard button in save bar reverts changes and hides save bar', async () => {
+        const payload = makePayload();
+        payload.alerts.enabled = true;
+        settings.set(payload);
+        pristineSettings.set(JSON.stringify(payload));
+
+        component = mount(App, { target: document.body });
+        await tick();
+
+        const bar = document.querySelector('.save-bar');
+        expect(bar!.classList.contains('visible')).toBe(false);
+
+        const toggle = document.querySelector(
+            'input[aria-label="Enable Threshold Alerts"]',
+        ) as HTMLInputElement;
+        toggle.checked = false;
+        toggle.dispatchEvent(new Event('change'));
+        await tick();
+
+        expect(bar!.classList.contains('visible')).toBe(true);
+
+        const discardBtn = document.querySelector('.save-bar .btn-discard') as HTMLButtonElement;
+        expect(discardBtn).not.toBeNull();
+        discardBtn.click();
+        await tick();
+
+        expect(bar!.classList.contains('visible')).toBe(false);
+        expect(get(settings)?.alerts.enabled).toBe(true);
     });
 
     it('initializes bridge messages and handles incoming webview events', async () => {

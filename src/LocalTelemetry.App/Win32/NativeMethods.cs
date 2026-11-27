@@ -237,6 +237,10 @@ internal static class NativeMethods
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     public static extern int GetClassName(IntPtr hWnd, [Out] char[] lpClassName, int nMaxCount);
 
+    /// <summary>Copies the text of the specified window's title bar into a buffer.</summary>
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern int GetWindowText(IntPtr hWnd, [Out] char[] lpString, int nMaxCount);
+
     /// <summary>Changes window position, size and Z-order.</summary>
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);

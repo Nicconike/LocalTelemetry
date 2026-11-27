@@ -65,6 +65,7 @@ public sealed class AlertService(
         EvaluateCpuAlerts(snap, f);
         EvaluateGpuAlerts(snap, f);
         EvaluateRamAndMiscAlerts(snap);
+        EvaluateDiskAlerts(snap, f);
         EvaluateNetAlerts();
 
         CleanupInactiveAlerts();
@@ -99,6 +100,7 @@ public sealed class AlertService(
         Metrics.BatteryPct => _cfg.Alerts.AlertBatteryLow,
         "net_daily" => _cfg.Alerts.AlertNetDaily,
         "net_monthly" => _cfg.Alerts.AlertNetMonthly,
+        _ when metricId.StartsWith("disk_", StringComparison.OrdinalIgnoreCase) && metricId.EndsWith("_temp", StringComparison.OrdinalIgnoreCase) => _cfg.Alerts.AlertDiskTemp,
         _ => false
     };
 
@@ -219,6 +221,30 @@ public sealed class AlertService(
             {
                 LowAlert = true,
                 Hysteresis = 5f
+            });
+        }
+    }
+
+    private void EvaluateDiskAlerts(TelemetrySnapshot snap, bool useFahrenheit)
+    {
+        if (!_cfg.Alerts.AlertDiskTemp) return;
+
+        for (int i = 0; i < snap.Disks.Count; i++)
+        {
+            var disk = snap.Disks[i];
+            if (!disk.TemperatureC.HasValue) continue;
+
+            string metricId = $"disk_{disk.Id}_temp";
+            string label = $"{disk.Label} Temperature";
+            float tempC = disk.TemperatureC.Value;
+
+            EvaluateThreshold(new(metricId, label, tempC, _cfg.Alerts.DiskTempMaxC,
+                unit: useFahrenheit ? "°F" : "°C",
+                displayValue: Metrics.TempString(tempC, useFahrenheit),
+                displayThreshold: Metrics.TempString(_cfg.Alerts.DiskTempMaxC, useFahrenheit))
+            {
+                Hysteresis = 5f,
+                EscalationDelta = 5f
             });
         }
     }

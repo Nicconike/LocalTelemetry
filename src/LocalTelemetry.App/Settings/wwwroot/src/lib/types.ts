@@ -84,6 +84,7 @@ export interface AlertsDto {
     alertCpuPower: boolean;
     alertGpuFreq: boolean;
     alertGpuPower: boolean;
+    alertDiskTemp: boolean;
     alertNetDaily: boolean;
     alertNetMonthly: boolean;
     cpuUsageMaxPct: number;
@@ -92,6 +93,7 @@ export interface AlertsDto {
     gpuVramMaxMb: number;
     cpuTempMaxC: number;
     gpuTempMaxC: number;
+    diskTempMaxC: number;
     batteryLowPct: number;
     cpuFreqMinMhz: number;
     cpuPowerMaxW: number;
@@ -140,9 +142,17 @@ export interface DiskInfo {
     model: string;
     vendor: string;
     busType: string;
+    mediaType?: string | null;
+    displayType?: string | null;
+    formattedSize?: string | null;
     sizeGb?: string | null;
     diskIndex?: number | null;
     boot: boolean;
+    health?: string | null;
+    temperatureC?: number | null;
+    remainingLifePercent?: number | null;
+    totalWrittenTb?: string | null;
+    totalReadTb?: string | null;
 }
 
 export interface SystemInfo {

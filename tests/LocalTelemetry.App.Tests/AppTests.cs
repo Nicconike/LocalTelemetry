@@ -556,7 +556,7 @@ public class AppTests
     {
         var app = GetOrCreateApp();
         var cfg = new AppSettings { RunAtStartup = false };
-        cfg.Monitoring.PollIntervalMs = 500;
+        cfg.Monitoring.PollIntervalMs = 2000;
         cfg.Alerts.Enabled = false;
         cfg.Alerts.ShowToastNotif = false;
         cfg.Overlay.Visible = true;
@@ -942,7 +942,7 @@ public class AppTests
         // Branch 1: Overlay visible = true, startup toggled, poll interval changed, alerts toast enabled
         cfg.Overlay.Visible = true;
         cfg.RunAtStartup = true;
-        cfg.Monitoring.PollIntervalMs = 500;
+        cfg.Monitoring.PollIntervalMs = 2000;
         cfg.Alerts.Enabled = true;
         cfg.Alerts.ShowToastNotif = true;
         cfg.EnableFileLogging = true;
@@ -1967,5 +1967,53 @@ public class AppTests
         target.Monitoring.PollIntervalMs.Should().Be(500);
         target.Overlay.Visible.Should().BeFalse();
         target.Alerts.Enabled.Should().BeFalse();
+    }
+
+    [WpfFact]
+    public void App_HandleTaskbarSpaceConstraintChanged_TogglesWarningState()
+    {
+        var app = GetOrCreateApp();
+
+        // Reset state
+        app.HandleTaskbarSpaceConstraintChanged(false, 300);
+        app.SpaceWarningFired.Should().BeFalse();
+
+        // When constrained
+        app.HandleTaskbarSpaceConstraintChanged(true, 50);
+        app.SpaceWarningFired.Should().BeTrue();
+
+        // Second call while still constrained does not re-fire
+        app.HandleTaskbarSpaceConstraintChanged(true, 50);
+        app.SpaceWarningFired.Should().BeTrue();
+
+        // When space is zero
+        app.HandleTaskbarSpaceConstraintChanged(true, 0);
+        app.SpaceWarningFired.Should().BeTrue();
+
+        // When space is restored
+        app.HandleTaskbarSpaceConstraintChanged(false, 600);
+        app.SpaceWarningFired.Should().BeFalse();
+    }
+
+    [WpfFact]
+    public void App_EnsureNotifierLaunched_ForceLaunchesEvenWhenAlertsDisabled()
+    {
+        var app = GetOrCreateApp();
+        bool launcherCalled = false;
+        var origLauncher = App.NotifierLauncherAction;
+        try
+        {
+            App.NotifierLauncherAction = _ => launcherCalled = true;
+            typeof(App).GetField("_notifierLaunched", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(app, false);
+
+            // Force launch
+            app.ForceLaunchNotifier();
+            launcherCalled.Should().BeTrue();
+        }
+        finally
+        {
+            App.NotifierLauncherAction = origLauncher;
+            typeof(App).GetField("_notifierLaunched", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(app, false);
+        }
     }
 }

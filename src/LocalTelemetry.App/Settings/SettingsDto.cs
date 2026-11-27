@@ -229,6 +229,9 @@ public sealed class AlertsDto
     /// <summary>Alert when current month's network usage exceeds <see cref="NetMonthlyMaxGb"/>.</summary>
     public bool AlertNetMonthly { get; set; }
 
+    /// <summary>Alert when any disk temperature exceeds <see cref="DiskTempMaxC"/>.</summary>
+    public bool AlertDiskTemp { get; set; }
+
     // Thresholds
     /// <summary>CPU usage threshold (percent) above which an alert fires.</summary>
     public float CpuUsageMaxPct { get; set; } = 90;
@@ -247,6 +250,9 @@ public sealed class AlertsDto
 
     /// <summary>GPU temperature threshold (°C) above which an alert fires.</summary>
     public float GpuTempMaxC { get; set; } = 90;
+
+    /// <summary>Maximum disk temperature (°C) before alert fires.</summary>
+    public float DiskTempMaxC { get; set; } = 70;
 
     /// <summary>Battery level threshold (percent) below which an alert fires.</summary>
     public float BatteryLowPct { get; set; } = 20;
@@ -413,12 +419,14 @@ public static class SettingsDtoMapping
                 AlertGpuPower = src.Alerts.AlertGpuPower,
                 AlertNetDaily = src.Alerts.AlertNetDaily,
                 AlertNetMonthly = src.Alerts.AlertNetMonthly,
+                AlertDiskTemp = src.Alerts.AlertDiskTemp,
                 CpuUsageMaxPct = src.Alerts.CpuUsageMaxPct,
                 RamUsageMaxPct = src.Alerts.RamUsageMaxPct,
                 GpuUsageMaxPct = src.Alerts.GpuUsageMaxPct,
                 GpuVramMaxMb = src.Alerts.GpuVramMaxMb,
                 CpuTempMaxC = src.Alerts.CpuTempMaxC,
                 GpuTempMaxC = src.Alerts.GpuTempMaxC,
+                DiskTempMaxC = src.Alerts.DiskTempMaxC,
                 BatteryLowPct = src.Alerts.BatteryLowPct,
                 CpuFreqMinMhz = src.Alerts.CpuFreqMinMhz,
                 CpuPowerMaxW = src.Alerts.CpuPowerMaxW,
@@ -468,7 +476,7 @@ public static class SettingsDtoMapping
 
     private static void ApplyMonitoringSettings(MonitoringConfig cfg, MonitoringDto dto)
     {
-        cfg.PollIntervalMs = Math.Max(100, dto.IntervalMs);
+        cfg.PollIntervalMs = Math.Max(1000, dto.IntervalMs);
         cfg.UseFahrenheit = dto.UseFahrenheit;
         cfg.UseNetBits = dto.UseNetBits;
         cfg.PreferredNic = !string.IsNullOrEmpty(dto.PreferredNic) ? dto.PreferredNic : "auto";
@@ -544,13 +552,15 @@ public static class SettingsDtoMapping
         cfg.AlertGpuFreq = dto.AlertGpuFreq;
         cfg.AlertGpuPower = dto.AlertGpuPower;
         cfg.AlertNetDaily = dto.AlertNetDaily;
-        cfg.AlertNetMonthly = dto.AlertNetMonthly;
+        cfg.AlertNetMonthly = dto.NetMonthlyMaxGb > 0 && dto.AlertNetMonthly;
+        cfg.AlertDiskTemp = dto.AlertDiskTemp;
         cfg.CpuUsageMaxPct = dto.CpuUsageMaxPct;
         cfg.RamUsageMaxPct = dto.RamUsageMaxPct;
         cfg.GpuUsageMaxPct = dto.GpuUsageMaxPct;
         cfg.GpuVramMaxMb = dto.GpuVramMaxMb;
         cfg.CpuTempMaxC = dto.CpuTempMaxC;
         cfg.GpuTempMaxC = dto.GpuTempMaxC;
+        cfg.DiskTempMaxC = dto.DiskTempMaxC;
         cfg.BatteryLowPct = dto.BatteryLowPct;
         cfg.CpuFreqMinMhz = dto.CpuFreqMinMhz;
         cfg.CpuPowerMaxW = dto.CpuPowerMaxW;

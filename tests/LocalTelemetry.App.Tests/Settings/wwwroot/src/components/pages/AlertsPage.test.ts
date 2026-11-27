@@ -1,6 +1,6 @@
 import { mount, unmount, tick } from 'svelte';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { settings } from '../../../../../../../src/LocalTelemetry.App/Settings/wwwroot/src/lib/store';
+import { settings, pristineSettings } from '../../../../../../../src/LocalTelemetry.App/Settings/wwwroot/src/lib/store';
 import AlertsPage from '../../../../../../../src/LocalTelemetry.App/Settings/wwwroot/src/components/pages/AlertsPage.svelte';
 
 function makeAlertPayload() {
@@ -19,6 +19,7 @@ function makeAlertPayload() {
             alertCpuPower: false,
             alertGpuFreq: false,
             alertGpuPower: false,
+            alertDiskTemp: false,
             alertNetDaily: false,
             alertNetMonthly: false,
             cpuUsageMaxPct: 90,
@@ -27,6 +28,7 @@ function makeAlertPayload() {
             gpuVramMaxMb: 8192,
             cpuTempMaxC: 90,
             gpuTempMaxC: 90,
+            diskTempMaxC: 70,
             batteryLowPct: 20,
             cpuFreqMinMhz: 400,
             cpuPowerMaxW: 100,
@@ -140,5 +142,45 @@ describe('AlertsPage.svelte', () => {
         await tick();
 
         expect(document.body.textContent).toContain('Sustained breach duration');
+    });
+
+    it('renders disk temperature alert controls', async () => {
+        const payload = makeAlertPayload();
+        payload.alerts.alertDiskTemp = true;
+        settings.set(payload as any);
+
+        component = mount(AlertsPage, { target: document.body });
+        await tick();
+
+        expect(document.body.textContent).toContain('Storage');
+        expect(document.body.textContent).toContain('Disk Temp');
+    });
+
+    it('reverts to pristine alert settings when turning master toggle off after having it turned on', async () => {
+        const payload = makeAlertPayload();
+        payload.alerts.enabled = false;
+        payload.alerts.alertCpuUsage = false;
+        payload.alerts.alertCpuTemp = false;
+        settings.set(payload as any);
+        pristineSettings.set(JSON.stringify(payload));
+
+        component = mount(AlertsPage, { target: document.body });
+        await tick();
+
+        const masterToggle = document.querySelector('input[type="checkbox"]') as HTMLInputElement;
+        masterToggle.click();
+        await tick();
+
+        let currentAlerts: any;
+        settings.subscribe((s) => (currentAlerts = s?.alerts))();
+        expect(currentAlerts.enabled).toBe(true);
+        expect(currentAlerts.alertCpuTemp).toBe(true);
+
+        masterToggle.click();
+        await tick();
+
+        settings.subscribe((s) => (currentAlerts = s?.alerts))();
+        expect(currentAlerts.enabled).toBe(false);
+        expect(currentAlerts.alertCpuTemp).toBe(false);
     });
 });

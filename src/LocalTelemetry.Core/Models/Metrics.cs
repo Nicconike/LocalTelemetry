@@ -74,6 +74,7 @@ public static class Metrics
         {
             new($"disk_{id}_read", label, $"{label} Read", "MB/s", "disk"),
             new($"disk_{id}_write", label, $"{label} Write", "MB/s", "disk"),
+            new($"disk_{id}_temp", label, $"{label} Temp", "°C", "disk"),
         };
         foreach (var m in list)
         {
@@ -124,7 +125,7 @@ public static class Metrics
             NetTotal => FormatTotalBytes(s.NetTotalBytes),
             BatteryPct => s.BatteryPct > 0 ? $"{s.BatteryPct:F0}%" : "--",
             BatteryRate => FormatBatteryRate(s.BatteryPct, s.BatteryChargeRateW),
-            _ => DiskValue(id, s),
+            _ => DiskValue(id, s, useFahrenheit),
         };
 
     private static string FormatBatteryRate(float pct, float rateW)
@@ -162,7 +163,7 @@ public static class Metrics
         };
     }
 
-    private static string DiskValue(string id, TelemetrySnapshot s)
+    private static string DiskValue(string id, TelemetrySnapshot s, bool useFahrenheit)
     {
         int last = id.LastIndexOf('_');
         if (last < 0 || last < 5) return "--";
@@ -174,6 +175,10 @@ public static class Metrics
             if (s.Disks[i].Id == rawId) { disk = s.Disks[i]; break; }
         }
         if (disk is null) return "--";
+        if (aspect == "temp")
+        {
+            return disk.TemperatureC.HasValue ? Temp(disk.TemperatureC.Value, useFahrenheit) : "--";
+        }
         float mbps = aspect switch
         {
             "read" => disk.ReadMBps,
@@ -215,6 +220,7 @@ public static class Metrics
         NetDown or NetUp => useBits ? "9999.9Gb/s" : "999.9GB/s",
         NetTotal => "999.99TB",
         BatteryRate => "+999.9W",
+        _ when id.StartsWith("disk_", StringComparison.Ordinal) && id.EndsWith("_temp", StringComparison.Ordinal) => useFahrenheit ? "212°F" : "100°C",
         _ when id.StartsWith("disk_", StringComparison.Ordinal) => "999.9GB/s",
         _ => "9999",
     };

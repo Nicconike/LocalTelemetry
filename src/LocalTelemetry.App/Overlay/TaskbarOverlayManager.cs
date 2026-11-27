@@ -102,8 +102,9 @@ public sealed class TaskbarOverlayManager : IDisposable
     public void Show()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        bool wasVisible = _isVisible;
         _isVisible = true;
-        SyncOverlays("Show request");
+        SyncOverlays(wasVisible ? "Display settings updated" : "Show request");
     }
 
     /// <inheritdoc/>
@@ -236,7 +237,8 @@ public sealed class TaskbarOverlayManager : IDisposable
         {
             if (_overlays.Remove(id, out var removedOverlay))
             {
-                Log.Info($"Removing overlay for display '{id}' ({reason})");
+                string displayLabel = removedOverlay.TargetDisplay?.FriendlyName ?? id;
+                Log.Info($"Removing overlay for display '{id}' ({displayLabel}) - reason: {reason}");
                 UnwireOverlay(removedOverlay);
                 removedOverlay.Hide();
                 removedOverlay.Dispose();

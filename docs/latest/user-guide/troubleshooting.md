@@ -22,9 +22,9 @@ On a fresh installation, LocalTelemetry launches with the Settings window open a
 No. LocalTelemetry is optimized for minimal background resource consumption:
 
 - Hardware polling occurs on asynchronous worker threads using non-blocking Win32 and vendor APIs.
-- When running in the background (taskbar overlay only), memory usage is **~15–20 MB** private RAM in Windows Task Manager.
-- When the Settings window is open, Microsoft WebView2 (Chromium engine) loads the configuration dashboard, using **~40–60 MB** total private RAM across processes.
-- Closing the Settings window disposes WebView2 and trims memory back to baseline (**~15–20 MB**).
+- When running in the background (taskbar overlay only), memory usage is **~10–15 MB** private RAM in Windows Task Manager.
+- When the Settings window is open, Microsoft WebView2 loads the Svelte 5 dashboard while active working set trimming (`EmptyWorkingSet`) immediately pages out idle memory, maintaining a compact footprint of **~10–20 MB** private RAM.
+- Closing the Settings window disposes WebView2 and trims working set memory back to baseline (**~10–15 MB**).
 
 ### :monitor: Is LocalTelemetry compatible with Windows 11?
 
@@ -39,6 +39,10 @@ Yes. LocalTelemetry is fully compatible with both **Windows 10** (v2004+ / build
 ### :laptop-minimal-check: Why does telemetry take ~3 seconds to update after waking from sleep?
 
 LocalTelemetry includes an automatic hardware stabilization delay. When your computer resumes from sleep or hibernation, `HardwareMonitor` waits 3 seconds before querying hardware sensors. This intentional delay allows PCIe buses, graphics drivers, and network adapters to reach full operational power states, preventing crashes and driver reset errors.
+
+### :hard-drive: Why do storage drive temperatures update every 2 seconds?
+
+To protect storage controller performance and allow laptop SSDs to remain in low-power PCIe ASPM sleep states, LocalTelemetry decouples slow physical sensors from real-time throughput metrics. Read and write transfer rates refresh on your configured **Polling Interval** (minimum 1 second), while drive temperatures update on a 2-second thermal cadence (`Math.Max(2000, PollIntervalMs)`).
 
 ---
 

@@ -260,6 +260,29 @@ describe('changelog-domains', () => {
             });
         });
 
+        it('correctly categorizes keyword sub-bullets containing tests and fixes', () => {
+            const commit = {
+                hash: 'ec1b5d15b96b785f49bdf0f57c38a070e8117b64',
+                shortHash: 'ec1b5d1',
+                message: [
+                    'fix(overlay): apply placement offset and avoid ExplorerPatcher weather overlap on Win10',
+                    '',
+                    '- Detect adjacent weather widgets and ReBar deskbands to eliminate overlay overlap.',
+                    '- Add unit tests for Windows 10 deskband clipping and placement offset calculations.',
+                    '- Update documentation for Windows 10 deskbands and uninstaller options.',
+                ].join('\n'),
+            };
+
+            const entries = parseCommitEntries(commit);
+            assert.equal(entries.length, 3);
+            assert.equal(entries[0].category, CHANGE_SECTIONS.FIX);
+            assert.equal(entries[0].subject, 'Detect adjacent weather widgets and ReBar deskbands to eliminate overlay overlap');
+            assert.equal(entries[1].category, CHANGE_SECTIONS.TEST);
+            assert.equal(entries[1].subject, 'Add unit tests for Windows 10 deskband clipping and placement offset calculations');
+            assert.equal(entries[2].category, CHANGE_SECTIONS.DOCS);
+            assert.equal(entries[2].subject, 'Update documentation for Windows 10 deskbands and uninstaller options');
+        });
+
         it('falls back to header scope when no body sub-bullets exist', () => {
             const commit = {
                 hash: 'bb672c28fde60aa5c785f12a76f671ce43199162',

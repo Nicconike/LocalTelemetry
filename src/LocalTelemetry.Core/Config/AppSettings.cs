@@ -49,7 +49,7 @@ public sealed class AppSettings
             catch (Exception ex)
             {
                 LastDirectoryError = ex;
-                System.Diagnostics.Trace.WriteLine($"[AppSettings.InitPaths] Failed to create data directory '{dataDir}': {ex.Message}");
+                System.Diagnostics.Trace.WriteLine($"Failed to create data directory '{dataDir}': {ex.Message}");
                 dataDir = exeDir;
             }
         }
@@ -59,7 +59,7 @@ public sealed class AppSettings
         catch (Exception ex)
         {
             LastDirectoryError = ex;
-            System.Diagnostics.Trace.WriteLine($"[AppSettings.InitPaths] Failed to create logs directory '{logsDir}': {ex.Message}");
+            System.Diagnostics.Trace.WriteLine($"Failed to create logs directory '{logsDir}': {ex.Message}");
             logsDir = dataDir;
         }
         LogsDir = logsDir;
@@ -107,18 +107,14 @@ public sealed class AppSettings
 
     private static void MigrateConfig(AppSettings cfg)
     {
-        // Ensure MetricColors has all known metric entries (from older configs with fewer keys)
+        // Ensure MetricColors has all known metric entries
         var mc = cfg.Overlay.MetricColors;
         var allDefaults = BrandColorDefaults.BuildDefaultMetricColors();
         cfg.Overlay.DefaultMetricColors = allDefaults;
         bool dirty = false;
         foreach (var (k, v) in allDefaults)
         {
-            bool isMissingOrLegacy = !mc.TryGetValue(k, out var curVal) ||
-                (!cfg.Overlay.UserCustomizedMetricColors.Contains(k) &&
-                 (curVal == OverlayConfig.DefaultCyanColor || curVal == OverlayConfig.DefaultSkyBlueColor || curVal == "#FBBF24" || curVal == "#80E080"));
-
-            if (isMissingOrLegacy)
+            if (!mc.ContainsKey(k))
             {
                 mc[k] = v;
                 dirty = true;
@@ -143,7 +139,12 @@ public sealed class AppSettings
             cfg.Save();
             Log.Debug($"Configuration migration completed: populated {gc.Count} group color entries");
         }
-        // Ensure pre-release updates are enabled by default on beta / pre-release builds
+        if (cfg.Monitoring.PollIntervalMs < 1000)
+        {
+            cfg.Monitoring.PollIntervalMs = 1000;
+            cfg.Save();
+            Log.Debug("Configuration migration: clamped polling interval to 1000ms minimum");
+        }
         // unless the user explicitly configured their preference in settings.
         if (UpdateConfig.DefaultIncludePrereleases && !cfg.Updates.UserExplicitlySetIncludePrereleases && !cfg.Updates.IncludePrereleases)
         {
@@ -227,7 +228,7 @@ public sealed class AppSettings
 /// <summary>Hardware monitoring poll configuration.</summary>
 public sealed class MonitoringConfig
 {
-    /// <summary>Polling interval in milliseconds (minimum 100).</summary>
+    /// <summary>Polling interval in milliseconds (minimum 1000).</summary>
     public int PollIntervalMs { get; set; } = 1000;
     /// <summary>Whether CPU usage/frequency monitoring is enabled.</summary>
     public bool EnableCpu { get; set; } = true;
@@ -353,6 +354,8 @@ public sealed class AlertConfig
     public bool AlertCpuTemp { get; set; }
     /// <summary>Alert when GPU temperature exceeds <see cref="GpuTempMaxC"/>.</summary>
     public bool AlertGpuTemp { get; set; }
+    /// <summary>Alert when any disk temperature exceeds <see cref="DiskTempMaxC"/>.</summary>
+    public bool AlertDiskTemp { get; set; }
     /// <summary>Alert when CPU usage exceeds <see cref="CpuUsageMaxPct"/>.</summary>
     public bool AlertCpuUsage { get; set; }
     /// <summary>Alert when RAM usage exceeds <see cref="RamUsageMaxPct"/>.</summary>
@@ -381,6 +384,8 @@ public sealed class AlertConfig
     public float CpuTempMaxC { get; set; } = 90f;
     /// <summary>GPU temperature threshold in Celsius.</summary>
     public float GpuTempMaxC { get; set; } = 85f;
+    /// <summary>Disk temperature threshold in Celsius.</summary>
+    public float DiskTempMaxC { get; set; } = 70f;
     /// <summary>CPU usage threshold in percent.</summary>
     public float CpuUsageMaxPct { get; set; } = 95f;
     /// <summary>RAM usage threshold in percent.</summary>
@@ -459,8 +464,9 @@ public sealed class UpdateConfig
                 ver = ver[..plusIdx];
             return ver.Contains('-');
         }
-        catch
+        catch (Exception ex)
         {
+            Log.Debug(ex, "Failed to parse assembly product version for pre-release check");
             return false;
         }
     }

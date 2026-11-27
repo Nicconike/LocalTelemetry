@@ -84,14 +84,23 @@ LocalTelemetry automatically discovers your installed physical storage drives (N
 | :--------------------- | :------------ | :-------------- | :---------------------------------------------------------------- |
 | **[Drive] Read** | `NVMeR` / `SATAR` / `HDDR` | `250KB/s` / `1.2GB/s` | Active read data throughput for the detected physical disk |
 | **[Drive] Write** | `NVMeW` / `SATAW` / `HDDW` | `14.8MB/s` / `450KB/s` | Active write data throughput for the detected physical disk |
+| **[Drive] Temp** | `NVMeT` / `SATAT` / `HDDT` | `48°C` / `118°F` | Current operating temperature queried directly via drive SMART sensor |
 
 ### :tag: How Disk Labels Work on the Taskbar
 
 The overlay creates concise, readable labels based on your storage drive's bus type and position:
 
-- **Single Drive of a Type**: If your PC has one NVMe SSD, the label displays simply as `NVMeR` (Read) and `NVMeW` (Write) without unnecessary numbering.
-- **Multiple Drives of the Same Type**: If you have two NVMe drives or multiple SATA drives, sequential numbers are added to distinguish them (e.g. `NVMe1R`, `NVMe2R`, `SATA1W`, `SATA2W`).
+- **Single Drive of a Type**: If your PC has one NVMe SSD, the label displays simply as `NVMeR` (Read), `NVMeW` (Write), and `NVMeT` (Temperature) without unnecessary numbering.
+- **Multiple Drives of the Same Type**: If you have two NVMe drives or multiple SATA drives, sequential numbers are added to distinguish them (e.g. `NVMe1R`, `NVMe2R`, `NVMe1T`, `NVMe2T`, `SATA1W`, `SATA2W`).
 - **Auto-Scaling Speed Units**: Throughput automatically scales to the cleanest unit: `KB/s` for light background I/O, `MB/s` for active transfers, and `GB/s` for high-speed sequential transfers.
+
+### :shield-check: Storage Health & Lifetime Telemetry (Settings -> System)
+
+The **System** tab provides hardware telemetry for all detected physical drives:
+
+- **Health Status**: Displays drive health (`Healthy`, `Warning`, or `Critical`) using SMART warning flags and Windows storage APIs.
+- **Remaining Life Percentage**: Reports SSD endurance remaining (derived from SMART NVMe percentage used).
+- **Total Lifetime Writes & Reads**: Tracks cumulative data written (`Total Writes: 16.5 TBW`) and read (`Total Reads: 14.7 TBR`).
 
 ---
 

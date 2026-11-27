@@ -624,6 +624,122 @@ public class DiskQueryTests
             DiskQuery.DeviceIoControlOverride = null;
         }
     }
+
+    [Fact]
+    public void DiskQuery_ParseMsftHealthStatus_ParsesCorrectly()
+    {
+        DiskQuery.ParseMsftHealthStatus(0).Should().Be("Healthy");
+        DiskQuery.ParseMsftHealthStatus(1).Should().Be("Warning");
+        DiskQuery.ParseMsftHealthStatus(2).Should().Be("Unhealthy");
+        DiskQuery.ParseMsftHealthStatus((ushort)0).Should().Be("Healthy");
+        DiskQuery.ParseMsftHealthStatus((byte)1).Should().Be("Warning");
+        DiskQuery.ParseMsftHealthStatus("unknown").Should().Be("Healthy");
+        DiskQuery.ParseMsftHealthStatus(null).Should().Be("Healthy");
+    }
+
+    [Fact]
+    public void DiskQuery_QueryNvmeSmart_ParsesTelemetryCorrectly()
+    {
+        try
+        {
+            DiskQuery.CreateFileOverride = path => new Microsoft.Win32.SafeHandles.SafeFileHandle(new IntPtr(100), true);
+            DiskQuery.DeviceIoControlOverride = (handle, ioctl, inBuf, outBuf) =>
+            {
+                if (outBuf.Length >= 560)
+                {
+                    int payload = 48;
+                    outBuf[payload] = 0; // critWarn = 0 (Healthy)
+                    BitConverter.GetBytes((ushort)323).CopyTo(outBuf, payload + 1); // 323 K = 50 C
+                    outBuf[payload + 5] = 1; // 1% used = 99% life
+                    BitConverter.GetBytes(28515625UL).CopyTo(outBuf, payload + 32); // Total read
+                    BitConverter.GetBytes(32226562UL).CopyTo(outBuf, payload + 48); // Total written
+                    return true;
+                }
+                return false;
+            };
+
+            var smart = DiskQuery.QuerySmartTelemetry(0, "Healthy");
+            smart.HealthStatus.Should().Be("Healthy");
+            smart.TemperatureC.Should().Be(50);
+            smart.RemainingLifePercent.Should().Be(99);
+            smart.TotalWrittenTb.Should().BeApproximately(15.4, 0.5);
+            smart.TotalReadTb.Should().BeApproximately(13.6, 0.5);
+        }
+        finally
+        {
+            DiskQuery.CreateFileOverride = null;
+            DiskQuery.DeviceIoControlOverride = null;
+        }
+    }
+
+    [Fact]
+    public void DiskQuery_QueryAtaSmart_ParsesTelemetryCorrectly()
+    {
+        try
+        {
+            DiskQuery.CreateFileOverride = path => new Microsoft.Win32.SafeHandles.SafeFileHandle(new IntPtr(101), true);
+            DiskQuery.DeviceIoControlOverride = (handle, ioctl, inBuf, outBuf) =>
+            {
+                // NVMe query is checked first; let NVMe fail to allow ATA check
+                uint protoType = BitConverter.ToUInt32(inBuf, 8);
+                if (protoType == 3) return false;
+
+                if (protoType == 1 && outBuf.Length >= 560)
+                {
+                    int payload = 48;
+                    // Attribute 194 at payload + 2: Temp = 36C
+                    outBuf[payload + 2] = 194;
+                    outBuf[payload + 2 + 3] = 100;
+                    outBuf[payload + 2 + 5] = 36;
+
+                    // Attribute 231 at payload + 14: Life = 98%
+                    outBuf[payload + 14] = 231;
+                    outBuf[payload + 14 + 3] = 98;
+
+                    // Attribute 241 at payload + 26: Total LBAs written = 20,000,000,000 (~9.3 TB)
+                    outBuf[payload + 26] = 241;
+                    ulong lbas = 20000000000UL;
+                    for (int b = 0; b < 6; b++)
+                    {
+                        outBuf[payload + 26 + 5 + b] = (byte)((lbas >> (b * 8)) & 0xFF);
+                    }
+
+                    return true;
+                }
+                return false;
+            };
+
+            var smart = DiskQuery.QuerySmartTelemetry(1, "Healthy");
+            smart.HealthStatus.Should().Be("Healthy");
+            smart.TemperatureC.Should().Be(36);
+            smart.RemainingLifePercent.Should().Be(98);
+            smart.TotalWrittenTb.Should().BeApproximately(9.3, 0.1);
+        }
+        finally
+        {
+            DiskQuery.CreateFileOverride = null;
+            DiskQuery.DeviceIoControlOverride = null;
+        }
+    }
+
+    [Fact]
+    public void DiskQuery_QuerySmartTelemetry_ReturnsDefaultHealthWhenHandleInvalid()
+    {
+        try
+        {
+            DiskQuery.CreateFileOverride = path => new Microsoft.Win32.SafeHandles.SafeFileHandle(IntPtr.Zero, true);
+            var smart = DiskQuery.QuerySmartTelemetry(99, "Warning");
+            smart.HealthStatus.Should().Be("Warning");
+            smart.TemperatureC.Should().BeNull();
+            smart.RemainingLifePercent.Should().BeNull();
+            smart.TotalWrittenTb.Should().BeNull();
+            smart.TotalReadTb.Should().BeNull();
+        }
+        finally
+        {
+            DiskQuery.CreateFileOverride = null;
+        }
+    }
 }
 
 

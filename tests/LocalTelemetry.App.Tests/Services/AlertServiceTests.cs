@@ -606,4 +606,33 @@ public class AlertServiceTests
         service.Evaluate(new TelemetrySnapshot { CpuTempPackageC = 95f });
         overlay.IsAlertActive(Metrics.CpuTemp).Should().BeFalse();
     }
+
+    [WpfFact]
+    public void Evaluate_DiskTempAlert_FiresAndRecovers()
+    {
+        var cfg = new AppSettings();
+        cfg.Alerts.Enabled = true;
+        cfg.Alerts.AlertDiskTemp = true;
+        cfg.Alerts.DiskTempMaxC = 70f;
+        cfg.Alerts.SustainedSecs = 0;
+
+        var (service, overlay, notifClient) = CreateService(cfg);
+
+        var snap = new TelemetrySnapshot
+        {
+            Disks = [new DiskSnapshot { Id = "disk0", Label = "NVMe 1", TemperatureC = 75 }]
+        };
+
+        service.Evaluate(snap);
+        overlay.IsAlertActive("disk_disk0_temp").Should().BeTrue();
+        _ = notifClient.Received(1).SendToastAsync(Arg.Is<string>(s => s.Contains("NVMe 1 Temperature")), Arg.Any<string>());
+
+        // Recovers when temp drops below threshold minus hysteresis (70 - 5 = 65°C)
+        var recoveredSnap = new TelemetrySnapshot
+        {
+            Disks = [new DiskSnapshot { Id = "disk0", Label = "NVMe 1", TemperatureC = 64 }]
+        };
+        service.Evaluate(recoveredSnap);
+        overlay.IsAlertActive("disk_disk0_temp").Should().BeFalse();
+    }
 }

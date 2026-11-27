@@ -33,6 +33,7 @@ internal static class NotifierLog
             {
                 _writer = null;
                 LastError = ex;
+                System.Diagnostics.Trace.WriteLine($"Failed to open notifier log file '{logPath}': {ex.Message}");
             }
         }
     }
@@ -52,6 +53,7 @@ internal static class NotifierLog
                 catch (Exception ex)
                 {
                     LastError = ex;
+                    System.Diagnostics.Trace.WriteLine($"Failed during notifier writer shutdown: {ex.Message}");
                 }
                 finally
                 {
@@ -92,6 +94,7 @@ internal static class NotifierLog
             catch (Exception writeEx)
             {
                 LastError = writeEx;
+                System.Diagnostics.Trace.WriteLine($"Failed to write notifier log entry: {writeEx.Message}");
             }
         }
     }

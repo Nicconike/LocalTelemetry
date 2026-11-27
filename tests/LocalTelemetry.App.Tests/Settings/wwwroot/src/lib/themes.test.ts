@@ -95,4 +95,16 @@ describe('themes.ts', () => {
         expect(defaultDark?.vars['--color-primary']).toBe('#0099b8');
         expect(defaultDark?.vars['--color-brand']).toBe('#0099b8');
     });
+
+    it('every theme should have unique primary and secondary accent colors without duplicates', () => {
+        const primaries = themes.map((t) => t.vars['--color-primary']);
+        const secondaries = themes.map((t) => t.vars['--color-secondary']);
+
+        expect(new Set(primaries).size).toBe(themes.length);
+        expect(new Set(secondaries).size).toBe(themes.length);
+
+        const oled = themes.find((t) => t.value === 'oled');
+        expect(oled?.vars['--color-primary']).toBe('#e11d48');
+        expect(oled?.vars['--color-secondary']).toBe('#fb7185');
+    });
 });

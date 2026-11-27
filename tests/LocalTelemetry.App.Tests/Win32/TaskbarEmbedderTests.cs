@@ -1572,13 +1572,22 @@ public class TaskbarEmbedderTests
             TaskbarEmbedder.FindWindowExOverride = null;
         }
 
-        // 11. GetAppListRightEdge with _taskBandHwnd set
-        typeof(TaskbarEmbedder).GetField("_taskBandHwnd", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, fakeTray.Handle);
+        // 11. GetAppListRightEdge with _taskBandHwnd set (with and without child buttons)
+        using var fakeBand = new Form { Bounds = new Rectangle(0, 1000, 1920, 48), FormBorderStyle = FormBorderStyle.None };
+        typeof(TaskbarEmbedder).GetField("_taskBandHwnd", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, fakeBand.Handle);
         typeof(TaskbarEmbedder).GetField("_cachedAppListRightEdge", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, -1);
         typeof(TaskbarEmbedder).GetField("_lastAppListQueryTicks", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, 0L);
         var queryAppBand = typeof(TaskbarEmbedder).GetMethod("GetAppListRightEdge", BindingFlags.NonPublic | BindingFlags.Instance);
         var bandRight = (int)queryAppBand?.Invoke(embedder, null)!;
-        bandRight.Should().Be(fakeTray.Right);
+        NativeMethods.GetWindowRect(fakeBand.Handle, out var fakeBandRect);
+        bandRight.Should().Be(fakeBandRect.Right);
+
+        // Taskband with buttons returns button edge
+        typeof(TaskbarEmbedder).GetField("_taskBandHwnd", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, fakeTray.Handle);
+        typeof(TaskbarEmbedder).GetField("_cachedAppListRightEdge", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, -1);
+        typeof(TaskbarEmbedder).GetField("_lastAppListQueryTicks", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, 0L);
+        var buttonBandRight = (int)queryAppBand?.Invoke(embedder, null)!;
+        buttonBandRight.Should().BeGreaterThan(0);
 
         // 12. UpdateWidgetsEdges branches (tray null vs tray valid)
         TaskbarEmbedder.LeftWidgetRightEdgeOverride = null;
@@ -2100,6 +2109,275 @@ public class TaskbarEmbedderTests
         finally
         {
             TaskbarEmbedder.InvalidateCaches();
+        }
+    }
+
+    [WpfFact]
+    public void TaskbarEmbedder_IsAdjacentTrayChild_And_ClusterLeft_Coverage()
+    {
+        var isAdjacentMethod = typeof(TaskbarEmbedder).GetMethod("IsAdjacentTrayChild", BindingFlags.NonPublic | BindingFlags.Static);
+        isAdjacentMethod.Should().NotBeNull();
+
+        using var trayForm = new Form { StartPosition = FormStartPosition.Manual, Bounds = new Rectangle(0, 0, 1920, 50) };
+        trayForm.Show();
+        using var childForm = new Form { StartPosition = FormStartPosition.Manual, Bounds = new Rectangle(1200, 0, 80, 50) };
+        childForm.Show();
+
+        NativeMethods.GetWindowRect(childForm.Handle, out var actualCr);
+        var trayRect = new NativeMethods.Rect { Left = 0, Top = 0, Right = actualCr.Right + 500, Bottom = 50 };
+        int clusterLeft = actualCr.Right + 10;
+
+        // Valid adjacent child
+        object[] args = [childForm.Handle, trayRect, clusterLeft, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, 0];
+        bool res = (bool)isAdjacentMethod.Invoke(null, args)!;
+        res.Should().BeTrue();
+        ((int)args[6]).Should().Be(actualCr.Left);
+
+        // App overlay window handle or title -> false (must not self-detect)
+        TaskbarEmbedder.ActiveOverlayHwnds.TryAdd(childForm.Handle, 0);
+        args = [childForm.Handle, trayRect, clusterLeft, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, 0];
+        ((bool)isAdjacentMethod.Invoke(null, args)!).Should().BeFalse();
+        TaskbarEmbedder.ActiveOverlayHwnds.TryRemove(childForm.Handle, out _);
+
+        childForm.Text = "LocalTelemetry_Overlay";
+        args = [childForm.Handle, trayRect, clusterLeft, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, 0];
+        ((bool)isAdjacentMethod.Invoke(null, args)!).Should().BeFalse();
+        childForm.Text = "MockChild";
+
+        // Same as rebar or trayNotify or clock -> false
+        args = [childForm.Handle, trayRect, clusterLeft, childForm.Handle, IntPtr.Zero, IntPtr.Zero, 0];
+        ((bool)isAdjacentMethod.Invoke(null, args)!).Should().BeFalse();
+
+        args = [childForm.Handle, trayRect, clusterLeft, IntPtr.Zero, childForm.Handle, IntPtr.Zero, 0];
+        ((bool)isAdjacentMethod.Invoke(null, args)!).Should().BeFalse();
+
+        args = [childForm.Handle, trayRect, clusterLeft, IntPtr.Zero, IntPtr.Zero, childForm.Handle, 0];
+        ((bool)isAdjacentMethod.Invoke(null, args)!).Should().BeFalse();
+
+        // Hidden window -> false
+        childForm.Visible = false;
+        args = [childForm.Handle, trayRect, clusterLeft, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, 0];
+        ((bool)isAdjacentMethod.Invoke(null, args)!).Should().BeFalse();
+        childForm.Visible = true;
+
+        // Horizontally not adjacent (too far left: actualCr.Right < clusterLeft - 20)
+        int farClusterLeft = actualCr.Right + 50;
+        args = [childForm.Handle, trayRect, farClusterLeft, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, 0];
+        ((bool)isAdjacentMethod.Invoke(null, args)!).Should().BeFalse();
+
+        // Not reasonable bounds (tray width too small so child exceeds 45% of width)
+        var narrowTrayRect = new NativeMethods.Rect { Left = 0, Top = actualCr.Top, Right = actualCr.Width + 10, Bottom = actualCr.Bottom };
+        args = [childForm.Handle, narrowTrayRect, clusterLeft, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, 0];
+        ((bool)isAdjacentMethod.Invoke(null, args)!).Should().BeFalse();
+
+        // Zero/negative width window handle (IntPtr.Zero) -> false
+        args = [IntPtr.Zero, trayRect, clusterLeft, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, 0];
+        ((bool)isAdjacentMethod.Invoke(null, args)!).Should().BeFalse();
+
+        // FindAdjacentClusterLeft with childForm as a child of trayForm
+        NativeMethods.SetParent(childForm.Handle, trayForm.Handle);
+        var findClusterMethod = typeof(TaskbarEmbedder).GetMethod("FindAdjacentClusterLeft", BindingFlags.NonPublic | BindingFlags.Static);
+        findClusterMethod.Should().NotBeNull();
+        int finalCluster = (int)findClusterMethod.Invoke(null, [trayForm.Handle, trayRect, clusterLeft, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero])!;
+        finalCluster.Should().BeLessThanOrEqualTo(clusterLeft);
+
+        trayForm.Close();
+        childForm.Close();
+    }
+
+    [WpfFact]
+    public void TaskbarEmbedder_RefactoredMethods_CompleteBranchCoverage()
+    {
+        var cfg = new AppSettings();
+        var embedder = new TaskbarEmbedder(cfg);
+
+        using var parentForm = new Form { Bounds = new Rectangle(0, 0, 1920, 48) };
+        using var bandForm = new Form { Bounds = new Rectangle(100, 0, 400, 48) };
+        parentForm.Show();
+        bandForm.Show();
+
+        typeof(TaskbarEmbedder).GetField("_parentHwnd", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, parentForm.Handle);
+        typeof(TaskbarEmbedder).GetField("_taskBandHwnd", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, bandForm.Handle);
+
+        // 1. QueryLegacyTaskBandRightEdge and LeftEdge with valid window
+        var queryRight = typeof(TaskbarEmbedder).GetMethod("QueryLegacyTaskBandRightEdge", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var queryLeft = typeof(TaskbarEmbedder).GetMethod("QueryLegacyTaskBandLeftEdge", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        ((int)queryRight.Invoke(embedder, null)!).Should().BeGreaterThan(0);
+        ((int)queryLeft.Invoke(embedder, null)!).Should().BeGreaterThanOrEqualTo(0);
+
+        // When taskband is IntPtr.Zero
+        typeof(TaskbarEmbedder).GetField("_taskBandHwnd", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, IntPtr.Zero);
+        ((int)queryRight.Invoke(embedder, null)!).Should().Be(-1);
+        ((int)queryLeft.Invoke(embedder, null)!).Should().Be(-1);
+
+        // 2. ResolveDynamicAppListRightEdge and LeftEdge automation overrides
+        var resolveRight = typeof(TaskbarEmbedder).GetMethod("ResolveDynamicAppListRightEdge", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var resolveLeft = typeof(TaskbarEmbedder).GetMethod("ResolveDynamicAppListLeftEdge", BindingFlags.NonPublic | BindingFlags.Instance)!;
+
+        try
+        {
+            TaskbarEmbedder.AppListRightEdgeAutomationOverride = _ => 999;
+            TaskbarEmbedder.AppListLeftEdgeAutomationOverride = _ => 111;
+            ((int)resolveRight.Invoke(embedder, null)!).Should().Be(999);
+            ((int)resolveLeft.Invoke(embedder, null)!).Should().Be(111);
+        }
+        finally
+        {
+            TaskbarEmbedder.AppListRightEdgeAutomationOverride = null;
+            TaskbarEmbedder.AppListLeftEdgeAutomationOverride = null;
+        }
+
+        // When overrides are null, scan taskbar fallback
+        int dynRight = (int)resolveRight.Invoke(embedder, null)!;
+        int dynLeft = (int)resolveLeft.Invoke(embedder, null)!;
+        dynRight.Should().BeInRange(-1, 1920);
+        dynLeft.Should().BeInRange(-1, 1920);
+
+        // 3. ResolveClientRightBoundary with valid boundary vs invalid (-1)
+        var resolveClientRight = typeof(TaskbarEmbedder).GetMethod("ResolveClientRightBoundary", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var parentRect = new NativeMethods.Rect { Left = 0, Top = 0, Right = 1920, Bottom = 48 };
+
+        typeof(TaskbarEmbedder).GetField("_trayLeftEdge", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, 1600);
+        var expectedPt = new NativeMethods.Point { X = 1600, Y = 0 };
+        NativeMethods.ScreenToClient(parentForm.Handle, ref expectedPt);
+        int clientRight = (int)resolveClientRight.Invoke(embedder, [parentRect])!;
+        clientRight.Should().Be(expectedPt.X);
+
+        typeof(TaskbarEmbedder).GetField("_trayLeftEdge", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, -1);
+        int fallbackRight = (int)resolveClientRight.Invoke(embedder, [parentRect])!;
+        fallbackRight.Should().BeGreaterThan(0);
+
+        // 4. FindRebarDeskBandRightBound with _trayLeftEdge == -1 vs valid
+        var findDeskBandBound = typeof(TaskbarEmbedder).GetMethod("FindRebarDeskBandRightBound", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        typeof(TaskbarEmbedder).GetField("_trayLeftEdge", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, -1);
+        int bound1 = (int)findDeskBandBound.Invoke(embedder, [500, 1920])!;
+        bound1.Should().Be(1920);
+
+        typeof(TaskbarEmbedder).GetField("_trayLeftEdge", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, 1500);
+        var expectedTrayPt = new NativeMethods.Point { X = 1500, Y = 0 };
+        NativeMethods.ScreenToClient(parentForm.Handle, ref expectedTrayPt);
+        int bound2 = (int)findDeskBandBound.Invoke(embedder, [500, 1920])!;
+        bound2.Should().Be(expectedTrayPt.X);
+
+        parentForm.Close();
+        bandForm.Close();
+    }
+
+    [WpfFact]
+    public void TaskbarEmbedder_ComputeBandLeftAlignedX_PlacementRight_NeverOverlapsAppButtonsWhenConstrained()
+    {
+        using var parentForm = new Form { Bounds = new Rectangle(0, 0, 1000, 48) };
+        var cfg = new AppSettings();
+        cfg.Overlay.Placement = "right";
+        cfg.Overlay.PlacementOffset = 5;
+
+        var embedder = new TaskbarEmbedder(cfg);
+        typeof(TaskbarEmbedder).GetField("_parentHwnd", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, parentForm.Handle);
+
+        try
+        {
+            TaskbarEmbedder.AppListRightEdgeOverride = () => 600;
+
+            var compute = typeof(TaskbarEmbedder).GetMethod("ComputeBandLeftAlignedX", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            // clientRightBoundary = 500, overlay width = 400.
+            // Available slot = 500 - 600 - 10 = 0px. Overlay is 400px.
+            int x = (int)compute.Invoke(embedder, [new Size(400, 30), 500])!;
+
+            var expectedPt = new NativeMethods.Point { X = 600, Y = 0 };
+            NativeMethods.ScreenToClient(parentForm.Handle, ref expectedPt);
+            int expectedX = Math.Max(0, expectedPt.X) + cfg.Overlay.PlacementOffset;
+
+            // Overlay must be clamped so it begins at or after appRight + offset, never overlapping app icons
+            x.Should().Be(expectedX);
+            embedder.IsTaskbarSpaceConstrained.Should().BeTrue();
+            embedder.AvailableSlotWidth.Should().Be(Math.Max(0, 500 - Math.Max(0, expectedPt.X) - (2 * cfg.Overlay.PlacementOffset)));
+        }
+        finally
+        {
+            TaskbarEmbedder.AppListRightEdgeOverride = null;
+        }
+    }
+
+    [WpfFact]
+    public void TaskbarEmbedder_ComputeBandWin10X_SpaceConstrained_ClampsWithoutOverlappingApps()
+    {
+        using var parentForm = new Form { Bounds = new Rectangle(0, 0, 1000, 40) };
+        using var bandForm = new Form { Bounds = new Rectangle(0, 0, 800, 40) };
+        parentForm.Show();
+        bandForm.Show();
+        NativeMethods.SetParent(bandForm.Handle, parentForm.Handle);
+
+        var cfg = new AppSettings();
+        cfg.Overlay.Placement = "right";
+        cfg.Overlay.PlacementOffset = 5;
+
+        var embedder = new TaskbarEmbedder(cfg);
+        typeof(TaskbarEmbedder).GetField("_parentHwnd", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, parentForm.Handle);
+        typeof(TaskbarEmbedder).GetField("_taskBandHwnd", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, bandForm.Handle);
+        typeof(TaskbarEmbedder).GetField("_isWin11", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, false);
+
+        try
+        {
+            TaskbarEmbedder.AppListRightEdgeOverride = () => 700;
+            var compute = typeof(TaskbarEmbedder).GetMethod("ComputeBandWin10X", BindingFlags.NonPublic | BindingFlags.Instance)!;
+
+            // Slot is parent width (800) - appRight (approx 536) - 2*offset (10) = 254px.
+            // Overlay width is 400px > 254px available.
+            var parentRect = new NativeMethods.Rect { Left = 0, Top = 0, Right = 800, Bottom = 40 };
+            int x = (int)compute.Invoke(embedder, [parentRect, new Size(400, 30)])!;
+
+            // Overlay must not overlap appRight; must be clamped to minRightX.
+            var pt = new NativeMethods.Point { X = 700, Y = 0 };
+            NativeMethods.ScreenToClient(parentForm.Handle, ref pt);
+            int expectedMinX = Math.Max(0, pt.X) + cfg.Overlay.PlacementOffset;
+
+            x.Should().Be(expectedMinX);
+            embedder.IsTaskbarSpaceConstrained.Should().BeTrue();
+            embedder.AvailableSlotWidth.Should().Be(Math.Max(0, 800 - Math.Max(0, pt.X) - (2 * cfg.Overlay.PlacementOffset)));
+        }
+        finally
+        {
+            TaskbarEmbedder.AppListRightEdgeOverride = null;
+            parentForm.Close();
+            bandForm.Close();
+        }
+    }
+
+    [WpfFact]
+    public void TaskbarEmbedder_CalculateAvailableSlotWidth_Win10Mode_ComputesExpectedWidth()
+    {
+        using var parentForm = new Form { Bounds = new Rectangle(0, 0, 1000, 40) };
+        using var bandForm = new Form { Bounds = new Rectangle(0, 0, 600, 40) };
+        parentForm.Show();
+        bandForm.Show();
+        NativeMethods.SetParent(bandForm.Handle, parentForm.Handle);
+
+        var cfg = new AppSettings();
+        cfg.Overlay.Placement = "right";
+        cfg.Overlay.PlacementOffset = 5;
+
+        var embedder = new TaskbarEmbedder(cfg);
+        typeof(TaskbarEmbedder).GetField("_parentHwnd", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, parentForm.Handle);
+        typeof(TaskbarEmbedder).GetField("_taskBandHwnd", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, bandForm.Handle);
+        typeof(TaskbarEmbedder).GetField("_isWin11", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(embedder, false);
+
+        try
+        {
+            TaskbarEmbedder.AppListRightEdgeOverride = () => 600;
+
+            NativeMethods.GetClientRect(parentForm.Handle, out var parentRect);
+            int slotWidth = embedder.CalculateAvailableSlotWidth();
+            var pt = new NativeMethods.Point { X = 600, Y = 0 };
+            NativeMethods.ScreenToClient(parentForm.Handle, ref pt);
+            int expected = Math.Max(0, parentRect.Width - Math.Max(0, pt.X) - (2 * cfg.Overlay.PlacementOffset));
+
+            slotWidth.Should().Be(expected);
+        }
+        finally
+        {
+            TaskbarEmbedder.AppListRightEdgeOverride = null;
+            parentForm.Close();
+            bandForm.Close();
         }
     }
 }

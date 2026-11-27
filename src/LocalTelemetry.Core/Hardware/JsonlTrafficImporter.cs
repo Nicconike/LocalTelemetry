@@ -45,9 +45,9 @@ public static class JsonlTrafficImporter
                 }
             }
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
-            // Fall back to line-by-line reading if parsing entire array fails
+            Diagnostics.Log.Debug(ex, "Failed to parse content as single JSON array, reading as line-by-line JSONL");
             ImportJsonLines(content, uniqueDays);
         }
     }
@@ -93,8 +93,9 @@ public static class JsonlTrafficImporter
 
             return TryParseElement(root, out record);
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
+            Diagnostics.Log.Debug(ex, "Failed to parse JSONL line as JSON document");
             return false;
         }
     }

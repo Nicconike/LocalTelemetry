@@ -517,4 +517,26 @@ public class TrayIconManagerTests
             System.Runtime.InteropServices.Marshal.FreeHGlobal(ptr);
         }
     }
+
+    [WpfFact]
+    public void TrayIconManager_ShowBalloonTip_ExercisesBranch()
+    {
+        using var tray = new TrayIconManager();
+        // SkipUiForTesting true branch
+        var actSkip = () => tray.ShowBalloonTip("Title", "Message");
+        actSkip.Should().NotThrow();
+
+        // SkipUiForTesting false branch
+        var priorSkip = TrayIconManager.SkipUiForTesting;
+        try
+        {
+            TrayIconManager.SkipUiForTesting = false;
+            var actShow = () => tray.ShowBalloonTip("Title", "Message");
+            actShow.Should().NotThrow();
+        }
+        finally
+        {
+            TrayIconManager.SkipUiForTesting = priorSkip;
+        }
+    }
 }

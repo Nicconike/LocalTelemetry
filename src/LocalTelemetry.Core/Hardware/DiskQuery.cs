@@ -28,6 +28,16 @@ public record DiskInfo
     public bool IsBootDrive { get; init; }
     /// <summary>Display-ready commercial capacity string (e.g. "1 TB", "512 GB").</summary>
     public string FormattedSize => SizeBytes.HasValue ? DiskQuery.FormatCommercialCapacity(SizeBytes.Value) : string.Empty;
+    /// <summary>Drive health status ("Healthy", "Warning", "Unhealthy").</summary>
+    public string HealthStatus { get; init; } = "Healthy";
+    /// <summary>Drive temperature in degrees Celsius, or null if unavailable.</summary>
+    public int? TemperatureC { get; init; }
+    /// <summary>Remaining drive life percentage (0-100), or null if unavailable.</summary>
+    public int? RemainingLifePercent { get; init; }
+    /// <summary>Total lifetime terabytes written, or null if unavailable.</summary>
+    public double? TotalWrittenTb { get; init; }
+    /// <summary>Total lifetime terabytes read, or null if unavailable.</summary>
+    public double? TotalReadTb { get; init; }
 }
 
 /// <summary>Queries physical disk information via WMI and IOCTL.</summary>
@@ -36,6 +46,13 @@ public static class DiskQuery
 {
     private const uint IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS = 0x00560000;
     private const uint IOCTL_STORAGE_QUERY_PROPERTY = 0x002D1400;
+
+    private const uint StorageAdapterProtocolSpecificProperty = 49;
+    private const uint ProtocolTypeAta = 1;
+    private const uint ProtocolTypeNvme = 3;
+    private const uint NvmeDataTypeLogPage = 2;
+    private const uint NvmeLogPageHealthInfo = 2;
+    private const uint AtaDataTypeLogPage = 2;
 
     private static readonly Lazy<ConcurrentDictionary<int, string>> _busTypeIoctlCache = new(() => new());
 
@@ -269,6 +286,7 @@ public static class DiskQuery
         var results = new List<DiskInfo>();
         int? bootIdx = GetBootDriveIndex();
         var msftMediaTypes = QueryMsftMediaTypes();
+        var msftHealthStatuses = QueryMsftHealthStatuses();
 
         try
         {
@@ -295,6 +313,11 @@ public static class DiskQuery
                     bool isBoot = bootIdx.HasValue && bootIdx.Value == idx;
                     string vendor = ExtractVendorFromModel(model);
 
+                    msftHealthStatuses.TryGetValue(idx.ToString(), out string? defaultHealth);
+                    defaultHealth ??= "Healthy";
+
+                    var smart = QuerySmartTelemetry(idx, defaultHealth);
+
                     results.Add(new DiskInfo
                     {
                         DiskIndex = idx,
@@ -305,6 +328,11 @@ public static class DiskQuery
                         DisplayType = displayType,
                         SizeBytes = (long?)size,
                         IsBootDrive = isBoot,
+                        HealthStatus = smart.HealthStatus,
+                        TemperatureC = smart.TemperatureC,
+                        RemainingLifePercent = smart.RemainingLifePercent,
+                        TotalWrittenTb = smart.TotalWrittenTb,
+                        TotalReadTb = smart.TotalReadTb,
                     });
                 }
             }
@@ -312,6 +340,51 @@ public static class DiskQuery
         catch (Exception ex) { Diagnostics.Log.Error(ex, "Failed to query physical drives"); }
 
         return results.OrderBy(d => d.DiskIndex).ToList();
+    }
+
+    private static Dictionary<string, string> QueryMsftHealthStatuses()
+    {
+        var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            using var searcher = new ManagementObjectSearcher(
+                @"root\Microsoft\Windows\Storage",
+                "SELECT DeviceId, HealthStatus FROM MSFT_PhysicalDisk");
+            using var coll = searcher.Get();
+            foreach (ManagementBaseObject mo in coll)
+            {
+                using (mo)
+                {
+                    string devId = mo["DeviceId"]?.ToString() ?? "";
+                    string health = ParseMsftHealthStatus(mo["HealthStatus"]);
+                    if (!string.IsNullOrEmpty(devId))
+                        dict[devId] = health;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Debug(ex, "WMI query for MSFT_PhysicalDisk HealthStatus failed; defaulting to Healthy");
+        }
+        return dict;
+    }
+
+    internal static string ParseMsftHealthStatus(object? rawHealth)
+    {
+        int h = rawHealth switch
+        {
+            int i => i,
+            ushort u => (int)u,
+            byte b => (int)b,
+            _ => 0
+        };
+        return h switch
+        {
+            0 => "Healthy",
+            1 => "Warning",
+            2 => "Unhealthy",
+            _ => "Healthy"
+        };
     }
 
     private static Dictionary<string, string> QueryMsftMediaTypes()
@@ -425,6 +498,159 @@ public static class DiskQuery
         _ when mediaType == "SSD" => "SSD",
         _ => busType
     };
+
+    internal record struct SmartTelemetry(
+        string HealthStatus,
+        int? TemperatureC,
+        int? RemainingLifePercent,
+        double? TotalWrittenTb,
+        double? TotalReadTb);
+
+    internal static SmartTelemetry QuerySmartTelemetry(int diskIndex, string defaultHealth)
+    {
+        string path = $@"\\.\PhysicalDrive{diskIndex}";
+        using var handle = CreateFileOverride != null
+            ? CreateFileOverride(path)
+            : NativeMethods.CreateFile(path, 0,
+                NativeMethods.FILE_SHARE_READ | NativeMethods.FILE_SHARE_WRITE,
+                IntPtr.Zero, NativeMethods.OPEN_EXISTING, 0, IntPtr.Zero);
+
+        if (handle is null || handle.IsInvalid)
+        {
+            return new SmartTelemetry(defaultHealth, null, null, null, null);
+        }
+
+        var nvme = QueryNvmeSmart(handle, defaultHealth);
+        if (nvme.HasValue) return nvme.Value;
+
+        var ata = QueryAtaSmart(handle, defaultHealth);
+        if (ata.HasValue) return ata.Value;
+
+        return new SmartTelemetry(defaultHealth, null, null, null, null);
+    }
+
+    internal static SmartTelemetry? QueryNvmeSmart(SafeFileHandle handle, string defaultHealth)
+    {
+        int queryHeaderSize = 8;
+        int protocolDataSize = 40;
+        int payloadSize = 512;
+        int totalBufferSize = queryHeaderSize + protocolDataSize + payloadSize;
+
+        byte[] inBuffer = new byte[totalBufferSize];
+        byte[] outBuffer = new byte[totalBufferSize];
+
+        BitConverter.GetBytes(StorageAdapterProtocolSpecificProperty).CopyTo(inBuffer, 0);
+        BitConverter.GetBytes(0u).CopyTo(inBuffer, 4);
+
+        BitConverter.GetBytes(ProtocolTypeNvme).CopyTo(inBuffer, 8);
+        BitConverter.GetBytes(NvmeDataTypeLogPage).CopyTo(inBuffer, 12);
+        BitConverter.GetBytes(NvmeLogPageHealthInfo).CopyTo(inBuffer, 16);
+        BitConverter.GetBytes((uint)protocolDataSize).CopyTo(inBuffer, 24);
+        BitConverter.GetBytes((uint)payloadSize).CopyTo(inBuffer, 28);
+
+        bool success = DeviceIoControlOverride != null
+            ? DeviceIoControlOverride(handle, IOCTL_STORAGE_QUERY_PROPERTY, inBuffer, outBuffer)
+            : NativeMethods.DeviceIoControl(handle, IOCTL_STORAGE_QUERY_PROPERTY,
+                inBuffer, (uint)totalBufferSize, outBuffer, (uint)totalBufferSize, out uint _, IntPtr.Zero);
+
+        if (!success) return null;
+
+        int payload = queryHeaderSize + protocolDataSize;
+        if (payload + payloadSize > outBuffer.Length) return null;
+
+        byte critWarn = outBuffer[payload];
+        ushort tempK = BitConverter.ToUInt16(outBuffer, payload + 1);
+        int? tempC = tempK > 273 ? tempK - 273 : null;
+        byte percentUsed = outBuffer[payload + 5];
+        int remainingLife = Math.Clamp(100 - (int)percentUsed, 0, 100);
+
+        ulong readUnits = BitConverter.ToUInt64(outBuffer, payload + 32);
+        double totalReadTb = Math.Round((readUnits * 1000.0 * 512.0) / (1024.0 * 1024.0 * 1024.0 * 1024.0), 1);
+
+        ulong writeUnits = BitConverter.ToUInt64(outBuffer, payload + 48);
+        double totalWrittenTb = Math.Round((writeUnits * 1000.0 * 512.0) / (1024.0 * 1024.0 * 1024.0 * 1024.0), 1);
+
+        string health = critWarn == 0 ? defaultHealth : "Warning";
+
+        return new SmartTelemetry(health, tempC, remainingLife, totalWrittenTb, totalReadTb);
+    }
+
+    internal static SmartTelemetry? QueryAtaSmart(SafeFileHandle handle, string defaultHealth)
+    {
+        int queryHeaderSize = 8;
+        int protocolDataSize = 40;
+        int payloadSize = 512;
+        int totalBufferSize = queryHeaderSize + protocolDataSize + payloadSize;
+
+        byte[] inBuffer = new byte[totalBufferSize];
+        byte[] outBuffer = new byte[totalBufferSize];
+
+        BitConverter.GetBytes(StorageAdapterProtocolSpecificProperty).CopyTo(inBuffer, 0);
+        BitConverter.GetBytes(0u).CopyTo(inBuffer, 4);
+
+        BitConverter.GetBytes(ProtocolTypeAta).CopyTo(inBuffer, 8);
+        BitConverter.GetBytes(AtaDataTypeLogPage).CopyTo(inBuffer, 12);
+        BitConverter.GetBytes(0x30u).CopyTo(inBuffer, 16);
+        BitConverter.GetBytes((uint)protocolDataSize).CopyTo(inBuffer, 24);
+        BitConverter.GetBytes((uint)payloadSize).CopyTo(inBuffer, 28);
+
+        bool success = DeviceIoControlOverride != null
+            ? DeviceIoControlOverride(handle, IOCTL_STORAGE_QUERY_PROPERTY, inBuffer, outBuffer)
+            : NativeMethods.DeviceIoControl(handle, IOCTL_STORAGE_QUERY_PROPERTY,
+                inBuffer, (uint)totalBufferSize, outBuffer, (uint)totalBufferSize, out uint _, IntPtr.Zero);
+
+        if (!success) return null;
+
+        int payload = queryHeaderSize + protocolDataSize;
+        if (payload + payloadSize > outBuffer.Length) return null;
+
+        int? tempC = null;
+        int? life = null;
+        double? writtenTb = null;
+        double? readTb = null;
+        string health = defaultHealth;
+
+        for (int i = payload + 2; i + 12 <= payload + payloadSize && i < payload + 362; i += 12)
+        {
+            byte id = outBuffer[i];
+            if (id == 0) continue;
+            byte normValue = outBuffer[i + 3];
+            ulong raw = 0;
+            for (int b = 0; b < 6; b++)
+            {
+                raw |= ((ulong)outBuffer[i + 5 + b]) << (b * 8);
+            }
+
+            if ((id == 194 || id == 190) && tempC == null)
+            {
+                int t = (int)(raw & 0xFF);
+                if (t > 0 && t < 120) tempC = t;
+            }
+            else if ((id == 231 || id == 202 || id == 232) && life == null)
+            {
+                life = Math.Clamp((int)normValue, 0, 100);
+            }
+            else if (id == 241 && writtenTb == null)
+            {
+                writtenTb = Math.Round((raw * 512.0) / (1024.0 * 1024.0 * 1024.0 * 1024.0), 1);
+            }
+            else if (id == 242 && readTb == null)
+            {
+                readTb = Math.Round((raw * 512.0) / (1024.0 * 1024.0 * 1024.0 * 1024.0), 1);
+            }
+            else if (id == 5 && raw > 10)
+            {
+                health = "Warning";
+            }
+        }
+
+        if (tempC != null || life != null || writtenTb != null || readTb != null)
+        {
+            return new SmartTelemetry(health, tempC, life, writtenTb, readTb);
+        }
+
+        return null;
+    }
 
     // Marshal helpers
     private static byte[] StructToBytes<T>(T obj) where T : struct

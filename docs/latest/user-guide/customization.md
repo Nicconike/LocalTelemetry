@@ -15,7 +15,7 @@ The settings panel is organized into 10 dedicated tabs matching the exact naviga
 
 - **Start with Windows**: Automatically launches LocalTelemetry at Windows logon using a Windows Task Scheduler task (`LocalTelemetry Startup`) running with elevated rights, avoiding UAC prompts on reboot.
 - **Show System Tray Icon**: Toggle whether the application icon is displayed in the Windows notification area. When disabled, LocalTelemetry operates exclusively through the taskbar overlay. This toggle is disabled if the overlay is hidden to prevent accidental interface lockout.
-- **Polling Interval**: Set hardware refresh speed to `0.5 s`, `1 s`, `2 s`, or `5 s`.
+- **Polling Interval**: Set hardware refresh speed to `1 s`, `2 s`, `3 s`, or `5 s`.
 - **Temperature Units**: Toggle **Show Temperatures in °F** to switch between Celsius (`°C`) and Fahrenheit (`°F`).
 
 ![General Settings Tab](/images/general-settings.png)
@@ -108,7 +108,7 @@ The settings panel is organized into 10 dedicated tabs matching the exact naviga
 
 ### :triangle-alert: Alerts
 
-- **Hardware Threshold Limits**: Configure warning triggers for CPU (Usage %, Temp, Frequency throttling, Package Power), RAM (Usage %), GPU (Usage %, VRAM, Temp, Frequency throttling, Board Power), Network (Daily and Monthly bandwidth quotas), and Battery (Low charge %). When enabled for the first time, only CPU Temp (90°C) is active by default.
+- **Hardware Threshold Limits**: Configure warning triggers for CPU (Usage %, Temp, Frequency throttling, Package Power), RAM (Usage %), GPU (Usage %, VRAM, Temp, Frequency throttling, Board Power), Storage (Disk Temp), Network (Daily and Monthly bandwidth quotas), and Battery (Low charge %). When enabled for the first time, only CPU Temp (90°C) is active by default.
 - **Sustained Duration Filter**: Configure **Sustained breach duration** (`1 s` to `10 s`, default: `3 s`) to ignore momentary turbo spikes.
 - **Visual In-Overlay Highlights**: Sustained breaches highlight the affected metric in Coral Red (`#FF4444`) on the taskbar overlay until normalized.
 - **10°C Thermal Hysteresis**: Keeps temperature alerts active until the sensor cools at least 10°C below its configured threshold to prevent flapping.
@@ -127,7 +127,7 @@ The settings panel is organized into 10 dedicated tabs matching the exact naviga
   - **Processor (CPU)**: Processor model string, CPU vendor brand, physical core count, logical thread count, base clock frequency (GHz), maximum turbo boost frequency (GHz), socket designation (e.g. `Socket LGA 1700`, `Socket AM5`), and thermal design power (TDP in Watts).
   - **Memory (RAM)**: Total installed RAM (with usable capacity in GB), memory manufacturer, clock speed (e.g. `5600 MT/s` or configured speed with rated SPD speed when different, such as `4800 MT/s (rated 6000 MT/s)`), memory generation type (e.g. `DDR5`, `DDR4`), number of populated module slots, and individual capacity and speed breakdown per module (`Module 1`, `Module 2`, etc.).
   - **Graphics (GPU)**: Detected graphics cards labeled as `Dedicated` or `Integrated`, GPU model name, dedicated VRAM capacity (GB), installed driver version, and board TDP power limit (W).
-  - **Storage**: Discovered physical drives indexed sequentially (`Disk 1`, `Disk 2`, etc.) with a blue `Boot` badge for the OS drive, drive model name, storage capacity, and connection bus type (`[NVMe]`, `[SATA]`, `[SCSI]`, or `[DISK]`).
+  - **Storage**: Discovered physical drives indexed sequentially (`Disk 1`, `Disk 2`, etc.) with a blue `Boot` badge for the OS drive, drive model name, storage capacity, connection bus type (`[NVMe]`, `[SATA]`, `[SCSI]`, or `[DISK]`), real-time health badges, remaining life percentage, and cumulative lifetime writes (TBW) and reads (TBR).
   - **Network**: Discovered active network adapters (`Adapter` name for each physical or virtual connection).
   - **Battery** *(Laptops only)*: Detected battery manufacturer, device name / model identifier, factory designed capacity, current full charge capacity, battery health percentage, wear level percentage, and completed charge cycle count.
 
@@ -136,14 +136,33 @@ The settings panel is organized into 10 dedicated tabs matching the exact naviga
 
 ### :swatch-book: Appearance
 
-- **Window Themes**: Select from 9 curated theme presets with both dark and light modes: Default, Midnight, Emerald, Amethyst, Rose, Amber, OLED Black, Nord, and Cyberpunk.
-- **Metric Color Customization**: Set individual hex colors for each hardware metric (CPU, GPU, RAM, Disks, Network, Battery) using color pickers or hex inputs.
-- **Hardware Group Colors**: Apply unified color overrides across entire component sensor groups.
-- **Follow Windows Theme**: Synchronize overlay transparency key color and contrast with the active Windows theme.
-- **Reset All to Defaults**: Reset metric colors back to the default vendor-detected color scheme.
+- **Window Themes**: Choose from 18 distinct themes across 9 Dark and Light pairs:
+
+| Theme | Background | Primary Accent | Secondary Accent |
+| :--- | :--- | :--- | :--- |
+| **Default Dark** | `#171614` | `#0099b8` | `#22d3ee` |
+| **Default Light** | `#f5f4f0` | `#00738c` | `#0e7490` |
+| **Midnight Blue** | `#0a0e17` | `#2563eb` | `#818cf8` |
+| **Midnight Light** | `#f0f4f9` | `#1d4ed8` | `#6366f1` |
+| **Forest Green** | `#0d1712` | `#16a34a` | `#84cc16` |
+| **Forest Light** | `#f1f6f2` | `#15803d` | `#65a30d` |
+| **Ocean Teal** | `#07151a` | `#0d9488` | `#2dd4bf` |
+| **Ocean Light** | `#edf7f8` | `#0f766e` | `#14b8a6` |
+| **Royal Purple** | `#130f1d` | `#9333ea` | `#c084fc` |
+| **Royal Light** | `#f5f0fa` | `#7e22ce` | `#a855f7` |
+| **Slate** | `#141517` | `#d97706` | `#ea580c` |
+| **Slate Light** | `#f2f3f5` | `#b45309` | `#c2410c` |
+| **OLED Black** | `#000000` | `#e11d48` | `#fb7185` |
+| **OLED Light** | `#ffffff` | `#09090b` | `#71717a` |
+| **Nord** | `#242933` | `#5e81ac` | `#88c0d0` |
+| **Nord Light** | `#e5e9f0` | `#4c6e96` | `#81a1c1` |
+| **Cyberpunk** | `#09090b` | `#ff0055` | `#e0e722` |
+| **Cyberpunk Light** | `#fdf4f6` | `#c026d3` | `#ec4899` |
+
+- **Taskbar Metric Colors**: Customize individual sensor colors, apply group overrides, or enable **Follow Windows Theme** to match taskbar contrast automatically.
 
 ![Appearance Settings Tab](/images/appearance-settings.png)
-*Appearance tab for customizing window themes, per-metric colors, and component group palettes.*
+*Appearance tab for customizing window themes and taskbar metric colors.*
 
 ### :info: About
 

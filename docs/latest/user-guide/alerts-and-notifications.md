@@ -61,6 +61,10 @@ All other sensor alerts remain disabled until you turn them on. You can adjust o
 - **GPU Frequency**: Low-threshold warning that triggers when GPU core clocks drop **below** the minimum target (`100 MHz` to `2000 MHz`) due to graphics throttling.
 - **GPU Power**: Alerts when total board power draw exceeds the wattage threshold (`20 W` to `400 W`).
 
+### :hard-drive: Storage Disk Alerts
+
+- **Disk Temperature**: Alerts when any monitored physical drive temperature exceeds the configured safety threshold (`45°C` to `90°C`, default `70°C`). The notification indicates the specific disk number and temperature.
+
 ### :wifi: Network Bandwidth Quotas
 
 - **Daily Internet Usage**: Alerts when total transferred data across the active network adapter exceeds your daily budget (`5 GB` to `500 GB`).
@@ -83,14 +87,13 @@ To prevent false alarms and notification flapping, LocalTelemetry implements sta
 Momentary CPU turbo boosts can exceed thermal targets for 1 to 2 seconds during application startup. LocalTelemetry requires a sensor to breach its threshold continuously for a sustained duration before triggering notifications.
 Configure this duration with the **Sustained breach duration** slider (`1 s` to `10 s`, default: `3 s`). Transient spikes below this duration are ignored.
 
-### :thermometer-snowflake: 10°C Thermal Normalization Hysteresis
+### :thermometer-snowflake: Thermal Normalization Hysteresis
 
-When a temperature breach triggers an alert, the warning state remains active until temperature drops at least **10°C below** the threshold:
+When a temperature breach triggers an alert, the warning state remains active until the sensor cools below the threshold:
 
-- For example, if CPU Temp threshold is `90°C`, the alert triggers when temperature stays at or above 90°C for 3 seconds.
-- The alert clears and the Coral Red overlay color resets only when CPU temperature cools to **80°C or below**.
-- This hysteresis prevents repeated notifications when temperatures fluctuate rapidly near the limit.
-- Non-temperature metrics (Usage, Power, Battery) use a 2-unit hysteresis band.
+- **CPU & GPU Temperatures**: 10°C hysteresis band (e.g., at 90°C threshold, clears when cooling to 80°C or below).
+- **Disk Temperatures**: 5°C hysteresis band (e.g., at 70°C threshold, clears when cooling to 65°C or below) suited for narrower storage margins.
+- **Non-Temperature Metrics** (Usage, Power, Battery): 2-unit hysteresis band.
 
 ### :file-text: Structured Alert Audit Logging
 

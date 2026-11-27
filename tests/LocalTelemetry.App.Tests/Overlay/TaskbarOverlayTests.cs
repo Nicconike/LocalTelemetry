@@ -361,6 +361,43 @@ public class TaskbarOverlayTests
     }
 
     [WpfFact]
+    public void TaskbarOverlay_MeasureSize_AutoScalesDown_WhenConstrained()
+    {
+        var cfg = new AppSettings();
+        cfg.Overlay.Visible = true;
+        cfg.Overlay.Columns = [
+            [Metrics.CpuPct, Metrics.RamPct],
+            [Metrics.GpuPct, Metrics.NetDown],
+            [Metrics.GpuTemp, Metrics.NetUp]
+        ];
+
+        var embedder = new TaskbarEmbedder(cfg);
+        using var overlay = new TaskbarOverlay(cfg, embedder);
+
+        overlay.Show();
+
+        var measureSize = typeof(TaskbarOverlay).GetMethod("MeasureSize", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var unconstrained = (Size)measureSize.Invoke(overlay, null)!;
+
+        // Simulate slot constrained to 200px
+        typeof(TaskbarEmbedder).GetProperty(nameof(TaskbarEmbedder.AvailableSlotWidth))!
+            .GetSetMethod(true)!.Invoke(embedder, [200]);
+        typeof(TaskbarEmbedder).GetProperty(nameof(TaskbarEmbedder.IsTaskbarSpaceConstrained))!
+            .GetSetMethod(true)!.Invoke(embedder, [true]);
+
+        var constrainedSz = (Size)measureSize.Invoke(overlay, null)!;
+        constrainedSz.Width.Should().BeLessThan(unconstrained.Width);
+
+        // Simulate slot constrained to 0px
+        typeof(TaskbarEmbedder).GetProperty(nameof(TaskbarEmbedder.AvailableSlotWidth))!
+            .GetSetMethod(true)!.Invoke(embedder, [0]);
+        var zeroSlotSz = (Size)measureSize.Invoke(overlay, null)!;
+        zeroSlotSz.Width.Should().BeLessThan(unconstrained.Width);
+
+        overlay.Hide();
+    }
+
+    [WpfFact]
     public void TaskbarOverlay_GetDiskLabel_FormatsSingleAndMultipleDisksCorrectly()
     {
         var cfg = new AppSettings();

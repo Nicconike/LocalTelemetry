@@ -239,22 +239,84 @@
                 <div class="sec-header">Storage</div>
                 {#if info.disks?.length}
                     {#each info.disks as disk, i}
-                        <div class="hw-row">
+                        <div class="hw-row disk-row">
                             <span class="hw-label">
                                 Disk {i + 1}
                                 {#if disk.boot}
                                     <span class="boot-badge">Boot</span>
                                 {/if}
                             </span>
-                            <span class="hw-value" title={disk.model}>
-                                {disk.model}
-                                {#if disk.formattedSize}
-                                    ({disk.formattedSize}){:else if disk.sizeGb}
-                                    ({disk.sizeGb} GB){/if}
-                                {#if disk.displayType}
-                                    [{disk.displayType}]{:else if disk.busType}
-                                    [{busTypeToLabel(disk.busType)}]{/if}
-                            </span>
+                            <div class="disk-info-col">
+                                <span class="hw-value" title={disk.model}>
+                                    {disk.model}
+                                    {#if disk.formattedSize}
+                                        ({disk.formattedSize}){:else if disk.sizeGb}
+                                        ({disk.sizeGb} GB){/if}
+                                    {#if disk.displayType}
+                                        [{disk.displayType}]{:else if disk.busType}
+                                        [{busTypeToLabel(disk.busType)}]{/if}
+                                </span>
+                                {#if disk.health || disk.remainingLifePercent != null || disk.totalWrittenTb != null || disk.totalReadTb != null}
+                                    <div class="disk-meta">
+                                        {#if disk.health || disk.remainingLifePercent != null}
+                                            <div class="disk-meta-line">
+                                                {#if disk.health}
+                                                    <span
+                                                        class="health-badge"
+                                                        class:warn={disk.health ===
+                                                            "Warning"}
+                                                        class:bad={disk.health ===
+                                                            "Unhealthy"}
+                                                    >
+                                                        {disk.health}
+                                                    </span>
+                                                {/if}
+                                                {#if disk.remainingLifePercent != null}
+                                                    <span class="disk-sub"
+                                                        ><span
+                                                            class="disk-sub-val"
+                                                            >{disk.remainingLifePercent}%</span
+                                                        > life</span
+                                                    >
+                                                {/if}
+                                            </div>
+                                        {/if}
+                                        {#if disk.totalWrittenTb != null || disk.totalReadTb != null}
+                                            <div class="disk-meta-line">
+                                                {#if disk.totalWrittenTb != null}
+                                                    <span class="disk-sub"
+                                                        ><span
+                                                            class="disk-sub-label"
+                                                            >Total Writes:</span
+                                                        >
+                                                        <span
+                                                            class="disk-sub-val"
+                                                            >{disk.totalWrittenTb} TBW</span
+                                                        ></span
+                                                    >
+                                                {/if}
+                                                {#if disk.totalWrittenTb != null && disk.totalReadTb != null}
+                                                    <span class="disk-dot"
+                                                        >•</span
+                                                    >
+                                                {/if}
+                                                {#if disk.totalReadTb != null}
+                                                    <span class="disk-sub"
+                                                        ><span
+                                                            class="disk-sub-label"
+                                                            >Total Reads:</span
+                                                        >
+                                                        <span
+                                                            class="disk-sub-val"
+                                                            >{disk.totalReadTb} TBR</span
+                                                        ></span
+                                                    >
+                                                {/if}
+                                            </div>
+                                        {/if}
+                                    </div>
+                                {/if}
+                            </div>
                         </div>
                     {/each}
                 {:else}
@@ -422,5 +484,62 @@
         border-radius: 3px;
         margin-left: 4px;
         vertical-align: middle;
+    }
+    .disk-row {
+        align-items: flex-start;
+        padding: var(--space-2) 0;
+    }
+    .disk-info-col {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        min-width: 0;
+    }
+    .disk-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        margin-top: 2px;
+    }
+    .disk-meta-line {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        font-size: var(--text-xs);
+        line-height: 1.4;
+    }
+    .health-badge {
+        font-size: 10px;
+        font-weight: 600;
+        padding: 1px 6px;
+        border-radius: 3px;
+        background: rgba(34, 197, 94, 0.15);
+        color: #22c55e;
+        letter-spacing: 0.02em;
+    }
+    .health-badge.warn {
+        background: rgba(234, 179, 8, 0.15);
+        color: #eab308;
+    }
+    .health-badge.bad {
+        background: rgba(239, 68, 68, 0.15);
+        color: #ef4444;
+    }
+    .disk-sub {
+        font-size: 11px;
+        color: var(--color-text-secondary, #cbd5e1);
+        font-weight: 500;
+    }
+    .disk-sub-label {
+        color: var(--color-text-muted, #94a3b8);
+    }
+    .disk-sub-val {
+        color: var(--color-text, #f1f5f9);
+        font-weight: 600;
+    }
+    .disk-dot {
+        font-size: 10px;
+        color: var(--color-text-muted, #94a3b8);
+        opacity: 0.8;
     }
 </style>

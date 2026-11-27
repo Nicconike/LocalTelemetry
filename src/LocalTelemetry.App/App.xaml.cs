@@ -899,6 +899,7 @@ public sealed partial class App : WpfApplication
         };
         _overlay.OnExitRequested = () => QuitApp();
         _overlay.OnDoubleClick += HandleOverlayDoubleClickAction;
+        _overlay.TaskbarSpaceConstraintChanged += HandleTaskbarSpaceConstraintChanged;
     }
 
     private void ShowTrayContextMenu(System.Drawing.Point pt)
@@ -967,6 +968,45 @@ public sealed partial class App : WpfApplication
         };
         _overlayManager.OnExitRequested = () => QuitApp();
         _overlayManager.OnDoubleClick += HandleOverlayDoubleClickAction;
+        _overlayManager.TaskbarSpaceConstraintChanged += HandleTaskbarSpaceConstraintChanged;
+    }
+
+    private bool _spaceWarningFired;
+    internal bool SpaceWarningFired => _spaceWarningFired;
+    private long _lastSpaceWarningTicks;
+
+    internal void HandleTaskbarSpaceConstraintChanged(bool constrained, int slotWidth)
+    {
+        if (!constrained)
+        {
+            if (slotWidth > 500)
+            {
+                _spaceWarningFired = false;
+            }
+            return;
+        }
+
+        long now = Stopwatch.GetTimestamp();
+        if (_spaceWarningFired && (now - _lastSpaceWarningTicks) < (Stopwatch.Frequency * 60))
+        {
+            return;
+        }
+        _spaceWarningFired = true;
+        _lastSpaceWarningTicks = now;
+
+        string title = slotWidth <= 0 ? "Taskbar Space Full" : "Taskbar Space Constrained";
+        string body = slotWidth <= 0
+            ? "There is no space on your taskbar for the telemetry overlay. Consider unpinning apps or hiding metrics in Settings."
+            : $"Taskbar slot is narrow ({slotWidth}px). LocalTelemetry has auto-scaled down to fit.";
+
+        _tray?.ShowBalloonTip(title, body, ToolTipIcon.Warning);
+
+        ForceLaunchNotifier();
+        if (_notifierProcess is { HasExited: false } || NotifierLauncherAction is not null)
+        {
+            _notifClient?.SendToastAsync(title, body, "taskbar_space_warning")
+                .ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
+        }
     }
 
     private void HandleOverlayDoubleClickAction(string action)
@@ -1298,7 +1338,7 @@ public sealed partial class App : WpfApplication
 
     private void SyncMonitorInterval()
     {
-        int ms = Math.Max(100, _cfg.Monitoring.PollIntervalMs);
+        int ms = Math.Max(1000, _cfg.Monitoring.PollIntervalMs);
         if (ms != _lastPollIntervalMs)
         {
             _lastPollIntervalMs = ms;
@@ -1339,6 +1379,17 @@ public sealed partial class App : WpfApplication
     {
         if (_notifierLaunched) return;
         if (_cfg != null && (!_cfg.Alerts.Enabled || !_cfg.Alerts.ShowToastNotif)) return;
+        LaunchNotifierProcess();
+    }
+
+    internal void ForceLaunchNotifier()
+    {
+        if (_notifierLaunched) return;
+        LaunchNotifierProcess();
+    }
+
+    private void LaunchNotifierProcess()
+    {
         try
         {
             string notifierPath = Path.Combine(

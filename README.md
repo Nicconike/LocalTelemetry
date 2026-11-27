@@ -74,48 +74,6 @@
 
 ---
 
-## Table of Contents
-
-- [Table of Contents](#table-of-contents)
-- [Quick Install](#quick-install)
-- [Why LocalTelemetry?](#why-localtelemetry)
-    - [Feature Comparison](#feature-comparison)
-- [Key Features](#key-features)
-- [Visual Overview](#visual-overview)
-    - [1. Application Walkthrough](#1-application-walkthrough)
-    - [2. Live Taskbar Overlay](#2-live-taskbar-overlay)
-    - [3. Settings \& Customization](#3-settings--customization)
-    - [4. Traffic History Calendar](#4-traffic-history-calendar)
-- [Installation Options](#installation-options)
-    - [Option 1: Setup Wizard Installer (Recommended)](#option-1-setup-wizard-installer-recommended)
-    - [Option 2: Scoop Package Manager](#option-2-scoop-package-manager)
-    - [Option 3: Portable ZIP](#option-3-portable-zip)
-- [Verifying Downloads \& Checksums](#verifying-downloads--checksums)
-    - [1. SHA-256 Checksum Verification](#1-sha-256-checksum-verification)
-    - [2. Sigstore Cosign Keyless Signatures](#2-sigstore-cosign-keyless-signatures)
-    - [3. SLSA Build Provenance](#3-slsa-build-provenance)
-- [System Requirements](#system-requirements)
-- [Support \& Community](#support--community)
-- [License](#license)
-
----
-
-## Quick Install
-
-Download and run the installer directly from GitHub Releases:
-
-1. Download **`LocalTelemetrySetup.exe`** from [**Latest GitHub Releases**](https://github.com/Nicconike/LocalTelemetry/releases/latest).
-2. Run the installer and follow the setup wizard instructions. LocalTelemetry starts automatically.
-
-You can also install via [**Scoop**](#option-2-scoop-package-manager):
-
-```powershell
-scoop bucket add localtelemetry https://github.com/Nicconike/LocalTelemetry
-scoop install localtelemetry
-```
-
----
-
 ## Why LocalTelemetry?
 
 Typical vendor software suites consume hundreds of megabytes of RAM across multiple background services. Windows 11 also removed support for legacy taskbar deskbands.
@@ -257,14 +215,14 @@ gh attestation verify .\LocalTelemetry-win-x64.zip --repo Nicconike/LocalTelemet
 
 ## System Requirements
 
-| Requirement | Minimum Specification | Recommended Specification |
-| :--- | :--- | :--- |
-| **Operating System** | **Windows 10** (64-bit, v2004+ / build 19041) | **Windows 11** (64-bit, v22H2+) |
-| **Architecture** | **x86-64 / AMD64** (Intel / AMD) | **x86-64 / AMD64** |
-| **Permissions** | **Administrator** *(Required for PawnIO MSR kernel driver)* | **Administrator** |
-| **System RAM** | **2 GB RAM** | **4 GB RAM or higher** |
-| **App Footprint** | **~15–30 MB RAM** (background taskbar monitoring) | **~40–60 MB RAM** (when Settings window is active) |
-| **Runtimes** | **.NET 10 Desktop Runtime** & **WebView2** | **.NET 10 Desktop Runtime** & **WebView2** |
+| Requirement | Specification |
+| :--- | :--- |
+| **Operating System** | **Windows 10** (64-bit, v2004+ / build 19041) or **Windows 11** (64-bit, v22H2+) |
+| **Architecture** | **x86-64 / AMD64** (Intel / AMD) |
+| **Permissions** | **Administrator** *(Required for PawnIO MSR kernel driver)* |
+| **System RAM** | **2 GB RAM** minimum (**4 GB RAM or higher** recommended) |
+| **App Footprint** | **~15–30 MB RAM** (background taskbar monitoring) / **~40–60 MB RAM** (when Settings window is active) |
+| **Runtimes** | **.NET 10 Desktop Runtime** & **WebView2** |
 
 ---
 

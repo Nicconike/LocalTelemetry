@@ -501,7 +501,7 @@
         padding: var(--space-2) var(--space-4);
         border: none;
         border-radius: var(--radius-md);
-        background: var(--color-accent, #3b82f6);
+        background: var(--color-primary, #3b82f6);
         color: #ffffff;
         font-size: var(--text-sm);
         font-weight: 500;
@@ -555,7 +555,7 @@
         font-weight: 500;
     }
     .nav-modal .btn-save {
-        background: var(--color-accent, #3b82f6);
+        background: var(--color-primary, #3b82f6);
         color: #ffffff;
         border: none;
     }

@@ -46,6 +46,8 @@ public sealed class HardwareMonitor : IDisposable
     private bool _nicPrimed;
     private string _primaryDiskType = string.Empty;
     private List<string> _diskBusTypes = [];
+    private readonly Dictionary<int, int?> _cachedDiskTemps = new();
+    private DateTime _lastDiskTempQuery = DateTime.MinValue;
 
     // GetSystemTimes fallback state
     private long _prevIdle, _prevKernel, _prevUser;
@@ -942,7 +944,7 @@ public sealed class HardwareMonitor : IDisposable
         bool alertNet = alerts is not null && (alerts.AlertNetDaily || alerts.AlertNetMonthly);
         bool needNet = alertNet || (row is not null && (row.Contains(Metrics.NetDown) || row.Contains(Metrics.NetUp) || row.Contains(Metrics.NetTotal)));
 
-        bool needDisk = row is not null && row.Any(m => m.StartsWith("disk", StringComparison.OrdinalIgnoreCase));
+        bool needDisk = (alerts?.AlertDiskTemp == true) || (row is not null && row.Any(m => m.StartsWith("disk", StringComparison.OrdinalIgnoreCase)));
 
         bool alertBat = alerts?.AlertBatteryLow == true;
         bool needBattery = alertBat || (row is not null && (row.Contains(Metrics.BatteryPct) || row.Contains(Metrics.BatteryRate)));
@@ -1065,6 +1067,13 @@ public sealed class HardwareMonitor : IDisposable
 
         if (_perDiskCounters is not null)
         {
+            int sensorIntervalMs = Math.Max(2000, mc.PollIntervalMs);
+            bool shouldQueryTemps = (DateTime.UtcNow - _lastDiskTempQuery).TotalMilliseconds >= sensorIntervalMs;
+            if (shouldQueryTemps)
+            {
+                _lastDiskTempQuery = DateTime.UtcNow;
+            }
+
             for (int i = 0; i < _perDiskCounters.Count; i++)
             {
                 var (read, write) = _perDiskCounters[i];
@@ -1072,6 +1081,26 @@ public sealed class HardwareMonitor : IDisposable
                 float w = ReadPdh(write) / (1000f * 1000f);
                 diskRead += r;
                 diskWrite += w;
+
+                int? tempC = null;
+                if (shouldQueryTemps || !_cachedDiskTemps.ContainsKey(i))
+                {
+                    try
+                    {
+                        var smart = DiskQuery.QuerySmartTelemetry(i, "Healthy");
+                        tempC = smart.TemperatureC;
+                        _cachedDiskTemps[i] = tempC;
+                    }
+                    catch (Exception ex)
+                    {
+                        LogMetricErrorOnce("disk", $"disk_{i}_temp_exception", $"Failed to query SMART temperature for disk {i}: {ex.Message}");
+                    }
+                }
+                else if (_cachedDiskTemps.TryGetValue(i, out var cached))
+                {
+                    tempC = cached;
+                }
+
                 string busType = i < _diskBusTypes.Count ? _diskBusTypes[i] : _primaryDiskType;
                 disks.Add(new DiskSnapshot
                 {
@@ -1080,6 +1109,7 @@ public sealed class HardwareMonitor : IDisposable
                     BusType = busType,
                     ReadMBps = r,
                     WriteMBps = w,
+                    TemperatureC = tempC,
                 });
             }
         }
@@ -1796,7 +1826,7 @@ public sealed class HardwareMonitor : IDisposable
 
     private bool _wasOfflineLogged;
 
-    // Network via NetworkInterface.GetIPv4Statistics delta
+    // Network via NetworkInterface.GetIPStatistics / GetIPv4Statistics delta
     private void EnsureNicCounters()
     {
         string pref = _cfg.Monitoring.PreferredNic;
@@ -1804,10 +1834,8 @@ public sealed class HardwareMonitor : IDisposable
 
         if (pref == _lastPreferredNic && _nicInterface is { OperationalStatus: OperationalStatus.Up })
             return;
-        _lastPreferredNic = pref;
 
-        _nicInterface = null;
-        _nicPrimed = false;
+        _lastPreferredNic = pref;
 
         try
         {
@@ -1816,21 +1844,23 @@ public sealed class HardwareMonitor : IDisposable
                 : SelectActiveNic(pref);
             if (selected is not null)
             {
+                bool adapterChanged = !string.Equals(_lastBoundNicId, selected.Id, StringComparison.OrdinalIgnoreCase);
                 _nicInterface = selected;
                 _nicInstanceName = selected.Name;
                 _wasOfflineLogged = false;
-                if (!string.Equals(_lastBoundNicId, selected.Id, StringComparison.OrdinalIgnoreCase))
+                if (adapterChanged)
                 {
                     _lastBoundNicId = selected.Id;
                     Log.Info($"Connected to network adapter '{selected.Name}' ({selected.Description})");
+                    PrimeNicCounters(selected);
                 }
-                PrimeNicCounters(selected);
             }
             else
             {
                 _nicInterface = null;
                 _nicInstanceName = string.Empty;
                 _lastBoundNicId = null;
+                _nicPrimed = false;
                 if (!_wasOfflineLogged)
                 {
                     Log.Info("Offline / no active network adapter connected");
@@ -1871,7 +1901,15 @@ public sealed class HardwareMonitor : IDisposable
                 || n.Description.Contains(pref, StringComparison.OrdinalIgnoreCase)
                 || pref.Contains(n.Name, StringComparison.OrdinalIgnoreCase));
         }
-        selected ??= withGateway.FirstOrDefault() ?? allNics.FirstOrDefault();
+
+        // Prioritize physical wired adapters with gateway, then physical wireless with gateway
+        selected ??= withGateway.FirstOrDefault(n => n.NetworkInterfaceType == NetworkInterfaceType.Ethernet)
+                     ?? withGateway.FirstOrDefault(n => n.NetworkInterfaceType == NetworkInterfaceType.Wireless80211)
+                     ?? withGateway.FirstOrDefault()
+                     ?? allNics.FirstOrDefault(n => n.NetworkInterfaceType == NetworkInterfaceType.Ethernet)
+                     ?? allNics.FirstOrDefault(n => n.NetworkInterfaceType == NetworkInterfaceType.Wireless80211)
+                     ?? allNics.FirstOrDefault();
+
         return (selected, withGateway.Count > 0);
     }
 
@@ -1900,9 +1938,23 @@ public sealed class HardwareMonitor : IDisposable
             if (ThrowInPrimeNicForTesting)
                 throw new InvalidOperationException("Simulated prime NIC error");
 
-            var stats = selected.GetIPv4Statistics();
-            _prevRx = stats.BytesReceived;
-            _prevTx = stats.BytesSent;
+            long rx, tx;
+            try
+            {
+                var stats = selected.GetIPStatistics();
+                rx = stats.BytesReceived;
+                tx = stats.BytesSent;
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, $"GetIPStatistics failed on interface '{selected.Name}', querying GetIPv4Statistics");
+                var stats4 = selected.GetIPv4Statistics();
+                rx = stats4.BytesReceived;
+                tx = stats4.BytesSent;
+            }
+
+            _prevRx = rx;
+            _prevTx = tx;
             _prevNicTime = DateTime.UtcNow;
             _nicPrimed = true;
             Log.Debug($"Network counters primed: RX {_prevRx} bytes, TX {_prevTx} bytes");
@@ -1929,10 +1981,19 @@ public sealed class HardwareMonitor : IDisposable
             || desc.Contains("loopback", StringComparison.OrdinalIgnoreCase)
             || desc.Contains("wan miniport", StringComparison.OrdinalIgnoreCase)
             || desc.Contains("wfp native mac", StringComparison.OrdinalIgnoreCase)
+            || desc.Contains("filter driver", StringComparison.OrdinalIgnoreCase)
+            || desc.Contains("packet scheduler", StringComparison.OrdinalIgnoreCase)
+            || desc.Contains("lightweight filter", StringComparison.OrdinalIgnoreCase)
             || desc.Contains("filter-", StringComparison.OrdinalIgnoreCase)
+            || desc.Contains("-filter", StringComparison.OrdinalIgnoreCase)
+            || desc.Contains("virtual switch", StringComparison.OrdinalIgnoreCase)
             || name.StartsWith("vEthernet", StringComparison.OrdinalIgnoreCase)
             || name.StartsWith("WSL", StringComparison.OrdinalIgnoreCase)
-            || name.StartsWith("Local Area Connection*", StringComparison.OrdinalIgnoreCase);
+            || name.StartsWith("Local Area Connection*", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("-WFP", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("-QoS", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("-Native WiFi", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("-Filter", StringComparison.OrdinalIgnoreCase);
     }
 
     private (double downBps, double upBps) ReadNetBytes()
@@ -1944,12 +2005,29 @@ public sealed class HardwareMonitor : IDisposable
 
         try
         {
-            var stats = _nicInterface.GetIPv4Statistics();
-            return CalculateNetBytesDelta(stats.BytesReceived, stats.BytesSent);
+            long rx, tx;
+            try
+            {
+                var stats = _nicInterface.GetIPStatistics();
+                rx = stats.BytesReceived;
+                tx = stats.BytesSent;
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, $"GetIPStatistics failed on interface '{_nicInterface.Name}', querying GetIPv4Statistics");
+                var stats4 = _nicInterface.GetIPv4Statistics();
+                rx = stats4.BytesReceived;
+                tx = stats4.BytesSent;
+            }
+
+            return CalculateNetBytesDelta(rx, tx);
         }
         catch (Exception ex)
         {
             LogMetricErrorOnce("net", "net_read_exception", $"Failed to read network adapter statistics: {ex.Message}");
+            _nicInterface = null;
+            _nicPrimed = false;
+            _lastPreferredNic = "~~unset~~";
             return (0, 0);
         }
     }
@@ -2254,6 +2332,8 @@ public sealed class HardwareMonitor : IDisposable
 
             Log.Debug("Device PnP event, refreshing disk cache");
             DiskQuery.RefreshDiskCache();
+            _cachedDiskTemps.Clear();
+            _lastDiskTempQuery = DateTime.MinValue;
         }
         catch (Exception ex)
         {
@@ -2314,8 +2394,8 @@ public sealed class HardwareMonitor : IDisposable
         {
             foreach (var (read, write) in _perDiskCounters)
             {
-                read.Dispose();
-                write.Dispose();
+                read?.Dispose();
+                write?.Dispose();
             }
         }
         _intelPwrGadget?.Dispose();
