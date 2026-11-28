@@ -305,9 +305,16 @@ function main() {
         return;
     }
 
-    // By default build only Latest and 1 latest semver release version
-    const tagsToBuild = validTags.slice(0, 1);
-    console.log(`[build-versions] Latest release version detected: ${tagsToBuild.join(', ')}`);
+    // Build newest tag and latest stable release
+    const latestStable = validTags.find((t) => !parseSemVer(t)?.prereleaseType);
+    const tagsToBuild = [];
+    if (validTags[0]) {
+        tagsToBuild.push(validTags[0]);
+    }
+    if (latestStable && !tagsToBuild.includes(latestStable)) {
+        tagsToBuild.push(latestStable);
+    }
+    console.log(`[build-versions] Release versions detected: ${tagsToBuild.join(', ')}`);
 
     cleanStaleVersionDirs(tagsToBuild);
 

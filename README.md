@@ -108,36 +108,8 @@ LocalTelemetry provides hardware monitoring in the taskbar: lightweight, native,
 
 ## Visual Overview
 
-### 1. Application Walkthrough
-
-A complete look at LocalTelemetry in action-real-time CPU, GPU, RAM, disk, and network telemetry with seamless system tray and taskbar integration:
-
 <p align="center">
     <img src="docs/public/videos/LocalTelemetry.gif" alt="LocalTelemetry Application Walkthrough" style="border-radius: 8px; max-width: 85%;" />
-</p>
-
-### 2. Live Taskbar Overlay
-
-Embeds directly into the Windows taskbar next to your system clock, matching system fonts and scaling automatically across multiple display DPIs:
-
-<p align="center">
-    <img src="docs/public/videos/default-overlay.gif" alt="LocalTelemetry Live Taskbar Overlay" style="border-radius: 8px;" />
-</p>
-
-### 3. Settings & Customization
-
-Configure layout presets, 2D column pairing, polling intervals, and custom brand color schemes (Intel, AMD, NVIDIA, Corsair, Samsung) effortlessly in the Settings window:
-
-<p align="center">
-    <img src="docs/public/videos/customization.gif" alt="LocalTelemetry Settings & Customization Walkthrough" style="border-radius: 8px; max-width: 90%;" />
-</p>
-
-### 4. Traffic History Calendar
-
-Inspect daily upload and download totals per network adapter with JSONL backup imports and historical Windows network usage backfilling:
-
-<p align="center">
-    <img src="docs/public/images/traffic-settings.png" alt="Traffic History Calendar" style="border-radius: 8px; max-width: 85%;" />
 </p>
 
 ---

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import { useRoute, useData } from 'vitepress';
+import { trackEvent } from './telemetry.js';
 
 const route = useRoute();
 const { page } = useData();
@@ -21,13 +22,11 @@ function sendFeedback(helpful: boolean) {
     feedbackValue.value = helpful;
     feedbackState.value = 'submitted';
 
-    if (typeof window !== 'undefined' && (window as any).gtag) {
-        (window as any).gtag('event', 'page_feedback', {
-            page_path: route.path,
-            page_title: page.value.title || document.title,
-            helpful: helpful ? 'yes' : 'no'
-        });
-    }
+    trackEvent('page_feedback', {
+        page_path: route.path,
+        page_title: page.value.title || (typeof document !== 'undefined' ? document.title : ''),
+        helpful: helpful ? 'yes' : 'no'
+    });
 }
 </script>
 

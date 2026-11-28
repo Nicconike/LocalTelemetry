@@ -1,4 +1,4 @@
-import { h } from 'vue';
+import { h, nextTick } from 'vue';
 import DefaultTheme from 'vitepress/theme';
 import { inBrowser, type EnhanceAppContext } from 'vitepress';
 import PageFeedback from './PageFeedback.vue';
@@ -6,7 +6,30 @@ import BackToTop from './BackToTop.vue';
 import VersionBanner from './VersionBanner.vue';
 import MermaidViewer from './MermaidViewer.vue';
 import VersionNavDropdown from './VersionNavDropdown.vue';
+import { initTelemetryListeners, resetScrollTracking, trackPageView, track404, trackEvent } from './telemetry.js';
 import './custom.css';
+
+function extractDocVersion(pathname: string): string {
+    const match = pathname.match(/(?:^|\/)(v\d[\w.-]*)(?:\/|$)/);
+    return match ? match[1] : 'Latest';
+}
+
+let currentDocVersion = typeof window !== 'undefined' ? extractDocVersion(window.location.pathname) : 'Latest';
+
+function dispatchCurrentRouteTelemetry(path: string): void {
+    nextTick(() => {
+        const is404 =
+            document.title.includes('404') ||
+            document.title.toLowerCase().includes('page not found') ||
+            document.querySelector('.VPNotFound') !== null;
+
+        if (is404) {
+            track404(path || window.location.pathname, document.referrer);
+        } else {
+            trackPageView(path || window.location.pathname, document.title);
+        }
+    });
+}
 
 export default {
     extends: DefaultTheme,
@@ -21,37 +44,27 @@ export default {
         app.component('VersionNavDropdown', VersionNavDropdown);
 
         if (inBrowser) {
-            // Track page views on client-side route changes via Google Analytics (GA4)
+            initTelemetryListeners();
+
+            // Track initial page load after DOM hydration
+            dispatchCurrentRouteTelemetry(window.location.pathname);
+
+            // Track client-side route transitions
             router.onAfterRouteChange = (to: string) => {
-                if (typeof window !== 'undefined' && (window as any).gtag) {
-                    (window as any).gtag('event', 'page_view', {
+                resetScrollTracking();
+
+                const newVersion = extractDocVersion(to);
+                if (newVersion !== currentDocVersion) {
+                    trackEvent('version_switch', {
+                        from_version: currentDocVersion,
+                        to_version: newVersion,
                         page_path: to
                     });
+                    currentDocVersion = newVersion;
                 }
+
+                dispatchCurrentRouteTelemetry(to);
             };
-
-            // Global event tracking for external outbound clicks (GitHub, Releases, Discord)
-            window.addEventListener('click', (e: MouseEvent) => {
-                const target = (e.target as HTMLElement).closest('a');
-                if (!target?.href) return;
-
-                const url = target.href;
-                if (url.includes('github.com/Nicconike/LocalTelemetry/releases')) {
-                    if ((window as any).gtag) {
-                        (window as any).gtag('event', 'download_click', {
-                            event_category: 'outbound',
-                            event_label: url
-                        });
-                    }
-                } else if (url.includes('discord.gg')) {
-                    if ((window as any).gtag) {
-                        (window as any).gtag('event', 'discord_click', {
-                            event_category: 'outbound',
-                            event_label: url
-                        });
-                    }
-                }
-            });
         }
     }
 };

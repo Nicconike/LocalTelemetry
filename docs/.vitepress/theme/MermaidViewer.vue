@@ -181,8 +181,8 @@ function handlePointerUp(e: PointerEvent) {
         isDragging.value = false;
         try {
             (e.currentTarget as HTMLElement)?.releasePointerCapture(e.pointerId);
-        } catch {
-            // Ignored
+        } catch (err) {
+            console.debug('[MermaidViewer] Failed to release pointer capture:', err);
         }
     }
 }

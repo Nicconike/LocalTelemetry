@@ -25,8 +25,8 @@ const version = (() => {
 })();
 const isPrerelease = /[-+]/.test(version);
 
-// Retrieve Measurement ID from environment variable
-const gaId = process.env.GA_MEASUREMENT_ID;
+// Retrieve Umami Website ID from environment variable
+const umamiWebsiteId = process.env.UMAMI_WEBSITE_ID;
 
 // Subpath base for GitHub Pages project sites (e.g. /LocalTelemetry/)
 const rawBase = process.env.VITE_BASE || '/';
@@ -40,20 +40,16 @@ const headConfigs: HeadConfig[] = [
     ['meta', { name: 'og:description', content: 'Real-time hardware telemetry displayed on the Windows taskbar' }]
 ];
 
-if (gaId && gaId !== 'GA-MEASUREMENT_ID') {
-    headConfigs.push(
-        ['script', { async: '', src: `https://www.googletagmanager.com/gtag/js?id=${gaId}` }],
-        [
-            'script',
-            {},
-            `
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', '${gaId}');
-      `
-        ]
-    );
+if (umamiWebsiteId && umamiWebsiteId !== 'UMAMI_WEBSITE_ID') {
+    headConfigs.push([
+        'script',
+        {
+            defer: '',
+            src: 'https://cloud.umami.is/script.js',
+            'data-website-id': umamiWebsiteId,
+            'data-auto-track': 'false'
+        }
+    ]);
 }
 
 // Sidebar definitions with page links relative to each guide root

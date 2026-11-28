@@ -44,13 +44,6 @@ features:
       details: Operates entirely offline with zero background analytics, no cloud accounts, and no phoning home. Your hardware vitals never leave your system.
 ---
 
-<div style="max-width: 800px; margin: 40px auto 30px auto; text-align: center;">
-    <video controls autoplay loop muted playsinline style="width: 100%; border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.35);">
-        <source src="/videos/LocalTelemetry.mp4" type="video/mp4" />
-        <img src="/videos/LocalTelemetry.gif" alt="LocalTelemetry Application Walkthrough" style="border-radius: 12px;" />
-    </video>
-</div>
-
 <div class="home-cta-box">
     <div class="home-cta-left">
         <span class="home-cta-badge"><span class="home-cta-dot"></span> Shape the Future</span>

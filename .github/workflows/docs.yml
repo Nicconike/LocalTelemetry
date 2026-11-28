@@ -41,7 +41,7 @@ jobs:
               run: bun run docs:build
               working-directory: docs
               env:
-                  GA_MEASUREMENT_ID: ${{ secrets.GA_MEASUREMENT_ID }}
+                  UMAMI_WEBSITE_ID: ${{ secrets.UMAMI_WEBSITE_ID }}
                   VITE_BASE: ${{ steps.pages.outputs.base_path }}
 
             - name: Upload Pages Artifact

@@ -88,7 +88,8 @@ watch(
         }
         try {
             isDismissed.value = sessionStorage.getItem(`lt_dismissed_version_${newTag}`) === 'true';
-        } catch {
+        } catch (err) {
+            console.debug('[VersionBanner] Failed to read sessionStorage:', err);
             isDismissed.value = false;
         }
     },
@@ -100,8 +101,8 @@ function dismiss() {
     if (typeof window !== 'undefined' && versionInfo.value?.tag) {
         try {
             sessionStorage.setItem(`lt_dismissed_version_${versionInfo.value.tag}`, 'true');
-        } catch {
-            // Ignore sessionStorage errors (e.g. private browsing restrictions)
+        } catch (err) {
+            console.debug('[VersionBanner] Failed to set sessionStorage:', err);
         }
     }
 }

@@ -4,4 +4,5 @@ export const latestReleaseTag = 'v1.3.0-beta.9';
 export const versions = [
     { text: 'Latest', link: '/' },
     { text: 'v1.3.0-beta.9', link: '/v1.3.0-beta.9/' },
+    { text: 'v1.2.0', link: '/v1.2.0/' },
 ];
